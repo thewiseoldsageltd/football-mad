@@ -3,15 +3,26 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Trophy } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 
+const COMPETITIONS = [
+  { value: "Premier League", label: "Premier League" },
+  { value: "La Liga", label: "La Liga" },
+  { value: "Bundesliga", label: "Bundesliga" },
+  { value: "Serie A", label: "Serie A" },
+  { value: "Ligue 1", label: "Ligue 1" },
+  { value: "all", label: "All Competitions" },
+];
+
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
+  const [competition, setCompetition] = useState("Premier League");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
@@ -50,9 +61,11 @@ export default function TeamsPage() {
     },
   });
 
-  const filteredTeams = teams?.filter((team) =>
-    team.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredTeams = teams?.filter((team) => {
+    const matchesSearch = team.name.toLowerCase().includes(search.toLowerCase());
+    const matchesCompetition = competition === "all" || team.league === competition;
+    return matchesSearch && matchesCompetition;
+  });
 
   const handleFollowToggle = (team: Team) => {
     if (!isAuthenticated) {
@@ -74,20 +87,35 @@ export default function TeamsPage() {
         <div className="mb-8">
           <h1 className="text-4xl md:text-5xl font-bold mb-2">Teams</h1>
           <p className="text-muted-foreground text-lg">
-            Browse all Premier League teams
+            Browse and follow your favourite clubs
           </p>
         </div>
 
-        <div className="relative mb-8 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search teams..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-teams"
-          />
+        <div className="flex flex-col sm:flex-row gap-4 mb-8">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search teams..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-teams"
+            />
+          </div>
+          <Select value={competition} onValueChange={setCompetition}>
+            <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-competition">
+              <Trophy className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="Competition" />
+            </SelectTrigger>
+            <SelectContent>
+              {COMPETITIONS.map((comp) => (
+                <SelectItem key={comp.value} value={comp.value} data-testid={`option-comp-${comp.value}`}>
+                  {comp.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading ? (

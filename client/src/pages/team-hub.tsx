@@ -1,9 +1,9 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
-import { Heart, HeartOff, Calendar, Users, TrendingUp, AlertCircle, ArrowLeft } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, Mail, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -12,11 +12,29 @@ import { MatchCard } from "@/components/cards/match-card";
 import { TransferCard } from "@/components/cards/transfer-card";
 import { InjuryCard } from "@/components/cards/injury-card";
 import { PostCard } from "@/components/cards/post-card";
-import { NewsletterForm } from "@/components/newsletter-form";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Team, Article, Match, Transfer, Injury, Post, Player } from "@shared/schema";
+import type { Team, Article, Match, Transfer, Injury, Post } from "@shared/schema";
+
+interface NewsFiltersResponse {
+  articles: Article[];
+  appliedFilters: Record<string, unknown>;
+}
+
+function EmptyState({ icon: Icon, title, description }: { icon: typeof Inbox; title: string; description: string }) {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+          <Icon className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <h3 className="font-semibold mb-1">{title}</h3>
+        <p className="text-sm text-muted-foreground max-w-xs">{description}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function TeamHubPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -27,8 +45,8 @@ export default function TeamHubPage() {
     queryKey: ["/api/teams", slug],
   });
 
-  const { data: articles } = useQuery<Article[]>({
-    queryKey: ["/api/articles", "team", slug],
+  const { data: newsData } = useQuery<NewsFiltersResponse>({
+    queryKey: ["/api/news", { teams: slug }],
     enabled: !!team,
   });
 
@@ -44,11 +62,6 @@ export default function TeamHubPage() {
 
   const { data: injuries } = useQuery<Injury[]>({
     queryKey: ["/api/injuries", "team", slug],
-    enabled: !!team,
-  });
-
-  const { data: players } = useQuery<Player[]>({
-    queryKey: ["/api/players", "team", slug],
     enabled: !!team,
   });
 
@@ -96,18 +109,36 @@ export default function TeamHubPage() {
     }
   };
 
-  const nextMatch = matches?.find((m) => new Date(m.kickoffTime) > new Date());
+  const now = new Date();
+  const sortedMatches = matches?.sort((a, b) => 
+    new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
+  );
+  const nextMatch = sortedMatches?.find((m) => new Date(m.kickoffTime) > now);
+  const recentResults = sortedMatches?.filter((m) => 
+    new Date(m.kickoffTime) <= now && m.status === "finished"
+  ).slice(-5).reverse();
+
+  const articles = newsData?.articles || [];
+
+  const getTierColor = (tier: string) => {
+    switch (tier) {
+      case "A": return "bg-green-500/10 text-green-600 border-green-500/30";
+      case "B": return "bg-blue-500/10 text-blue-600 border-blue-500/30";
+      case "C": return "bg-amber-500/10 text-amber-600 border-amber-500/30";
+      default: return "bg-red-500/10 text-red-600 border-red-500/30";
+    }
+  };
 
   if (teamLoading) {
     return (
       <MainLayout>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <Skeleton className="h-48 w-full rounded-lg mb-8" />
-          <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2">
-              <Skeleton className="h-96 w-full rounded-lg" />
-            </div>
-            <Skeleton className="h-96 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full max-w-md mb-6" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-48 w-full rounded-lg" />
+            ))}
           </div>
         </div>
       </MainLayout>
@@ -119,8 +150,11 @@ export default function TeamHubPage() {
       <MainLayout>
         <div className="max-w-4xl mx-auto px-4 py-16 text-center">
           <h1 className="text-2xl font-bold mb-4">Team not found</h1>
+          <p className="text-muted-foreground mb-6">
+            The team you're looking for doesn't exist or has been removed.
+          </p>
           <Link href="/teams">
-            <Button>
+            <Button data-testid="link-back-to-teams">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Teams
             </Button>
@@ -133,21 +167,21 @@ export default function TeamHubPage() {
   return (
     <MainLayout>
       <div
-        className="relative py-16 mb-8"
+        className="relative py-12 md:py-16 mb-8"
         style={{
-          background: `linear-gradient(to right, ${team.primaryColor || "#1a1a2e"}cc, ${team.primaryColor || "#1a1a2e"}88)`,
+          background: `linear-gradient(135deg, ${team.primaryColor ?? "#1a1a2e"}ee, ${team.primaryColor ?? "#1a1a2e"}99)`,
         }}
       >
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div
-              className="w-24 h-24 md:w-32 md:h-32 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ backgroundColor: team.secondaryColor || "#ffffff" }}
+              className="w-20 h-20 md:w-28 md:h-28 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
+              style={{ backgroundColor: team.secondaryColor ?? "#ffffff" }}
             >
               {team.logoUrl ? (
-                <img src={team.logoUrl} alt={team.name} className="w-20 h-20 md:w-24 md:h-24 object-contain" />
+                <img src={team.logoUrl} alt={team.name} className="w-16 h-16 md:w-20 md:h-20 object-contain" />
               ) : (
-                <span className="text-4xl md:text-5xl font-bold" style={{ color: team.primaryColor }}>
+                <span className="text-3xl md:text-4xl font-bold" style={{ color: team.primaryColor ?? "#1a1a2e" }}>
                   {team.shortName?.[0] || team.name[0]}
                 </span>
               )}
@@ -156,214 +190,210 @@ export default function TeamHubPage() {
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2">
                 {team.name}
               </h1>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 text-white/80">
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 text-white/80 text-sm">
                 {team.stadiumName && <span>{team.stadiumName}</span>}
                 {team.manager && <span>Manager: {team.manager}</span>}
                 {team.founded && <span>Est. {team.founded}</span>}
               </div>
             </div>
-            <Button
-              size="lg"
-              variant={isFollowing ? "secondary" : "default"}
-              onClick={handleFollowToggle}
-              disabled={followMutation.isPending || unfollowMutation.isPending}
-              className="bg-white text-black hover:bg-white/90"
-              data-testid="button-follow-team"
-            >
-              {isFollowing ? (
-                <>
-                  <HeartOff className="h-5 w-5 mr-2" />
-                  Unfollow
-                </>
-              ) : (
-                <>
-                  <Heart className="h-5 w-5 mr-2" />
-                  Follow
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                size="lg"
+                variant={isFollowing ? "secondary" : "default"}
+                onClick={handleFollowToggle}
+                disabled={followMutation.isPending || unfollowMutation.isPending}
+                className="bg-white text-black hover:bg-white/90"
+                data-testid="button-follow-team"
+              >
+                {isFollowing ? (
+                  <>
+                    <HeartOff className="h-5 w-5 mr-2" />
+                    Unfollow
+                  </>
+                ) : (
+                  <>
+                    <Heart className="h-5 w-5 mr-2" />
+                    Follow
+                  </>
+                )}
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="bg-white/10 border-white/30 text-white hover:bg-white/20"
+                data-testid="button-subscribe-newsletter"
+              >
+                <Mail className="h-5 w-5 mr-2" />
+                Subscribe
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 pb-12">
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="mb-6 flex-wrap h-auto gap-1">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="squad">Squad</TabsTrigger>
-                <TabsTrigger value="fixtures">Fixtures</TabsTrigger>
-                <TabsTrigger value="transfers">Transfers</TabsTrigger>
-                <TabsTrigger value="injuries">Injuries</TabsTrigger>
-                <TabsTrigger value="fans">Fans</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-6">
-                <section>
-                  <h2 className="text-xl font-bold mb-4">Latest News</h2>
-                  {articles && articles.length > 0 ? (
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      {articles.slice(0, 4).map((article) => (
-                        <ArticleCard key={article.id} article={article} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">No news articles yet.</p>
-                  )}
-                </section>
-              </TabsContent>
-
-              <TabsContent value="squad" className="space-y-4">
-                <h2 className="text-xl font-bold mb-4">Squad</h2>
-                {players && players.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {players.map((player) => (
-                      <Card key={player.id} className="hover-elevate">
-                        <CardContent className="p-4 flex items-center gap-4">
-                          <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                            {player.imageUrl ? (
-                              <img src={player.imageUrl} alt={player.name} className="w-12 h-12 rounded-full object-cover" />
-                            ) : (
-                              <span className="text-lg font-bold text-muted-foreground">{player.number || player.name[0]}</span>
-                            )}
-                          </div>
-                          <div>
-                            <p className="font-semibold">{player.name}</p>
-                            <p className="text-sm text-muted-foreground">{player.position}</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">Squad information coming soon.</p>
-                )}
-              </TabsContent>
-
-              <TabsContent value="fixtures" className="space-y-4">
-                <h2 className="text-xl font-bold mb-4">Fixtures & Results</h2>
-                {matches && matches.length > 0 ? (
-                  <div className="space-y-4">
-                    {matches.map((match) => (
-                      <MatchCard key={match.id} match={match} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No fixtures available.</p>
-                )}
-              </TabsContent>
-
-              <TabsContent value="transfers" className="space-y-4">
-                <h2 className="text-xl font-bold mb-4">Transfer Activity</h2>
-                {transfers && transfers.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {transfers.map((transfer) => (
-                      <TransferCard key={transfer.id} transfer={transfer} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No transfer activity.</p>
-                )}
-              </TabsContent>
-
-              <TabsContent value="injuries" className="space-y-4">
-                <h2 className="text-xl font-bold mb-4">Injury Room</h2>
-                {injuries && injuries.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {injuries.map((injury) => (
-                      <InjuryCard key={injury.id} injury={injury} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No injuries reported.</p>
-                )}
-              </TabsContent>
-
-              <TabsContent value="fans" className="space-y-4">
-                <h2 className="text-xl font-bold mb-4">Fan Posts</h2>
-                {posts && posts.length > 0 ? (
-                  <div className="space-y-4">
-                    {posts.map((post) => (
-                      <PostCard key={post.id} post={post} />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">No fan posts yet. Be the first!</p>
-                )}
-              </TabsContent>
-            </Tabs>
+        <Tabs defaultValue="latest" className="w-full">
+          <div className="overflow-x-auto -mx-4 px-4 mb-6">
+            <TabsList className="inline-flex w-max gap-2 bg-transparent p-0">
+              <TabsTrigger 
+                value="latest" 
+                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                data-testid="tab-latest"
+              >
+                <Newspaper className="h-4 w-4 mr-2" />
+                Latest
+              </TabsTrigger>
+              <TabsTrigger 
+                value="injuries" 
+                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                data-testid="tab-injuries"
+              >
+                <Activity className="h-4 w-4 mr-2" />
+                Injuries
+              </TabsTrigger>
+              <TabsTrigger 
+                value="transfers" 
+                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                data-testid="tab-transfers"
+              >
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Transfers
+              </TabsTrigger>
+              <TabsTrigger 
+                value="matches" 
+                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                data-testid="tab-matches"
+              >
+                <Calendar className="h-4 w-4 mr-2" />
+                Matches
+              </TabsTrigger>
+              <TabsTrigger 
+                value="fans" 
+                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                data-testid="tab-fans"
+              >
+                <Users className="h-4 w-4 mr-2" />
+                Fans
+              </TabsTrigger>
+            </TabsList>
           </div>
 
-          <aside className="space-y-6">
+          <TabsContent value="latest" className="mt-0">
+            {articles.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {articles.map((article) => (
+                  <ArticleCard key={article.id} article={article} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Newspaper}
+                title="No news yet"
+                description={`Check back soon for the latest ${team.name} news and updates.`}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="injuries" className="mt-0">
+            {injuries && injuries.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {injuries.map((injury) => (
+                  <InjuryCard key={injury.id} injury={injury} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Activity}
+                title="No injuries reported"
+                description={`Great news! No ${team.name} players are currently injured.`}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="transfers" className="mt-0">
+            {transfers && transfers.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {transfers.map((transfer) => (
+                  <Card key={transfer.id} className="hover-elevate" data-testid={`card-transfer-${transfer.id}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="font-semibold">{transfer.playerName}</h3>
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs ${getTierColor(transfer.reliabilityTier || "D")}`}
+                        >
+                          Tier {transfer.reliabilityTier || "?"}
+                        </Badge>
+                      </div>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <p>{transfer.fromTeamName} → {transfer.toTeamName}</p>
+                        <div className="flex items-center gap-2">
+                          {transfer.fee && <span className="font-medium">{transfer.fee}</span>}
+                          <Badge variant={transfer.status === "confirmed" ? "default" : "secondary"} className="text-xs">
+                            {transfer.status === "confirmed" ? "Confirmed" : "Rumour"}
+                          </Badge>
+                        </div>
+                        {transfer.sourceName && (
+                          <p className="text-xs">Source: {transfer.sourceName}</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={TrendingUp}
+                title="No transfer activity"
+                description={`No transfer rumours or confirmed deals for ${team.name} at the moment.`}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="matches" className="mt-0 space-y-6">
             {nextMatch && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-primary" />
-                    <CardTitle>Next Match</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <MatchCard match={nextMatch} />
-                </CardContent>
-              </Card>
+              <section>
+                <h2 className="text-lg font-semibold mb-3">Next Match</h2>
+                <MatchCard match={nextMatch} />
+              </section>
             )}
-
-            {injuries && injuries.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-red-500" />
-                    <CardTitle>Injuries</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {injuries.slice(0, 3).map((injury) => (
-                    <div key={injury.id} className="flex items-center justify-between">
-                      <span className="font-medium">{injury.playerName}</span>
-                      <Badge variant="outline" className={
-                        injury.status === "OUT" ? "text-red-500 border-red-500" :
-                        injury.status === "DOUBTFUL" ? "text-amber-500 border-amber-500" :
-                        "text-green-500 border-green-500"
-                      }>
-                        {injury.status}
-                      </Badge>
-                    </div>
+            
+            {recentResults && recentResults.length > 0 && (
+              <section>
+                <h2 className="text-lg font-semibold mb-3">Recent Results</h2>
+                <div className="space-y-3">
+                  {recentResults.map((match) => (
+                    <MatchCard key={match.id} match={match} />
                   ))}
-                </CardContent>
-              </Card>
+                </div>
+              </section>
             )}
 
-            {transfers && transfers.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5 text-primary" />
-                    <CardTitle>Transfer News</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {transfers.slice(0, 3).map((transfer) => (
-                    <div key={transfer.id}>
-                      <p className="font-medium">{transfer.playerName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {transfer.status === "confirmed" ? "Confirmed" : "Rumour"}
-                        {transfer.fee && ` - ${transfer.fee}`}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
+            {!nextMatch && (!recentResults || recentResults.length === 0) && (
+              <EmptyState
+                icon={Calendar}
+                title="No fixtures available"
+                description={`Match fixtures for ${team.name} will appear here when scheduled.`}
+              />
             )}
+          </TabsContent>
 
-            <NewsletterForm
-              edition={`${team.slug}-mad`}
-              title={`${team.shortName || team.name} Mad`}
-              description={`Get exclusive ${team.name} news and updates.`}
-            />
-          </aside>
-        </div>
+          <TabsContent value="fans" className="mt-0">
+            {posts && posts.length > 0 ? (
+              <div className="space-y-4">
+                {posts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                icon={Users}
+                title="No fan posts yet"
+                description={`Be the first to share your thoughts about ${team.name}!`}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </MainLayout>
   );
