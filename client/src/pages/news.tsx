@@ -13,16 +13,18 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SlidersHorizontal, Search, X, Zap, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import type { Article, Team } from "@shared/schema";
 
 const competitions = [
-  { value: "all", label: "All" },
-  { value: "Premier League", label: "Premier League" },
-  { value: "Championship", label: "Championship" },
-  { value: "League One", label: "League One" },
-  { value: "League Two", label: "League Two" },
+  { value: "all", label: "All", shortLabel: "All", subheading: "The latest football news, analysis, and insights" },
+  { value: "Premier League", label: "Premier League", shortLabel: "PL", subheading: "The latest Premier League news and analysis" },
+  { value: "Championship", label: "Championship", shortLabel: "Champ", subheading: "The latest Championship news and analysis" },
+  { value: "League One", label: "League One", shortLabel: "L1", subheading: "The latest League One news and analysis" },
+  { value: "League Two", label: "League Two", shortLabel: "L2", subheading: "The latest League Two news and analysis" },
 ];
 
 const contentTypes = [
@@ -184,6 +186,8 @@ export default function NewsPage() {
     showMyTeams,
   ].filter(Boolean).length;
 
+  const currentCompetition = competitions.find(c => c.value === selectedCompetition);
+
   const clearFilters = () => {
     setSelectedContentTypes([]);
     setSelectedTeams([]);
@@ -202,15 +206,30 @@ export default function NewsPage() {
   };
 
   const toggleTeam = (teamId: string) => {
-    setSelectedTeams(prev =>
-      prev.includes(teamId)
+    setSelectedTeams(prev => {
+      const newSelection = prev.includes(teamId)
         ? prev.filter(id => id !== teamId)
-        : [...prev, teamId]
-    );
+        : [...prev, teamId];
+      
+      if (showMyTeams && followedTeamIds) {
+        const stillMatchesMyTeams = 
+          newSelection.length === followedTeamIds.length &&
+          followedTeamIds.every(id => newSelection.includes(id));
+        if (!stillMatchesMyTeams) {
+          setShowMyTeams(false);
+        }
+      }
+      
+      return newSelection;
+    });
   };
 
-  const selectMyTeams = () => {
-    if (followedTeamIds) {
+  const toggleMyTeams = () => {
+    if (showMyTeams) {
+      setShowMyTeams(false);
+      setSelectedTeams([]);
+    } else if (followedTeamIds) {
+      setShowMyTeams(true);
       setSelectedTeams(followedTeamIds);
     }
   };
@@ -221,7 +240,7 @@ export default function NewsPage() {
         <div className="mb-8">
           <h1 className="text-4xl md:text-5xl font-bold mb-2">News</h1>
           <p className="text-muted-foreground text-lg">
-            The latest football news, analysis, and insights
+            {currentCompetition?.subheading}
           </p>
         </div>
 
@@ -229,19 +248,32 @@ export default function NewsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <TabsList className="flex-wrap h-auto gap-1">
               {competitions.map((comp) => (
-                <TabsTrigger 
-                  key={comp.value} 
-                  value={comp.value} 
-                  data-testid={`tab-competition-${comp.value}`}
-                >
-                  {comp.label}
-                </TabsTrigger>
+                <Tooltip key={comp.value}>
+                  <TooltipTrigger asChild>
+                    <TabsTrigger 
+                      value={comp.value} 
+                      data-testid={`tab-competition-${comp.value}`}
+                      aria-label={comp.label}
+                    >
+                      <span className="sm:hidden">{comp.shortLabel}</span>
+                      <span className="hidden sm:inline">{comp.label}</span>
+                    </TabsTrigger>
+                  </TooltipTrigger>
+                  <TooltipContent className="sm:hidden">
+                    {comp.label}
+                  </TooltipContent>
+                </Tooltip>
               ))}
             </TabsList>
 
             <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" className="gap-2" data-testid="button-filters">
+                <Button 
+                  variant="outline" 
+                  className="gap-2" 
+                  data-testid="button-filters"
+                  aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
+                >
                   <SlidersHorizontal className="h-4 w-4" />
                   Filters
                   {activeFilterCount > 0 && (
@@ -253,7 +285,7 @@ export default function NewsPage() {
               </SheetTrigger>
               <SheetContent className="w-full sm:max-w-md">
                 <SheetHeader>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <SheetTitle>Filters</SheetTitle>
                     {activeFilterCount > 0 && (
                       <Button 
@@ -271,43 +303,20 @@ export default function NewsPage() {
                 <ScrollArea className="h-[calc(100vh-120px)] mt-6 pr-4">
                   <div className="space-y-6">
                     <div>
-                      <Label className="text-sm font-semibold mb-3 block">Content Type</Label>
-                      <div className="space-y-2">
-                        {contentTypes.map((type) => (
-                          <div key={type.value} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`content-${type.value}`}
-                              checked={selectedContentTypes.includes(type.value)}
-                              onCheckedChange={() => toggleContentType(type.value)}
-                              data-testid={`checkbox-content-${type.value}`}
-                            />
-                            <label 
-                              htmlFor={`content-${type.value}`}
-                              className="text-sm cursor-pointer"
-                            >
-                              {type.label}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div>
                       <div className="flex items-center justify-between mb-3">
                         <Label className="text-sm font-semibold">Teams</Label>
                         {isAuthenticated && followedTeamIds && followedTeamIds.length > 0 && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={selectMyTeams}
-                            className="h-7 text-xs"
-                            data-testid="button-select-my-teams"
-                          >
-                            <Users className="h-3 w-3 mr-1" />
-                            My Teams
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="my-teams-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                              My Teams
+                            </Label>
+                            <Switch 
+                              id="my-teams-toggle"
+                              checked={showMyTeams}
+                              onCheckedChange={toggleMyTeams}
+                              data-testid="switch-my-teams"
+                            />
+                          </div>
                         )}
                       </div>
                       <div className="relative mb-3">
@@ -343,6 +352,30 @@ export default function NewsPage() {
                           ))}
                         </div>
                       </ScrollArea>
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <Label className="text-sm font-semibold mb-3 block">Content Type</Label>
+                      <div className="space-y-2">
+                        {contentTypes.map((type) => (
+                          <div key={type.value} className="flex items-center space-x-2">
+                            <Checkbox 
+                              id={`content-${type.value}`}
+                              checked={selectedContentTypes.includes(type.value)}
+                              onCheckedChange={() => toggleContentType(type.value)}
+                              data-testid={`checkbox-content-${type.value}`}
+                            />
+                            <label 
+                              htmlFor={`content-${type.value}`}
+                              className="text-sm cursor-pointer"
+                            >
+                              {type.label}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     <Separator />
@@ -426,7 +459,7 @@ export default function NewsPage() {
               <Badge 
                 variant={showMyTeams ? "default" : "outline"}
                 className="cursor-pointer gap-1"
-                onClick={() => setShowMyTeams(!showMyTeams)}
+                onClick={toggleMyTeams}
                 data-testid="chip-my-teams"
               >
                 <Users className="h-3 w-3" />
@@ -478,7 +511,7 @@ export default function NewsPage() {
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             ))}
-            {selectedTeams.map(teamId => {
+            {!showMyTeams && selectedTeams.map(teamId => {
               const team = teams?.find(t => t.id === teamId);
               return team ? (
                 <Badge 
