@@ -351,6 +351,23 @@ export const insertSubscriberSchema = createInsertSchema(subscribers).omit({ id:
 export type InsertSubscriber = z.infer<typeof insertSubscriberSchema>;
 export type Subscriber = typeof subscribers.$inferSelect;
 
+// ============ SHARE CLICKS (ANALYTICS) ============
+export const shareClicks = pgTable("share_clicks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  platform: text("platform").notNull(), // whatsapp, twitter, facebook, copy, native
+  userId: varchar("user_id"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("share_clicks_article_idx").on(table.articleId),
+  index("share_clicks_platform_idx").on(table.platform),
+]);
+
+export const insertShareClickSchema = createInsertSchema(shareClicks).omit({ id: true, createdAt: true });
+export type InsertShareClick = z.infer<typeof insertShareClickSchema>;
+export type ShareClick = typeof shareClicks.$inferSelect;
+
 // ============ NEWS FILTER CONSTANTS & SCHEMAS ============
 export const NEWS_COMPETITIONS = {
   all: { value: "all", label: "All", slug: "all" },
