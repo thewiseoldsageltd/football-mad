@@ -2,6 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
+import { newsFiltersSchema } from "@shared/schema";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
   // Auth routes
@@ -43,6 +44,59 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching players:", error);
       res.status(500).json({ error: "Failed to fetch players" });
+    }
+  });
+
+  // ========== NEWS (with URL-driven filters) ==========
+  app.get("/api/news", async (req: any, res) => {
+    try {
+      const parsed = newsFiltersSchema.safeParse(req.query);
+      
+      if (!parsed.success) {
+        return res.status(400).json({ 
+          error: "Invalid filter parameters",
+          details: parsed.error.errors 
+        });
+      }
+      
+      const { comp, type, teams: teamsParam, sort, range, breaking } = parsed.data;
+      
+      if (sort === "for-you" && !req.user) {
+        return res.status(401).json({ error: "Authentication required for 'For You' sort" });
+      }
+      
+      let teamSlugs: string[] = [];
+      let myTeams = false;
+      
+      if (teamsParam === "my") {
+        if (!req.user) {
+          return res.status(401).json({ error: "Authentication required for 'My Teams' filter" });
+        }
+        const followedTeamIds = await storage.getFollowsByUser(req.user.id);
+        const allTeams = await storage.getTeams();
+        teamSlugs = allTeams
+          .filter(t => followedTeamIds.includes(t.id))
+          .map(t => t.slug);
+        myTeams = true;
+      } else if (teamsParam) {
+        teamSlugs = teamsParam.split(",").filter(Boolean);
+      }
+      
+      const result = await storage.getNewsArticles({
+        comp,
+        type,
+        teamSlugs,
+        sort,
+        range,
+        breaking,
+      });
+      
+      result.appliedFilters.myTeams = myTeams;
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching news:", error);
+      res.status(500).json({ error: "Failed to fetch news" });
     }
   });
 

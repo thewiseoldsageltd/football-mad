@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
@@ -17,68 +17,96 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SlidersHorizontal, Search, X, Zap, Users } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import type { Article, Team } from "@shared/schema";
+import { useNewsFilters, type ContentTypeSlug, type CompetitionSlug } from "@/hooks/use-news-filters";
+import { NEWS_COMPETITIONS, NEWS_CONTENT_TYPES, NEWS_SORT_OPTIONS, NEWS_TIME_RANGES, type Team, type NewsFiltersResponse } from "@shared/schema";
+import { useState } from "react";
 
-const competitions = [
-  { value: "all", label: "All", shortLabel: "All", subheading: "The latest football news, analysis, and insights" },
-  { value: "Premier League", label: "Premier League", shortLabel: "PL", subheading: "The latest Premier League news and analysis" },
-  { value: "Championship", label: "Championship", shortLabel: "Champ", subheading: "The latest Championship news and analysis" },
-  { value: "League One", label: "League One", shortLabel: "L1", subheading: "The latest League One news and analysis" },
-  { value: "League Two", label: "League Two", shortLabel: "L2", subheading: "The latest League Two news and analysis" },
-];
+const competitionsList = Object.values(NEWS_COMPETITIONS).map(comp => ({
+  ...comp,
+  shortLabel: comp.value === "all" ? "All" : 
+              comp.value === "premier-league" ? "PL" :
+              comp.value === "championship" ? "Champ" :
+              comp.value === "league-one" ? "L1" : "L2",
+  subheading: comp.value === "all" 
+    ? "The latest football news, analysis, and insights"
+    : `The latest ${comp.label} news and analysis`
+}));
 
-const contentTypes = [
-  { value: "team-news", label: "Team News" },
-  { value: "match-preview", label: "Match Preview" },
-  { value: "match-report", label: "Match Report" },
-  { value: "analysis", label: "Analysis" },
-  { value: "opinion", label: "Opinion" },
-  { value: "explainer", label: "Explainers" },
-  { value: "fpl", label: "FPL" },
-];
-
-const timeRanges = [
-  { value: "24h", label: "24 hours" },
-  { value: "7d", label: "7 days" },
-  { value: "month", label: "This month" },
-  { value: "any", label: "Any time" },
-];
-
-const sortOptions = [
-  { value: "latest", label: "Latest" },
-  { value: "trending", label: "Trending" },
-  { value: "discussed", label: "Most Discussed" },
-];
+const contentTypesList = Object.values(NEWS_CONTENT_TYPES);
+const sortOptionsList = Object.values(NEWS_SORT_OPTIONS);
+const timeRangesList = Object.values(NEWS_TIME_RANGES);
 
 export default function NewsPage() {
   const { user, isAuthenticated } = useAuth();
-  const [selectedCompetition, setSelectedCompetition] = useState("all");
-  const [selectedContentTypes, setSelectedContentTypes] = useState<string[]>([]);
-  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const { 
+    filters, 
+    setFilter, 
+    setFilters,
+    toggleType, 
+    toggleTeam, 
+    removeFilter, 
+    clearFilters,
+    hasActiveFilters,
+    shouldNoIndex,
+    canonicalUrl,
+    buildApiQueryString
+  } = useNewsFilters();
+  
   const [teamSearch, setTeamSearch] = useState("");
-  const [timeRange, setTimeRange] = useState("any");
-  const [sortBy, setSortBy] = useState("latest");
-  const [showBreaking, setShowBreaking] = useState(false);
-  const [showMyTeams, setShowMyTeams] = useState(false);
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
-  const { data: articles, isLoading } = useQuery<Article[]>({
-    queryKey: ["/api/articles"],
+  const apiQueryString = buildApiQueryString();
+  
+  const { data: newsResponse, isLoading } = useQuery<NewsFiltersResponse>({
+    queryKey: ["/api/news", apiQueryString],
+    queryFn: async () => {
+      const res = await fetch(`/api/news${apiQueryString}`);
+      if (!res.ok) throw new Error("Failed to fetch news");
+      return res.json();
+    },
   });
 
   const { data: teams } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
   });
 
-  const { data: followedTeamIds } = useQuery<string[]>({
+  const { data: followedTeamIds = [] } = useQuery<string[]>({
     queryKey: ["/api/follows"],
     enabled: isAuthenticated,
+    retry: false,
   });
 
-  const followedTeams = useMemo(() => {
-    if (!teams || !followedTeamIds) return [];
-    return teams.filter(t => followedTeamIds.includes(t.id));
-  }, [teams, followedTeamIds]);
+  useEffect(() => {
+    const fullCanonicalUrl = `${window.location.origin}${canonicalUrl}`;
+    
+    let canonicalLink = document.getElementById("news-page-canonical") as HTMLLinkElement | null;
+    if (!canonicalLink) {
+      canonicalLink = document.createElement("link");
+      canonicalLink.id = "news-page-canonical";
+      canonicalLink.rel = "canonical";
+      document.head.appendChild(canonicalLink);
+    }
+    canonicalLink.href = fullCanonicalUrl;
+    
+    let robotsMeta = document.getElementById("news-page-robots") as HTMLMetaElement | null;
+    
+    if (shouldNoIndex) {
+      if (!robotsMeta) {
+        robotsMeta = document.createElement("meta");
+        robotsMeta.id = "news-page-robots";
+        robotsMeta.name = "robots";
+        document.head.appendChild(robotsMeta);
+      }
+      robotsMeta.content = "noindex,follow";
+    } else if (robotsMeta) {
+      robotsMeta.remove();
+    }
+    
+    return () => {
+      document.getElementById("news-page-canonical")?.remove();
+      document.getElementById("news-page-robots")?.remove();
+    };
+  }, [canonicalUrl, shouldNoIndex]);
 
   const filteredTeams = useMemo(() => {
     if (!teams) return [];
@@ -89,148 +117,46 @@ export default function NewsPage() {
     );
   }, [teams, teamSearch]);
 
-  const filteredArticles = useMemo(() => {
-    if (!articles) return [];
-    
-    let result = [...articles];
+  const followedTeams = useMemo(() => {
+    if (!teams) return [];
+    return teams.filter(t => followedTeamIds.includes(t.id));
+  }, [teams, followedTeamIds]);
 
-    if (selectedCompetition !== "all") {
-      result = result.filter(a => a.competition === selectedCompetition);
-    }
-
-    if (selectedContentTypes.length > 0) {
-      result = result.filter(a => selectedContentTypes.includes(a.contentType || "team-news"));
-    }
-
-    if (selectedTeams.length > 0) {
-      result = result.filter(a => 
-        a.tags?.some(tag => {
-          const team = teams?.find(t => t.slug === tag);
-          return team && selectedTeams.includes(team.id);
-        })
-      );
-    }
-
-    if (showBreaking) {
-      result = result.filter(a => a.isBreaking);
-    }
-
-    if (showMyTeams && followedTeamIds?.length) {
-      result = result.filter(a => 
-        a.tags?.some(tag => {
-          const team = teams?.find(t => t.slug === tag);
-          return team && followedTeamIds.includes(team.id);
-        })
-      );
-    }
-
-    if (timeRange !== "any") {
-      const now = new Date();
-      let cutoff: Date;
-      switch (timeRange) {
-        case "24h":
-          cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          break;
-        case "7d":
-          cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case "month":
-          cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
-          break;
-        default:
-          cutoff = new Date(0);
-      }
-      result = result.filter(a => new Date(a.publishedAt!) >= cutoff);
-    }
-
-    switch (sortBy) {
-      case "trending":
-        result.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
-        break;
-      case "discussed":
-        result.sort((a, b) => (b.commentsCount || 0) - (a.commentsCount || 0));
-        break;
-      case "for-you":
-        if (followedTeamIds?.length) {
-          result.sort((a, b) => {
-            const aFollowed = a.tags?.some(tag => {
-              const team = teams?.find(t => t.slug === tag);
-              return team && followedTeamIds.includes(team.id);
-            }) ? 1 : 0;
-            const bFollowed = b.tags?.some(tag => {
-              const team = teams?.find(t => t.slug === tag);
-              return team && followedTeamIds.includes(team.id);
-            }) ? 1 : 0;
-            return bFollowed - aFollowed;
-          });
-        }
-        break;
-      default:
-        result.sort((a, b) => 
-          new Date(b.publishedAt!).getTime() - new Date(a.publishedAt!).getTime()
-        );
-    }
-
-    return result;
-  }, [articles, selectedCompetition, selectedContentTypes, selectedTeams, timeRange, sortBy, showBreaking, showMyTeams, followedTeamIds, teams]);
-
-  const featuredArticle = filteredArticles.find(a => a.isFeatured);
-  const regularArticles = filteredArticles.filter(a => a.id !== featuredArticle?.id);
+  const articles = newsResponse?.articles || [];
+  const featuredArticle = articles.find(a => a.isFeatured);
+  const regularArticles = articles.filter(a => a.id !== featuredArticle?.id);
 
   const activeFilterCount = [
-    selectedContentTypes.length > 0,
-    selectedTeams.length > 0,
-    timeRange !== "any",
-    sortBy !== "latest",
-    showBreaking,
-    showMyTeams,
+    filters.type.length > 0,
+    filters.teams.length > 0 || filters.myTeams,
+    filters.sort !== "latest",
+    filters.range !== "all",
+    filters.breaking,
   ].filter(Boolean).length;
 
-  const currentCompetition = competitions.find(c => c.value === selectedCompetition);
+  const currentCompetition = competitionsList.find(c => c.value === filters.comp);
 
-  const clearFilters = () => {
-    setSelectedContentTypes([]);
-    setSelectedTeams([]);
-    setTimeRange("any");
-    setSortBy("latest");
-    setShowBreaking(false);
-    setShowMyTeams(false);
+  const handleCompetitionChange = (value: string) => {
+    setFilter("comp", value as CompetitionSlug);
   };
 
-  const toggleContentType = (value: string) => {
-    setSelectedContentTypes(prev => 
-      prev.includes(value) 
-        ? prev.filter(v => v !== value)
-        : [...prev, value]
-    );
+  const handleMyTeamsToggle = () => {
+    if (filters.myTeams) {
+      setFilters({ myTeams: false, teams: [] });
+    } else {
+      setFilter("myTeams", true);
+    }
   };
 
-  const toggleTeam = (teamId: string) => {
-    setSelectedTeams(prev => {
-      const newSelection = prev.includes(teamId)
-        ? prev.filter(id => id !== teamId)
-        : [...prev, teamId];
-      
-      if (showMyTeams && followedTeamIds) {
-        const stillMatchesMyTeams = 
-          newSelection.length === followedTeamIds.length &&
-          followedTeamIds.every(id => newSelection.includes(id));
-        if (!stillMatchesMyTeams) {
-          setShowMyTeams(false);
-        }
-      }
-      
-      return newSelection;
-    });
-  };
-
-  const toggleMyTeams = () => {
-    if (showMyTeams) {
-      setShowMyTeams(false);
-      setSelectedTeams([]);
-    } else if (followedTeamIds) {
-      setShowMyTeams(true);
-      setSelectedTeams(followedTeamIds);
+  const handleTeamCheckboxChange = (teamSlug: string) => {
+    if (filters.myTeams) {
+      const followedSlugs = followedTeams.map(t => t.slug);
+      const newTeams = followedSlugs.includes(teamSlug)
+        ? followedSlugs.filter(s => s !== teamSlug)
+        : [...followedSlugs, teamSlug];
+      setFilters({ myTeams: false, teams: newTeams });
+    } else {
+      toggleTeam(teamSlug);
     }
   };
 
@@ -244,10 +170,10 @@ export default function NewsPage() {
           </p>
         </div>
 
-        <Tabs value={selectedCompetition} onValueChange={setSelectedCompetition} className="w-full">
+        <Tabs value={filters.comp} onValueChange={handleCompetitionChange} className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <TabsList className="flex-wrap h-auto gap-1">
-              {competitions.map((comp) => (
+              {competitionsList.map((comp) => (
                 <Tooltip key={comp.value}>
                   <TooltipTrigger asChild>
                     <TabsTrigger 
@@ -287,7 +213,7 @@ export default function NewsPage() {
                 <SheetHeader>
                   <div className="flex items-center justify-between gap-2">
                     <SheetTitle>Filters</SheetTitle>
-                    {activeFilterCount > 0 && (
+                    {hasActiveFilters && (
                       <Button 
                         variant="ghost" 
                         size="sm" 
@@ -305,15 +231,15 @@ export default function NewsPage() {
                     <div>
                       <div className="flex items-center justify-between mb-3">
                         <Label className="text-sm font-semibold">Teams</Label>
-                        {isAuthenticated && followedTeamIds && followedTeamIds.length > 0 && (
+                        {isAuthenticated && followedTeamIds.length > 0 && (
                           <div className="flex items-center gap-2">
                             <Label htmlFor="my-teams-toggle" className="text-xs text-muted-foreground cursor-pointer">
                               My Teams
                             </Label>
                             <Switch 
                               id="my-teams-toggle"
-                              checked={showMyTeams}
-                              onCheckedChange={toggleMyTeams}
+                              checked={filters.myTeams}
+                              onCheckedChange={handleMyTeamsToggle}
                               data-testid="switch-my-teams"
                             />
                           </div>
@@ -335,8 +261,11 @@ export default function NewsPage() {
                             <div key={team.id} className="flex items-center space-x-2">
                               <Checkbox 
                                 id={`team-${team.id}`}
-                                checked={selectedTeams.includes(team.id)}
-                                onCheckedChange={() => toggleTeam(team.id)}
+                                checked={filters.myTeams 
+                                  ? followedTeamIds.includes(team.id)
+                                  : filters.teams.includes(team.slug)
+                                }
+                                onCheckedChange={() => handleTeamCheckboxChange(team.slug)}
                                 data-testid={`checkbox-team-${team.slug}`}
                               />
                               <label 
@@ -344,7 +273,7 @@ export default function NewsPage() {
                                 className="text-sm cursor-pointer flex items-center gap-2"
                               >
                                 {team.name}
-                                {followedTeamIds?.includes(team.id) && (
+                                {followedTeamIds.includes(team.id) && (
                                   <Badge variant="outline" className="text-xs py-0">Following</Badge>
                                 )}
                               </label>
@@ -359,12 +288,12 @@ export default function NewsPage() {
                     <div>
                       <Label className="text-sm font-semibold mb-3 block">Content Type</Label>
                       <div className="space-y-2">
-                        {contentTypes.map((type) => (
+                        {contentTypesList.map((type) => (
                           <div key={type.value} className="flex items-center space-x-2">
                             <Checkbox 
                               id={`content-${type.value}`}
-                              checked={selectedContentTypes.includes(type.value)}
-                              onCheckedChange={() => toggleContentType(type.value)}
+                              checked={filters.type.includes(type.value as ContentTypeSlug)}
+                              onCheckedChange={() => toggleType(type.value as ContentTypeSlug)}
                               data-testid={`checkbox-content-${type.value}`}
                             />
                             <label 
@@ -382,8 +311,8 @@ export default function NewsPage() {
 
                     <div>
                       <Label className="text-sm font-semibold mb-3 block">Time Range</Label>
-                      <RadioGroup value={timeRange} onValueChange={setTimeRange}>
-                        {timeRanges.map((range) => (
+                      <RadioGroup value={filters.range} onValueChange={(val) => setFilter("range", val as any)}>
+                        {timeRangesList.map((range) => (
                           <div key={range.value} className="flex items-center space-x-2">
                             <RadioGroupItem 
                               value={range.value} 
@@ -405,37 +334,27 @@ export default function NewsPage() {
 
                     <div>
                       <Label className="text-sm font-semibold mb-3 block">Sort By</Label>
-                      <RadioGroup value={sortBy} onValueChange={setSortBy}>
-                        {sortOptions.map((option) => (
-                          <div key={option.value} className="flex items-center space-x-2">
-                            <RadioGroupItem 
-                              value={option.value} 
-                              id={`sort-${option.value}`}
-                              data-testid={`radio-sort-${option.value}`}
-                            />
-                            <label 
-                              htmlFor={`sort-${option.value}`}
-                              className="text-sm cursor-pointer"
-                            >
-                              {option.label}
-                            </label>
-                          </div>
-                        ))}
-                        {isAuthenticated && followedTeamIds && followedTeamIds.length > 0 && (
-                          <div className="flex items-center space-x-2">
-                            <RadioGroupItem 
-                              value="for-you" 
-                              id="sort-for-you"
-                              data-testid="radio-sort-for-you"
-                            />
-                            <label 
-                              htmlFor="sort-for-you"
-                              className="text-sm cursor-pointer"
-                            >
-                              For You
-                            </label>
-                          </div>
-                        )}
+                      <RadioGroup value={filters.sort} onValueChange={(val) => setFilter("sort", val as any)}>
+                        {sortOptionsList.map((option) => {
+                          if ("requiresAuth" in option && option.requiresAuth && !isAuthenticated) {
+                            return null;
+                          }
+                          return (
+                            <div key={option.value} className="flex items-center space-x-2">
+                              <RadioGroupItem 
+                                value={option.value} 
+                                id={`sort-${option.value}`}
+                                data-testid={`radio-sort-${option.value}`}
+                              />
+                              <label 
+                                htmlFor={`sort-${option.value}`}
+                                className="text-sm cursor-pointer"
+                              >
+                                {option.label}
+                              </label>
+                            </div>
+                          );
+                        })}
                       </RadioGroup>
                     </div>
                   </div>
@@ -447,7 +366,7 @@ export default function NewsPage() {
                     onClick={() => setIsFiltersOpen(false)}
                     data-testid="button-apply-filters"
                   >
-                    Show {filteredArticles.length} articles
+                    Show {articles.length} articles
                   </Button>
                 </div>
               </SheetContent>
@@ -455,70 +374,70 @@ export default function NewsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2 mb-6">
-            {isAuthenticated && followedTeamIds && followedTeamIds.length > 0 && (
+            {isAuthenticated && followedTeamIds.length > 0 && (
               <Badge 
-                variant={showMyTeams ? "default" : "outline"}
+                variant={filters.myTeams ? "default" : "outline"}
                 className="cursor-pointer gap-1"
-                onClick={toggleMyTeams}
+                onClick={handleMyTeamsToggle}
                 data-testid="chip-my-teams"
               >
                 <Users className="h-3 w-3" />
                 My Teams
-                {showMyTeams && <X className="h-3 w-3 ml-1" />}
+                {filters.myTeams && <X className="h-3 w-3 ml-1" />}
               </Badge>
             )}
             <Badge 
-              variant={showBreaking ? "destructive" : "outline"}
+              variant={filters.breaking ? "destructive" : "outline"}
               className="cursor-pointer gap-1"
-              onClick={() => setShowBreaking(!showBreaking)}
+              onClick={() => setFilter("breaking", !filters.breaking)}
               data-testid="chip-breaking"
             >
               <Zap className="h-3 w-3" />
               Breaking
-              {showBreaking && <X className="h-3 w-3 ml-1" />}
+              {filters.breaking && <X className="h-3 w-3 ml-1" />}
             </Badge>
-            {sortBy !== "latest" && (
+            {filters.sort !== "latest" && (
               <Badge 
                 variant="outline"
                 className="cursor-pointer gap-1 text-muted-foreground"
-                onClick={() => setSortBy("latest")}
-                data-testid={`chip-sort-${sortBy}`}
+                onClick={() => removeFilter("sort")}
+                data-testid={`chip-sort-${filters.sort}`}
               >
-                Sort: {sortBy === "for-you" ? "For You" : sortOptions.find(o => o.value === sortBy)?.label}
+                Sort: {NEWS_SORT_OPTIONS[filters.sort]?.label || filters.sort}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             )}
-            {timeRange !== "any" && (
+            {filters.range !== "all" && (
               <Badge 
                 variant="outline"
                 className="cursor-pointer gap-1 text-muted-foreground"
-                onClick={() => setTimeRange("any")}
-                data-testid={`chip-time-${timeRange}`}
+                onClick={() => removeFilter("range")}
+                data-testid={`chip-time-${filters.range}`}
               >
-                Time: {timeRanges.find(r => r.value === timeRange)?.label}
+                Time: {NEWS_TIME_RANGES[filters.range]?.label || filters.range}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             )}
-            {selectedContentTypes.map(type => (
+            {filters.type.map(type => (
               <Badge 
                 key={type}
                 variant="outline"
                 className="cursor-pointer gap-1 text-muted-foreground"
-                onClick={() => toggleContentType(type)}
+                onClick={() => removeFilter("type", type)}
                 data-testid={`chip-content-${type}`}
               >
-                Type: {contentTypes.find(t => t.value === type)?.label}
+                Type: {NEWS_CONTENT_TYPES[type]?.label || type}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             ))}
-            {!showMyTeams && selectedTeams.map(teamId => {
-              const team = teams?.find(t => t.id === teamId);
+            {!filters.myTeams && filters.teams.map(teamSlug => {
+              const team = teams?.find(t => t.slug === teamSlug);
               return team ? (
                 <Badge 
-                  key={teamId}
+                  key={teamSlug}
                   variant="outline"
                   className="cursor-pointer gap-1 text-muted-foreground"
-                  onClick={() => toggleTeam(teamId)}
+                  onClick={() => removeFilter("teams", teamSlug)}
                   data-testid={`chip-team-${team.slug}`}
                 >
                   Team: {team.name}
@@ -528,9 +447,9 @@ export default function NewsPage() {
             })}
           </div>
 
-          {competitions.map((comp) => (
+          {competitionsList.map((comp) => (
             <TabsContent key={comp.value} value={comp.value}>
-              {featuredArticle && !isLoading && comp.value === selectedCompetition && (
+              {featuredArticle && !isLoading && comp.value === filters.comp && (
                 <section className="mb-8">
                   <ArticleCard article={featuredArticle} featured />
                 </section>

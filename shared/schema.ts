@@ -350,3 +350,61 @@ export const subscribers = pgTable("subscribers", {
 export const insertSubscriberSchema = createInsertSchema(subscribers).omit({ id: true, createdAt: true });
 export type InsertSubscriber = z.infer<typeof insertSubscriberSchema>;
 export type Subscriber = typeof subscribers.$inferSelect;
+
+// ============ NEWS FILTER CONSTANTS & SCHEMAS ============
+export const NEWS_COMPETITIONS = {
+  all: { value: "all", label: "All", slug: "all" },
+  "premier-league": { value: "premier-league", label: "Premier League", slug: "premier-league", dbValue: "Premier League" },
+  "championship": { value: "championship", label: "Championship", slug: "championship", dbValue: "Championship" },
+  "league-one": { value: "league-one", label: "League One", slug: "league-one", dbValue: "League One" },
+  "league-two": { value: "league-two", label: "League Two", slug: "league-two", dbValue: "League Two" },
+} as const;
+
+export const NEWS_CONTENT_TYPES = {
+  "team-news": { value: "team-news", label: "Team News" },
+  "match-preview": { value: "match-preview", label: "Match Preview" },
+  "match-report": { value: "match-report", label: "Match Report" },
+  "analysis": { value: "analysis", label: "Analysis" },
+  "opinion": { value: "opinion", label: "Opinion" },
+  "explainer": { value: "explainer", label: "Explainers" },
+  "fpl": { value: "fpl", label: "FPL" },
+} as const;
+
+export const NEWS_SORT_OPTIONS = {
+  "latest": { value: "latest", label: "Latest" },
+  "trending": { value: "trending", label: "Trending" },
+  "discussed": { value: "discussed", label: "Most Discussed" },
+  "for-you": { value: "for-you", label: "For You", requiresAuth: true },
+} as const;
+
+export const NEWS_TIME_RANGES = {
+  "24h": { value: "24h", label: "24 hours", hours: 24 },
+  "7d": { value: "7d", label: "7 days", hours: 168 },
+  "30d": { value: "30d", label: "30 days", hours: 720 },
+  "all": { value: "all", label: "All time", hours: null },
+} as const;
+
+export const newsFiltersSchema = z.object({
+  comp: z.enum(["all", "premier-league", "championship", "league-one", "league-two"]).default("all"),
+  type: z.string().optional().transform(val => val ? val.split(",").filter(Boolean) : []),
+  teams: z.string().optional(),
+  sort: z.enum(["latest", "trending", "discussed", "for-you"]).default("latest"),
+  range: z.enum(["24h", "7d", "30d", "all"]).default("all"),
+  breaking: z.string().optional().transform(val => val === "true"),
+});
+
+export type NewsFilters = z.infer<typeof newsFiltersSchema>;
+
+export type NewsFiltersResponse = {
+  articles: Article[];
+  appliedFilters: {
+    comp: string;
+    type: string[];
+    teams: string[];
+    myTeams: boolean;
+    sort: string;
+    range: string;
+    breaking: boolean;
+    total: number;
+  };
+};

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, ilike, sql, or } from "drizzle-orm";
+import { eq, and, desc, ilike, sql, or, inArray, gte } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers,
@@ -16,7 +16,19 @@ import {
   type Product, type InsertProduct,
   type Order, type InsertOrder,
   type Subscriber, type InsertSubscriber,
+  NEWS_COMPETITIONS,
+  NEWS_TIME_RANGES,
+  type NewsFiltersResponse,
 } from "@shared/schema";
+
+export interface NewsFilterParams {
+  comp: string;
+  type: string[];
+  teamSlugs: string[];
+  sort: string;
+  range: string;
+  breaking: boolean;
+}
 
 export interface IStorage {
   // Teams
@@ -35,6 +47,7 @@ export interface IStorage {
   getArticlesByTeam(teamSlug: string): Promise<Article[]>;
   createArticle(data: InsertArticle): Promise<Article>;
   incrementArticleViews(id: string): Promise<void>;
+  getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse>;
   
   // Matches
   getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
@@ -151,6 +164,104 @@ export class DatabaseStorage implements IStorage {
     await db.update(articles)
       .set({ viewCount: sql`${articles.viewCount} + 1` })
       .where(eq(articles.id, id));
+  }
+
+  async getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse> {
+    const { comp, type, teamSlugs, sort, range, breaking } = params;
+    
+    const conditions: any[] = [];
+    
+    if (comp !== "all") {
+      const compConfig = NEWS_COMPETITIONS[comp as keyof typeof NEWS_COMPETITIONS];
+      if (compConfig && "dbValue" in compConfig) {
+        conditions.push(eq(articles.competition, compConfig.dbValue));
+      }
+    }
+    
+    if (type.length > 0) {
+      conditions.push(inArray(articles.contentType, type));
+    }
+    
+    if (breaking) {
+      conditions.push(eq(articles.isBreaking, true));
+    }
+    
+    if (range !== "all") {
+      const rangeConfig = NEWS_TIME_RANGES[range as keyof typeof NEWS_TIME_RANGES];
+      if (rangeConfig && rangeConfig.hours) {
+        const cutoff = new Date(Date.now() - rangeConfig.hours * 60 * 60 * 1000);
+        conditions.push(gte(articles.publishedAt, cutoff));
+      }
+    }
+    
+    let teamIds: string[] = [];
+    if (teamSlugs.length > 0) {
+      const teamResults = await db.select().from(teams).where(inArray(teams.slug, teamSlugs));
+      teamIds = teamResults.map(t => t.id);
+    }
+    
+    let result: Article[];
+    
+    if (teamIds.length > 0) {
+      const articleIdsWithTeams = await db
+        .selectDistinct({ articleId: articleTeams.articleId })
+        .from(articleTeams)
+        .where(inArray(articleTeams.teamId, teamIds));
+      
+      const articleIdList = articleIdsWithTeams.map(a => a.articleId);
+      
+      if (articleIdList.length > 0) {
+        conditions.push(inArray(articles.id, articleIdList));
+      } else {
+        return {
+          articles: [],
+          appliedFilters: {
+            comp,
+            type,
+            teams: teamSlugs,
+            myTeams: false,
+            sort,
+            range,
+            breaking,
+            total: 0,
+          },
+        };
+      }
+    }
+    
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    
+    let orderByClause;
+    switch (sort) {
+      case "trending":
+        orderByClause = desc(articles.viewCount);
+        break;
+      case "discussed":
+        orderByClause = desc(articles.commentsCount);
+        break;
+      default:
+        orderByClause = desc(articles.publishedAt);
+    }
+    
+    if (whereClause) {
+      result = await db.select().from(articles).where(whereClause).orderBy(orderByClause);
+    } else {
+      result = await db.select().from(articles).orderBy(orderByClause);
+    }
+    
+    return {
+      articles: result,
+      appliedFilters: {
+        comp,
+        type,
+        teams: teamSlugs,
+        myTeams: false,
+        sort,
+        range,
+        breaking,
+        total: result.length,
+      },
+    };
   }
 
   // Matches
