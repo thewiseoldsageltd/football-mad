@@ -1,18 +1,18 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
+import { useEffect } from "react";
 import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, Mail, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
 import { MatchCard } from "@/components/cards/match-card";
-import { TransferCard } from "@/components/cards/transfer-card";
 import { InjuryCard } from "@/components/cards/injury-card";
 import { PostCard } from "@/components/cards/post-card";
+import { TransferCard } from "@/components/cards/transfer-card";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,17 @@ interface NewsFiltersResponse {
   articles: Article[];
   appliedFilters: Record<string, unknown>;
 }
+
+const VALID_TABS = ["latest", "injuries", "transfers", "matches", "fans"] as const;
+type TabValue = typeof VALID_TABS[number];
+
+const TAB_META: Record<TabValue, { icon: typeof Newspaper; label: string; title: string }> = {
+  latest: { icon: Newspaper, label: "Latest", title: "News" },
+  injuries: { icon: Activity, label: "Injuries", title: "Injuries" },
+  transfers: { icon: TrendingUp, label: "Transfers", title: "Transfers" },
+  matches: { icon: Calendar, label: "Matches", title: "Matches" },
+  fans: { icon: Users, label: "Fans", title: "Fan Zone" },
+};
 
 function EmptyState({ icon: Icon, title, description }: { icon: typeof Inbox; title: string; description: string }) {
   return (
@@ -37,13 +48,78 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof Inbox; ti
   );
 }
 
+function getBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return import.meta.env.VITE_SITE_URL || "https://football-mad.replit.app";
+}
+
+function useDocumentMeta(title: string, description: string, canonicalPath: string) {
+  useEffect(() => {
+    const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
+    
+    document.title = title;
+    
+    const setMetaTag = (selector: string, attr: string, value: string, attrType: "name" | "property" = "name") => {
+      let tag = document.querySelector(selector);
+      if (!tag) {
+        tag = document.createElement("meta");
+        tag.setAttribute(attrType, attr);
+        document.head.appendChild(tag);
+      }
+      tag.setAttribute("content", value);
+    };
+
+    setMetaTag('meta[name="description"]', "description", description);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.setAttribute("rel", "canonical");
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute("href", canonicalUrl);
+
+    setMetaTag('meta[property="og:title"]', "og:title", title, "property");
+    setMetaTag('meta[property="og:description"]', "og:description", description, "property");
+    setMetaTag('meta[property="og:url"]', "og:url", canonicalUrl, "property");
+    setMetaTag('meta[property="og:type"]', "og:type", "website", "property");
+    setMetaTag('meta[property="og:site_name"]', "og:site_name", "Football Mad", "property");
+    
+    setMetaTag('meta[name="twitter:card"]', "twitter:card", "summary_large_image");
+    setMetaTag('meta[name="twitter:title"]', "twitter:title", title);
+    setMetaTag('meta[name="twitter:description"]', "twitter:description", description);
+  }, [title, description, canonicalPath]);
+}
+
+function trackTabClick(teamSlug: string, tabName: string) {
+  if (typeof window !== "undefined" && (window as unknown as { gtag?: (...args: unknown[]) => void }).gtag) {
+    (window as unknown as { gtag: (...args: unknown[]) => void }).gtag("event", "team_tab_click", {
+      team_slug: teamSlug,
+      tab_name: tabName,
+    });
+  }
+  console.debug("[Analytics] Tab click:", { team: teamSlug, tab: tabName });
+}
+
 export default function TeamHubPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug: string; tab?: string }>();
+  const slug = params.slug;
+  const tabParam = params.tab;
+  const [, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
+  const activeTab: TabValue = VALID_TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : "latest";
+
   const { data: team, isLoading: teamLoading } = useQuery<Team>({
     queryKey: ["/api/teams", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch team");
+      return res.json();
+    },
   });
 
   const { data: newsData, isLoading: newsLoading } = useQuery<NewsFiltersResponse>({
@@ -58,26 +134,51 @@ export default function TeamHubPage() {
 
   const { data: matches } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
     queryKey: ["/api/matches", "team", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/matches/team/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch matches");
+      return res.json();
+    },
     enabled: !!team,
   });
 
   const { data: transfers } = useQuery<Transfer[]>({
     queryKey: ["/api/transfers", "team", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/transfers/team/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch transfers");
+      return res.json();
+    },
     enabled: !!team,
   });
 
   const { data: injuries } = useQuery<Injury[]>({
     queryKey: ["/api/injuries", "team", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/injuries/team/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch injuries");
+      return res.json();
+    },
     enabled: !!team,
   });
 
   const { data: posts } = useQuery<(Post & { team?: Team })[]>({
     queryKey: ["/api/posts", "team", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/posts/team/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch posts");
+      return res.json();
+    },
     enabled: !!team,
   });
 
   const { data: followedTeamIds } = useQuery<string[]>({
     queryKey: ["/api/follows"],
+    queryFn: async () => {
+      const res = await fetch("/api/follows");
+      if (!res.ok) throw new Error("Failed to fetch follows");
+      return res.json();
+    },
     enabled: isAuthenticated,
   });
 
@@ -105,7 +206,13 @@ export default function TeamHubPage() {
 
   const handleFollowToggle = () => {
     if (!isAuthenticated) {
-      window.location.href = "/api/login";
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to follow teams. Redirecting...",
+      });
+      setTimeout(() => {
+        window.location.href = "/api/login";
+      }, 1500);
       return;
     }
     if (isFollowing) {
@@ -113,6 +220,13 @@ export default function TeamHubPage() {
     } else {
       followMutation.mutate();
     }
+  };
+
+  const handleTabChange = (tab: TabValue) => {
+    if (tab === activeTab) return;
+    trackTabClick(slug, tab);
+    const newPath = tab === "latest" ? `/teams/${slug}` : `/teams/${slug}/${tab}`;
+    navigate(newPath, { replace: false });
   };
 
   const now = new Date();
@@ -126,14 +240,14 @@ export default function TeamHubPage() {
 
   const articles = newsData?.articles || [];
 
-  const getTierColor = (tier: string) => {
-    switch (tier) {
-      case "A": return "bg-green-500/10 text-green-600 border-green-500/30";
-      case "B": return "bg-blue-500/10 text-blue-600 border-blue-500/30";
-      case "C": return "bg-amber-500/10 text-amber-600 border-amber-500/30";
-      default: return "bg-red-500/10 text-red-600 border-red-500/30";
-    }
-  };
+  const tabTitle = TAB_META[activeTab].title;
+  const pageTitle = team ? `${team.name} ${tabTitle} | Football Mad` : "Team | Football Mad";
+  const pageDescription = team 
+    ? `${tabTitle} for ${team.name}. Stay updated with the latest ${tabTitle.toLowerCase()} from your favorite Premier League club.`
+    : "Team hub page on Football Mad";
+  const canonicalPath = `/teams/${slug}${activeTab !== "latest" ? `/${activeTab}` : ""}`;
+
+  useDocumentMeta(pageTitle, pageDescription, canonicalPath);
 
   if (teamLoading) {
     return (
@@ -173,7 +287,7 @@ export default function TeamHubPage() {
   return (
     <MainLayout>
       <div
-        className="relative py-12 md:py-16 mb-8"
+        className="relative py-12 md:py-16"
         style={{
           background: `linear-gradient(135deg, ${team.primaryColor ?? "#1a1a2e"}ee, ${team.primaryColor ?? "#1a1a2e"}99)`,
         }}
@@ -237,57 +351,51 @@ export default function TeamHubPage() {
         </div>
       </div>
 
+      <div className="h-4 bg-gradient-to-b from-muted/50 to-background" aria-hidden="true" />
+
       <div 
-        className="max-w-7xl mx-auto px-4 pb-12"
+        className="sticky top-16 z-40 bg-background border-b shadow-sm"
         style={{ "--team-color": team.primaryColor ?? "#1a1a2e" } as React.CSSProperties}
       >
-        <Tabs defaultValue="latest" className="w-full">
-          <div className="overflow-x-auto -mx-4 px-4 mb-6 scrollbar-hide">
-            <TabsList className="inline-flex w-max gap-2 bg-transparent p-0">
-              <TabsTrigger 
-                value="latest" 
-                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
-                data-testid="tab-latest"
-              >
-                <Newspaper className="h-4 w-4 mr-2" />
-                Latest
-              </TabsTrigger>
-              <TabsTrigger 
-                value="injuries" 
-                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
-                data-testid="tab-injuries"
-              >
-                <Activity className="h-4 w-4 mr-2" />
-                Injuries
-              </TabsTrigger>
-              <TabsTrigger 
-                value="transfers" 
-                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
-                data-testid="tab-transfers"
-              >
-                <TrendingUp className="h-4 w-4 mr-2" />
-                Transfers
-              </TabsTrigger>
-              <TabsTrigger 
-                value="matches" 
-                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
-                data-testid="tab-matches"
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                Matches
-              </TabsTrigger>
-              <TabsTrigger 
-                value="fans" 
-                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
-                data-testid="tab-fans"
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Fans
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <div className="max-w-7xl mx-auto px-4">
+          <nav className="overflow-x-auto scrollbar-hide">
+            <div className="inline-flex w-max gap-2 py-3">
+              {VALID_TABS.map((tab) => {
+                const { icon: TabIcon, label } = TAB_META[tab];
+                const isActive = tab === activeTab;
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => handleTabChange(tab)}
+                    className={`team-tab flex items-center rounded-full px-4 py-2 border transition-all duration-200 ${
+                      isActive 
+                        ? "text-white shadow-md" 
+                        : "border-transparent hover:bg-muted"
+                    }`}
+                    style={isActive ? { 
+                      backgroundColor: team.primaryColor ?? "#1a1a2e",
+                      borderColor: team.primaryColor ?? "#1a1a2e"
+                    } : undefined}
+                    data-testid={`tab-${tab}`}
+                    data-state={isActive ? "active" : "inactive"}
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    <TabIcon className="h-4 w-4 mr-2" />
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </div>
+      </div>
 
-          <TabsContent value="latest" className="mt-0">
+      <div 
+        className="max-w-7xl mx-auto px-4 py-6"
+        style={{ "--team-color": team.primaryColor ?? "#1a1a2e" } as React.CSSProperties}
+      >
+        {activeTab === "latest" && (
+          <div>
             {newsLoading ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
@@ -307,9 +415,11 @@ export default function TeamHubPage() {
                 description={`Check back soon for the latest ${team.name} news and updates.`}
               />
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="injuries" className="mt-0">
+        {activeTab === "injuries" && (
+          <div>
             {injuries && injuries.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {injuries.map((injury) => (
@@ -323,37 +433,15 @@ export default function TeamHubPage() {
                 description={`Great news! No ${team.name} players are currently injured.`}
               />
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="transfers" className="mt-0">
+        {activeTab === "transfers" && (
+          <div>
             {transfers && transfers.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {transfers.map((transfer) => (
-                  <Card key={transfer.id} className="hover-elevate" data-testid={`card-transfer-${transfer.id}`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-semibold">{transfer.playerName}</h3>
-                        <Badge 
-                          variant="outline" 
-                          className={`text-xs ${getTierColor(transfer.reliabilityTier || "D")}`}
-                        >
-                          Tier {transfer.reliabilityTier || "?"}
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <p>{transfer.fromTeamName} → {transfer.toTeamName}</p>
-                        <div className="flex items-center gap-2">
-                          {transfer.fee && <span className="font-medium">{transfer.fee}</span>}
-                          <Badge variant={transfer.status === "confirmed" ? "default" : "secondary"} className="text-xs">
-                            {transfer.status === "confirmed" ? "Confirmed" : "Rumour"}
-                          </Badge>
-                        </div>
-                        {transfer.sourceName && (
-                          <p className="text-xs">Source: {transfer.sourceName}</p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <TransferCard key={transfer.id} transfer={transfer} />
                 ))}
               </div>
             ) : (
@@ -363,9 +451,11 @@ export default function TeamHubPage() {
                 description={`No transfer rumours or confirmed deals for ${team.name} at the moment.`}
               />
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="matches" className="mt-0 space-y-6">
+        {activeTab === "matches" && (
+          <div className="space-y-6">
             {nextMatch && (
               <section>
                 <h2 className="text-lg font-semibold mb-3">Next Match</h2>
@@ -391,9 +481,11 @@ export default function TeamHubPage() {
                 description={`Match fixtures for ${team.name} will appear here when scheduled.`}
               />
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="fans" className="mt-0">
+        {activeTab === "fans" && (
+          <div>
             {posts && posts.length > 0 ? (
               <div className="space-y-4">
                 {posts.map((post) => (
@@ -407,8 +499,8 @@ export default function TeamHubPage() {
                 description={`Be the first to share your thoughts about ${team.name}!`}
               />
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
       </div>
     </MainLayout>
   );
