@@ -111,7 +111,15 @@ export default function TeamHubPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const activeTab: TabValue = VALID_TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : "latest";
+  useEffect(() => {
+    if (tabParam === "latest") {
+      navigate(`/teams/${slug}`, { replace: true });
+    }
+  }, [tabParam, slug, navigate]);
+
+  const activeTab: TabValue = (!tabParam || tabParam === "latest") 
+    ? "latest" 
+    : VALID_TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : "latest";
 
   const { data: team, isLoading: teamLoading } = useQuery<Team>({
     queryKey: ["/api/teams", slug],
