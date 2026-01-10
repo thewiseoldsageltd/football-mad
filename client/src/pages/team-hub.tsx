@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
+import { ArticleCardSkeleton } from "@/components/skeletons";
 import { MatchCard } from "@/components/cards/match-card";
 import { TransferCard } from "@/components/cards/transfer-card";
 import { InjuryCard } from "@/components/cards/injury-card";
@@ -45,8 +46,13 @@ export default function TeamHubPage() {
     queryKey: ["/api/teams", slug],
   });
 
-  const { data: newsData } = useQuery<NewsFiltersResponse>({
-    queryKey: ["/api/news", { teams: slug }],
+  const { data: newsData, isLoading: newsLoading } = useQuery<NewsFiltersResponse>({
+    queryKey: ["/api/news", "team", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/news?teams=${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch team news");
+      return res.json();
+    },
     enabled: !!team,
   });
 
@@ -279,7 +285,13 @@ export default function TeamHubPage() {
           </div>
 
           <TabsContent value="latest" className="mt-0">
-            {articles.length > 0 ? (
+            {newsLoading ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <ArticleCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : articles.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {articles.map((article) => (
                   <ArticleCard key={article.id} article={article} />
