@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useParams, Link, useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useEffect } from "react";
 import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, Mail, Inbox } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -103,23 +103,34 @@ function trackTabClick(teamSlug: string, tabName: string) {
   console.debug("[Analytics] Tab click:", { team: teamSlug, tab: tabName });
 }
 
+function parseTabFromPath(pathname: string): { slug: string; tab: TabValue } {
+  const parts = pathname.split("/").filter(Boolean);
+  const slug = parts[1] || "";
+  const tabSegment = parts[2];
+  
+  if (!tabSegment || tabSegment === "latest") {
+    return { slug, tab: "latest" };
+  }
+  
+  if (VALID_TABS.includes(tabSegment as TabValue)) {
+    return { slug, tab: tabSegment as TabValue };
+  }
+  
+  return { slug, tab: "latest" };
+}
+
 export default function TeamHubPage() {
-  const params = useParams<{ slug: string; tab?: string }>();
-  const slug = params.slug;
-  const tabParam = params.tab;
-  const [, navigate] = useLocation();
+  const [pathname, navigate] = useLocation();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
+  const { slug, tab: activeTab } = parseTabFromPath(pathname);
+
   useEffect(() => {
-    if (tabParam === "latest") {
+    if (pathname.endsWith("/latest")) {
       navigate(`/teams/${slug}`, { replace: true });
     }
-  }, [tabParam, slug, navigate]);
-
-  const activeTab: TabValue = (!tabParam || tabParam === "latest") 
-    ? "latest" 
-    : VALID_TABS.includes(tabParam as TabValue) ? (tabParam as TabValue) : "latest";
+  }, [pathname, slug, navigate]);
 
   const { data: team, isLoading: teamLoading } = useQuery<Team>({
     queryKey: ["/api/teams", slug],
