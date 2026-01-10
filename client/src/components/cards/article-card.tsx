@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Clock, Eye } from "lucide-react";
+import { Clock, Eye, Zap, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Article } from "@shared/schema";
@@ -13,6 +13,7 @@ interface ArticleCardProps {
 
 export function ArticleCard({ article, featured = false, teamBadge }: ArticleCardProps) {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
+  const viewCount = article.viewCount ?? 0;
   
   if (featured) {
     return (
@@ -33,6 +34,18 @@ export function ArticleCard({ article, featured = false, teamBadge }: ArticleCar
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-6">
               <div className="flex items-center gap-2 mb-3">
+                {article.isBreaking && (
+                  <Badge variant="destructive" className="gap-1">
+                    <Zap className="h-3 w-3" />
+                    Breaking
+                  </Badge>
+                )}
+                {article.isEditorPick && (
+                  <Badge variant="secondary" className="bg-amber-500/90 text-white border-0 gap-1">
+                    <Star className="h-3 w-3" />
+                    Editor's Pick
+                  </Badge>
+                )}
                 <Badge variant="default" className="bg-primary text-primary-foreground">
                   {article.category || "News"}
                 </Badge>
@@ -55,10 +68,10 @@ export function ArticleCard({ article, featured = false, teamBadge }: ArticleCar
                   <Clock className="h-4 w-4" />
                   {formatDistanceToNow(publishedAt, { addSuffix: true })}
                 </span>
-                {article.viewCount !== undefined && article.viewCount > 0 && (
+                {viewCount > 0 && (
                   <span className="flex items-center gap-1">
                     <Eye className="h-4 w-4" />
-                    {article.viewCount.toLocaleString()}
+                    {viewCount.toLocaleString()}
                   </span>
                 )}
                 {article.authorName && (
@@ -94,7 +107,19 @@ export function ArticleCard({ article, featured = false, teamBadge }: ArticleCar
           )}
         </div>
         <CardContent className="p-4">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            {article.isBreaking && (
+              <Badge variant="destructive" className="text-xs gap-1">
+                <Zap className="h-3 w-3" />
+                Breaking
+              </Badge>
+            )}
+            {article.isEditorPick && (
+              <Badge variant="secondary" className="text-xs bg-amber-500/90 text-white border-0 gap-1">
+                <Star className="h-3 w-3" />
+                Pick
+              </Badge>
+            )}
             <Badge variant="secondary" className="text-xs">
               {article.category || "News"}
             </Badge>
@@ -117,10 +142,10 @@ export function ArticleCard({ article, featured = false, teamBadge }: ArticleCar
               <Clock className="h-3 w-3" />
               {formatDistanceToNow(publishedAt, { addSuffix: true })}
             </span>
-            {article.viewCount !== undefined && article.viewCount > 0 && (
+            {viewCount > 0 && (
               <span className="flex items-center gap-1">
                 <Eye className="h-3 w-3" />
-                {article.viewCount.toLocaleString()}
+                {viewCount.toLocaleString()}
               </span>
             )}
           </div>

@@ -74,16 +74,23 @@ export const articles = pgTable("articles", {
   authorId: varchar("author_id"),
   authorName: text("author_name").default("Football Mad"),
   category: text("category").default("news"),
+  competition: text("competition").default("Premier League"),
+  contentType: text("content_type").default("team-news"),
   tags: text("tags").array(),
   isFeatured: boolean("is_featured").default(false),
   isTrending: boolean("is_trending").default(false),
+  isBreaking: boolean("is_breaking").default(false),
+  isEditorPick: boolean("is_editor_pick").default(false),
   viewCount: integer("view_count").default(0),
+  commentsCount: integer("comments_count").default(0),
   publishedAt: timestamp("published_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   index("articles_published_at_idx").on(table.publishedAt),
   index("articles_category_idx").on(table.category),
+  index("articles_competition_idx").on(table.competition),
+  index("articles_content_type_idx").on(table.contentType),
 ]);
 
 export const articlesRelations = relations(articles, ({ many }) => ({
