@@ -180,6 +180,8 @@ export default function NewsPage() {
     selectedTeams.length > 0,
     timeRange !== "any",
     sortBy !== "latest",
+    showBreaking,
+    showMyTeams,
   ].filter(Boolean).length;
 
   const clearFilters = () => {
@@ -442,6 +444,28 @@ export default function NewsPage() {
               Breaking
               {showBreaking && <X className="h-3 w-3 ml-1" />}
             </Badge>
+            {sortBy !== "latest" && (
+              <Badge 
+                variant="secondary"
+                className="cursor-pointer gap-1"
+                onClick={() => setSortBy("latest")}
+                data-testid={`chip-sort-${sortBy}`}
+              >
+                {sortBy === "for-you" ? "For You" : sortOptions.find(o => o.value === sortBy)?.label}
+                <X className="h-3 w-3 ml-1" />
+              </Badge>
+            )}
+            {timeRange !== "any" && (
+              <Badge 
+                variant="secondary"
+                className="cursor-pointer gap-1"
+                onClick={() => setTimeRange("any")}
+                data-testid={`chip-time-${timeRange}`}
+              >
+                {timeRanges.find(r => r.value === timeRange)?.label}
+                <X className="h-3 w-3 ml-1" />
+              </Badge>
+            )}
             {selectedContentTypes.map(type => (
               <Badge 
                 key={type}
