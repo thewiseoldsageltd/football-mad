@@ -25,24 +25,6 @@ export default function ArticlePage() {
     enabled: !!article,
   });
 
-  if (isLoading) {
-    return (
-      <MainLayout>
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <Skeleton className="h-8 w-32 mb-4" />
-          <Skeleton className="h-12 w-full mb-2" />
-          <Skeleton className="h-12 w-3/4 mb-6" />
-          <Skeleton className="aspect-[16/9] w-full mb-8 rounded-lg" />
-          <div className="space-y-4">
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/4" />
-          </div>
-        </div>
-      </MainLayout>
-    );
-  }
-
   const articleUrl = typeof window !== "undefined" 
     ? `${window.location.origin}/article/${slug}` 
     : `/article/${slug}`;
@@ -87,6 +69,24 @@ export default function ArticlePage() {
       document.title = "Football Mad";
     };
   }, [article, articleUrl]);
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-32 mb-4" />
+          <Skeleton className="h-12 w-full mb-2" />
+          <Skeleton className="h-12 w-3/4 mb-6" />
+          <Skeleton className="aspect-[16/9] w-full mb-8 rounded-lg" />
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!article) {
     return (
