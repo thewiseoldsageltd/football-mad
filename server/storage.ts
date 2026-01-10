@@ -1,38 +1,385 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import { eq, and, desc, ilike, sql, or } from "drizzle-orm";
+import {
+  teams, players, articles, articleTeams, matches, transfers, injuries,
+  follows, posts, comments, reactions, products, orders, subscribers,
+  type Team, type InsertTeam,
+  type Player, type InsertPlayer,
+  type Article, type InsertArticle,
+  type Match, type InsertMatch,
+  type Transfer, type InsertTransfer,
+  type Injury, type InsertInjury,
+  type Follow, type InsertFollow,
+  type Post, type InsertPost,
+  type Comment, type InsertComment,
+  type Reaction, type InsertReaction,
+  type Product, type InsertProduct,
+  type Order, type InsertOrder,
+  type Subscriber, type InsertSubscriber,
+} from "@shared/schema";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Teams
+  getTeams(): Promise<Team[]>;
+  getTeamBySlug(slug: string): Promise<Team | undefined>;
+  getTeamById(id: string): Promise<Team | undefined>;
+  createTeam(data: InsertTeam): Promise<Team>;
+  
+  // Players
+  getPlayersByTeam(teamId: string): Promise<Player[]>;
+  createPlayer(data: InsertPlayer): Promise<Player>;
+  
+  // Articles
+  getArticles(category?: string): Promise<Article[]>;
+  getArticleBySlug(slug: string): Promise<Article | undefined>;
+  getArticlesByTeam(teamSlug: string): Promise<Article[]>;
+  createArticle(data: InsertArticle): Promise<Article>;
+  incrementArticleViews(id: string): Promise<void>;
+  
+  // Matches
+  getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
+  getMatchBySlug(slug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team }) | undefined>;
+  getMatchesByTeam(teamSlug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
+  createMatch(data: InsertMatch): Promise<Match>;
+  
+  // Transfers
+  getTransfers(): Promise<Transfer[]>;
+  getTransfersByTeam(teamSlug: string): Promise<Transfer[]>;
+  createTransfer(data: InsertTransfer): Promise<Transfer>;
+  
+  // Injuries
+  getInjuries(): Promise<Injury[]>;
+  getInjuriesByTeam(teamSlug: string): Promise<Injury[]>;
+  createInjury(data: InsertInjury): Promise<Injury>;
+  
+  // Follows
+  getFollowsByUser(userId: string): Promise<string[]>;
+  getFollowedTeams(userId: string): Promise<Team[]>;
+  followTeam(userId: string, teamId: string): Promise<Follow>;
+  unfollowTeam(userId: string, teamId: string): Promise<void>;
+  
+  // Posts
+  getPosts(): Promise<(Post & { team?: Team })[]>;
+  getPostsByTeam(teamSlug: string): Promise<(Post & { team?: Team })[]>;
+  getPostById(id: string): Promise<Post | undefined>;
+  createPost(data: InsertPost): Promise<Post>;
+  likePost(postId: string, userId: string): Promise<void>;
+  
+  // Comments
+  getCommentsByPost(postId: string): Promise<Comment[]>;
+  createComment(data: InsertComment): Promise<Comment>;
+  
+  // Products
+  getProducts(): Promise<(Product & { team?: Team })[]>;
+  getProductBySlug(slug: string): Promise<(Product & { team?: Team }) | undefined>;
+  createProduct(data: InsertProduct): Promise<Product>;
+  
+  // Orders
+  getOrdersByUser(userId: string): Promise<Order[]>;
+  createOrder(data: InsertOrder): Promise<Order>;
+  
+  // Subscribers
+  createSubscriber(data: InsertSubscriber): Promise<Subscriber>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  // Teams
+  async getTeams(): Promise<Team[]> {
+    return db.select().from(teams).orderBy(teams.name);
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getTeamBySlug(slug: string): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(eq(teams.slug, slug));
+    return team;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getTeamById(id: string): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(eq(teams.id, id));
+    return team;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async createTeam(data: InsertTeam): Promise<Team> {
+    const [team] = await db.insert(teams).values(data).returning();
+    return team;
+  }
+
+  // Players
+  async getPlayersByTeam(teamId: string): Promise<Player[]> {
+    return db.select().from(players).where(eq(players.teamId, teamId));
+  }
+
+  async createPlayer(data: InsertPlayer): Promise<Player> {
+    const [player] = await db.insert(players).values(data).returning();
+    return player;
+  }
+
+  // Articles
+  async getArticles(category?: string): Promise<Article[]> {
+    if (category && category !== "all") {
+      return db.select().from(articles)
+        .where(eq(articles.category, category))
+        .orderBy(desc(articles.publishedAt));
+    }
+    return db.select().from(articles).orderBy(desc(articles.publishedAt));
+  }
+
+  async getArticleBySlug(slug: string): Promise<Article | undefined> {
+    const [article] = await db.select().from(articles).where(eq(articles.slug, slug));
+    return article;
+  }
+
+  async getArticlesByTeam(teamSlug: string): Promise<Article[]> {
+    const team = await this.getTeamBySlug(teamSlug);
+    if (!team) return [];
+    
+    const result = await db
+      .select({ article: articles })
+      .from(articles)
+      .innerJoin(articleTeams, eq(articleTeams.articleId, articles.id))
+      .where(eq(articleTeams.teamId, team.id))
+      .orderBy(desc(articles.publishedAt));
+    
+    return result.map(r => r.article);
+  }
+
+  async createArticle(data: InsertArticle): Promise<Article> {
+    const [article] = await db.insert(articles).values(data).returning();
+    return article;
+  }
+
+  async incrementArticleViews(id: string): Promise<void> {
+    await db.update(articles)
+      .set({ viewCount: sql`${articles.viewCount} + 1` })
+      .where(eq(articles.id, id));
+  }
+
+  // Matches
+  async getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
+    const results = await db.select().from(matches).orderBy(matches.kickoffTime);
+    const enriched = await Promise.all(results.map(async (match) => {
+      const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
+      const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
+      return { ...match, homeTeam, awayTeam };
+    }));
+    return enriched;
+  }
+
+  async getMatchBySlug(slug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team }) | undefined> {
+    const [match] = await db.select().from(matches).where(eq(matches.slug, slug));
+    if (!match) return undefined;
+    const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
+    const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
+    return { ...match, homeTeam, awayTeam };
+  }
+
+  async getMatchesByTeam(teamSlug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
+    const team = await this.getTeamBySlug(teamSlug);
+    if (!team) return [];
+    
+    const results = await db.select().from(matches)
+      .where(or(eq(matches.homeTeamId, team.id), eq(matches.awayTeamId, team.id)))
+      .orderBy(matches.kickoffTime);
+    
+    const enriched = await Promise.all(results.map(async (match) => {
+      const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
+      const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
+      return { ...match, homeTeam, awayTeam };
+    }));
+    return enriched;
+  }
+
+  async createMatch(data: InsertMatch): Promise<Match> {
+    const [match] = await db.insert(matches).values(data).returning();
+    return match;
+  }
+
+  // Transfers
+  async getTransfers(): Promise<Transfer[]> {
+    return db.select().from(transfers).orderBy(desc(transfers.createdAt));
+  }
+
+  async getTransfersByTeam(teamSlug: string): Promise<Transfer[]> {
+    const team = await this.getTeamBySlug(teamSlug);
+    if (!team) return [];
+    return db.select().from(transfers)
+      .where(or(eq(transfers.fromTeamId, team.id), eq(transfers.toTeamId, team.id)))
+      .orderBy(desc(transfers.createdAt));
+  }
+
+  async createTransfer(data: InsertTransfer): Promise<Transfer> {
+    const [transfer] = await db.insert(transfers).values(data).returning();
+    return transfer;
+  }
+
+  // Injuries
+  async getInjuries(): Promise<Injury[]> {
+    return db.select().from(injuries).orderBy(desc(injuries.createdAt));
+  }
+
+  async getInjuriesByTeam(teamSlug: string): Promise<Injury[]> {
+    const team = await this.getTeamBySlug(teamSlug);
+    if (!team) return [];
+    return db.select().from(injuries)
+      .where(eq(injuries.teamId, team.id))
+      .orderBy(desc(injuries.createdAt));
+  }
+
+  async createInjury(data: InsertInjury): Promise<Injury> {
+    const [injury] = await db.insert(injuries).values(data).returning();
+    return injury;
+  }
+
+  // Follows
+  async getFollowsByUser(userId: string): Promise<string[]> {
+    const result = await db.select({ teamId: follows.teamId })
+      .from(follows)
+      .where(eq(follows.userId, userId));
+    return result.map(r => r.teamId);
+  }
+
+  async getFollowedTeams(userId: string): Promise<Team[]> {
+    const result = await db
+      .select({ team: teams })
+      .from(follows)
+      .innerJoin(teams, eq(follows.teamId, teams.id))
+      .where(eq(follows.userId, userId));
+    return result.map(r => r.team);
+  }
+
+  async followTeam(userId: string, teamId: string): Promise<Follow> {
+    const existing = await db.select().from(follows)
+      .where(and(eq(follows.userId, userId), eq(follows.teamId, teamId)));
+    if (existing.length > 0) return existing[0];
+    
+    const [follow] = await db.insert(follows).values({ userId, teamId }).returning();
+    return follow;
+  }
+
+  async unfollowTeam(userId: string, teamId: string): Promise<void> {
+    await db.delete(follows)
+      .where(and(eq(follows.userId, userId), eq(follows.teamId, teamId)));
+  }
+
+  // Posts
+  async getPosts(): Promise<(Post & { team?: Team })[]> {
+    const results = await db.select().from(posts).orderBy(desc(posts.createdAt));
+    const enriched = await Promise.all(results.map(async (post) => {
+      let team: Team | undefined;
+      if (post.teamId) {
+        [team] = await db.select().from(teams).where(eq(teams.id, post.teamId));
+      }
+      return { ...post, team };
+    }));
+    return enriched;
+  }
+
+  async getPostsByTeam(teamSlug: string): Promise<(Post & { team?: Team })[]> {
+    const team = await this.getTeamBySlug(teamSlug);
+    if (!team) return [];
+    const results = await db.select().from(posts)
+      .where(eq(posts.teamId, team.id))
+      .orderBy(desc(posts.createdAt));
+    return results.map(p => ({ ...p, team }));
+  }
+
+  async getPostById(id: string): Promise<Post | undefined> {
+    const [post] = await db.select().from(posts).where(eq(posts.id, id));
+    return post;
+  }
+
+  async createPost(data: InsertPost): Promise<Post> {
+    const [post] = await db.insert(posts).values(data).returning();
+    return post;
+  }
+
+  async likePost(postId: string, userId: string): Promise<void> {
+    const existing = await db.select().from(reactions)
+      .where(and(eq(reactions.postId, postId), eq(reactions.userId, userId)));
+    
+    if (existing.length > 0) {
+      await db.delete(reactions)
+        .where(and(eq(reactions.postId, postId), eq(reactions.userId, userId)));
+      await db.update(posts)
+        .set({ likesCount: sql`${posts.likesCount} - 1` })
+        .where(eq(posts.id, postId));
+    } else {
+      await db.insert(reactions).values({ postId, userId, type: "like" });
+      await db.update(posts)
+        .set({ likesCount: sql`${posts.likesCount} + 1` })
+        .where(eq(posts.id, postId));
+    }
+  }
+
+  // Comments
+  async getCommentsByPost(postId: string): Promise<Comment[]> {
+    return db.select().from(comments)
+      .where(eq(comments.postId, postId))
+      .orderBy(comments.createdAt);
+  }
+
+  async createComment(data: InsertComment): Promise<Comment> {
+    const [comment] = await db.insert(comments).values(data).returning();
+    if (data.postId) {
+      await db.update(posts)
+        .set({ commentsCount: sql`${posts.commentsCount} + 1` })
+        .where(eq(posts.id, data.postId));
+    }
+    return comment;
+  }
+
+  // Products
+  async getProducts(): Promise<(Product & { team?: Team })[]> {
+    const results = await db.select().from(products).orderBy(products.name);
+    const enriched = await Promise.all(results.map(async (product) => {
+      let team: Team | undefined;
+      if (product.teamId) {
+        [team] = await db.select().from(teams).where(eq(teams.id, product.teamId));
+      }
+      return { ...product, team };
+    }));
+    return enriched;
+  }
+
+  async getProductBySlug(slug: string): Promise<(Product & { team?: Team }) | undefined> {
+    const [product] = await db.select().from(products).where(eq(products.slug, slug));
+    if (!product) return undefined;
+    let team: Team | undefined;
+    if (product.teamId) {
+      [team] = await db.select().from(teams).where(eq(teams.id, product.teamId));
+    }
+    return { ...product, team };
+  }
+
+  async createProduct(data: InsertProduct): Promise<Product> {
+    const [product] = await db.insert(products).values(data).returning();
+    return product;
+  }
+
+  // Orders
+  async getOrdersByUser(userId: string): Promise<Order[]> {
+    return db.select().from(orders)
+      .where(eq(orders.userId, userId))
+      .orderBy(desc(orders.createdAt));
+  }
+
+  async createOrder(data: InsertOrder): Promise<Order> {
+    const [order] = await db.insert(orders).values(data).returning();
+    return order;
+  }
+
+  // Subscribers
+  async createSubscriber(data: InsertSubscriber): Promise<Subscriber> {
+    const existing = await db.select().from(subscribers).where(eq(subscribers.email, data.email));
+    if (existing.length > 0) {
+      const [updated] = await db.update(subscribers)
+        .set({ tags: sql`array_cat(${subscribers.tags}, ${data.tags || []})` })
+        .where(eq(subscribers.email, data.email))
+        .returning();
+      return updated;
+    }
+    const [subscriber] = await db.insert(subscribers).values(data).returning();
+    return subscriber;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
