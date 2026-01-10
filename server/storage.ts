@@ -2,7 +2,7 @@ import { db } from "./db";
 import { eq, and, desc, ilike, sql, or, inArray, gte } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
-  follows, posts, comments, reactions, products, orders, subscribers,
+  follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -93,6 +93,9 @@ export interface IStorage {
   
   // Subscribers
   createSubscriber(data: InsertSubscriber): Promise<Subscriber>;
+  
+  // Share Analytics
+  trackShareClick(articleId: string, platform: string, userId?: string, userAgent?: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -490,6 +493,16 @@ export class DatabaseStorage implements IStorage {
     }
     const [subscriber] = await db.insert(subscribers).values(data).returning();
     return subscriber;
+  }
+
+  // Share Analytics
+  async trackShareClick(articleId: string, platform: string, userId?: string, userAgent?: string): Promise<void> {
+    await db.insert(shareClicks).values({
+      articleId,
+      platform,
+      userId: userId || null,
+      userAgent: userAgent || null,
+    });
   }
 }
 

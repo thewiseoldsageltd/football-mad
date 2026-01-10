@@ -465,4 +465,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: "Failed to subscribe" });
     }
   });
+
+  // ========== SHARE ANALYTICS ==========
+  app.post("/api/share-click", async (req: any, res) => {
+    try {
+      const { articleId, platform } = req.body;
+      if (!articleId || !platform) {
+        return res.status(400).json({ error: "articleId and platform are required" });
+      }
+      const validPlatforms = ["whatsapp", "twitter", "facebook", "copy", "native"];
+      if (!validPlatforms.includes(platform)) {
+        return res.status(400).json({ error: "Invalid platform" });
+      }
+      const userId = req.user?.id;
+      const userAgent = req.headers["user-agent"];
+      await storage.trackShareClick(articleId, platform, userId, userAgent);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error tracking share click:", error);
+      res.status(500).json({ error: "Failed to track share" });
+    }
+  });
 }
