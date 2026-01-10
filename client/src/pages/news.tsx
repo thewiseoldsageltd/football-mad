@@ -479,35 +479,35 @@ export default function NewsPage() {
             </Badge>
             {sortBy !== "latest" && (
               <Badge 
-                variant="secondary"
-                className="cursor-pointer gap-1"
+                variant="outline"
+                className="cursor-pointer gap-1 text-muted-foreground"
                 onClick={() => setSortBy("latest")}
                 data-testid={`chip-sort-${sortBy}`}
               >
-                {sortBy === "for-you" ? "For You" : sortOptions.find(o => o.value === sortBy)?.label}
+                Sort: {sortBy === "for-you" ? "For You" : sortOptions.find(o => o.value === sortBy)?.label}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             )}
             {timeRange !== "any" && (
               <Badge 
-                variant="secondary"
-                className="cursor-pointer gap-1"
+                variant="outline"
+                className="cursor-pointer gap-1 text-muted-foreground"
                 onClick={() => setTimeRange("any")}
                 data-testid={`chip-time-${timeRange}`}
               >
-                {timeRanges.find(r => r.value === timeRange)?.label}
+                Time: {timeRanges.find(r => r.value === timeRange)?.label}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             )}
             {selectedContentTypes.map(type => (
               <Badge 
                 key={type}
-                variant="secondary"
-                className="cursor-pointer gap-1"
+                variant="outline"
+                className="cursor-pointer gap-1 text-muted-foreground"
                 onClick={() => toggleContentType(type)}
                 data-testid={`chip-content-${type}`}
               >
-                {contentTypes.find(t => t.value === type)?.label}
+                Type: {contentTypes.find(t => t.value === type)?.label}
                 <X className="h-3 w-3 ml-1" />
               </Badge>
             ))}
@@ -516,12 +516,12 @@ export default function NewsPage() {
               return team ? (
                 <Badge 
                   key={teamId}
-                  variant="secondary"
-                  className="cursor-pointer gap-1"
+                  variant="outline"
+                  className="cursor-pointer gap-1 text-muted-foreground"
                   onClick={() => toggleTeam(teamId)}
                   data-testid={`chip-team-${team.slug}`}
                 >
-                  {team.shortName || team.name}
+                  Team: {team.name}
                   <X className="h-3 w-3 ml-1" />
                 </Badge>
               ) : null;
