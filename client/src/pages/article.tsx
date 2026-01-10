@@ -1,7 +1,8 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { format } from "date-fns";
-import { Clock, Eye, ArrowLeft, Share2, Bookmark } from "lucide-react";
+import { Clock, Eye, ArrowLeft, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -9,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { NewsletterForm } from "@/components/newsletter-form";
+import { ShareButtons, MobileStickyShare } from "@/components/share-buttons";
 import type { Article } from "@shared/schema";
 
 export default function ArticlePage() {
@@ -40,6 +42,51 @@ export default function ArticlePage() {
       </MainLayout>
     );
   }
+
+  const articleUrl = typeof window !== "undefined" 
+    ? `${window.location.origin}/article/${slug}` 
+    : `/article/${slug}`;
+
+  useEffect(() => {
+    if (!article) return;
+
+    const setMetaTag = (property: string, content: string, isName = false) => {
+      const attr = isName ? "name" : "property";
+      const existingId = `article-meta-${property.replace(/:/g, "-")}`;
+      let tag = document.getElementById(existingId) as HTMLMetaElement | null;
+      if (!tag) {
+        tag = document.createElement("meta");
+        tag.id = existingId;
+        tag.setAttribute(attr, property);
+        document.head.appendChild(tag);
+      }
+      tag.content = content;
+    };
+
+    document.title = `${article.title} | Football Mad`;
+    
+    setMetaTag("og:title", article.title);
+    setMetaTag("og:description", article.excerpt || "Read the latest football news on Football Mad");
+    setMetaTag("og:type", "article");
+    setMetaTag("og:url", articleUrl);
+    if (article.coverImage) {
+      setMetaTag("og:image", article.coverImage);
+    }
+    setMetaTag("og:site_name", "Football Mad");
+    
+    setMetaTag("twitter:card", "summary_large_image", true);
+    setMetaTag("twitter:title", article.title, true);
+    setMetaTag("twitter:description", article.excerpt || "Read the latest football news on Football Mad", true);
+    if (article.coverImage) {
+      setMetaTag("twitter:image", article.coverImage, true);
+    }
+
+    return () => {
+      const metaTags = document.querySelectorAll('[id^="article-meta-"]');
+      metaTags.forEach(tag => tag.remove());
+      document.title = "Football Mad";
+    };
+  }, [article, articleUrl]);
 
   if (!article) {
     return (
@@ -106,7 +153,7 @@ export default function ArticlePage() {
                     <Clock className="h-3 w-3" />
                     {format(publishedAt, "d MMM yyyy, HH:mm")}
                   </span>
-                  {article.viewCount !== undefined && article.viewCount > 0 && (
+                  {article.viewCount != null && article.viewCount > 0 && (
                     <span className="flex items-center gap-1">
                       <Eye className="h-3 w-3" />
                       {article.viewCount.toLocaleString()} views
@@ -117,10 +164,6 @@ export default function ArticlePage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" data-testid="button-share">
-                <Share2 className="h-4 w-4 mr-2" />
-                Share
-              </Button>
               <Button variant="outline" size="sm" data-testid="button-bookmark">
                 <Bookmark className="h-4 w-4" />
               </Button>
@@ -153,6 +196,15 @@ export default function ArticlePage() {
           </div>
         )}
 
+        <section className="py-6 border-y mb-8">
+          <ShareButtons
+            articleId={article.id}
+            title={article.title}
+            url={typeof window !== "undefined" ? window.location.href : `/article/${slug}`}
+            description={article.excerpt || undefined}
+          />
+        </section>
+
         <section className="mb-12">
           <NewsletterForm />
         </section>
@@ -168,6 +220,13 @@ export default function ArticlePage() {
           </section>
         )}
       </article>
+
+      <MobileStickyShare
+        articleId={article.id}
+        title={article.title}
+        url={typeof window !== "undefined" ? window.location.href : `/article/${slug}`}
+        description={article.excerpt || undefined}
+      />
     </MainLayout>
   );
 }

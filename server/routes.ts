@@ -3,6 +3,12 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema } from "@shared/schema";
+import { z } from "zod";
+
+const shareClickSchema = z.object({
+  articleId: z.string(),
+  platform: z.enum(["whatsapp", "twitter", "facebook", "copy", "native"]),
+});
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
   // Auth routes
@@ -469,14 +475,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== SHARE ANALYTICS ==========
   app.post("/api/share-click", async (req: any, res) => {
     try {
-      const { articleId, platform } = req.body;
-      if (!articleId || !platform) {
-        return res.status(400).json({ error: "articleId and platform are required" });
+      const result = shareClickSchema.safeParse(req.body);
+      if (!result.success) {
+        return res.status(400).json({ error: "Invalid request", details: result.error.flatten() });
       }
-      const validPlatforms = ["whatsapp", "twitter", "facebook", "copy", "native"];
-      if (!validPlatforms.includes(platform)) {
-        return res.status(400).json({ error: "Invalid platform" });
-      }
+      const { articleId, platform } = result.data;
       const userId = req.user?.id;
       const userAgent = req.headers["user-agent"];
       await storage.trackShareClick(articleId, platform, userId, userAgent);
