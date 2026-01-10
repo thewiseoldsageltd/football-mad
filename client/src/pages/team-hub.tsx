@@ -208,7 +208,7 @@ export default function TeamHubPage() {
                 variant={isFollowing ? "secondary" : "default"}
                 onClick={handleFollowToggle}
                 disabled={followMutation.isPending || unfollowMutation.isPending}
-                className="bg-white text-black hover:bg-white/90"
+                className="bg-white text-black shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-200"
                 data-testid="button-follow-team"
               >
                 {isFollowing ? (
@@ -226,7 +226,7 @@ export default function TeamHubPage() {
               <Button
                 size="lg"
                 variant="outline"
-                className="bg-white/10 border-white/30 text-white hover:bg-white/20"
+                className="bg-white/10 border-white/30 text-white shadow-md hover:shadow-lg hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 active:shadow-md transition-all duration-200"
                 data-testid="button-subscribe-newsletter"
               >
                 <Mail className="h-5 w-5 mr-2" />
@@ -237,13 +237,16 @@ export default function TeamHubPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 pb-12">
+      <div 
+        className="max-w-7xl mx-auto px-4 pb-12"
+        style={{ "--team-color": team.primaryColor ?? "#1a1a2e" } as React.CSSProperties}
+      >
         <Tabs defaultValue="latest" className="w-full">
-          <div className="overflow-x-auto -mx-4 px-4 mb-6">
+          <div className="overflow-x-auto -mx-4 px-4 mb-6 scrollbar-hide">
             <TabsList className="inline-flex w-max gap-2 bg-transparent p-0">
               <TabsTrigger 
                 value="latest" 
-                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
                 data-testid="tab-latest"
               >
                 <Newspaper className="h-4 w-4 mr-2" />
@@ -251,7 +254,7 @@ export default function TeamHubPage() {
               </TabsTrigger>
               <TabsTrigger 
                 value="injuries" 
-                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
                 data-testid="tab-injuries"
               >
                 <Activity className="h-4 w-4 mr-2" />
@@ -259,7 +262,7 @@ export default function TeamHubPage() {
               </TabsTrigger>
               <TabsTrigger 
                 value="transfers" 
-                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
                 data-testid="tab-transfers"
               >
                 <TrendingUp className="h-4 w-4 mr-2" />
@@ -267,7 +270,7 @@ export default function TeamHubPage() {
               </TabsTrigger>
               <TabsTrigger 
                 value="matches" 
-                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
                 data-testid="tab-matches"
               >
                 <Calendar className="h-4 w-4 mr-2" />
@@ -275,7 +278,7 @@ export default function TeamHubPage() {
               </TabsTrigger>
               <TabsTrigger 
                 value="fans" 
-                className="rounded-full px-4 py-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                className="team-tab rounded-full px-4 py-2 border border-transparent transition-all duration-200 data-[state=inactive]:hover:bg-muted"
                 data-testid="tab-fans"
               >
                 <Users className="h-4 w-4 mr-2" />
@@ -294,7 +297,7 @@ export default function TeamHubPage() {
             ) : articles.length > 0 ? (
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {articles.map((article) => (
-                  <ArticleCard key={article.id} article={article} />
+                  <ArticleCard key={article.id} article={article} teamColor={team.primaryColor ?? undefined} />
                 ))}
               </div>
             ) : (

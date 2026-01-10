@@ -9,11 +9,14 @@ interface ArticleCardProps {
   article: Article;
   featured?: boolean;
   teamBadge?: string;
+  teamColor?: string;
 }
 
-export function ArticleCard({ article, featured = false, teamBadge }: ArticleCardProps) {
+export function ArticleCard({ article, featured = false, teamBadge, teamColor }: ArticleCardProps) {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
+  
+  const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;
   
   if (featured) {
     return (
@@ -87,7 +90,11 @@ export function ArticleCard({ article, featured = false, teamBadge }: ArticleCar
 
   return (
     <Link href={`/news/${article.slug}`}>
-      <Card className="group h-full overflow-hidden hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-article-${article.id}`}>
+      <Card 
+        className={`group h-full overflow-hidden hover-elevate active-elevate-2 cursor-pointer border ${teamColor ? "team-card-hover" : ""}`}
+        style={teamCardStyle}
+        data-testid={`card-article-${article.id}`}
+      >
         <div className="relative aspect-[16/9] overflow-hidden">
           {article.coverImage ? (
             <img

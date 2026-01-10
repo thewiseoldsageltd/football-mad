@@ -285,4 +285,30 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+
+  /* Scrollbar hide utility for horizontal scroll areas */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Team-colored tab styling */
+  .team-tab[data-state="active"] {
+    background-color: var(--team-color, hsl(var(--primary)));
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  
+  /* Card hover with team accent border */
+  .team-card-hover {
+    transition: all 0.2s ease;
+  }
+  .team-card-hover:hover {
+    border-color: var(--team-color, hsl(var(--primary)));
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
 }
