@@ -1,0 +1,402 @@
+⚽ FOOTBALL MAD — MASTER PLATFORM SPEC (SOURCE OF TRUTH)
+IMPORTANT INSTRUCTION
+
+This document is the single source of truth.
+Do not simplify, omit, or reinterpret features unless explicitly stated.
+Ask clarifying questions only if something is genuinely ambiguous.
+
+1. Vision
+
+Football Mad will be THE go-to destination for all football fans worldwide.
+
+It combines:
+
+News & analysis
+
+Match, team & player hubs
+
+Transfers & injuries (with trust indicators)
+
+Fantasy Premier League content
+
+Games & predictions (future phases)
+
+Community & fan content
+
+Podcasts & video
+
+Shop & merchandise
+
+Memberships & newsletters
+
+Football Mad is a daily habit, not a blog.
+
+2. Core Product Principles (Non-Negotiable)
+
+Habit over hits – optimise for daily return visits
+
+Personalisation is the product – followed teams drive the experience
+
+Hubs are product pages, not posts
+
+Trust beats speed – transfers & injuries show sources + confidence
+
+Future-proof architecture – leagues, seasons, tools added without rewrites
+
+Everything links together – articles connect to teams, matches, players
+
+Every page has a next action (Follow, Subscribe, Comment, Buy)
+
+3. Tech Stack (Phase 1)
+
+Next.js (App Router)
+
+TypeScript
+
+TailwindCSS
+
+Postgres
+
+Prisma ORM
+
+Auth: NextAuth (credentials + email)
+
+Payments: Stripe Checkout + Webhooks
+
+Search: Postgres full-text (Algolia later)
+
+Hosting: Replit-compatible, monolithic Phase 1
+
+4. Sitemap (Phase 1)
+/
+├─ /news
+│  └─ /news/:slug
+├─ /matches
+│  └─ /matches/:slug
+├─ /teams
+│  └─ /teams/:slug
+│     ├─ injuries
+│     ├─ transfers
+│     ├─ squad
+│     └─ fans
+├─ /players/:slug
+├─ /transfers
+├─ /injuries
+├─ /fpl
+├─ /community
+│  └─ /community/:slug
+├─ /shop
+│  └─ /shop/product/:slug
+├─ /subscribe/:edition
+├─ /account
+├─ /admin
+└─ /legal
+
+5. Canonical Premier League Teams (LOCKED)
+
+These 20 teams must be seeded and used everywhere.
+Slugs are permanent and must not change.
+
+[
+  {"name":"Arsenal","slug":"arsenal"},
+  {"name":"Aston Villa","slug":"aston-villa"},
+  {"name":"AFC Bournemouth","slug":"afc-bournemouth"},
+  {"name":"Brentford","slug":"brentford"},
+  {"name":"Brighton & Hove Albion","slug":"brighton-and-hove-albion"},
+  {"name":"Burnley","slug":"burnley"},
+  {"name":"Chelsea","slug":"chelsea"},
+  {"name":"Crystal Palace","slug":"crystal-palace"},
+  {"name":"Everton","slug":"everton"},
+  {"name":"Fulham","slug":"fulham"},
+  {"name":"Leeds United","slug":"leeds-united"},
+  {"name":"Liverpool","slug":"liverpool"},
+  {"name":"Manchester City","slug":"manchester-city"},
+  {"name":"Manchester United","slug":"manchester-united"},
+  {"name":"Newcastle United","slug":"newcastle-united"},
+  {"name":"Nottingham Forest","slug":"nottingham-forest"},
+  {"name":"Sunderland","slug":"sunderland"},
+  {"name":"Tottenham Hotspur","slug":"tottenham-hotspur"},
+  {"name":"West Ham United","slug":"west-ham-united"},
+  {"name":"Wolverhampton Wanderers","slug":"wolverhampton-wanderers"}
+]
+
+6. Core Features (Phase 1)
+6.1 Articles & News
+
+Articles with title, excerpt, cover image, HTML content
+
+Tags & entity links (team/match/player)
+
+SEO metadata + OpenGraph
+
+JSON-LD NewsArticle schema
+
+Trending based on views
+
+6.2 Team Hubs
+
+Each team page shows:
+
+Latest articles
+
+Next match
+
+Injuries
+
+Transfers
+
+Squad list
+
+Fan posts
+
+Follow button
+
+Club-edition newsletter CTA
+
+6.3 Match Hubs
+
+Fixture list by date
+
+Match page with:
+
+kickoff time
+
+teams
+
+competition
+
+predicted lineups (manual placeholder)
+
+timeline placeholder
+
+related articles
+
+comments
+
+6.4 Transfers Centre
+
+Rumours vs confirmed
+
+Reliability tier (A–D)
+
+Source name + optional URL
+
+Filter by team
+
+6.5 Injury Room
+
+Player name
+
+Status (OUT / DOUBTFUL / FIT)
+
+Expected return
+
+Confidence %
+
+Source
+
+Filter by team
+
+6.6 FPL Hub
+
+Editorial FPL content
+
+Deadline countdown placeholder
+
+Injury impact surfaced
+
+Team-news confidence
+
+6.7 Community
+
+Fan posts
+
+Comments
+
+Likes
+
+Team-filtered feeds
+
+Admin moderation
+
+6.8 Shop & Merch
+
+Products & variants
+
+Team-specific collections
+
+Cart
+
+Stripe Checkout
+
+Order confirmation page
+
+Orders saved via webhook
+
+6.9 Newsletter System
+
+Email capture
+
+Tags per edition (e.g. monday-memo, gunners-mad)
+
+Admin CSV export
+
+6.10 Personalisation
+
+User accounts
+
+Follow teams
+
+Home page “For You” module based on follows
+
+7. Database (Prisma)
+
+Use the Prisma schema exactly as provided previously.
+Do not simplify entity relationships.
+
+Key models:
+
+User
+
+Team
+
+Player
+
+Match
+
+Article
+
+Injury
+
+Transfer
+
+Follow
+
+Post
+
+Comment
+
+Reaction
+
+Product
+
+Order
+
+Subscriber
+
+8. Admin Panel (Phase 1)
+
+Protected routes under /admin:
+
+CRUD: articles, teams, matches
+
+Manage injuries & transfers
+
+Manage products & orders
+
+Export subscribers
+
+Delete posts/comments
+
+9. SEO & Performance
+
+Must include:
+
+Dynamic <title> and <meta description>
+
+OG tags
+
+JSON-LD for articles
+
+/sitemap.xml
+
+/robots.txt
+
+Optimised images (Next/Image)
+
+Server caching for homepage modules
+
+10. Seed Requirements (MANDATORY)
+
+Seed the database with:
+
+1 Admin user
+
+20 Premier League teams
+
+40+ sample articles
+
+10+ matches
+
+30 injuries
+
+50 transfers
+
+24 products (Football Mad + club editions)
+
+5 subscribers
+
+The site must look alive on first load.
+
+11. Acceptance Criteria (Phase 1 Done When…)
+
+Users can browse, register, follow teams
+
+Team hubs auto-populate correctly
+
+Transfers & injuries show sources
+
+Articles are SEO-ready
+
+Community posting works
+
+Shop checkout works end-to-end
+
+Orders update via Stripe webhook
+
+Newsletter signup stores tagged subscribers
+
+Admin can manage all content
+
+No broken links
+
+Mobile works cleanly
+
+12. Build Order (STRICT)
+
+Scaffold Next.js + Tailwind + Prisma
+
+Implement schema & migrations
+
+Seed database
+
+Build layout & components
+
+Articles & home page
+
+Team hubs
+
+Transfers & injuries
+
+Matches
+
+Auth + follows
+
+Community
+
+Shop + Stripe
+
+Admin
+
+SEO
+
+Polish
+
+13. Replit Instruction (Paste This Too)
+
+Build Football Mad exactly as specified in this document.
+Treat this spec as immutable.
+Implement Phase 1 fully.
+Seed the database so the platform looks real.
+Optimise for scalability, personalisation, and future Phase 2 features.
+Ask clarifying questions only if absolutely necessary.
