@@ -1,0 +1,90 @@
+Implement Team Hub Navigation v1 for /teams/:slug pages with URL-driven tabs, deep linking, and smooth UX.
+
+Goals:
+
+Tabs must be shareable URLs (deep links)
+
+Navigation must feel instant (client-side), not page reload-y
+
+Mobile-first: tabs scroll horizontally, remain usable on small screens
+
+Preserve current team header + Follow/Subscribe CTAs and existing styling
+
+1) URL structure (routes)
+
+Support these routes (all must work):
+
+/teams/:slug → default tab Latest
+
+/teams/:slug/latest
+
+/teams/:slug/injuries
+
+/teams/:slug/transfers
+
+/teams/:slug/matches
+
+/teams/:slug/fans
+
+The tabs must update the URL using client-side navigation (no full refresh).
+Visiting any route directly must load the correct tab state.
+
+2) Tabs UI + active state
+
+Tabs should be rendered as a horizontal pill/tab row under the team header.
+
+Active tab must be visually obvious using team-colour accent (underline or pill fill + icon emphasis).
+
+Inactive tabs remain neutral.
+
+Add subtle hover + active press micro-interactions (lift/opacity) consistent with the new visual energy pass.
+
+3) Sticky tab bar (optional but recommended)
+
+On scroll, make the tab bar sticky under the main site header (desktop + mobile), so users can switch sections without scrolling back up.
+Ensure it does not overlap content and maintains spacing.
+
+4) Content rendering per tab
+
+Each tab should render as a distinct section component; no duplicated logic:
+
+Latest: reuse the News feed logic filtered by teams=:slug (same article cards and sorting).
+
+Injuries: team-scoped injuries list/table (existing injuries data).
+
+Transfers: team-scoped transfer list (existing transfers data).
+
+Matches: team-scoped fixtures/results list (existing matches data).
+
+Fans: team-scoped community posts (or placeholder + empty state if not implemented yet).
+
+Each tab must have a friendly empty state and should never crash if data is missing.
+
+5) SEO + metadata
+
+Set canonical URL to the tab route (/teams/:slug/<tab>)
+
+Add sensible title formatting (e.g. “Arsenal Transfers | Football Mad”)
+
+Ensure OpenGraph/Twitter card tags use team + tab context
+
+6) Preserve context on tab change
+
+When switching tabs, keep the user anchored near the tab/content area (no jump to top).
+Optionally scroll to the tabs smoothly if needed.
+
+7) Analytics hooks (lightweight)
+
+Add basic tracking events for tab clicks (tab name + team slug) for future insights.
+
+Acceptance Criteria:
+
+Direct linking to /teams/arsenal/transfers loads the Arsenal page with Transfers tab active.
+
+Switching tabs updates URL instantly and feels smooth.
+
+Tabs are usable on mobile (horizontal scroll) and optionally sticky on scroll.
+
+No duplicated article logic: Latest uses the existing News system filtered by team slug.
+
+Empty states exist for each tab and are user-friendly.

@@ -28,6 +28,7 @@ function Router() {
       <Route path="/news/:slug" component={ArticlePage} />
       <Route path="/teams" component={TeamsPage} />
       <Route path="/teams/:slug" component={TeamHubPage} />
+      <Route path="/teams/:slug/:tab" component={TeamHubPage} />
       <Route path="/matches" component={MatchesPage} />
       <Route path="/matches/:slug" component={MatchPage} />
       <Route path="/transfers" component={TransfersPage} />
