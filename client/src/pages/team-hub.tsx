@@ -301,6 +301,33 @@ function MatchesTabContent({
   );
 }
 
+const NEWSLETTER_NAMES: Record<string, string> = {
+  "arsenal": "Gunners Mad",
+  "tottenham": "Spurs Mad",
+  "chelsea": "Blues Mad",
+  "liverpool": "Reds Mad",
+  "manchester-city": "City Mad",
+  "manchester-united": "Red Devils Mad",
+  "newcastle": "Magpies Mad",
+  "aston-villa": "Villa Mad",
+  "brighton": "Seagulls Mad",
+  "brentford": "Bees Mad",
+  "crystal-palace": "Eagles Mad",
+  "everton": "Toffees Mad",
+  "fulham": "Fulham Mad",
+  "nottingham-forest": "Forest Mad",
+  "wolves": "Wolves Mad",
+  "west-ham": "Hammers Mad",
+  "bournemouth": "Cherries Mad",
+  "leicester-city": "Foxes Mad",
+  "ipswich-town": "Ipswich Mad",
+  "southampton": "Saints Mad",
+};
+
+function getNewsletterName(teamSlug: string, teamName: string): string {
+  return NEWSLETTER_NAMES[teamSlug] || `${teamName} Mad`;
+}
+
 function FansTabContent({ 
   posts, 
   teamName,
@@ -385,20 +412,22 @@ function TeamRightRail({
       .slice(0, 4);
   }, [articles]);
 
+  const newsletterName = getNewsletterName(team.slug, team.name);
+
   return (
     <div className="lg:sticky lg:top-32 space-y-6">
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Heart className="h-4 w-4 text-primary" />
-            Follow {team.shortName || team.name}
+            Follow {team.name}
           </CardTitle>
           <CardDescription className="text-sm">
             {isAuthenticated 
               ? (isFollowing 
-                  ? "You're following this team. We'll personalize your feed." 
-                  : "Follow to get personalized news in your feed.")
-              : "Sign in to follow teams and personalize your experience."}
+                  ? "You're following this team. We'll personalise your feed." 
+                  : "Follow to get personalised news in your feed.")
+              : "Sign in to follow teams and personalise your experience."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -413,7 +442,7 @@ function TeamRightRail({
               {isFollowing ? (
                 <>
                   <HeartOff className="h-4 w-4 mr-2" />
-                  Unfollow
+                  Following
                 </>
               ) : (
                 <>
@@ -437,7 +466,7 @@ function TeamRightRail({
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Bell className="h-4 w-4 text-primary" />
-            {team.shortName || team.name} Newsletter
+            {newsletterName}
           </CardTitle>
           <CardDescription className="text-sm">
             Get {team.name} news straight to your inbox.
@@ -451,7 +480,7 @@ function TeamRightRail({
       {relatedArticles.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">More from {team.shortName || team.name}</CardTitle>
+            <CardTitle className="text-base">More from {team.name}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <ul className="space-y-3">

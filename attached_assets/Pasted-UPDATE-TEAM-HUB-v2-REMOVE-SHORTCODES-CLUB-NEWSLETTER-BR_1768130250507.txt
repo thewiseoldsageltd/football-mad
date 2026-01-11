@@ -1,0 +1,66 @@
+UPDATE TEAM HUB v2 — REMOVE SHORTCODES + CLUB NEWSLETTER BRANDING
+
+Context:
+On Team Hub pages (e.g. /teams/arsenal), the right rail currently uses a 3-letter team shortcode (e.g. “Follow ARS” and “ARS Newsletter”). This feels too app/database-like.
+
+Goal:
+Replace all instances of team shortcodes in UI copy with friendly team names and use club newsletter branding (e.g. “Gunners Mad”, “Spurs Mad”) in the newsletter module.
+
+Requirements:
+
+1) Follow Card Copy (Right Rail)
+- Replace “Follow {SHORTCODE}” with “Follow {Team Name}”
+  Example: “Follow ARS” -> “Follow Arsenal”
+- If logged out:
+  Title: “Follow {Team Name}”
+  Body: “Sign in to follow teams and personalise your experience.”
+  Button: “Sign in to follow”
+- If logged in:
+  Title: “Follow {Team Name}”
+  Button toggles: “Follow” / “Following”
+- Do not show shortcodes anywhere on the Team Hub UI (header, cards, buttons).
+
+2) Newsletter Module (Right Rail)
+- Replace “{SHORTCODE} Newsletter” with the club newsletter brand in the format: “{Club Newsletter Name}”
+  Example: Arsenal -> “Gunners Mad”
+- Module body copy:
+  “Get {Team Name} news straight to your inbox.”
+- Button: “Subscribe”
+- If we do not yet have a mapping for a team, fallback to:
+  Title: “{Team Name} Mad”
+  Example: “Arsenal Mad”
+  (but never use 3-letter shortcode as fallback)
+
+3) Create a Team -> Newsletter Name Map (Prem only)
+- Implement a mapping object that converts teamSlug (or teamName) to newsletterName.
+- Use known brand-friendly names (examples below).
+- Ensure this is used wherever the right rail newsletter title is rendered.
+
+Initial mapping examples (add the full set of 20 PL teams):
+- arsenal: “Gunners Mad”
+- tottenham: “Spurs Mad”
+- chelsea: “Blues Mad”
+- liverpool: “Reds Mad”
+- manchester-city: “City Mad”
+- manchester-united: “Red Devils Mad”
+- newcastle: “Magpies Mad”
+- aston-villa: “Villa Mad”
+- brighton: “Seagulls Mad”
+- brentford: “Bees Mad”
+- crystal-palace: “Eagles Mad”
+- everton: “Toffees Mad”
+- fulham: “Fulham Mad” (do NOT use “Cottagers”)
+- nottingham-forest: “Forest Mad”
+- wolves: “Wolves Mad”
+- west-ham: “Hammers Mad”
+- bournemouth: “Cherries Mad”
+- leicester-city: “Foxes Mad”
+- ipswich-town: “Ipswich Mad”
+- southampton: “Saints Mad”
+
+4) Acceptance Criteria
+- No team shortcode appears anywhere in Team Hub UI.
+- Right rail follow card reads “Follow {Team Name}”.
+- Right rail newsletter reads “{Newsletter Name}” and matches the mapping.
+- Fallback is “{Team Name} Mad” if mapping missing.
+- Fulham explicitly uses “Fulham Mad” (not Cottagers).
