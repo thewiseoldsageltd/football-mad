@@ -24,6 +24,7 @@ import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailabilit
 interface FplAvailabilityWithRag extends FplPlayerAvailability {
   ragColor: "green" | "light-green" | "amber" | "orange" | "red" | "unknown";
   displayPercent: string;
+  effectiveChance: number | null;
 }
 
 interface NewsFiltersResponse {
@@ -233,7 +234,7 @@ function formatAvailabilityText(news: string | null, chanceThisRound: number | n
 
 function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
   const newsAdded = player.newsAdded ? new Date(player.newsAdded) : null;
-  const availabilityText = formatAvailabilityText(player.news, player.chanceThisRound);
+  const availabilityText = formatAvailabilityText(player.news, player.effectiveChance);
   
   return (
     <Card className="hover-elevate" data-testid={`card-availability-${player.id}`}>

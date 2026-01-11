@@ -530,11 +530,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const availability = await storage.getFplAvailabilityByTeam(teamSlug, sortBy);
       
       const enriched = availability.map((player) => {
-        const rag = getRagColor(player.chanceThisRound, player.fplStatus, player.news);
+        const rag = getRagColor(player.chanceNextRound, player.chanceThisRound, player.fplStatus, player.news);
         return {
           ...player,
           ragColor: rag.color,
           displayPercent: rag.displayPercent,
+          effectiveChance: rag.effectiveChance,
         };
       });
       

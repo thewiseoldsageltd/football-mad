@@ -166,28 +166,36 @@ export async function syncFplAvailability(): Promise<{ updated: number; skipped:
   }
 }
 
-export function getRagColor(chanceThisRound: number | null, fplStatus: string | null, news: string | null): {
+export function getRagColor(
+  chanceNextRound: number | null, 
+  chanceThisRound: number | null, 
+  fplStatus: string | null, 
+  news: string | null
+): {
   color: "green" | "light-green" | "amber" | "orange" | "red" | "unknown";
   displayPercent: string;
+  effectiveChance: number | null;
 } {
-  if (chanceThisRound === null) {
-    if (fplStatus && fplStatus !== "a" || (news && news.length > 0)) {
-      return { color: "red", displayPercent: "—" };
+  const effectiveChance = chanceNextRound ?? chanceThisRound ?? null;
+  
+  if (effectiveChance === null) {
+    if ((fplStatus && fplStatus !== "a") || (news && news.length > 0)) {
+      return { color: "red", displayPercent: "—", effectiveChance: null };
     }
-    return { color: "green", displayPercent: "100%" };
+    return { color: "green", displayPercent: "100%", effectiveChance: 100 };
   }
   
-  const displayPercent = `${chanceThisRound}%`;
+  const displayPercent = `${effectiveChance}%`;
   
-  if (chanceThisRound === 100) {
-    return { color: "green", displayPercent };
-  } else if (chanceThisRound >= 75) {
-    return { color: "light-green", displayPercent };
-  } else if (chanceThisRound >= 50) {
-    return { color: "amber", displayPercent };
-  } else if (chanceThisRound >= 25) {
-    return { color: "orange", displayPercent };
+  if (effectiveChance === 100) {
+    return { color: "green", displayPercent, effectiveChance };
+  } else if (effectiveChance >= 75) {
+    return { color: "light-green", displayPercent, effectiveChance };
+  } else if (effectiveChance >= 50) {
+    return { color: "amber", displayPercent, effectiveChance };
+  } else if (effectiveChance >= 25) {
+    return { color: "orange", displayPercent, effectiveChance };
   } else {
-    return { color: "red", displayPercent };
+    return { color: "red", displayPercent, effectiveChance };
   }
 }

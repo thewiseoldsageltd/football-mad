@@ -520,16 +520,16 @@ export class DatabaseStorage implements IStorage {
           eq(fplPlayerAvailability.teamSlug, teamSlug),
           or(
             sql`${fplPlayerAvailability.news} IS NOT NULL AND ${fplPlayerAvailability.news} != ''`,
-            sql`${fplPlayerAvailability.chanceThisRound} < 100`,
-            sql`${fplPlayerAvailability.chanceThisRound} IS NULL AND ${fplPlayerAvailability.fplStatus} != 'a'`
+            sql`COALESCE(${fplPlayerAvailability.chanceNextRound}, ${fplPlayerAvailability.chanceThisRound}) < 100`,
+            sql`${fplPlayerAvailability.chanceNextRound} IS NULL AND ${fplPlayerAvailability.chanceThisRound} IS NULL AND ${fplPlayerAvailability.fplStatus} != 'a'`
           )
         )
       );
     
     if (sortBy === "lowest") {
       return results.sort((a, b) => {
-        const aChance = a.chanceThisRound ?? -1;
-        const bChance = b.chanceThisRound ?? -1;
+        const aChance = a.chanceNextRound ?? a.chanceThisRound ?? -1;
+        const bChance = b.chanceNextRound ?? b.chanceThisRound ?? -1;
         return aChance - bChance;
       });
     }
