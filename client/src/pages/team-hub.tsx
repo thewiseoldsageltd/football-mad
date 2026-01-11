@@ -177,14 +177,34 @@ const RING_COLORS: Record<RingColor, { bg: string; border: string }> = {
   gray: { bg: "bg-gray-500/10", border: "border-gray-500" },
 };
 
-const FILTER_OPTIONS: { key: AvailabilityBucket; label: string }[] = [
-  { key: "RETURNING_SOON", label: "Returning soon" },
+type TabKey = "OVERVIEW" | AvailabilityBucket;
+
+const TAB_OPTIONS: { key: TabKey; label: string }[] = [
+  { key: "OVERVIEW", label: "Overview" },
   { key: "COIN_FLIP", label: "Coin flip" },
   { key: "DOUBTFUL", label: "Doubtful" },
   { key: "OUT", label: "Out" },
   { key: "SUSPENDED", label: "Suspended" },
   { key: "LEFT_CLUB", label: "Loans/Transfers" },
 ];
+
+const SECTION_ORDER: AvailabilityBucket[] = [
+  "RETURNING_SOON",
+  "COIN_FLIP", 
+  "DOUBTFUL",
+  "OUT",
+  "SUSPENDED",
+  "LEFT_CLUB",
+];
+
+const SECTION_LABELS: Record<AvailabilityBucket, string> = {
+  RETURNING_SOON: "Returning soon (75%)",
+  COIN_FLIP: "Coin flip (50%)",
+  DOUBTFUL: "Doubtful (25%)",
+  OUT: "Out (0%)",
+  SUSPENDED: "Suspended",
+  LEFT_CLUB: "Loans/Transfers",
+};
 
 function PlayerAvatar({ 
   playerName, 
@@ -321,7 +341,7 @@ function InjuriesTabContent({
   teamName: string;
   relatedArticles?: Article[];
 }) {
-  const [activeFilter, setActiveFilter] = useState<AvailabilityBucket>("RETURNING_SOON");
+  const [activeTab, setActiveTab] = useState<TabKey>("OVERVIEW");
   
   const { data: availability, isLoading } = useQuery<FplAvailabilityWithRag[]>({
     queryKey: ["/api/teams", teamSlug, "availability"],
@@ -332,30 +352,46 @@ function InjuriesTabContent({
     },
   });
 
-  const { filteredPlayers, counts, lastUpdated } = useMemo(() => {
-    if (!availability || availability.length === 0) {
-      return { 
-        filteredPlayers: [], 
-        counts: { out: 0, doubtful: 0, suspended: 0, loaned: 0 }, 
-        lastUpdated: null 
-      };
+  const sortByRecent = (players: FplAvailabilityWithRag[]) => {
+    return [...players].sort((a, b) => {
+      const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+      const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+      return bDate - aDate;
+    });
+  };
+
+  const { bucketCounts, groupedPlayers, totalCount, lastUpdated } = useMemo(() => {
+    const counts: Record<AvailabilityBucket, number> = {
+      RETURNING_SOON: 0,
+      COIN_FLIP: 0,
+      DOUBTFUL: 0,
+      OUT: 0,
+      SUSPENDED: 0,
+      LEFT_CLUB: 0,
+    };
+    const grouped: Record<AvailabilityBucket, FplAvailabilityWithRag[]> = {
+      RETURNING_SOON: [],
+      COIN_FLIP: [],
+      DOUBTFUL: [],
+      OUT: [],
+      SUSPENDED: [],
+      LEFT_CLUB: [],
+    };
+    
+    if (!availability) {
+      return { bucketCounts: counts, groupedPlayers: grouped, totalCount: 0, lastUpdated: null };
     }
     
-    const out = availability.filter(p => p.bucket === "OUT").length;
-    const doubtful = availability.filter(p => p.bucket === "DOUBTFUL").length;
-    const suspended = availability.filter(p => p.classification === "SUSPENSION").length;
-    const loaned = availability.filter(p => p.classification === "LOAN_OR_TRANSFER").length;
+    availability.forEach(p => {
+      counts[p.bucket]++;
+      grouped[p.bucket].push(p);
+    });
     
-    const filtered = availability
-      .filter(p => p.bucket === activeFilter)
-      .sort((a, b) => {
-        const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
-        const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
-        if (bDate !== aDate) return bDate - aDate;
-        const aChance = a.effectiveChance ?? -1;
-        const bChance = b.effectiveChance ?? -1;
-        return aChance - bChance;
-      });
+    Object.keys(grouped).forEach(key => {
+      grouped[key as AvailabilityBucket] = sortByRecent(grouped[key as AvailabilityBucket]);
+    });
+    
+    const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
     
     const mostRecent = availability.reduce((latest, p) => {
       if (p.newsAdded) {
@@ -366,25 +402,17 @@ function InjuriesTabContent({
     }, new Date(0));
     
     return {
-      filteredPlayers: filtered,
-      counts: { out, doubtful, suspended, loaned },
+      bucketCounts: counts,
+      groupedPlayers: grouped,
+      totalCount: total,
       lastUpdated: mostRecent.getTime() > 0 ? mostRecent : null,
     };
-  }, [availability, activeFilter]);
-
-  const bucketCounts = useMemo((): Record<AvailabilityBucket, number> => {
-    const counts: Record<AvailabilityBucket, number> = {
-      RETURNING_SOON: 0,
-      COIN_FLIP: 0,
-      DOUBTFUL: 0,
-      OUT: 0,
-      SUSPENDED: 0,
-      LEFT_CLUB: 0,
-    };
-    if (!availability) return counts;
-    availability.forEach(p => { counts[p.bucket]++; });
-    return counts;
   }, [availability]);
+
+  const getTabCount = (tabKey: TabKey): number => {
+    if (tabKey === "OVERVIEW") return totalCount;
+    return bucketCounts[tabKey as AvailabilityBucket] || 0;
+  };
 
   if (isLoading) {
     return (
@@ -413,6 +441,45 @@ function InjuriesTabContent({
     );
   }
 
+  const renderOverviewSection = (bucket: AvailabilityBucket) => {
+    const players = groupedPlayers[bucket];
+    if (players.length === 0) return null;
+    
+    return (
+      <section key={bucket} className="space-y-3">
+        <h3 className="text-base font-semibold text-muted-foreground flex items-center gap-2">
+          {SECTION_LABELS[bucket]}
+          <Badge variant="secondary" className="text-xs">{players.length}</Badge>
+        </h3>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {players.map((player) => (
+            <FplAvailabilityCard key={player.id} player={player} />
+          ))}
+        </div>
+      </section>
+    );
+  };
+
+  const renderSingleTabContent = (bucket: AvailabilityBucket) => {
+    const players = groupedPlayers[bucket];
+    if (players.length === 0) {
+      return (
+        <EmptyState
+          icon={Activity}
+          title={`No players in "${TAB_OPTIONS.find(o => o.key === bucket)?.label}"`}
+          description="No players currently match this status."
+        />
+      );
+    }
+    return (
+      <div className="grid sm:grid-cols-2 gap-4">
+        {players.map((player) => (
+          <FplAvailabilityCard key={player.id} player={player} />
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -420,45 +487,20 @@ function InjuriesTabContent({
         <p className="text-sm text-muted-foreground mb-3">
           FPL-powered availability for {teamName}
         </p>
-        
-        {(availability && availability.length > 0) && (
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {counts.out > 0 && (
-              <Badge variant="destructive" className="text-xs" data-testid="badge-out-count">
-                OUT: {counts.out}
-              </Badge>
-            )}
-            {counts.doubtful > 0 && (
-              <Badge className="bg-amber-500 text-white text-xs" data-testid="badge-doubtful-count">
-                DOUBTFUL: {counts.doubtful}
-              </Badge>
-            )}
-            {counts.suspended > 0 && (
-              <Badge variant="outline" className="text-xs border-red-500 text-red-600" data-testid="badge-suspended-count">
-                SUSPENDED: {counts.suspended}
-              </Badge>
-            )}
-            {counts.loaned > 0 && (
-              <Badge variant="outline" className="text-xs border-gray-400 text-gray-500" data-testid="badge-loaned-count">
-                LOANED: {counts.loaned}
-              </Badge>
-            )}
-          </div>
-        )}
 
         <div className="flex flex-wrap gap-2 mb-4">
-          {FILTER_OPTIONS.map((option) => {
-            const count = bucketCounts[option.key] || 0;
+          {TAB_OPTIONS.map((option) => {
+            const count = getTabCount(option.key);
             return (
               <Button
                 key={option.key}
-                variant={activeFilter === option.key ? "default" : "outline"}
+                variant={activeTab === option.key ? "default" : "outline"}
                 size="sm"
-                onClick={() => setActiveFilter(option.key)}
-                data-testid={`filter-${option.key.toLowerCase()}`}
+                onClick={() => setActiveTab(option.key)}
+                data-testid={`tab-${option.key.toLowerCase()}`}
                 className="text-xs"
               >
-                {option.label} {count > 0 && `(${count})`}
+                {option.label} ({count})
               </Button>
             );
           })}
@@ -477,18 +519,20 @@ function InjuriesTabContent({
         )}
       </div>
 
-      {filteredPlayers.length === 0 ? (
-        <EmptyState
-          icon={Activity}
-          title={`No players in "${FILTER_OPTIONS.find(o => o.key === activeFilter)?.label}"`}
-          description="Try selecting a different filter to see more players."
-        />
+      {activeTab === "OVERVIEW" ? (
+        totalCount === 0 ? (
+          <EmptyState
+            icon={Activity}
+            title="No availability issues"
+            description="All players appear fit and available."
+          />
+        ) : (
+          <div className="space-y-6">
+            {SECTION_ORDER.map(bucket => renderOverviewSection(bucket))}
+          </div>
+        )
       ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
-          {filteredPlayers.map((player) => (
-            <FplAvailabilityCard key={player.id} player={player} />
-          ))}
-        </div>
+        renderSingleTabContent(activeTab as AvailabilityBucket)
       )}
 
       {relatedArticles && relatedArticles.length > 0 && (

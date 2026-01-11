@@ -1,0 +1,97 @@
+TASK: Update Team Hub > Injuries tab UX to remove redundant pills and use the final tab system.
+
+CONTEXT
+We already ingest FPL availability into the DB (fplPlayerAvailability) and render the Injuries tab on /teams/:slug/injuries using that data. We previously added “OUT” / “LOANED” pills and multiple filter tabs. We want to simplify and standardise.
+
+GOAL (FINAL UX)
+1) REMOVE the red “OUT:x” and grey “LOANED:x” pills entirely.
+2) KEEP ONLY these tabs (in this exact order), with counts:
+   - Overview (All)
+   - Coin flip (50%)
+   - Doubtful (25%)
+   - Out (0%)
+   - Suspended
+   - Loans/Transfers
+3) Default tab = Overview.
+4) Tabs should filter the list instantly (client-side is fine if we’re already fetching the list; server-side is fine too).
+5) Overview view should show ALL players, but grouped into sections (with section headings), in this order:
+   - Returning soon (75%)
+   - Coin flip (50%)
+   - Doubtful (25%)
+   - Out (0%)
+   - Suspended
+   - Loans/Transfers
+   Each section should show a count and only render if count > 0.
+6) Single-tab views:
+   - Coin flip (50%): show only players where chance (use the SAME chance field we decided: prefer next round over this round if present) equals 50
+   - Doubtful (25%): show only players where chance equals 25
+   - Out (0%): show only players where chance equals 0 AND the item is NOT a loan/transfer AND NOT suspended (those should appear in their own tabs)
+   - Suspended: show only players whose status/news indicates suspension (see “classification rules”)
+   - Loans/Transfers: show only players whose status/news indicates they are loaned out / transferred away / left the club (see “classification rules”)
+
+CLASSIFICATION RULES (IMPORTANT)
+We need deterministic classification so tabs + overview grouping are correct.
+
+A) CHANCE VALUE
+- Compute `displayChance` as:
+  - if chance_of_playing_next_round is not null: use that
+  - else use chance_of_playing_this_round
+  - if both are null: treat as 100 (available) UNLESS fplStatus != "a" OR news is non-empty, then treat as 0 (unknown/unavailable)
+(Keep this consistent with whatever we already changed in the codebase.)
+
+B) LOANS/TRANSFERS
+A player should be classified as Loans/Transfers if:
+- news contains phrases like:
+  - "has joined" OR "joined" OR "on loan" OR "loan" OR "permanent" OR "transferred" OR "move to" OR "signed for" OR "left the club"
+AND/OR
+- fplStatus indicates not in squad (if we have a known mapping; if not, rely on news text)
+If classified as Loans/Transfers, they should ONLY appear in Loans/Transfers (not Out).
+
+C) SUSPENDED
+Classify as Suspended if:
+- news contains "suspended" OR "suspension" OR "ban" OR "red card" OR "disciplinary"
+If Suspended, they should ONLY appear in Suspended (not Out).
+
+D) OUT (0%)
+Out tab should represent genuine injury/availability 0% that is NOT loan/transfer and NOT suspension.
+So:
+- displayChance === 0
+- AND not classified as Loans/Transfers
+- AND not classified as Suspended
+
+E) RETURNING SOON (75%)
+This is only a section in Overview (not a standalone tab).
+- displayChance === 75
+
+F) AVAILABLE (100%)
+We generally don’t need a tab for 100%. In Overview, 100% players should NOT be shown (this is injuries & availability, we want only impacted players).
+So: only show players where (displayChance is 75/50/25/0) OR classified as Suspended OR Loans/Transfers.
+Do not show 100% in this tab view.
+
+UI DETAILS
+- Tabs should look like our current pill-style tabs (rounded, compact). The active tab has the green fill.
+- Each tab label should include count e.g. “Coin flip (2)”.
+- Overview label: “Overview (X)” where X is total of all rendered items across all categories (not including 100% available).
+- For card rows, keep current layout (initials avatar circle + name + position pill + one-line news string + updated time).
+- Ensure the “Most Recent / Lowest %” controls are removed or replaced:
+  - Remove “Lowest %” entirely (we no longer want this sort).
+  - Keep “Most Recent” as the only sort toggle if it exists OR just default to Most Recent ordering.
+  - Ordering within a section: most recently updated first.
+
+TECHNICAL TODO
+- Update the Injuries tab component to implement the classification + grouping + tabs.
+- If any server route is returning data sorted/filtered, adjust as needed.
+- Add unit-ish helper functions for:
+  - getDisplayChance(record)
+  - classifyAvailability(record) -> one of: returningSoon | coinFlip | doubtful | out | suspended | loansTransfers | ignore
+- Ensure consistency across teams.
+
+ACCEPTANCE CHECKS
+- No more OUT/LOANED pills above tabs.
+- Tabs show correct counts.
+- Clicking “Out” does NOT show loaned-out or suspended players.
+- Overview shows grouped sections in the specified order.
+- The Arsenal example includes those “has joined …” players under Loans/Transfers (not Out).
+- Hincapié at 75% appears under Returning soon and not green “100%”.
+
+Please implement now.
