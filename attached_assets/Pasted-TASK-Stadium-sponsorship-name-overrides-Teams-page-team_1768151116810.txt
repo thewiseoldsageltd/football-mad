@@ -1,0 +1,37 @@
+TASK: Stadium sponsorship name overrides (Teams page + team hubs)
+
+We’ve fixed Bournemouth display naming. Now we need to update 3 stadium names to their sponsorship/current names (and keep them stable even if Wikidata returns the old generic names).
+
+REQUIRED STADIUM NAME OVERRIDES (by team slug)
+- afc-bournemouth → "Vitality Stadium"   (was Dean Court)
+- brentford → "Gtech Community Stadium"  (was Brentford Community Stadium)
+- brighton-and-hove-albion → "American Express Stadium" (was Brighton Community Stadium)
+
+WHAT TO DO
+1) Add a stadium override map in the team metadata sync job (server job that currently pulls from Wikidata).
+   - e.g. const STADIUM_NAME_OVERRIDES: Record<string, string> = { ... }
+2) When syncing a team:
+   - If an override exists for that teamSlug, set stadiumName to the override value.
+   - This should apply even if the stadiumName field is already populated (overrides should win).
+   - Manager logic can remain “only fill if empty” as currently implemented.
+3) Also apply the overrides immediately to the database so the UI updates without needing to wait for the next sync:
+   - Run a DB update (drizzle or SQL) to set stadium_name for those 3 teams (match by slug).
+4) Ensure Teams page + Team Hub header cards use teams.stadiumName consistently (no hardcoded strings).
+
+ACCEPTANCE CRITERIA
+- Bournemouth shows “Vitality Stadium”
+- Brentford shows “Gtech Community Stadium”
+- Brighton shows “American Express Stadium”
+- Future runs of POST /api/jobs/sync-team-metadata do not revert these names.
+
+FILES (likely)
+- server/* team metadata sync job (where Wikidata fetch/merge happens)
+- server/db.ts + drizzle schema already has teams.stadiumName
+- Any query / UI component reading stadiumName should remain unchanged
+
+IMPLEMENTATION NOTE
+If you need a one-off migration script, add something like:
+- server/script/fix-stadium-overrides.ts
+and wire it to run once, OR just run a direct update in the sync job immediately after computing overrides.
+
+After changes, confirm by showing the three updated cards in Teams page screenshot.

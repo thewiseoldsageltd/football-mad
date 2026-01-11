@@ -103,6 +103,12 @@ const WIKIDATA_NAME_TO_DISPLAY_NAME: Record<string, string> = {
 
 const MANUAL_OVERRIDES: Record<string, { manager?: string; stadiumName?: string }> = {};
 
+const STADIUM_NAME_OVERRIDES: Record<string, string> = {
+  "afc-bournemouth": "Vitality Stadium",
+  "brentford": "Gtech Community Stadium",
+  "brighton-and-hove-albion": "American Express Stadium",
+};
+
 function normalizeClubName(name: string): string {
   return name
     .toLowerCase()
@@ -234,10 +240,16 @@ export async function syncTeamMetadata(): Promise<SyncTeamMetadataResult> {
         changes.push(`manager: "${existingTeam.manager || ""}" -> "${newManager}"`);
       }
 
-      const newStadium = override?.stadiumName || wikidataRow?.stadiumLabel;
-      if (newStadium && (!existingTeam.stadiumName || existingTeam.stadiumName.trim() === "")) {
-        updates.stadiumName = newStadium;
-        changes.push(`stadiumName: "${existingTeam.stadiumName || ""}" -> "${newStadium}"`);
+      const stadiumOverride = STADIUM_NAME_OVERRIDES[slug];
+      if (stadiumOverride && existingTeam.stadiumName !== stadiumOverride) {
+        updates.stadiumName = stadiumOverride;
+        changes.push(`stadiumName: "${existingTeam.stadiumName || ""}" -> "${stadiumOverride}" (override)`);
+      } else if (!stadiumOverride) {
+        const newStadium = override?.stadiumName || wikidataRow?.stadiumLabel;
+        if (newStadium && (!existingTeam.stadiumName || existingTeam.stadiumName.trim() === "")) {
+          updates.stadiumName = newStadium;
+          changes.push(`stadiumName: "${existingTeam.stadiumName || ""}" -> "${newStadium}"`);
+        }
       }
 
       if (Object.keys(updates).length > 0) {
