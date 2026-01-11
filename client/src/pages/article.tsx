@@ -3,8 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { 
-  Clock, Eye, ArrowLeft, Bookmark, Zap, Star, TrendingUp, 
-  Newspaper, ArrowUpRight, BarChart3, AlertCircle, Heart, Copy, Check, Share2, ChevronRight
+  Clock, Eye, ArrowLeft, Bookmark, Newspaper, ArrowUpRight, 
+  BarChart3, AlertCircle, Heart, Copy, Check, Share2, ChevronRight
 } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { NewsletterForm } from "@/components/newsletter-form";
+import { TaxonomyPill } from "@/components/taxonomy-pill";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
@@ -36,6 +37,10 @@ function calculateReadingTime(content: string): number {
 function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength).replace(/\s+\S*$/, "") + "...";
+}
+
+function slugifyCompetition(competition: string): string {
+  return competition.toLowerCase().replace(/\s+/g, "-");
 }
 
 function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
@@ -232,9 +237,18 @@ function RightRail({
             <CardContent className="p-4">
               <div className="flex items-center gap-3 mb-3">
                 <div 
-                  className="w-10 h-10 rounded-lg flex items-center justify-center"
+                  className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden"
                   style={{ backgroundColor: primaryTeam.primaryColor || "#333" }}
                 >
+                  <img 
+                    src={`/crests/teams/${primaryTeam.slug}.svg`} 
+                    alt={primaryTeam.name}
+                    className="w-6 h-6 object-contain"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = "none";
+                    }}
+                  />
                   <span className="text-white font-bold text-sm">
                     {primaryTeam.shortName?.[0] || primaryTeam.name[0]}
                   </span>
@@ -598,42 +612,72 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <Badge variant="default" className="bg-primary gap-1">
                   <CategoryIcon className="h-3 w-3" />
                   {article.category?.charAt(0).toUpperCase() + (article.category?.slice(1) || "")}
                 </Badge>
+                
                 {article.isBreaking && (
-                  <Badge variant="destructive" className="gap-1">
-                    <Zap className="h-3 w-3" />
-                    Breaking
-                  </Badge>
+                  <TaxonomyPill 
+                    label="Breaking" 
+                    variant="breaking" 
+                    data-testid="pill-breaking"
+                  />
                 )}
                 {article.isEditorPick && (
-                  <Badge className="bg-amber-500 text-white border-0 gap-1">
-                    <Star className="h-3 w-3" />
-                    Editor's Pick
-                  </Badge>
+                  <TaxonomyPill 
+                    label="Editor's Pick" 
+                    variant="editor-pick"
+                    data-testid="pill-editor-pick"
+                  />
                 )}
                 {article.isTrending && (
-                  <Badge variant="secondary" className="gap-1">
-                    <TrendingUp className="h-3 w-3" />
-                    Trending
-                  </Badge>
+                  <TaxonomyPill 
+                    label="Trending" 
+                    variant="trending"
+                    data-testid="pill-trending"
+                  />
                 )}
               </div>
 
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4 line-clamp-3">
+              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4">
                 {article.title}
               </h1>
 
               {article.excerpt && (
-                <p className="text-lg md:text-xl text-muted-foreground mb-6 line-clamp-2">
+                <p className="text-lg md:text-xl text-muted-foreground mb-6">
                   {article.excerpt}
                 </p>
               )}
 
-              <div className="flex items-center justify-between flex-wrap gap-4 pb-6 border-b">
+              <div className="flex items-center gap-2 flex-wrap mb-6">
+                {articleTeams.slice(0, 4).map((team) => (
+                  <TaxonomyPill
+                    key={team.id}
+                    label={team.name}
+                    variant="team"
+                    href={`/teams/${team.slug}`}
+                    teamColor={team.primaryColor}
+                    crestUrl={`/crests/teams/${team.slug}.svg`}
+                    data-testid={`pill-team-${team.slug}`}
+                  />
+                ))}
+                {articleTeams.length > 4 && (
+                  <Badge variant="secondary">+{articleTeams.length - 4}</Badge>
+                )}
+                {article.competition && (
+                  <TaxonomyPill
+                    label={article.competition}
+                    variant="competition"
+                    href={`/news?competition=${slugifyCompetition(article.competition)}`}
+                    crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
+                    data-testid="pill-competition"
+                  />
+                )}
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-4 pt-4 border-t">
                 <div className="flex items-center gap-3">
                   <Avatar>
                     <AvatarFallback>
@@ -661,37 +705,6 @@ export default function ArticlePage() {
                   <Bookmark className="h-5 w-5" />
                 </Button>
               </div>
-
-              {articleTeams.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap mt-4">
-                  {articleTeams.slice(0, 4).map((team) => (
-                    <Link key={team.id} href={`/teams/${team.slug}`}>
-                      <Badge 
-                        variant="outline" 
-                        className="cursor-pointer hover-elevate gap-1"
-                        style={{ borderColor: team.primaryColor || undefined }}
-                        data-testid={`badge-team-${team.slug}`}
-                      >
-                        <div 
-                          className="w-3 h-3 rounded-sm"
-                          style={{ backgroundColor: team.primaryColor || "#333" }}
-                        />
-                        {team.name}
-                      </Badge>
-                    </Link>
-                  ))}
-                  {articleTeams.length > 4 && (
-                    <Badge variant="secondary">+{articleTeams.length - 4}</Badge>
-                  )}
-                  {article.competition && (
-                    <Link href={`/news?competition=${encodeURIComponent(article.competition.toLowerCase().replace(/\s+/g, "-"))}`}>
-                      <Badge variant="secondary" className="cursor-pointer hover-elevate">
-                        {article.competition}
-                      </Badge>
-                    </Link>
-                  )}
-                </div>
-              )}
             </header>
 
             {article.coverImage ? (
@@ -709,23 +722,11 @@ export default function ArticlePage() {
             )}
 
             <div
-              className="prose prose-lg dark:prose-invert max-w-none mb-12"
+              className="prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3"
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
-            {article.tags && article.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-8 pb-8 border-b">
-                {article.tags.map((tag) => (
-                  <Link key={tag} href={`/news?tag=${encodeURIComponent(tag)}`}>
-                    <Badge key={tag} variant="outline" className="cursor-pointer hover-elevate">
-                      {tag}
-                    </Badge>
-                  </Link>
-                ))}
-              </div>
-            )}
-
-            <section className="py-6 border-y mb-8 lg:hidden">
+            <section className="py-6 border-t mb-8 lg:hidden">
               <p className="text-sm text-muted-foreground mb-3">Share this article</p>
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
@@ -771,9 +772,18 @@ export default function ArticlePage() {
                   <CardContent className="p-6 flex items-center justify-between flex-wrap gap-4">
                     <div className="flex items-center gap-3">
                       <div 
-                        className="w-12 h-12 rounded-lg flex items-center justify-center"
+                        className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden"
                         style={{ backgroundColor: articleTeams[0].primaryColor || "#333" }}
                       >
+                        <img 
+                          src={`/crests/teams/${articleTeams[0].slug}.svg`}
+                          alt={articleTeams[0].name}
+                          className="w-8 h-8 object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                          }}
+                        />
                         <span className="text-white font-bold">
                           {articleTeams[0].shortName?.[0] || articleTeams[0].name[0]}
                         </span>
