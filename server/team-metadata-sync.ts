@@ -219,17 +219,19 @@ export async function syncTeamMetadata(): Promise<SyncTeamMetadataResult> {
       const changes: string[] = [];
 
       if (existingTeam.name !== displayName) {
-        updates.name = displayName;
-        changes.push(`name: "${existingTeam.name}" -> "${displayName}"`);
+        const [conflictingTeam] = await db.select().from(teams).where(eq(teams.name, displayName));
+        if (!conflictingTeam) {
+          updates.name = displayName;
+          changes.push(`name: "${existingTeam.name}" -> "${displayName}"`);
+        } else {
+          console.log(`[team-metadata-sync] Skipping name update for ${slug}: "${displayName}" already exists on another team`);
+        }
       }
 
       const newManager = override?.manager || wikidataRow?.managerLabel;
       if (newManager && (!existingTeam.manager || existingTeam.manager.trim() === "")) {
         updates.manager = newManager;
         changes.push(`manager: "${existingTeam.manager || ""}" -> "${newManager}"`);
-      } else if (newManager && newManager !== existingTeam.manager) {
-        updates.manager = newManager;
-        changes.push(`manager: "${existingTeam.manager}" -> "${newManager}"`);
       }
 
       const newStadium = override?.stadiumName || wikidataRow?.stadiumLabel;
