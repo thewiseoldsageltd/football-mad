@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema } from "@shared/schema";
 import { z } from "zod";
-import { syncFplAvailability, getRagColor } from "./fpl-sync";
+import { syncFplAvailability, classifyPlayer } from "./fpl-sync";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -530,12 +530,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const availability = await storage.getFplAvailabilityByTeam(teamSlug, sortBy);
       
       const enriched = availability.map((player) => {
-        const rag = getRagColor(player.chanceNextRound, player.chanceThisRound, player.fplStatus, player.news);
+        const result = classifyPlayer(player.chanceNextRound, player.chanceThisRound, player.fplStatus, player.news);
         return {
           ...player,
-          ragColor: rag.color,
-          displayPercent: rag.displayPercent,
-          effectiveChance: rag.effectiveChance,
+          classification: result.classification,
+          bucket: result.bucket,
+          ringColor: result.ringColor,
+          displayPercent: result.displayPercent,
+          effectiveChance: result.effectiveChance,
         };
       });
       

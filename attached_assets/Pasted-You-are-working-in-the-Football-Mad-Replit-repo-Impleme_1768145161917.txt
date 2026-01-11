@@ -1,0 +1,112 @@
+You are working in the Football Mad Replit repo. Implement the next UX iteration for the Team Hub > Injuries tab to mirror FPL decision-making.
+
+GOAL
+- Keep using the existing FPL availability ingestion (bootstrap-static sync) and existing DB table/model.
+- Improve the Injuries tab UI/logic by:
+  1) Replacing the “Lowest %” sort with FPL-manager-friendly filters
+  2) Distinguishing between: Injuries, Suspensions, Loans/Transfers
+  3) Defaulting the view to the most useful group (“Returning soon”)
+
+REQUIREMENTS
+
+A) DATA / CLASSIFICATION (server-side or shared utility)
+Create a clear classification for each player availability row using existing fields:
+- chanceThisRound (or the app’s chosen “display chance” which currently prioritizes next round)
+- fplStatus
+- news (string)
+
+Define 3 top-level groups:
+1. INJURY (availability risk due to injury/knock)
+2. SUSPENSION (unavailable due to suspension)
+3. LOAN_OR_TRANSFER (unavailable because they have joined another club on loan/permanently / left the club)
+
+Rules:
+- SUSPENSION if fplStatus === "s" (FPL suspended)
+- LOAN_OR_TRANSFER if news text indicates player has left the club, e.g. contains any of:
+  - "has joined"
+  - "on loan"
+  - "loan"
+  - "permanently"
+  - "joined" (case-insensitive)
+  (Be careful not to misclassify “joined training” etc — prefer “has joined” and “on loan” and “permanently” as strongest signals; use “joined" only if paired with a club name or “on loan/permanently”.)
+- Otherwise treat as INJURY when:
+  - (displayChance !== 100) OR (news contains "injury" / "knock" / "hamstring" / "ankle" etc)
+- If chance is null but fplStatus != "a" OR news present, treat as INJURY unless it matches LOAN_OR_TRANSFER or SUSPENSION.
+
+Also create an “availability bucket” for INJURY group, based on DISPLAY CHANCE:
+- RETURNING_SOON: 75% (and optionally 100% with injury news, but 100% usually healthy)
+- COIN_FLIP: 50%
+- DOUBTFUL: 25% or <50%
+- OUT: 0% (injury-related)
+For non-injury groups:
+- SUSPENSION bucket: SUSPENDED
+- LOAN_OR_TRANSFER bucket: LEFT_CLUB
+
+B) UI CHANGES (client)
+On /teams/:teamSlug/injuries (Team Hub Injuries tab):
+1) Replace the “Lowest %” toggle with a small filter control set. Use pills/tabs aligned with current UI style:
+   - “Returning soon” (DEFAULT)
+   - “Coin flip”
+   - “Doubtful”
+   - “Out”
+   - “Suspended”
+   - “Loans/Transfers”
+2) Each filter shows only the matching players:
+   - Returning soon: injury bucket RETURNING_SOON (75%)
+   - Coin flip: injury bucket COIN_FLIP (50%)
+   - Doubtful: injury bucket DOUBTFUL (<50 and >0)
+   - Out: injury bucket OUT (0) AND classification INJURY
+   - Suspended: classification SUSPENSION
+   - Loans/Transfers: classification LOAN_OR_TRANSFER
+3) Keep the existing “Most Recent” sorting (as default), but ensure within each filter results are sorted by:
+   - Most recent update first (newsAdded desc if available, else updated/lastSyncedAt)
+   - Tie-breaker: lower chance first (for injury filters only)
+4) Summary chips near the top (next to OUT count) should become:
+   - OUT (injury OUT only, 0% and INJURY)
+   - DOUBTFUL (<=75 and >=50? OR specifically 75? — follow FPL: 75 is doubtful, 50 is injured, 25 is injured, 0 is out. So:
+        - DOUBTFUL count = players with 75% in INJURY bucket RETURNING_SOON
+        - INJURED count = players with 50/25/0 in INJURY group (optional; if too busy, skip)
+     )
+   - SUSPENDED count
+   - LOANED OUT count
+Keep it clean—no more than 3-4 summary chips.
+
+C) VISUAL CONSISTENCY
+- Keep the avatar circle (initials) on cards (no percentage circle).
+- The avatar ring color should reflect the FPL-style statuses:
+  - 100% healthy/no issue: green ring (but these usually shouldn’t appear in the injuries list unless news indicates issue)
+  - 75%: amber ring (doubtful)
+  - 50%: orange/amber ring (coin flip)
+  - 25%: red ring (doubtful)
+  - 0% injury: red ring
+  - Suspended: red ring + small “Suspended” label
+  - Loan/Transfer: grey ring + small “Loan/Transfer” label
+Use existing Tailwind palette; avoid introducing brand new colors beyond typical tailwind semantic colors.
+- Ensure the text line reads cleanly and uses ONE percentage:
+  e.g. “Muscle injury — 75% chance”
+  If percentage is null and suspension/loan: show “Suspended” or “Loaned out / Joined X”
+  Keep the FPL news text visible and accurate.
+
+D) DATA DISPLAY CHANCE CONSISTENCY
+- Use the same “display chance” everywhere (the one you chose after fixing mismatch: prioritizing next round chance over this round chance).
+- Make sure the displayed percentage matches the value used for filtering and ring colors.
+
+E) IMPLEMENTATION NOTES
+- Locate the Team injuries route/component and update it. Keep code modular.
+- If there’s an existing utility like getRagColor(), refactor it so it returns:
+  - classification
+  - bucket
+  - ringColor token
+  - displayPercent string (or null)
+- Update any server endpoint used by this page if necessary to return classification/bucket precomputed, OR compute client-side if already fetching all rows.
+- Do NOT break other pages/tabs.
+
+F) QA / ACCEPTANCE
+- For Arsenal, Piero Hincapie should show 75% and be amber (doubtful), matching FPL.
+- Players with “has joined … on loan/permanently” should appear under Loans/Transfers with grey ring and should NOT inflate OUT injury count.
+- Suspended players should appear under Suspended and not under injury OUT.
+- “Returning soon” should be the default selected filter.
+- Page should still support sorting by most recent update.
+
+DELIVERABLE
+- Implement changes, ensure build passes, and leave a short note in BUILD_LOG.md describing what changed (1-2 paragraphs).

@@ -166,6 +166,126 @@ export async function syncFplAvailability(): Promise<{ updated: number; skipped:
   }
 }
 
+export type Classification = "INJURY" | "SUSPENSION" | "LOAN_OR_TRANSFER";
+export type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
+export type RingColor = "green" | "amber" | "red" | "gray";
+
+function isLoanOrTransfer(news: string | null): boolean {
+  if (!news) return false;
+  const lowerNews = news.toLowerCase();
+  
+  if (lowerNews.includes("has joined") || 
+      lowerNews.includes("on loan") || 
+      lowerNews.includes("permanently")) {
+    return true;
+  }
+  
+  if (lowerNews.includes("joined") && 
+      (lowerNews.includes("loan") || lowerNews.includes("permanently"))) {
+    return true;
+  }
+  
+  return false;
+}
+
+export function classifyPlayer(
+  chanceNextRound: number | null, 
+  chanceThisRound: number | null, 
+  fplStatus: string | null, 
+  news: string | null
+): {
+  classification: Classification;
+  bucket: AvailabilityBucket;
+  ringColor: RingColor;
+  displayPercent: string;
+  effectiveChance: number | null;
+} {
+  const effectiveChance = chanceNextRound ?? chanceThisRound ?? null;
+  
+  if (fplStatus === "s") {
+    return {
+      classification: "SUSPENSION",
+      bucket: "SUSPENDED",
+      ringColor: "red",
+      displayPercent: "—",
+      effectiveChance,
+    };
+  }
+  
+  if (isLoanOrTransfer(news)) {
+    return {
+      classification: "LOAN_OR_TRANSFER",
+      bucket: "LEFT_CLUB",
+      ringColor: "gray",
+      displayPercent: "—",
+      effectiveChance,
+    };
+  }
+  
+  if (effectiveChance === null) {
+    if ((fplStatus && fplStatus !== "a") || (news && news.length > 0)) {
+      return {
+        classification: "INJURY",
+        bucket: "OUT",
+        ringColor: "red",
+        displayPercent: "—",
+        effectiveChance: null,
+      };
+    }
+    return {
+      classification: "INJURY",
+      bucket: "RETURNING_SOON",
+      ringColor: "green",
+      displayPercent: "100%",
+      effectiveChance: 100,
+    };
+  }
+  
+  const displayPercent = `${effectiveChance}%`;
+  
+  if (effectiveChance === 100) {
+    return {
+      classification: "INJURY",
+      bucket: "RETURNING_SOON",
+      ringColor: "green",
+      displayPercent,
+      effectiveChance,
+    };
+  } else if (effectiveChance === 75) {
+    return {
+      classification: "INJURY",
+      bucket: "RETURNING_SOON",
+      ringColor: "amber",
+      displayPercent,
+      effectiveChance,
+    };
+  } else if (effectiveChance === 50) {
+    return {
+      classification: "INJURY",
+      bucket: "COIN_FLIP",
+      ringColor: "amber",
+      displayPercent,
+      effectiveChance,
+    };
+  } else if (effectiveChance > 0 && effectiveChance < 50) {
+    return {
+      classification: "INJURY",
+      bucket: "DOUBTFUL",
+      ringColor: "red",
+      displayPercent,
+      effectiveChance,
+    };
+  } else {
+    return {
+      classification: "INJURY",
+      bucket: "OUT",
+      ringColor: "red",
+      displayPercent,
+      effectiveChance,
+    };
+  }
+}
+
 export function getRagColor(
   chanceNextRound: number | null, 
   chanceThisRound: number | null, 
@@ -176,22 +296,10 @@ export function getRagColor(
   displayPercent: string;
   effectiveChance: number | null;
 } {
-  const effectiveChance = chanceNextRound ?? chanceThisRound ?? null;
-  
-  if (effectiveChance === null) {
-    if ((fplStatus && fplStatus !== "a") || (news && news.length > 0)) {
-      return { color: "red", displayPercent: "—", effectiveChance: null };
-    }
-    return { color: "green", displayPercent: "100%", effectiveChance: 100 };
-  }
-  
-  const displayPercent = `${effectiveChance}%`;
-  
-  if (effectiveChance === 100) {
-    return { color: "green", displayPercent, effectiveChance };
-  } else if (effectiveChance >= 50) {
-    return { color: "amber", displayPercent, effectiveChance };
-  } else {
-    return { color: "red", displayPercent, effectiveChance };
-  }
+  const result = classifyPlayer(chanceNextRound, chanceThisRound, fplStatus, news);
+  return {
+    color: result.ringColor === "gray" ? "red" : result.ringColor,
+    displayPercent: result.displayPercent,
+    effectiveChance: result.effectiveChance,
+  };
 }

@@ -21,8 +21,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
 
+type Classification = "INJURY" | "SUSPENSION" | "LOAN_OR_TRANSFER";
+type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
+type RingColor = "green" | "amber" | "red" | "gray";
+
 interface FplAvailabilityWithRag extends FplPlayerAvailability {
-  ragColor: "green" | "amber" | "red";
+  classification: Classification;
+  bucket: AvailabilityBucket;
+  ringColor: RingColor;
   displayPercent: string;
   effectiveChance: number | null;
 }
@@ -164,22 +170,32 @@ function LatestTabContent({
   );
 }
 
-const RAG_COLORS: Record<string, { bg: string; border: string }> = {
+const RING_COLORS: Record<RingColor, { bg: string; border: string }> = {
   green: { bg: "bg-green-500/10", border: "border-green-500" },
   amber: { bg: "bg-amber-500/10", border: "border-amber-500" },
   red: { bg: "bg-red-500/10", border: "border-red-500" },
+  gray: { bg: "bg-gray-500/10", border: "border-gray-500" },
 };
+
+const FILTER_OPTIONS: { key: AvailabilityBucket; label: string }[] = [
+  { key: "RETURNING_SOON", label: "Returning soon" },
+  { key: "COIN_FLIP", label: "Coin flip" },
+  { key: "DOUBTFUL", label: "Doubtful" },
+  { key: "OUT", label: "Out" },
+  { key: "SUSPENDED", label: "Suspended" },
+  { key: "LEFT_CLUB", label: "Loans/Transfers" },
+];
 
 function PlayerAvatar({ 
   playerName, 
   photoUrl,
-  ragColor 
+  ringColor 
 }: { 
   playerName: string; 
   photoUrl?: string | null;
-  ragColor: string;
+  ringColor: RingColor;
 }) {
-  const ragStyle = RAG_COLORS[ragColor] || RAG_COLORS.unknown;
+  const style = RING_COLORS[ringColor] || RING_COLORS.gray;
   const initials = playerName
     .split(" ")
     .map(n => n[0])
@@ -189,7 +205,7 @@ function PlayerAvatar({
 
   if (photoUrl) {
     return (
-      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${ragStyle.border} flex-shrink-0`}>
+      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${style.border} flex-shrink-0`}>
         <img 
           src={photoUrl} 
           alt={playerName} 
@@ -205,33 +221,45 @@ function PlayerAvatar({
 
   return (
     <div 
-      className={`w-12 h-12 rounded-full ${ragStyle.bg} border-2 ${ragStyle.border} flex items-center justify-center flex-shrink-0`}
+      className={`w-12 h-12 rounded-full ${style.bg} border-2 ${style.border} flex items-center justify-center flex-shrink-0`}
     >
       <span className="text-sm font-medium text-muted-foreground">{initials}</span>
     </div>
   );
 }
 
-function formatAvailabilityText(news: string | null, chanceThisRound: number | null): string {
-  const cleanNews = news?.replace(/\s*-\s*\d+%\s*chance\s*(of\s*playing)?/gi, "").trim() || "";
+function getStatusLabel(player: FplAvailabilityWithRag): string | null {
+  if (player.classification === "SUSPENSION") return "Suspended";
+  if (player.classification === "LOAN_OR_TRANSFER") return "Loan/Transfer";
+  return null;
+}
+
+function formatAvailabilityTextV2(player: FplAvailabilityWithRag): string {
+  const cleanNews = player.news?.replace(/\s*-\s*\d+%\s*chance\s*(of\s*playing)?/gi, "").trim() || "";
   
-  if (chanceThisRound === null || chanceThisRound === undefined) {
+  if (player.classification === "SUSPENSION") {
+    return cleanNews || "Suspended";
+  }
+  
+  if (player.classification === "LOAN_OR_TRANSFER") {
+    return cleanNews || "Left club";
+  }
+  
+  if (player.effectiveChance === null) {
     return cleanNews ? `${cleanNews} — Chance unknown` : "Chance unknown";
   }
   
-  if (chanceThisRound === 0) {
-    if (cleanNews.toLowerCase().includes("unknown return")) {
-      return cleanNews;
-    }
-    return cleanNews ? `${cleanNews} — 0% chance` : "0% chance of playing";
+  if (player.effectiveChance === 0) {
+    return cleanNews || "0% chance of playing";
   }
   
-  return cleanNews ? `${cleanNews} — ${chanceThisRound}% chance` : `${chanceThisRound}% chance of playing`;
+  return cleanNews ? `${cleanNews} — ${player.effectiveChance}% chance` : `${player.effectiveChance}% chance of playing`;
 }
 
 function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
   const newsAdded = player.newsAdded ? new Date(player.newsAdded) : null;
-  const availabilityText = formatAvailabilityText(player.news, player.effectiveChance);
+  const availabilityText = formatAvailabilityTextV2(player);
+  const statusLabel = getStatusLabel(player);
   
   return (
     <Card className="hover-elevate" data-testid={`card-availability-${player.id}`}>
@@ -240,15 +268,27 @@ function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
           <PlayerAvatar 
             playerName={player.playerName} 
             photoUrl={null}
-            ragColor={player.ragColor}
+            ringColor={player.ringColor}
           />
           
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <h3 className="font-semibold truncate">{player.playerName}</h3>
               <Badge variant="secondary" className="text-xs flex-shrink-0">
                 {player.position}
               </Badge>
+              {statusLabel && (
+                <Badge 
+                  variant="outline" 
+                  className={`text-xs flex-shrink-0 ${
+                    player.classification === "SUSPENSION" 
+                      ? "border-red-500 text-red-600" 
+                      : "border-gray-400 text-gray-500"
+                  }`}
+                >
+                  {statusLabel}
+                </Badge>
+              )}
             </div>
             
             <p className="text-sm text-muted-foreground line-clamp-2">
@@ -281,24 +321,41 @@ function InjuriesTabContent({
   teamName: string;
   relatedArticles?: Article[];
 }) {
-  const [sortBy, setSortBy] = useState<"recent" | "lowest">("recent");
+  const [activeFilter, setActiveFilter] = useState<AvailabilityBucket>("RETURNING_SOON");
   
   const { data: availability, isLoading } = useQuery<FplAvailabilityWithRag[]>({
-    queryKey: ["/api/teams", teamSlug, "availability", sortBy],
+    queryKey: ["/api/teams", teamSlug, "availability"],
     queryFn: async () => {
-      const res = await fetch(`/api/teams/${teamSlug}/availability?sort=${sortBy}`);
+      const res = await fetch(`/api/teams/${teamSlug}/availability?sort=recent`);
       if (!res.ok) throw new Error("Failed to fetch availability");
       return res.json();
     },
   });
 
-  const { outCount, doubtfulCount, lastUpdated } = useMemo(() => {
+  const { filteredPlayers, counts, lastUpdated } = useMemo(() => {
     if (!availability || availability.length === 0) {
-      return { outCount: 0, doubtfulCount: 0, lastUpdated: null };
+      return { 
+        filteredPlayers: [], 
+        counts: { out: 0, doubtful: 0, suspended: 0, loaned: 0 }, 
+        lastUpdated: null 
+      };
     }
     
-    const out = availability.filter(p => p.ragColor === "red").length;
-    const doubtful = availability.filter(p => p.ragColor === "amber").length;
+    const out = availability.filter(p => p.bucket === "OUT" && p.classification === "INJURY").length;
+    const doubtful = availability.filter(p => p.bucket === "RETURNING_SOON" && p.effectiveChance === 75).length;
+    const suspended = availability.filter(p => p.classification === "SUSPENSION").length;
+    const loaned = availability.filter(p => p.classification === "LOAN_OR_TRANSFER").length;
+    
+    const filtered = availability
+      .filter(p => p.bucket === activeFilter)
+      .sort((a, b) => {
+        const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+        const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+        if (bDate !== aDate) return bDate - aDate;
+        const aChance = a.effectiveChance ?? -1;
+        const bChance = b.effectiveChance ?? -1;
+        return aChance - bChance;
+      });
     
     const mostRecent = availability.reduce((latest, p) => {
       if (p.newsAdded) {
@@ -309,10 +366,24 @@ function InjuriesTabContent({
     }, new Date(0));
     
     return {
-      outCount: out,
-      doubtfulCount: doubtful,
+      filteredPlayers: filtered,
+      counts: { out, doubtful, suspended, loaned },
       lastUpdated: mostRecent.getTime() > 0 ? mostRecent : null,
     };
+  }, [availability, activeFilter]);
+
+  const bucketCounts = useMemo((): Record<AvailabilityBucket, number> => {
+    const counts: Record<AvailabilityBucket, number> = {
+      RETURNING_SOON: 0,
+      COIN_FLIP: 0,
+      DOUBTFUL: 0,
+      OUT: 0,
+      SUSPENDED: 0,
+      LEFT_CLUB: 0,
+    };
+    if (!availability) return counts;
+    availability.forEach(p => { counts[p.bucket]++; });
+    return counts;
   }, [availability]);
 
   if (isLoading) {
@@ -321,9 +392,10 @@ function InjuriesTabContent({
         <div className="space-y-2">
           <Skeleton className="h-7 w-48" />
           <Skeleton className="h-5 w-64" />
-          <div className="flex gap-2 mt-3">
-            <Skeleton className="h-6 w-20" />
-            <Skeleton className="h-6 w-24" />
+          <div className="flex gap-2 mt-3 flex-wrap">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-8 w-24" />
+            ))}
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -344,45 +416,53 @@ function InjuriesTabContent({
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-          <h2 className="text-xl font-semibold">Injuries & Availability</h2>
-          <div className="flex gap-1">
-            <Button 
-              variant={sortBy === "recent" ? "default" : "ghost"} 
-              size="sm"
-              onClick={() => setSortBy("recent")}
-              data-testid="button-sort-recent"
-            >
-              Most Recent
-            </Button>
-            <Button 
-              variant={sortBy === "lowest" ? "default" : "ghost"} 
-              size="sm"
-              onClick={() => setSortBy("lowest")}
-              data-testid="button-sort-lowest"
-            >
-              Lowest %
-            </Button>
-          </div>
-        </div>
+        <h2 className="text-xl font-semibold mb-1">Injuries & Availability</h2>
         <p className="text-sm text-muted-foreground mb-3">
           FPL-powered availability for {teamName}
         </p>
         
         {(availability && availability.length > 0) && (
-          <div className="flex flex-wrap items-center gap-2 mb-2">
-            {outCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {counts.out > 0 && (
               <Badge variant="destructive" className="text-xs" data-testid="badge-out-count">
-                OUT: {outCount}
+                OUT: {counts.out}
               </Badge>
             )}
-            {doubtfulCount > 0 && (
-              <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-xs" data-testid="badge-doubtful-count">
-                DOUBTFUL: {doubtfulCount}
+            {counts.doubtful > 0 && (
+              <Badge className="bg-amber-500 text-white text-xs" data-testid="badge-doubtful-count">
+                DOUBTFUL: {counts.doubtful}
+              </Badge>
+            )}
+            {counts.suspended > 0 && (
+              <Badge variant="outline" className="text-xs border-red-500 text-red-600" data-testid="badge-suspended-count">
+                SUSPENDED: {counts.suspended}
+              </Badge>
+            )}
+            {counts.loaned > 0 && (
+              <Badge variant="outline" className="text-xs border-gray-400 text-gray-500" data-testid="badge-loaned-count">
+                LOANED: {counts.loaned}
               </Badge>
             )}
           </div>
         )}
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          {FILTER_OPTIONS.map((option) => {
+            const count = bucketCounts[option.key] || 0;
+            return (
+              <Button
+                key={option.key}
+                variant={activeFilter === option.key ? "default" : "outline"}
+                size="sm"
+                onClick={() => setActiveFilter(option.key)}
+                data-testid={`filter-${option.key.toLowerCase()}`}
+                className="text-xs"
+              >
+                {option.label} {count > 0 && `(${count})`}
+              </Button>
+            );
+          })}
+        </div>
 
         {lastUpdated && (
           <p className="text-xs text-muted-foreground">
@@ -397,15 +477,15 @@ function InjuriesTabContent({
         )}
       </div>
 
-      {(!availability || availability.length === 0) ? (
+      {filteredPlayers.length === 0 ? (
         <EmptyState
           icon={Activity}
-          title="No injury updates right now"
-          description="All players appear fit. Sync FPL data to populate availability."
+          title={`No players in "${FILTER_OPTIONS.find(o => o.key === activeFilter)?.label}"`}
+          description="Try selecting a different filter to see more players."
         />
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
-          {availability.map((player) => (
+          {filteredPlayers.map((player) => (
             <FplAvailabilityCard key={player.id} player={player} />
           ))}
         </div>
