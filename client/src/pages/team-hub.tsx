@@ -22,7 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
 
 interface FplAvailabilityWithRag extends FplPlayerAvailability {
-  ragColor: "green" | "light-green" | "amber" | "orange" | "red" | "unknown";
+  ragColor: "green" | "amber" | "red";
   displayPercent: string;
   effectiveChance: number | null;
 }
@@ -166,11 +166,8 @@ function LatestTabContent({
 
 const RAG_COLORS: Record<string, { bg: string; border: string }> = {
   green: { bg: "bg-green-500/10", border: "border-green-500" },
-  "light-green": { bg: "bg-green-400/10", border: "border-green-400" },
   amber: { bg: "bg-amber-500/10", border: "border-amber-500" },
-  orange: { bg: "bg-orange-500/10", border: "border-orange-500" },
   red: { bg: "bg-red-500/10", border: "border-red-500" },
-  unknown: { bg: "bg-gray-500/10", border: "border-gray-500" },
 };
 
 function PlayerAvatar({ 
@@ -301,9 +298,7 @@ function InjuriesTabContent({
     }
     
     const out = availability.filter(p => p.ragColor === "red").length;
-    const doubtful = availability.filter(p => 
-      p.ragColor === "amber" || p.ragColor === "orange"
-    ).length;
+    const doubtful = availability.filter(p => p.ragColor === "amber").length;
     
     const mostRecent = availability.reduce((latest, p) => {
       if (p.newsAdded) {

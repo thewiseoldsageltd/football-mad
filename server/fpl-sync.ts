@@ -172,7 +172,7 @@ export function getRagColor(
   fplStatus: string | null, 
   news: string | null
 ): {
-  color: "green" | "light-green" | "amber" | "orange" | "red" | "unknown";
+  color: "green" | "amber" | "red";
   displayPercent: string;
   effectiveChance: number | null;
 } {
@@ -189,12 +189,8 @@ export function getRagColor(
   
   if (effectiveChance === 100) {
     return { color: "green", displayPercent, effectiveChance };
-  } else if (effectiveChance >= 75) {
-    return { color: "light-green", displayPercent, effectiveChance };
   } else if (effectiveChance >= 50) {
     return { color: "amber", displayPercent, effectiveChance };
-  } else if (effectiveChance >= 25) {
-    return { color: "orange", displayPercent, effectiveChance };
   } else {
     return { color: "red", displayPercent, effectiveChance };
   }
