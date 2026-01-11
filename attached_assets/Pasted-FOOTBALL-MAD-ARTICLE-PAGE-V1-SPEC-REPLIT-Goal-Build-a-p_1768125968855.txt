@@ -1,0 +1,163 @@
+FOOTBALL MAD — ARTICLE PAGE V1 SPEC (REPLIT)
+
+Goal
+Build a premium-feeling article page that maximises: (1) readability, (2) time-on-page, (3) shares, (4) internal clicks, (5) follows/subscriptions.
+Must be responsive, fast, and SEO-correct.
+
+Routes
+- /article/:slug (canonical public route)
+- (optional) keep /news/:slug redirects → /article/:slug if legacy exists
+
+Layout Overview (Desktop)
+1) Top nav (existing site header)
+2) Article header block (title, meta, tags)
+3) Main content + right rail (sticky)
+4) Post-content modules (share, follow, newsletter)
+5) Related articles (strong internal linking)
+6) Footer
+
+Layout Overview (Mobile)
+- Single column
+- Sticky bottom action bar: Share + Follow + Copy link (compact)
+- Right rail content moves inline below intro or after article
+
+Data Contract (what the page expects)
+Article object fields:
+- id
+- slug
+- title
+- excerpt (or dek)
+- content_html (or content blocks)
+- cover_image_url
+- cover_image_alt
+- published_at (ISO)
+- updated_at (optional)
+- author_name
+- author_avatar_url (optional)
+- author_bio (optional)
+- reading_time_minutes (derived if not provided)
+- view_count
+- category (e.g. news, transfers, injuries, analysis)
+- tags[] (e.g. editor-pick, breaking, trending)
+- teams[] (team slugs + names)
+- competition (premier-league, championship, etc)
+
+Page Behaviour & State
+- Show skeleton loader while fetching
+- If 404: show “Article not found” + 6 popular articles module
+- Track view on mount (debounced; only once per session per slug)
+- Ensure hydration-safe share URLs (window.location only in client effect)
+
+SEO Requirements
+- <title> = "{title} | Football Mad"
+- meta description = excerpt (truncate ~155 chars)
+- canonical = /article/:slug (always)
+- OpenGraph:
+  - og:title, og:description, og:image, og:url, og:type=article
+- Twitter card: summary_large_image
+- Article schema JSON-LD:
+  - headline, image, datePublished, dateModified (if), author, publisher
+- If query params ever added: canonical MUST remain clean base article URL
+- If draft/preview route exists, add noindex to preview only (not public route)
+
+ARTICLE HEADER (above the fold)
+- Category pill (News/Transfers/Injuries/Analysis) with icon
+- Optional badges row (Breaking / Editor’s Pick / Trending)
+- H1 title (big, bold)
+- Excerpt/dek below title (1–2 lines)
+- Meta row:
+  - Author name (clickable if author pages exist)
+  - Published time (“2 hours ago”)
+  - Reading time (“4 min read”)
+  - View count (optional but nice)
+- Cover image:
+  - Full width, rounded, subtle gradient overlay optional
+  - Caption if available
+- Teams row:
+  - Team chips (e.g. Arsenal, Chelsea) → link to /teams/:slug
+  - Competition chip → link to /news?competition=premier-league
+
+MAIN CONTENT
+- Typography: comfortable line length (~65–75ch), generous line height
+- Support:
+  - H2/H3 headings
+  - lists, blockquotes
+  - inline links styled clearly
+- If content_html is used, sanitize + style with prose (Tailwind Typography / “prose”)
+- Add “key takeaways” box IF tag includes analysis OR editor-pick (optional v1, simple)
+  - 3 bullets auto-generated from excerpt for now (or omit if no logic yet)
+
+RIGHT RAIL (Desktop only, sticky)
+Sticky card stack:
+1) “Follow {Team}” card (if teams[0] exists)
+   - CTA: Follow
+   - Secondary: “Get team updates”
+2) “Subscribe” newsletter mini-card
+3) “More like this” mini list (3 links)
+4) “Share” small row (icons)
+
+POST-CONTENT MODULES (below article)
+- Share block: “Share this article”
+  Buttons:
+  - WhatsApp
+  - X
+  - Facebook
+  - Copy link (toast “Copied”)
+  Behaviour:
+  - Use encoded URL + encoded title
+  - WhatsApp: https://wa.me/?text={title}%20{url}
+  - X: https://twitter.com/intent/tweet?text={title}&url={url}
+  - Facebook: https://www.facebook.com/sharer/sharer.php?u={url}
+  - Copy uses navigator.clipboard
+- Newsletter block (“Stay in the loop”) same styling as homepage (reuse component)
+- Team follow prompt (if not following): “Follow Arsenal for more updates” with team chip
+
+RELATED ARTICLES (high impact)
+Section title: “Related Articles”
+- 6 cards (2 rows of 3 desktop, 1 column mobile)
+Ranking logic (v1):
+1) Same team(s)
+2) Same category
+3) Same tags
+Fallback: trending/latest
+Each card:
+- image
+- title
+- time
+- badges (small)
+- on click → /article/:slug
+
+COMMENTS / COMMUNITY (optional, can stub)
+If feature flag OFF: show “Fan thoughts coming soon”
+If ON (later): embed comment list + add comment box (auth gated)
+
+EDGE CASES
+- Article with no cover image: use gradient placeholder + Football Mad icon
+- Long titles: clamp to 2 lines on mobile, 3 on desktop
+- Content missing excerpt: generate from first ~140 chars of content (strip HTML)
+- Multiple teams: show max 4 chips + “+N” overflow
+
+NAV & DISCOVERY
+- Breadcrumbs (small): Home / News / {Team?} / Article title (optional v1)
+- Sticky progress bar at top (optional but nice): shows reading progress
+
+Design & Interaction
+- Buttons: subtle lift on hover, focus rings accessible
+- Share buttons: consistent icon style
+- Use site green for primary CTAs, neutral for secondary
+- Keep it clean, not cluttered; premium sports-media vibe
+
+Acceptance Tests
+1) Page loads with skeleton, renders article correctly
+2) Share buttons open correct destinations and copy works with toast
+3) SEO tags present (title, description, canonical, OG)
+4) Related articles render and link
+5) Team chips link to team hubs
+6) Mobile: sticky bottom action bar appears; no horizontal scroll
+7) No React hook order issues (avoid conditional hooks)
+
+Implementation Notes (important)
+- Ensure hooks are not called conditionally
+- Derive URL for sharing inside useEffect or guard window usage
+- Sanitize HTML if rendering content_html
+- Use one reusable ArticleCard component across homepage/news/team/article related

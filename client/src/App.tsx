@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/lib/theme-provider";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
 import NewsPage from "@/pages/news";
-import ArticlePage from "@/pages/article";
+import ArticlePage, { LegacyArticleRedirect } from "@/pages/article";
 import TeamsPage from "@/pages/teams";
 import TeamHubPage from "@/pages/team-hub";
 import MatchesPage from "@/pages/matches";
@@ -25,7 +25,8 @@ function Router() {
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/news" component={NewsPage} />
-      <Route path="/news/:slug" component={ArticlePage} />
+      <Route path="/article/:slug" component={ArticlePage} />
+      <Route path="/news/:slug" component={LegacyArticleRedirect} />
       <Route path="/teams" component={TeamsPage} />
       <Route path="/teams/:slug" component={TeamHubPage} />
       <Route path="/teams/:slug/:tab" component={TeamHubPage} />
