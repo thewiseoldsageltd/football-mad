@@ -13,6 +13,7 @@ import type { Team } from "@shared/schema";
 
 const COMPETITIONS = [
   { value: "Premier League", label: "Premier League" },
+  { value: "Championship", label: "Championship" },
   { value: "La Liga", label: "La Liga" },
   { value: "Bundesliga", label: "Bundesliga" },
   { value: "Serie A", label: "Serie A" },

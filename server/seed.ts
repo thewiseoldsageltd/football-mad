@@ -2,26 +2,32 @@ import { db } from "./db";
 import { teams, players, articles, articleTeams, matches, transfers, injuries, products } from "@shared/schema";
 
 const premierLeagueTeams = [
-  { name: "Arsenal", slug: "arsenal", shortName: "ARS", primaryColor: "#EF0107", secondaryColor: "#FFFFFF", stadiumName: "Emirates Stadium", founded: 1886, manager: "Mikel Arteta" },
-  { name: "Aston Villa", slug: "aston-villa", shortName: "AVL", primaryColor: "#670E36", secondaryColor: "#95BFE5", stadiumName: "Villa Park", founded: 1874, manager: "Unai Emery" },
-  { name: "Bournemouth", slug: "bournemouth", shortName: "BOU", primaryColor: "#DA291C", secondaryColor: "#000000", stadiumName: "Vitality Stadium", founded: 1899, manager: "Andoni Iraola" },
-  { name: "Brentford", slug: "brentford", shortName: "BRE", primaryColor: "#E30613", secondaryColor: "#FFFFFF", stadiumName: "Brentford Community Stadium", founded: 1889, manager: "Thomas Frank" },
-  { name: "Brighton & Hove Albion", slug: "brighton", shortName: "BHA", primaryColor: "#0057B8", secondaryColor: "#FFFFFF", stadiumName: "Amex Stadium", founded: 1901, manager: "Fabian Hurzeler" },
-  { name: "Chelsea", slug: "chelsea", shortName: "CHE", primaryColor: "#034694", secondaryColor: "#FFFFFF", stadiumName: "Stamford Bridge", founded: 1905, manager: "Enzo Maresca" },
-  { name: "Crystal Palace", slug: "crystal-palace", shortName: "CRY", primaryColor: "#1B458F", secondaryColor: "#C4122E", stadiumName: "Selhurst Park", founded: 1905, manager: "Oliver Glasner" },
-  { name: "Everton", slug: "everton", shortName: "EVE", primaryColor: "#003399", secondaryColor: "#FFFFFF", stadiumName: "Goodison Park", founded: 1878, manager: "Sean Dyche" },
-  { name: "Fulham", slug: "fulham", shortName: "FUL", primaryColor: "#000000", secondaryColor: "#FFFFFF", stadiumName: "Craven Cottage", founded: 1879, manager: "Marco Silva" },
-  { name: "Ipswich Town", slug: "ipswich", shortName: "IPS", primaryColor: "#0033A0", secondaryColor: "#FFFFFF", stadiumName: "Portman Road", founded: 1878, manager: "Kieran McKenna" },
-  { name: "Leicester City", slug: "leicester", shortName: "LEI", primaryColor: "#003090", secondaryColor: "#FDBE11", stadiumName: "King Power Stadium", founded: 1884, manager: "Steve Cooper" },
-  { name: "Liverpool", slug: "liverpool", shortName: "LIV", primaryColor: "#C8102E", secondaryColor: "#FFFFFF", stadiumName: "Anfield", founded: 1892, manager: "Arne Slot" },
-  { name: "Manchester City", slug: "manchester-city", shortName: "MCI", primaryColor: "#6CABDD", secondaryColor: "#FFFFFF", stadiumName: "Etihad Stadium", founded: 1880, manager: "Pep Guardiola" },
-  { name: "Manchester United", slug: "manchester-united", shortName: "MUN", primaryColor: "#DA291C", secondaryColor: "#FFFFFF", stadiumName: "Old Trafford", founded: 1878, manager: "Ruben Amorim" },
-  { name: "Newcastle United", slug: "newcastle", shortName: "NEW", primaryColor: "#241F20", secondaryColor: "#FFFFFF", stadiumName: "St. James' Park", founded: 1892, manager: "Eddie Howe" },
-  { name: "Nottingham Forest", slug: "nottingham-forest", shortName: "NFO", primaryColor: "#DD0000", secondaryColor: "#FFFFFF", stadiumName: "City Ground", founded: 1865, manager: "Nuno Espirito Santo" },
-  { name: "Southampton", slug: "southampton", shortName: "SOU", primaryColor: "#D71920", secondaryColor: "#FFFFFF", stadiumName: "St. Mary's Stadium", founded: 1885, manager: "Ivan Juric" },
-  { name: "Tottenham Hotspur", slug: "tottenham", shortName: "TOT", primaryColor: "#132257", secondaryColor: "#FFFFFF", stadiumName: "Tottenham Hotspur Stadium", founded: 1882, manager: "Ange Postecoglou" },
-  { name: "West Ham United", slug: "west-ham", shortName: "WHU", primaryColor: "#7A263A", secondaryColor: "#1BB1E7", stadiumName: "London Stadium", founded: 1895, manager: "Julen Lopetegui" },
-  { name: "Wolverhampton Wanderers", slug: "wolves", shortName: "WOL", primaryColor: "#FDB913", secondaryColor: "#231F20", stadiumName: "Molineux Stadium", founded: 1877, manager: "Vitor Pereira" },
+  { name: "Arsenal", slug: "arsenal", shortName: "ARS", primaryColor: "#EF0107", secondaryColor: "#FFFFFF", stadiumName: "Emirates Stadium", founded: 1886, manager: "Mikel Arteta", league: "Premier League" },
+  { name: "Aston Villa", slug: "aston-villa", shortName: "AVL", primaryColor: "#670E36", secondaryColor: "#95BFE5", stadiumName: "Villa Park", founded: 1874, manager: "Unai Emery", league: "Premier League" },
+  { name: "Bournemouth", slug: "afc-bournemouth", shortName: "BOU", primaryColor: "#DA291C", secondaryColor: "#000000", stadiumName: "Vitality Stadium", founded: 1899, manager: "Andoni Iraola", league: "Premier League" },
+  { name: "Brentford", slug: "brentford", shortName: "BRE", primaryColor: "#E30613", secondaryColor: "#FFFFFF", stadiumName: "Brentford Community Stadium", founded: 1889, manager: "Thomas Frank", league: "Premier League" },
+  { name: "Brighton & Hove Albion", slug: "brighton-and-hove-albion", shortName: "BHA", primaryColor: "#0057B8", secondaryColor: "#FFFFFF", stadiumName: "Amex Stadium", founded: 1901, manager: "Fabian Hurzeler", league: "Premier League" },
+  { name: "Burnley", slug: "burnley", shortName: "BUR", primaryColor: "#6C1D45", secondaryColor: "#99D6EA", stadiumName: "Turf Moor", founded: 1882, manager: "Scott Parker", league: "Premier League" },
+  { name: "Chelsea", slug: "chelsea", shortName: "CHE", primaryColor: "#034694", secondaryColor: "#FFFFFF", stadiumName: "Stamford Bridge", founded: 1905, manager: "Enzo Maresca", league: "Premier League" },
+  { name: "Crystal Palace", slug: "crystal-palace", shortName: "CRY", primaryColor: "#1B458F", secondaryColor: "#C4122E", stadiumName: "Selhurst Park", founded: 1905, manager: "Oliver Glasner", league: "Premier League" },
+  { name: "Everton", slug: "everton", shortName: "EVE", primaryColor: "#003399", secondaryColor: "#FFFFFF", stadiumName: "Goodison Park", founded: 1878, manager: "Sean Dyche", league: "Premier League" },
+  { name: "Fulham", slug: "fulham", shortName: "FUL", primaryColor: "#000000", secondaryColor: "#FFFFFF", stadiumName: "Craven Cottage", founded: 1879, manager: "Marco Silva", league: "Premier League" },
+  { name: "Leeds United", slug: "leeds-united", shortName: "LEE", primaryColor: "#FFCD00", secondaryColor: "#1D428A", stadiumName: "Elland Road", founded: 1919, manager: "Daniel Farke", league: "Premier League" },
+  { name: "Liverpool", slug: "liverpool", shortName: "LIV", primaryColor: "#C8102E", secondaryColor: "#FFFFFF", stadiumName: "Anfield", founded: 1892, manager: "Arne Slot", league: "Premier League" },
+  { name: "Manchester City", slug: "manchester-city", shortName: "MCI", primaryColor: "#6CABDD", secondaryColor: "#FFFFFF", stadiumName: "Etihad Stadium", founded: 1880, manager: "Pep Guardiola", league: "Premier League" },
+  { name: "Manchester United", slug: "manchester-united", shortName: "MUN", primaryColor: "#DA291C", secondaryColor: "#FFFFFF", stadiumName: "Old Trafford", founded: 1878, manager: "Ruben Amorim", league: "Premier League" },
+  { name: "Newcastle United", slug: "newcastle-united", shortName: "NEW", primaryColor: "#241F20", secondaryColor: "#FFFFFF", stadiumName: "St. James' Park", founded: 1892, manager: "Eddie Howe", league: "Premier League" },
+  { name: "Nottingham Forest", slug: "nottingham-forest", shortName: "NFO", primaryColor: "#DD0000", secondaryColor: "#FFFFFF", stadiumName: "City Ground", founded: 1865, manager: "Nuno Espirito Santo", league: "Premier League" },
+  { name: "Sunderland", slug: "sunderland", shortName: "SUN", primaryColor: "#EB172B", secondaryColor: "#FFFFFF", stadiumName: "Stadium of Light", founded: 1879, manager: "Regis Le Bris", league: "Premier League" },
+  { name: "Tottenham Hotspur", slug: "tottenham-hotspur", shortName: "TOT", primaryColor: "#132257", secondaryColor: "#FFFFFF", stadiumName: "Tottenham Hotspur Stadium", founded: 1882, manager: "Ange Postecoglou", league: "Premier League" },
+  { name: "West Ham United", slug: "west-ham-united", shortName: "WHU", primaryColor: "#7A263A", secondaryColor: "#1BB1E7", stadiumName: "London Stadium", founded: 1895, manager: "Julen Lopetegui", league: "Premier League" },
+  { name: "Wolverhampton Wanderers", slug: "wolverhampton-wanderers", shortName: "WOL", primaryColor: "#FDB913", secondaryColor: "#231F20", stadiumName: "Molineux Stadium", founded: 1877, manager: "Vitor Pereira", league: "Premier League" },
+];
+
+const championshipTeams = [
+  { name: "Ipswich Town", slug: "ipswich-town", shortName: "IPS", primaryColor: "#0033A0", secondaryColor: "#FFFFFF", stadiumName: "Portman Road", founded: 1878, manager: "Kieran McKenna", league: "Championship" },
+  { name: "Leicester City", slug: "leicester-city", shortName: "LEI", primaryColor: "#003090", secondaryColor: "#FDBE11", stadiumName: "King Power Stadium", founded: 1884, manager: "Steve Cooper", league: "Championship" },
+  { name: "Southampton", slug: "southampton", shortName: "SOU", primaryColor: "#D71920", secondaryColor: "#FFFFFF", stadiumName: "St. Mary's Stadium", founded: 1885, manager: "Ivan Juric", league: "Championship" },
 ];
 
 const sampleArticles = [
@@ -103,17 +109,20 @@ const sampleProducts = [
 async function seed() {
   console.log("Starting database seed...");
 
-  // Seed teams
-  console.log("Seeding teams...");
+  // Seed teams (Premier League)
+  console.log("Seeding Premier League teams...");
   const insertedTeams: { id: string; slug: string }[] = [];
   for (const team of premierLeagueTeams) {
-    const [inserted] = await db.insert(teams).values({
-      ...team,
-      league: "Premier League",
-    }).onConflictDoNothing().returning();
+    const [inserted] = await db.insert(teams).values(team).onConflictDoNothing().returning();
     if (inserted) {
       insertedTeams.push({ id: inserted.id, slug: inserted.slug });
     }
+  }
+  
+  // Seed Championship teams
+  console.log("Seeding Championship teams...");
+  for (const team of championshipTeams) {
+    await db.insert(teams).values(team).onConflictDoNothing();
   }
   
   // Fetch all teams for reference

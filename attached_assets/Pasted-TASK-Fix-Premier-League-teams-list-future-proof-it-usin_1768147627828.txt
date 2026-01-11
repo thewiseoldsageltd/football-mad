@@ -1,0 +1,97 @@
+TASK: Fix Premier League teams list + future-proof it using FPL bootstrap teams as source of truth (NO schema migration)
+
+Schema context:
+- teams table fields we can use:
+  - name (unique)
+  - slug (unique)
+  - shortName
+  - league (default "Premier League")
+  - primaryColor, secondaryColor, logoUrl, stadiumName, founded, manager
+- There is no isActive / competition flag; use `league` to decide which teams are in PL.
+
+Goal:
+- Teams page currently shows Ipswich/Leicester/Southampton as PL.
+- Current PL should include Burnley/Leeds United/Sunderland instead.
+- We already use https://fantasy.premierleague.com/api/bootstrap-static/ (FPL bootstrap) for availability syncing.
+- Make the PL membership auto-update by syncing teams from FPL bootstrap.
+
+Deliverables (do in this order):
+
+1) Update FPL team slug mapping
+File: server/fpl-sync.ts
+- Extend FPL_TEAM_SLUG_MAP with:
+  - "Burnley": "burnley"
+  - "Leeds": "leeds-united"
+  - "Leeds United": "leeds-united"
+  - "Sunderland": "sunderland"
+- Keep existing mappings intact.
+
+2) Implement syncFplTeams()
+File: server/fpl-sync.ts (or new file server/fpl-teams-sync.ts, but export it)
+- Create function: export async function syncFplTeams(): Promise<{ upserted: number; demoted: number; errors: string[] }>
+- Fetch FPL_BOOTSTRAP_URL and read data.teams (array of {id, name, short_name})
+- For each FPL team:
+  - Derive slug using existing mapFplTeamToSlug(fplTeam.name, fplTeam.short_name)
+  - Upsert into DB table "teams" using slug as the primary conflict target:
+    - slug: derived slug
+    - name: fplTeam.name (use FPL name unless we already have a name set for that slug; if a row exists, keep existing name unless it’s blank)
+    - shortName: fplTeam.short_name
+    - league: "Premier League"
+    - Do NOT overwrite branding fields (primaryColor, secondaryColor, logoUrl, stadiumName, founded, manager) if already set in DB.
+      - Only set those fields if currently NULL / empty.
+- After processing all 20 FPL teams:
+  - Identify teams in our DB that have league="Premier League" BUT slug NOT IN the current FPL slug list
+  - Demote them by setting league="Championship"
+  - Do not delete any teams.
+
+Implementation notes:
+- Use drizzle-orm upsert pattern similar to fplPlayerAvailability:
+  - insert(teams).values(...).onConflictDoUpdate({ target: teams.slug, set: {...} })
+- Since teams.name is also unique, ensure we don’t cause name collisions:
+  - Prefer upsert by slug; if inserting a brand-new row and the name already exists on another row, handle gracefully:
+    - In that case, keep the existing row’s name and set the new row name to `${fplTeam.name} FC` OR skip and log error.
+  - Add errors[] entries rather than crashing sync.
+
+3) Add secured endpoint to trigger team sync
+File: server/routes.ts
+- Add POST /api/jobs/sync-fpl-teams
+- Require a secret:
+  - Read expected secret from process.env.FPL_SYNC_SECRET (same env var used by availability sync if present)
+  - Validate request header: x-sync-secret must equal expected secret
+  - If missing/incorrect: return 401
+- Handler should call syncFplTeams() and return JSON with { upserted, demoted, errors }
+
+4) Ensure availability sync calls team sync first (so slugs/leagues stay correct)
+- In the existing POST /api/jobs/sync-fpl-availability handler:
+  - Call await syncFplTeams() before await syncFplAvailability()
+  - Return both results (teams + availability) in the response payload.
+
+5) Update Teams page filtering logic to use teams.league
+File: client Teams page (where PL dropdown/filter is implemented)
+- Ensure the Premier League view shows teams where team.league === "Premier League"
+- Add a secondary option (if it exists) for Championship teams using team.league === "Championship"
+- After running sync-fpl-teams, PL list must be 20 teams from FPL bootstrap.
+
+6) One-time safety net: seed data update (until sync runs)
+File: server/seed.ts (or wherever you seed teams)
+- Update seeded Premier League teams to include:
+  Arsenal, Aston Villa, Bournemouth, Brentford, Brighton & Hove Albion, Burnley,
+  Chelsea, Crystal Palace, Everton, Fulham, Leeds United, Liverpool,
+  Manchester City, Manchester United, Newcastle United, Nottingham Forest,
+  Sunderland, Tottenham Hotspur, West Ham United, Wolverhampton Wanderers
+- Remove: Ipswich Town, Leicester City, Southampton from the seeded PL set (they can remain seeded but set league="Championship")
+- Slugs must match:
+  burnley, leeds-united, sunderland
+- Fulham slug must remain "fulham" (do not use “cottagers” anywhere)
+
+7) Verification output
+After sync, log:
+- Number of DB rows with league="Premier League" (should be 20)
+- List the 20 {name, slug}
+- List demoted teams {name, slug}
+
+Acceptance Criteria:
+- Teams page no longer shows Ipswich/Leicester/Southampton under Premier League.
+- Teams page shows Burnley/Leeds United/Sunderland under Premier League.
+- Running POST /api/jobs/sync-fpl-teams with x-sync-secret updates PL membership without code changes.
+- No deletions; demoted teams remain in DB with league="Championship".

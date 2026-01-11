@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { fplPlayerAvailability, teams } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, inArray, notInArray, and } from "drizzle-orm";
 
 const FPL_BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/";
 
@@ -26,6 +26,10 @@ const FPL_TEAM_SLUG_MAP: Record<string, string> = {
   "Brentford": "brentford",
   "Bournemouth": "afc-bournemouth",
   "Southampton": "southampton",
+  "Burnley": "burnley",
+  "Leeds": "leeds-united",
+  "Leeds United": "leeds-united",
+  "Sunderland": "sunderland",
 };
 
 const FPL_POSITION_MAP: Record<number, "GKP" | "DEF" | "MID" | "FWD"> = {
@@ -163,6 +167,91 @@ export async function syncFplAvailability(): Promise<{ updated: number; skipped:
     const msg = err instanceof Error ? err.message : String(err);
     errors.push(`Sync failed: ${msg}`);
     return { updated, skipped, errors };
+  }
+}
+
+export async function syncFplTeams(): Promise<{ upserted: number; demoted: number; errors: string[] }> {
+  const errors: string[] = [];
+  let upserted = 0;
+  let demoted = 0;
+  const fplSlugs: string[] = [];
+
+  try {
+    const response = await fetch(FPL_BOOTSTRAP_URL);
+    if (!response.ok) {
+      throw new Error(`FPL API returned ${response.status}`);
+    }
+    
+    const data: FplBootstrapData = await response.json();
+    
+    for (const fplTeam of data.teams) {
+      try {
+        const slug = mapFplTeamToSlug(fplTeam.name, fplTeam.short_name);
+        if (!slug) {
+          errors.push(`Could not derive slug for team: ${fplTeam.name}`);
+          continue;
+        }
+        
+        fplSlugs.push(slug);
+        
+        const existing = await db.select().from(teams).where(eq(teams.slug, slug));
+        
+        if (existing.length > 0) {
+          const existingTeam = existing[0];
+          await db
+            .update(teams)
+            .set({
+              shortName: fplTeam.short_name,
+              league: "Premier League",
+              name: existingTeam.name || fplTeam.name,
+            })
+            .where(eq(teams.slug, slug));
+        } else {
+          const nameExists = await db.select().from(teams).where(eq(teams.name, fplTeam.name));
+          const teamName = nameExists.length > 0 ? `${fplTeam.name} FC` : fplTeam.name;
+          
+          await db.insert(teams).values({
+            name: teamName,
+            slug,
+            shortName: fplTeam.short_name,
+            league: "Premier League",
+          });
+        }
+        
+        upserted++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`Team ${fplTeam.name}: ${msg}`);
+      }
+    }
+    
+    if (fplSlugs.length > 0) {
+      const demotedTeams = await db
+        .update(teams)
+        .set({ league: "Championship" })
+        .where(
+          and(
+            eq(teams.league, "Premier League"),
+            notInArray(teams.slug, fplSlugs)
+          )
+        )
+        .returning();
+      
+      demoted = demotedTeams.length;
+      
+      if (demoted > 0) {
+        console.log(`[FPL Team Sync] Demoted ${demoted} teams to Championship:`, demotedTeams.map(t => t.slug).join(", "));
+      }
+    }
+    
+    const plTeams = await db.select({ name: teams.name, slug: teams.slug }).from(teams).where(eq(teams.league, "Premier League"));
+    console.log(`[FPL Team Sync] Premier League teams (${plTeams.length}):`, plTeams.map(t => t.slug).join(", "));
+    
+    return { upserted, demoted, errors };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`Team sync failed: ${msg}`);
+    return { upserted, demoted, errors };
   }
 }
 

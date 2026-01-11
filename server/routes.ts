@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema } from "@shared/schema";
 import { z } from "zod";
-import { syncFplAvailability, classifyPlayer } from "./fpl-sync";
+import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -491,10 +491,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ========== FPL SYNC (Server Job) ==========
-  app.post("/api/jobs/sync-fpl-availability", async (req, res) => {
+  // ========== FPL SYNC (Server Jobs) ==========
+  app.post("/api/jobs/sync-fpl-teams", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
+      const syncSecret = req.headers["x-sync-secret"];
       const expectedSecret = process.env.FPL_SYNC_SECRET;
       
       if (!expectedSecret) {
@@ -502,19 +502,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(500).json({ error: "Sync not configured" });
       }
       
-      if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
+      if (!syncSecret || syncSecret !== expectedSecret) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      console.log("[FPL Sync] Starting sync...");
-      const result = await syncFplAvailability();
-      console.log(`[FPL Sync] Complete: ${result.updated} updated, ${result.skipped} skipped`);
+      console.log("[FPL Team Sync] Starting team sync...");
+      const result = await syncFplTeams();
+      console.log(`[FPL Team Sync] Complete: ${result.upserted} upserted, ${result.demoted} demoted`);
       
       if (result.errors.length > 0) {
-        console.warn("[FPL Sync] Errors:", result.errors.slice(0, 5));
+        console.warn("[FPL Team Sync] Errors:", result.errors.slice(0, 5));
       }
       
       res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("[FPL Team Sync] Error:", error);
+      res.status(500).json({ error: "Team sync failed" });
+    }
+  });
+
+  app.post("/api/jobs/sync-fpl-availability", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const syncSecret = req.headers["x-sync-secret"];
+      const expectedSecret = process.env.FPL_SYNC_SECRET;
+      
+      if (!expectedSecret) {
+        console.warn("FPL_SYNC_SECRET not configured");
+        return res.status(500).json({ error: "Sync not configured" });
+      }
+      
+      const isAuthorized = (authHeader && authHeader === `Bearer ${expectedSecret}`) || 
+                           (syncSecret && syncSecret === expectedSecret);
+      
+      if (!isAuthorized) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      console.log("[FPL Sync] Starting team sync first...");
+      const teamResult = await syncFplTeams();
+      console.log(`[FPL Team Sync] Complete: ${teamResult.upserted} upserted, ${teamResult.demoted} demoted`);
+      
+      console.log("[FPL Sync] Starting availability sync...");
+      const availabilityResult = await syncFplAvailability();
+      console.log(`[FPL Availability Sync] Complete: ${availabilityResult.updated} updated, ${availabilityResult.skipped} skipped`);
+      
+      const allErrors = [...teamResult.errors, ...availabilityResult.errors];
+      if (allErrors.length > 0) {
+        console.warn("[FPL Sync] Errors:", allErrors.slice(0, 5));
+      }
+      
+      res.json({ 
+        ok: true, 
+        teams: { upserted: teamResult.upserted, demoted: teamResult.demoted, errors: teamResult.errors },
+        availability: { updated: availabilityResult.updated, skipped: availabilityResult.skipped, errors: availabilityResult.errors },
+      });
     } catch (error) {
       console.error("[FPL Sync] Error:", error);
       res.status(500).json({ error: "Sync failed" });
