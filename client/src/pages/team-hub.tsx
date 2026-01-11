@@ -888,43 +888,383 @@ function TransfersTabContent({
   );
 }
 
+type MatchSubTab = "fixtures" | "results";
+
+function formatMatchDate(dateStr: string | Date): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.floor((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  
+  const options: Intl.DateTimeFormatOptions = { 
+    weekday: "short", 
+    day: "numeric", 
+    month: "short" 
+  };
+  
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays === -1) return "Yesterday";
+  
+  return date.toLocaleDateString("en-GB", options);
+}
+
+function formatKickoffTime(dateStr: string | Date): string {
+  const date = new Date(dateStr);
+  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function getMatchResult(match: Match & { homeTeam?: Team; awayTeam?: Team }, teamId: string): "W" | "D" | "L" | null {
+  if (match.homeScore === null || match.awayScore === null) return null;
+  const isHome = match.homeTeamId === teamId;
+  const teamScore = isHome ? match.homeScore : match.awayScore;
+  const opponentScore = isHome ? match.awayScore : match.homeScore;
+  if (teamScore > opponentScore) return "W";
+  if (teamScore < opponentScore) return "L";
+  return "D";
+}
+
+function ResultBadge({ result }: { result: "W" | "D" | "L" | null }) {
+  if (!result) return null;
+  const styles = {
+    W: "bg-green-600 text-white",
+    D: "bg-amber-500 text-white",
+    L: "bg-red-600 text-white",
+  };
+  const labels = { W: "Win", D: "Draw", L: "Loss" };
+  return (
+    <Badge className={`${styles[result]} font-bold text-xs`}>
+      {labels[result]}
+    </Badge>
+  );
+}
+
+function AvailabilitySummaryBadge({ teamSlug }: { teamSlug: string }) {
+  const { data: fplData } = useQuery<FplPlayerAvailability[]>({
+    queryKey: ["/api/fpl/availability", teamSlug],
+  });
+  
+  if (!fplData || fplData.length === 0) return null;
+  
+  const outCount = fplData.filter(p => 
+    p.fplStatus === "i" || p.fplStatus === "u" || (p.chanceNextRound !== null && p.chanceNextRound === 0)
+  ).length;
+  
+  const doubtCount = fplData.filter(p => 
+    p.fplStatus === "d" || (p.chanceNextRound !== null && p.chanceNextRound > 0 && p.chanceNextRound < 75)
+  ).length;
+  
+  if (outCount === 0 && doubtCount === 0) {
+    return (
+      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+        <Activity className="h-3 w-3" />
+        Full squad available
+      </span>
+    );
+  }
+  
+  return (
+    <span className="text-xs text-muted-foreground flex items-center gap-1">
+      <Activity className="h-3 w-3" />
+      {outCount > 0 && <span className="text-red-600 dark:text-red-400">{outCount} out</span>}
+      {outCount > 0 && doubtCount > 0 && <span>•</span>}
+      {doubtCount > 0 && <span className="text-amber-600 dark:text-amber-400">{doubtCount} doubt</span>}
+    </span>
+  );
+}
+
+function NextMatchCard({ 
+  match, 
+  teamId,
+  teamSlug 
+}: { 
+  match: Match & { homeTeam?: Team; awayTeam?: Team };
+  teamId: string;
+  teamSlug: string;
+}) {
+  const isHome = match.homeTeamId === teamId;
+  const opponent = isHome ? match.awayTeam : match.homeTeam;
+  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
+  const venue = isHome ? (match.venue || match.homeTeam?.stadiumName || "Home") : (match.venue || "Away");
+  const isPostponed = match.status === "postponed";
+  
+  return (
+    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <Badge variant="outline" className="text-xs font-medium">
+            {isPostponed ? "Postponed" : "Next Match"}
+          </Badge>
+          <AvailabilitySummaryBadge teamSlug={teamSlug} />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-lg font-bold">{isHome ? "vs" : "@"} {opponentName}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span>{match.competition || "Premier League"}</span>
+              <span>•</span>
+              <span>{isHome ? "Home" : "Away"}</span>
+            </div>
+          </div>
+        </div>
+        <Separator />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{isPostponed ? "TBC" : formatMatchDate(match.kickoffTime)}</span>
+            {!isPostponed && (
+              <span className="text-muted-foreground">• {formatKickoffTime(match.kickoffTime)}</span>
+            )}
+          </div>
+          <div className="text-muted-foreground">
+            {venue}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FixtureRow({ 
+  match, 
+  teamId 
+}: { 
+  match: Match & { homeTeam?: Team; awayTeam?: Team };
+  teamId: string;
+}) {
+  const isHome = match.homeTeamId === teamId;
+  const opponent = isHome ? match.awayTeam : match.homeTeam;
+  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
+  const isPostponed = match.status === "postponed";
+  
+  return (
+    <Card>
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 text-center">
+              <div className="text-xs font-medium">{isPostponed ? "TBC" : formatMatchDate(match.kickoffTime).split(" ")[0]}</div>
+              <div className="text-xs text-muted-foreground">{isPostponed ? "" : formatMatchDate(match.kickoffTime).split(" ").slice(1).join(" ")}</div>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">{isHome ? "vs" : "@"} {opponentName}</div>
+              <div className="text-xs text-muted-foreground truncate">{match.competition || "Premier League"}</div>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            {isPostponed ? (
+              <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">Postponed</Badge>
+            ) : (
+              <div className="text-sm font-medium">{formatKickoffTime(match.kickoffTime)}</div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LatestResultCard({ 
+  match, 
+  teamId 
+}: { 
+  match: Match & { homeTeam?: Team; awayTeam?: Team };
+  teamId: string;
+}) {
+  const isHome = match.homeTeamId === teamId;
+  const opponent = isHome ? match.awayTeam : match.homeTeam;
+  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
+  const result = getMatchResult(match, teamId);
+  const homeScore = match.homeScore ?? 0;
+  const awayScore = match.awayScore ?? 0;
+  
+  return (
+    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <Badge variant="outline" className="text-xs font-medium">Latest Result</Badge>
+          <ResultBadge result={result} />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center justify-center gap-4">
+          <div className="text-center flex-1">
+            <div className="text-sm text-muted-foreground mb-1">{isHome ? "Home" : "Away"}</div>
+            <div className="font-bold">{isHome ? match.homeTeam?.name : opponentName}</div>
+          </div>
+          <div className="text-3xl font-bold tabular-nums">
+            {isHome ? homeScore : awayScore} - {isHome ? awayScore : homeScore}
+          </div>
+          <div className="text-center flex-1">
+            <div className="text-sm text-muted-foreground mb-1">{isHome ? "Away" : "Home"}</div>
+            <div className="font-bold">{isHome ? opponentName : match.homeTeam?.name}</div>
+          </div>
+        </div>
+        <Separator />
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span>{match.competition || "Premier League"}</span>
+          <span>{formatMatchDate(match.kickoffTime)}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ResultRow({ 
+  match, 
+  teamId 
+}: { 
+  match: Match & { homeTeam?: Team; awayTeam?: Team };
+  teamId: string;
+}) {
+  const isHome = match.homeTeamId === teamId;
+  const opponent = isHome ? match.awayTeam : match.homeTeam;
+  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
+  const result = getMatchResult(match, teamId);
+  const homeScore = match.homeScore ?? 0;
+  const awayScore = match.awayScore ?? 0;
+  
+  return (
+    <Card>
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-10 text-center shrink-0">
+              <ResultBadge result={result} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">{isHome ? "vs" : "@"} {opponentName}</div>
+              <div className="text-xs text-muted-foreground truncate">{match.competition || "Premier League"} • {formatMatchDate(match.kickoffTime)}</div>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="text-lg font-bold tabular-nums">
+              {isHome ? homeScore : awayScore}-{isHome ? awayScore : homeScore}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function MatchesTabContent({ 
   nextMatch, 
   recentResults,
-  teamName
+  upcomingFixtures,
+  teamName,
+  teamId,
+  teamSlug
 }: { 
   nextMatch?: Match & { homeTeam?: Team; awayTeam?: Team };
   recentResults?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
+  upcomingFixtures?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
   teamName: string;
+  teamId: string;
+  teamSlug: string;
 }) {
-  if (!nextMatch && (!recentResults || recentResults.length === 0)) {
-    return (
-      <EmptyState
-        icon={Calendar}
-        title="No fixtures available"
-        description={`Match fixtures for ${teamName} will appear here when scheduled.`}
-      />
-    );
-  }
-
+  const [subTab, setSubTab] = useState<MatchSubTab>("fixtures");
+  
+  const hasFixtures = nextMatch || (upcomingFixtures && upcomingFixtures.length > 0);
+  const hasResults = recentResults && recentResults.length > 0;
+  const latestResult = recentResults?.[0];
+  const otherResults = recentResults?.slice(1) || [];
+  const otherFixtures = upcomingFixtures?.slice(0, 5) || [];
+  
   return (
     <div className="space-y-6">
-      {nextMatch && (
-        <section>
-          <h2 className="text-lg font-semibold mb-3">Next Match</h2>
-          <MatchCard match={nextMatch} />
-        </section>
+      <div className="flex gap-2 border-b">
+        <button
+          onClick={() => setSubTab("fixtures")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            subTab === "fixtures"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="subtab-fixtures"
+        >
+          Fixtures
+        </button>
+        <button
+          onClick={() => setSubTab("results")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            subTab === "results"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="subtab-results"
+        >
+          Results
+        </button>
+      </div>
+      
+      {subTab === "fixtures" && (
+        <div className="space-y-6">
+          {!hasFixtures ? (
+            <EmptyState
+              icon={Calendar}
+              title="No fixtures scheduled"
+              description={`Upcoming fixtures for ${teamName} will appear here when scheduled.`}
+            />
+          ) : (
+            <>
+              {nextMatch && (
+                <section>
+                  <NextMatchCard match={nextMatch} teamId={teamId} teamSlug={teamSlug} />
+                </section>
+              )}
+              
+              {otherFixtures.length > 0 && (
+                <section>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Upcoming Fixtures
+                  </h3>
+                  <div className="space-y-2">
+                    {otherFixtures.map((match) => (
+                      <FixtureRow key={match.id} match={match} teamId={teamId} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+        </div>
       )}
       
-      {recentResults && recentResults.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold mb-3">Recent Results</h2>
-          <div className="space-y-3">
-            {recentResults.map((match) => (
-              <MatchCard key={match.id} match={match} />
-            ))}
-          </div>
-        </section>
+      {subTab === "results" && (
+        <div className="space-y-6">
+          {!hasResults ? (
+            <EmptyState
+              icon={Calendar}
+              title="No results yet"
+              description={`Match results for ${teamName} will appear here after matches are played.`}
+            />
+          ) : (
+            <>
+              {latestResult && (
+                <section>
+                  <LatestResultCard match={latestResult} teamId={teamId} />
+                </section>
+              )}
+              
+              {otherResults.length > 0 && (
+                <section>
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                    Previous Results
+                  </h3>
+                  <div className="space-y-2">
+                    {otherResults.map((match) => (
+                      <ResultRow key={match.id} match={match} teamId={teamId} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+        </div>
       )}
     </div>
   );
@@ -1293,7 +1633,10 @@ export default function TeamHubPage() {
   const sortedMatches = matches?.sort((a, b) => 
     new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
   );
-  const nextMatch = sortedMatches?.find((m) => new Date(m.kickoffTime) > now);
+  const upcomingFixtures = sortedMatches?.filter((m) => 
+    new Date(m.kickoffTime) > now || m.status === "postponed"
+  );
+  const nextMatch = upcomingFixtures?.[0];
   const recentResults = sortedMatches?.filter((m) => 
     new Date(m.kickoffTime) <= now && m.status === "finished"
   ).slice(-5).reverse();
@@ -1511,7 +1854,10 @@ export default function TeamHubPage() {
               <MatchesTabContent 
                 nextMatch={nextMatch}
                 recentResults={recentResults}
+                upcomingFixtures={upcomingFixtures?.slice(1)}
                 teamName={team.name}
+                teamId={team.id}
+                teamSlug={team.slug}
               />
             )}
 

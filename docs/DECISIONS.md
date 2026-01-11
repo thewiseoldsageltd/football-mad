@@ -108,3 +108,101 @@ Article pages will open at scroll top on route change and follow a Substack-styl
 
 ---
 
+# Decisions — Day 2
+
+## Injuries & Availability
+
+### Percentage Badge
+Decision: REMOVE
+Reason:
+- Duplicated information
+- Inconsistent with rest of site
+- Avatar initials are clearer and reusable
+
+---
+
+### Colour Coding
+Decision: MATCH FPL COLOURS
+- 75% → Amber
+- 50% → Amber
+- <50% → Red
+Reason:
+- Familiar to FPL users
+- Reduces cognitive load
+- Increases trust
+
+---
+
+### Injury Classification
+Decision: SPLIT INTO FUNCTIONAL GROUPS
+- Returning soon (75%)
+- Coin flip (50%)
+- Out (0%)
+- Suspended
+- Loans / Transfers
+
+Reason:
+- “Lowest %” sorting is not user-intuitive
+- FPL players care about *decision relevance*, not absolutes
+
+---
+
+### Tabs vs Pills
+Decision:
+- Keep tabs
+- Remove duplicate pills (Out / Loaned)
+
+Reason:
+- Tabs provide global filtering
+- Pills duplicated logic and cluttered UI
+
+---
+
+## Team Data
+
+### Team Naming
+Decision: USE FAN-FRIENDLY NAMES
+Examples:
+- Bournemouth (not AFC Bournemouth)
+- Man City / Man Utd
+- Spurs / Wolves
+
+Reason:
+- Alphabetical clarity
+- Matches fan language
+- Cleaner UI
+
+---
+
+### Data Sources
+Decision: HYBRID APPROACH
+- Automated: FPL API, Wikidata
+- Manual overrides allowed
+
+Reason:
+- Football data changes fast
+- “Outdated” ≠ incorrect (e.g. interim managers)
+- Editorial control required
+
+---
+
+## Engineering
+
+### Null Safety
+Decision: ALWAYS GUARD RENDERING
+- Never index strings or arrays directly
+- Introduced helper for team initials
+
+Reason:
+- Prevent back-navigation crashes
+- Improve perceived stability
+
+---
+
+## UX Philosophy
+Decision:
+- Default to clarity over density
+- Mirror official football products where possible (FPL)
+- Reduce surprises
+
+Status: LOCKED ✅

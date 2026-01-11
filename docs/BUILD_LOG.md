@@ -117,3 +117,86 @@ Result:
 - Fully functional Team Hub architecture
 - Stable navigation across nested routes
 - Strong SEO foundations
+
+---
+
+# Build Log — Day 2
+
+## Scope
+Team Hub (Injuries & Availability), FPL ingestion, Team metadata, Teams index polish, UI/UX consistency.
+
+---
+
+## Completed
+
+### FPL Injury & Availability System
+- Integrated FPL bootstrap-static API
+- Ingested:
+  - chance_of_playing_this_round
+  - chance_of_playing_next_round
+  - injury news + timestamps
+- Normalised availability logic to mirror FPL website behaviour
+- Prioritised *next round* chance where applicable
+
+### Injury UI (Team Hub)
+- Removed circular percentage badge
+- Replaced with player avatar initials for consistency across site
+- Percentage shown once in text only
+- Implemented FPL-style colour coding:
+  - 75% → Amber
+  - 50% → Amber
+  - 25% → Red
+  - 0% → Red
+- Added section grouping:
+  - Returning soon (75%)
+  - Coin flip (50%)
+  - Out (0%)
+  - Loans / Transfers
+- Added filter tabs:
+  - Overview
+  - Coin flip (50%)
+  - Doubtful (25%)
+  - Out (0%)
+  - Suspended
+  - Loans / Transfers
+
+### FPL Accuracy Fix
+- Fixed mismatch where players showed 100% when FPL showed 75%
+- Root cause: fallback logic when chance_of_playing_this_round was null
+- Now aligned with official FPL display
+
+---
+
+## Team Metadata
+- Updated Premier League teams for correct season:
+  - Removed: Ipswich, Leicester, Southampton
+  - Added: Burnley, Leeds, Sunderland
+- Standardised display names (e.g. Bournemouth instead of AFC Bournemouth)
+- Confirmed canonical slugs for all teams
+
+### Stadium Naming (Sponsorship Fixes)
+- Dean Court → Vitality Stadium
+- Brentford Community Stadium → Gtech Community Stadium
+- Brighton Community Stadium → American Express Stadium
+
+### Manager & Stadium Sync
+- Implemented Wikidata-powered team metadata sync job
+- Sync only fills missing fields (does not overwrite)
+- Manual overrides allowed where Wikidata lags or context differs
+
+---
+
+## Bugs Fixed
+- Back-navigation crash on Team Hub:
+  - `Cannot read properties of undefined (reading '0')`
+  - Caused by unsafe string indexing on `team.name[0]`
+  - Resolved with null-safe helper for team initials
+
+---
+
+## Status
+✔ Rolled out across all Team Hub pages  
+✔ Injuries tab now production-grade and FPL-consistent  
+➡ Ready for Day 3 (Matches, Lineups, FPL overlays, SEO)
+
+---

@@ -91,3 +91,64 @@ Outcome:
 - Cleaner URLs
 - Avoids duplicate content
 - Canonical remains /teams/[slug]
+
+---
+
+# Prompts — Day 2
+
+## FPL Injury Ingestion
+Build an ingestion job using the official FPL bootstrap-static API.
+Store chance_of_playing_this_round, chance_of_playing_next_round, injury news, and timestamps.
+Mirror FPL logic exactly.
+Prioritise next round chance where relevant.
+Do not invent percentages.
+
+---
+
+## Injury UI Refactor
+Replace percentage badges with player avatar initials.
+Show percentage only once in the injury text.
+Apply FPL-style colour coding.
+Group players into Returning Soon, Coin Flip, Out, Loans/Transfers.
+
+---
+
+## Injury Filtering UX
+Remove “Lowest %” sorting.
+Implement tabs:
+- Overview
+- Coin flip (50%)
+- Doubtful (25%)
+- Out (0%)
+- Suspended
+- Loans / Transfers
+Each tab must update counts dynamically.
+
+---
+
+## Team Metadata Sync
+Create a secure job to fetch manager and stadium data from Wikidata.
+Only fill missing fields.
+Do not overwrite manually curated data.
+Allow future manual overrides per team.
+
+---
+
+## Stadium Naming Overrides
+Apply manual overrides for:
+- Vitality Stadium (Bournemouth)
+- Gtech Community Stadium (Brentford)
+- American Express Stadium (Brighton)
+
+---
+
+## Crash Fix Prompt
+Fix runtime error caused by unsafe string indexing in team hub.
+Add null-safe helper for team initials.
+Ensure back navigation never crashes even during hydration/loading.
+
+---
+
+## Guiding Principle
+If Football Mad disagrees with FPL or official club reality, Football Mad is wrong.
+Match fan expectations first.
