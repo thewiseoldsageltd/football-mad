@@ -160,7 +160,7 @@ export function TaxonomyPill({
 
   if (href) {
     return (
-      <Link href={href} onClick={() => window.scrollTo(0, 0)}>
+      <Link href={href}>
         {content}
       </Link>
     );

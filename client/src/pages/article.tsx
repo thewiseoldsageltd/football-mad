@@ -651,33 +651,7 @@ export default function ArticlePage() {
                 </p>
               )}
 
-              <div className="flex items-center gap-2 flex-wrap mb-6">
-                {articleTeams.slice(0, 4).map((team) => (
-                  <TaxonomyPill
-                    key={team.id}
-                    label={team.name}
-                    variant="team"
-                    href={`/teams/${team.slug}`}
-                    teamColor={team.primaryColor}
-                    crestUrl={`/crests/teams/${team.slug}.svg`}
-                    data-testid={`pill-team-${team.slug}`}
-                  />
-                ))}
-                {articleTeams.length > 4 && (
-                  <Badge variant="secondary">+{articleTeams.length - 4}</Badge>
-                )}
-                {article.competition && (
-                  <TaxonomyPill
-                    label={article.competition}
-                    variant="competition"
-                    href={`/news?competition=${slugifyCompetition(article.competition)}`}
-                    crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
-                    data-testid="pill-competition"
-                  />
-                )}
-              </div>
-
-              <div className="flex items-center justify-between flex-wrap gap-4 pt-4 border-t">
+              <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b">
                 <div className="flex items-center gap-3">
                   <Avatar>
                     <AvatarFallback>
@@ -705,6 +679,34 @@ export default function ArticlePage() {
                   <Bookmark className="h-5 w-5" />
                 </Button>
               </div>
+
+              {(articleTeams.length > 0 || article.competition) && (
+                <div className="flex items-center gap-2 flex-wrap mt-4">
+                  {articleTeams.slice(0, 4).map((team) => (
+                    <TaxonomyPill
+                      key={team.id}
+                      label={team.name}
+                      variant="team"
+                      href={`/teams/${team.slug}`}
+                      teamColor={team.primaryColor}
+                      crestUrl={`/crests/teams/${team.slug}.svg`}
+                      data-testid={`pill-team-${team.slug}`}
+                    />
+                  ))}
+                  {articleTeams.length > 4 && (
+                    <Badge variant="secondary">+{articleTeams.length - 4}</Badge>
+                  )}
+                  {article.competition && (
+                    <TaxonomyPill
+                      label={article.competition}
+                      variant="competition"
+                      href={`/news?competition=${slugifyCompetition(article.competition)}`}
+                      crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
+                      data-testid="pill-competition"
+                    />
+                  )}
+                </div>
+              )}
             </header>
 
             {article.coverImage ? (
