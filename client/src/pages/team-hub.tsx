@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -334,12 +335,12 @@ interface TransferSummary {
 interface MockTransferRumour {
   id: string;
   playerName: string;
-  position?: string;
+  position: "GKP" | "DEF" | "MID" | "FWD";
   linkedClub: string;
+  linkedClubSlug: string;
   direction: "in" | "out";
   confidencePercent: number;
-  stage?: "Interest" | "Talks" | "Bid" | "Medical";
-  reliabilityTier: string;
+  descriptor?: string;
   sourceName: string;
 }
 
@@ -356,23 +357,23 @@ const MOCK_TRANSFER_DATA: Record<string, {
       {
         id: "rumour-1",
         playerName: "Viktor Gyokeres",
-        position: "Striker",
+        position: "FWD",
         linkedClub: "Sporting CP",
+        linkedClubSlug: "sporting-cp",
         direction: "in",
         confidencePercent: 65,
-        stage: "Interest",
-        reliabilityTier: "B",
+        descriptor: "Strong interest",
         sourceName: "The Athletic",
       },
       {
         id: "rumour-2",
         playerName: "Nico Williams",
-        position: "Winger",
+        position: "MID",
         linkedClub: "Athletic Bilbao",
+        linkedClubSlug: "athletic-bilbao",
         direction: "in",
         confidencePercent: 40,
-        stage: "Interest",
-        reliabilityTier: "C",
+        descriptor: "Early link",
         sourceName: "AS",
       },
     ],
@@ -386,81 +387,87 @@ const MOCK_TRANSFER_DATA: Record<string, {
   },
 };
 
+function getPlayerInitials(name: string): string {
+  const parts = name.split(" ");
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+function ClubCrest({ clubName, size = 24 }: { clubName: string; size?: number }) {
+  return (
+    <div 
+      className="rounded-full bg-muted flex items-center justify-center flex-shrink-0 border border-border/50"
+      style={{ width: size, height: size }}
+      title={clubName}
+    >
+      <svg 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="1.5" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+        className="text-muted-foreground"
+        style={{ width: size * 0.6, height: size * 0.6 }}
+      >
+        <path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3z" />
+      </svg>
+    </div>
+  );
+}
+
 function RumourCard({ rumour, teamName }: { rumour: MockTransferRumour; teamName: string }) {
-  const directionColors = {
-    in: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
-    out: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30",
-  };
+  const initials = getPlayerInitials(rumour.playerName);
   
-  const tierColors: Record<string, string> = {
-    A: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500",
-    B: "bg-gray-400/20 text-gray-600 dark:text-gray-300 border-gray-400",
-    C: "bg-amber-700/20 text-amber-700 dark:text-amber-500 border-amber-700",
-    D: "bg-gray-300/20 text-gray-500 dark:text-gray-400 border-gray-400",
-  };
+  const sourceClub = rumour.direction === "in" ? rumour.linkedClub : teamName;
+  const destClub = rumour.direction === "in" ? teamName : rumour.linkedClub;
 
   return (
-    <Card className="hover-elevate bg-card/50" data-testid={`card-rumour-${rumour.id}`}>
+    <Card className="hover-elevate" data-testid={`card-rumour-${rumour.id}`}>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-11 w-11 flex-shrink-0">
+            <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg truncate">{rumour.playerName}</h3>
-            {rumour.position && (
-              <p className="text-sm text-muted-foreground">{rumour.position}</p>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-2 flex-shrink-0">
-            <Badge 
-              variant="outline" 
-              className={directionColors[rumour.direction]}
-            >
-              {rumour.direction === "in" ? "Linked In" : "Linked Out"}
-            </Badge>
-            <Badge 
-              variant="outline" 
-              className={`text-xs ${tierColors[rumour.reliabilityTier] || tierColors.C}`}
-            >
-              Tier {rumour.reliabilityTier}
-            </Badge>
+            <div className="flex items-center gap-2 mb-0.5">
+              <h3 className="font-semibold truncate">{rumour.playerName}</h3>
+              <Badge variant="secondary" className="text-xs flex-shrink-0">
+                {rumour.position}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center gap-1.5 mb-2">
+              <ClubCrest clubName={sourceClub} size={20} />
+              <ArrowRight className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <ClubCrest clubName={destClub} size={20} />
+            </div>
+            
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Confidence</span>
+                <span className="font-medium">{rumour.confidencePercent}%</span>
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${rumour.confidencePercent}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
-
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          {rumour.direction === "in" ? (
-            <>
-              <span className="truncate">{rumour.linkedClub}</span>
-              <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
-              <span className="truncate">{teamName}</span>
-            </>
-          ) : (
-            <>
-              <span className="truncate">{teamName}</span>
-              <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
-              <span className="truncate">{rumour.linkedClub}</span>
-            </>
+        
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/50">
+          {rumour.descriptor && (
+            <span className="text-xs text-muted-foreground italic">{rumour.descriptor}</span>
           )}
-        </div>
-
-        <div className="space-y-2 mb-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Confidence</span>
-            <span className="font-medium">{rumour.confidencePercent}%</span>
-          </div>
-          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary rounded-full transition-all"
-              style={{ width: `${rumour.confidencePercent}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          {rumour.stage && (
-            <Badge variant="secondary" className="text-xs">
-              {rumour.stage}
-            </Badge>
-          )}
-          <span className="text-xs text-muted-foreground">{rumour.sourceName}</span>
+          <span className="text-xs text-muted-foreground ml-auto">{rumour.sourceName}</span>
         </div>
       </CardContent>
     </Card>
@@ -570,7 +577,9 @@ function TransfersTabContent({
         )}
       </header>
 
-      <TransfersSummaryBar summary={summary} />
+      {(confirmedIn.length > 0 || confirmedOut.length > 0) && (
+        <TransfersSummaryBar summary={summary} />
+      )}
 
       {!hasActivity ? (
         <Card className="border-dashed">
@@ -592,6 +601,20 @@ function TransfersTabContent({
         </Card>
       ) : (
         <>
+          {(rumours.length > 0 || apiRumours.length > 0) && (
+            <section>
+              <h3 className="text-lg font-bold mb-4">Rumours & Links</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {apiRumours.map((transfer) => (
+                  <TransferCard key={transfer.id} transfer={transfer} />
+                ))}
+                {rumours.map((rumour) => (
+                  <RumourCard key={rumour.id} rumour={rumour} teamName={teamName} />
+                ))}
+              </div>
+            </section>
+          )}
+
           {(confirmedIn.length > 0 || confirmedOut.length > 0) && (
             <section>
               <h3 className="text-lg font-bold mb-4">Confirmed Deals</h3>
@@ -623,20 +646,6 @@ function TransfersTabContent({
                   </div>
                 </div>
               )}
-            </section>
-          )}
-
-          {(rumours.length > 0 || apiRumours.length > 0) && (
-            <section>
-              <h3 className="text-lg font-bold mb-4">Rumours & Links</h3>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {apiRumours.map((transfer) => (
-                  <TransferCard key={transfer.id} transfer={transfer} />
-                ))}
-                {rumours.map((rumour) => (
-                  <RumourCard key={rumour.id} rumour={rumour} teamName={teamName} />
-                ))}
-              </div>
             </section>
           )}
         </>

@@ -1,0 +1,74 @@
+Update the Team Hub → Transfers tab to version v2.3 with the following product and UX decisions applied.
+
+GOALS
+- Reduce noise and cognitive load
+- Prioritise clarity, scannability, and fan usefulness
+- Align player data and conventions with FPL standards
+- Design for rumours-first now, confirmed deals later
+
+STRUCTURE
+1. Transfers Header
+- Title: “Transfers”
+- Subtitle: “Latest rumours and links for [Team Name]”
+- Show current window label (e.g. “January Window”)
+- Show “Last updated” timestamp
+
+2. In / Out / Net Summary
+- HIDE this entire section by default
+- ONLY render In / Out / Net when at least one CONFIRMED transfer exists
+- Do not show this summary for rumours-only states
+
+3. Rumours & Links (Primary Section)
+- This is the default and main content area
+
+PLAYER CARD DESIGN (v2.3)
+Each rumour card must include:
+
+LEFT
+- Circular player headshot (40–48px)
+- Fallback to initials avatar if image unavailable
+
+CENTER
+- Player name (bold)
+- Player position using FPL shortcodes ONLY:
+  - GKP, DEF, MID, FWD
+- Confidence bar showing likelihood of move (percentage + progress bar)
+
+RIGHT / INLINE
+- Proposed transfer visual:
+  - Source club crest SVG → arrow → destination club crest SVG
+- Crests must be SVG icons, not text
+- Subtle hover interaction optional
+
+REMOVED ELEMENTS
+- REMOVE “Linked In” pill
+- REMOVE Tier A / B / C pills
+- REMOVE any redundant metadata that requires explanation
+
+CONFIDENCE
+- Confidence % bar is the PRIMARY signal of likelihood
+- Keep this prominent and visually clean
+
+OPTIONAL TEXT (LOW PRIORITY)
+- At most ONE subtle descriptor if needed (e.g. “Early link”, “Strong interest”)
+- Do not stack multiple labels
+
+SIDEBAR (UNCHANGED)
+- Follow Team card (login gated)
+- Club-specific newsletter card:
+  - Use club branding and naming (e.g. “Gunners Mad”, “Spurs Mad”)
+- “More from [Team]” links
+
+DESIGN PRINCIPLES
+- No legends required to understand the UI
+- Everything should be scannable in under 3 seconds
+- Optimised for mobile and desktop
+- Premium, calm, editorial feel
+
+FUTURE-PROOFING (DO NOT IMPLEMENT YET)
+- Confirmed Deals section (for later)
+- Window Summary (when meaningful)
+- Data ingestion hooks will be added later
+
+VERSION
+- Label this internally as: Team Hub Transfers v2.3
