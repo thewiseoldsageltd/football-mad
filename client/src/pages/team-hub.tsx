@@ -510,9 +510,9 @@ function TransfersTabContent({
 }) {
   const mockData = MOCK_TRANSFER_DATA[teamSlug];
   
-  const { rumours, confirmedIn, confirmedOut, summary } = useMemo(() => {
+  const { rumours, apiRumours, confirmedIn, confirmedOut, summary } = useMemo(() => {
     const confirmed = (transfers || []).filter(t => t.status === "confirmed");
-    const apiRumours = (transfers || []).filter(t => t.status === "rumour");
+    const apiRumoursData = (transfers || []).filter(t => t.status === "rumour");
     
     const combinedIn = [
       ...confirmed.filter(t => t.toTeamId === teamId),
@@ -525,28 +525,24 @@ function TransfersTabContent({
     
     const mockRumours = mockData?.rumours || [];
     
-    const calculatedSummary: TransferSummary = mockData?.summary || {
+    const calculatedSummary: TransferSummary = {
       inCount: combinedIn.length,
       outCount: combinedOut.length,
-      netSpendText: "—",
-      lastUpdated: transfers?.[0]?.updatedAt?.toString() || null,
-      windowLabel: "January Window",
+      netSpendText: mockData?.summary?.netSpendText || "—",
+      lastUpdated: transfers?.[0]?.updatedAt?.toString() || mockData?.summary?.lastUpdated || new Date().toISOString(),
+      windowLabel: mockData?.summary?.windowLabel || "January Window",
     };
     
     return {
       rumours: mockRumours,
-      apiRumours,
+      apiRumours: apiRumoursData,
       confirmedIn: combinedIn,
       confirmedOut: combinedOut,
-      summary: {
-        ...calculatedSummary,
-        inCount: combinedIn.length,
-        outCount: combinedOut.length,
-      },
+      summary: calculatedSummary,
     };
   }, [transfers, teamId, mockData]);
 
-  const hasActivity = confirmedIn.length > 0 || confirmedOut.length > 0 || rumours.length > 0;
+  const hasActivity = confirmedIn.length > 0 || confirmedOut.length > 0 || rumours.length > 0 || apiRumours.length > 0;
   const lastUpdatedFormatted = summary.lastUpdated 
     ? new Date(summary.lastUpdated).toLocaleDateString("en-GB", { 
         day: "numeric", 
@@ -560,23 +556,21 @@ function TransfersTabContent({
       <header className="mb-2">
         <div className="flex items-center gap-3 mb-2 flex-wrap">
           <h2 className="text-2xl font-bold">Transfers</h2>
-          {hasActivity && (
-            <Badge variant="outline" className="text-xs">
-              {summary.windowLabel}
-            </Badge>
-          )}
+          <Badge variant="outline" className="text-xs">
+            {summary.windowLabel}
+          </Badge>
         </div>
         <p className="text-muted-foreground">
           Latest rumours and deals for {teamName}
         </p>
-        {hasActivity && lastUpdatedFormatted && (
+        {lastUpdatedFormatted && (
           <p className="text-xs text-muted-foreground mt-1">
             Last updated: {lastUpdatedFormatted}
           </p>
         )}
       </header>
 
-      {hasActivity && <TransfersSummaryBar summary={summary} />}
+      <TransfersSummaryBar summary={summary} />
 
       {!hasActivity ? (
         <Card className="border-dashed">
@@ -632,10 +626,13 @@ function TransfersTabContent({
             </section>
           )}
 
-          {rumours.length > 0 && (
+          {(rumours.length > 0 || apiRumours.length > 0) && (
             <section>
               <h3 className="text-lg font-bold mb-4">Rumours & Links</h3>
               <div className="grid sm:grid-cols-2 gap-4">
+                {apiRumours.map((transfer) => (
+                  <TransferCard key={transfer.id} transfer={transfer} />
+                ))}
                 {rumours.map((rumour) => (
                   <RumourCard key={rumour.id} rumour={rumour} teamName={teamName} />
                 ))}
