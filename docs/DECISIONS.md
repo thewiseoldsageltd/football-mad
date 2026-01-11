@@ -100,3 +100,11 @@ Status: Deferred
 - Plan:
   - Use seed content during platform build
   - Revisit ingestion in Phase 3 once routes and schemas are final
+
+---
+
+## Article Pages & Editorial Pills Ordering
+Article pages will open at scroll top on route change and follow a Substack-style hierarchy: editorial pills → headline → meta → taxonomy → hero → body.
+
+---
+

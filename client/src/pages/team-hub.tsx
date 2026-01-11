@@ -1,11 +1,12 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { useEffect } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, Mail, Inbox } from "lucide-react";
+import { useEffect, useMemo } from "react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -13,6 +14,7 @@ import { MatchCard } from "@/components/cards/match-card";
 import { InjuryCard } from "@/components/cards/injury-card";
 import { PostCard } from "@/components/cards/post-card";
 import { TransferCard } from "@/components/cards/transfer-card";
+import { NewsletterForm } from "@/components/newsletter-form";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -101,6 +103,387 @@ function trackTabClick(teamSlug: string, tabName: string) {
     });
   }
   console.debug("[Analytics] Tab click:", { team: teamSlug, tab: tabName });
+}
+
+function LatestTabContent({ 
+  articles, 
+  isLoading, 
+  teamName,
+  teamColor
+}: { 
+  articles: Article[]; 
+  isLoading: boolean;
+  teamName: string;
+  teamColor?: string;
+}) {
+  const sortedArticles = useMemo(() => {
+    return [...articles].sort((a, b) => {
+      if (a.isBreaking && !b.isBreaking) return -1;
+      if (!a.isBreaking && b.isBreaking) return 1;
+      if (a.isEditorPick && !b.isEditorPick) return -1;
+      if (!a.isEditorPick && b.isEditorPick) return 1;
+      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [articles]);
+
+  if (isLoading) {
+    return (
+      <div className="grid sm:grid-cols-2 gap-4">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <ArticleCardSkeleton key={i} />
+        ))}
+      </div>
+    );
+  }
+
+  if (sortedArticles.length === 0) {
+    return (
+      <EmptyState
+        icon={Newspaper}
+        title="No news yet"
+        description={`Check back soon for the latest ${teamName} news and updates.`}
+      />
+    );
+  }
+
+  return (
+    <div className="grid sm:grid-cols-2 gap-4">
+      {sortedArticles.map((article) => (
+        <ArticleCard key={article.id} article={article} teamColor={teamColor} />
+      ))}
+    </div>
+  );
+}
+
+function InjuriesTabContent({ 
+  injuries, 
+  teamName 
+}: { 
+  injuries?: Injury[];
+  teamName: string;
+}) {
+  if (!injuries || injuries.length === 0) {
+    return (
+      <EmptyState
+        icon={Activity}
+        title="No current injury concerns"
+        description={`Great news! No ${teamName} players are currently on the injury list.`}
+      />
+    );
+  }
+
+  return (
+    <div className="grid sm:grid-cols-2 gap-4">
+      {injuries.map((injury) => (
+        <InjuryCard key={injury.id} injury={injury} />
+      ))}
+    </div>
+  );
+}
+
+function TransfersTabContent({ 
+  transfers, 
+  teamName,
+  teamId
+}: { 
+  transfers?: Transfer[];
+  teamName: string;
+  teamId: string;
+}) {
+  const { rumours, confirmedIn, confirmedOut } = useMemo(() => {
+    if (!transfers) return { rumours: [], confirmedIn: [], confirmedOut: [] };
+    const confirmed = transfers.filter(t => t.status === "confirmed");
+    return {
+      rumours: transfers.filter(t => t.status === "rumour"),
+      confirmedIn: confirmed.filter(t => t.toTeamId === teamId),
+      confirmedOut: confirmed.filter(t => t.fromTeamId === teamId),
+    };
+  }, [transfers, teamId]);
+
+  if (!transfers || transfers.length === 0) {
+    return (
+      <EmptyState
+        icon={TrendingUp}
+        title="No transfer activity"
+        description={`No transfer rumours or confirmed deals for ${teamName} at the moment.`}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {rumours.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Badge variant="secondary">Rumours</Badge>
+            <span className="text-sm text-muted-foreground font-normal">({rumours.length})</span>
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {rumours.map((transfer) => (
+              <TransferCard key={transfer.id} transfer={transfer} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {confirmedIn.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Badge className="bg-green-600">Confirmed IN</Badge>
+            <span className="text-sm text-muted-foreground font-normal">({confirmedIn.length})</span>
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {confirmedIn.map((transfer) => (
+              <TransferCard key={transfer.id} transfer={transfer} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {confirmedOut.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Badge className="bg-red-600">Confirmed OUT</Badge>
+            <span className="text-sm text-muted-foreground font-normal">({confirmedOut.length})</span>
+          </h2>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {confirmedOut.map((transfer) => (
+              <TransferCard key={transfer.id} transfer={transfer} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function MatchesTabContent({ 
+  nextMatch, 
+  recentResults,
+  teamName
+}: { 
+  nextMatch?: Match & { homeTeam?: Team; awayTeam?: Team };
+  recentResults?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
+  teamName: string;
+}) {
+  if (!nextMatch && (!recentResults || recentResults.length === 0)) {
+    return (
+      <EmptyState
+        icon={Calendar}
+        title="No fixtures available"
+        description={`Match fixtures for ${teamName} will appear here when scheduled.`}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {nextMatch && (
+        <section>
+          <h2 className="text-lg font-semibold mb-3">Next Match</h2>
+          <MatchCard match={nextMatch} />
+        </section>
+      )}
+      
+      {recentResults && recentResults.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold mb-3">Recent Results</h2>
+          <div className="space-y-3">
+            {recentResults.map((match) => (
+              <MatchCard key={match.id} match={match} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function FansTabContent({ 
+  posts, 
+  teamName,
+  isAuthenticated
+}: { 
+  posts?: (Post & { team?: Team })[];
+  teamName: string;
+  isAuthenticated: boolean;
+}) {
+  if (!posts || posts.length === 0) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
+              <Users className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold mb-1">No fan posts yet</h3>
+            <p className="text-sm text-muted-foreground max-w-xs mb-4">
+              Be the first to share your thoughts about {teamName}!
+            </p>
+            {isAuthenticated ? (
+              <Button data-testid="button-create-post">
+                <MessageSquarePlus className="h-4 w-4 mr-2" />
+                Create Post
+              </Button>
+            ) : (
+              <Button variant="outline" asChild data-testid="button-login-to-post">
+                <a href="/api/login">
+                  <LogIn className="h-4 w-4 mr-2" />
+                  Sign in to post
+                </a>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {isAuthenticated && (
+        <div className="flex justify-end mb-4">
+          <Button data-testid="button-create-post">
+            <MessageSquarePlus className="h-4 w-4 mr-2" />
+            Create Post
+          </Button>
+        </div>
+      )}
+      {posts.map((post) => (
+        <PostCard key={post.id} post={post} />
+      ))}
+    </div>
+  );
+}
+
+function TeamRightRail({ 
+  team, 
+  articles,
+  isAuthenticated,
+  isFollowing,
+  onFollowToggle,
+  isPending
+}: { 
+  team: Team;
+  articles: Article[];
+  isAuthenticated: boolean;
+  isFollowing: boolean;
+  onFollowToggle: () => void;
+  isPending: boolean;
+}) {
+  const relatedArticles = useMemo(() => {
+    return [...articles]
+      .sort((a, b) => {
+        if (a.isBreaking && !b.isBreaking) return -1;
+        if (!a.isBreaking && b.isBreaking) return 1;
+        if (a.isTrending && !b.isTrending) return -1;
+        if (!a.isTrending && b.isTrending) return 1;
+        return (b.viewCount ?? 0) - (a.viewCount ?? 0);
+      })
+      .slice(0, 4);
+  }, [articles]);
+
+  return (
+    <div className="lg:sticky lg:top-32 space-y-6">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Heart className="h-4 w-4 text-primary" />
+            Follow {team.shortName || team.name}
+          </CardTitle>
+          <CardDescription className="text-sm">
+            {isAuthenticated 
+              ? (isFollowing 
+                  ? "You're following this team. We'll personalize your feed." 
+                  : "Follow to get personalized news in your feed.")
+              : "Sign in to follow teams and personalize your experience."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isAuthenticated ? (
+            <Button
+              className="w-full"
+              variant={isFollowing ? "outline" : "default"}
+              onClick={onFollowToggle}
+              disabled={isPending}
+              data-testid="rail-button-follow"
+            >
+              {isFollowing ? (
+                <>
+                  <HeartOff className="h-4 w-4 mr-2" />
+                  Unfollow
+                </>
+              ) : (
+                <>
+                  <Heart className="h-4 w-4 mr-2" />
+                  Follow
+                </>
+              )}
+            </Button>
+          ) : (
+            <Button className="w-full" variant="outline" asChild data-testid="rail-button-login">
+              <a href="/api/login">
+                <LogIn className="h-4 w-4 mr-2" />
+                Sign in to follow
+              </a>
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bell className="h-4 w-4 text-primary" />
+            {team.shortName || team.name} Newsletter
+          </CardTitle>
+          <CardDescription className="text-sm">
+            Get {team.name} news straight to your inbox.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <NewsletterForm edition={team.slug} compact />
+        </CardContent>
+      </Card>
+
+      {relatedArticles.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">More from {team.shortName || team.name}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ul className="space-y-3">
+              {relatedArticles.map((article, idx) => (
+                <li key={article.id}>
+                  <Link href={`/article/${article.slug}`}>
+                    <div className="group flex items-start gap-2 hover-elevate rounded-md p-2 -mx-2 cursor-pointer">
+                      <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                          {article.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          {article.isBreaking && (
+                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Breaking</Badge>
+                          )}
+                          {article.isTrending && (
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Trending</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                  {idx < relatedArticles.length - 1 && <Separator className="mt-3" />}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 function parseTabFromPath(pathname: string): { slug: string; tab: TabValue } {
@@ -413,113 +796,60 @@ export default function TeamHubPage() {
         className="max-w-7xl mx-auto px-4 py-6"
         style={{ "--team-color": team.primaryColor ?? "#1a1a2e" } as React.CSSProperties}
       >
-        {activeTab === "latest" && (
-          <div>
-            {newsLoading ? (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <ArticleCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : articles.length > 0 ? (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {articles.map((article) => (
-                  <ArticleCard key={article.id} article={article} teamColor={team.primaryColor ?? undefined} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Newspaper}
-                title="No news yet"
-                description={`Check back soon for the latest ${team.name} news and updates.`}
+        <div className="flex flex-col lg:flex-row gap-8">
+          <main className="flex-1 min-w-0">
+            {activeTab === "latest" && (
+              <LatestTabContent 
+                articles={articles} 
+                isLoading={newsLoading} 
+                teamName={team.name}
+                teamColor={team.primaryColor ?? undefined}
               />
             )}
-          </div>
-        )}
 
-        {activeTab === "injuries" && (
-          <div>
-            {injuries && injuries.length > 0 ? (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {injuries.map((injury) => (
-                  <InjuryCard key={injury.id} injury={injury} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Activity}
-                title="No injuries reported"
-                description={`Great news! No ${team.name} players are currently injured.`}
+            {activeTab === "injuries" && (
+              <InjuriesTabContent 
+                injuries={injuries} 
+                teamName={team.name} 
               />
             )}
-          </div>
-        )}
 
-        {activeTab === "transfers" && (
-          <div>
-            {transfers && transfers.length > 0 ? (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {transfers.map((transfer) => (
-                  <TransferCard key={transfer.id} transfer={transfer} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={TrendingUp}
-                title="No transfer activity"
-                description={`No transfer rumours or confirmed deals for ${team.name} at the moment.`}
+            {activeTab === "transfers" && (
+              <TransfersTabContent 
+                transfers={transfers} 
+                teamName={team.name}
+                teamId={team.id}
               />
             )}
-          </div>
-        )}
 
-        {activeTab === "matches" && (
-          <div className="space-y-6">
-            {nextMatch && (
-              <section>
-                <h2 className="text-lg font-semibold mb-3">Next Match</h2>
-                <MatchCard match={nextMatch} />
-              </section>
-            )}
-            
-            {recentResults && recentResults.length > 0 && (
-              <section>
-                <h2 className="text-lg font-semibold mb-3">Recent Results</h2>
-                <div className="space-y-3">
-                  {recentResults.map((match) => (
-                    <MatchCard key={match.id} match={match} />
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {!nextMatch && (!recentResults || recentResults.length === 0) && (
-              <EmptyState
-                icon={Calendar}
-                title="No fixtures available"
-                description={`Match fixtures for ${team.name} will appear here when scheduled.`}
+            {activeTab === "matches" && (
+              <MatchesTabContent 
+                nextMatch={nextMatch}
+                recentResults={recentResults}
+                teamName={team.name}
               />
             )}
-          </div>
-        )}
 
-        {activeTab === "fans" && (
-          <div>
-            {posts && posts.length > 0 ? (
-              <div className="space-y-4">
-                {posts.map((post) => (
-                  <PostCard key={post.id} post={post} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                icon={Users}
-                title="No fan posts yet"
-                description={`Be the first to share your thoughts about ${team.name}!`}
+            {activeTab === "fans" && (
+              <FansTabContent 
+                posts={posts}
+                teamName={team.name}
+                isAuthenticated={isAuthenticated}
               />
             )}
-          </div>
-        )}
+          </main>
+
+          <aside className="w-full lg:w-80 shrink-0 space-y-6">
+            <TeamRightRail 
+              team={team}
+              articles={articles}
+              isAuthenticated={isAuthenticated}
+              isFollowing={isFollowing ?? false}
+              onFollowToggle={handleFollowToggle}
+              isPending={followMutation.isPending || unfollowMutation.isPending}
+            />
+          </aside>
+        </div>
       </div>
     </MainLayout>
   );

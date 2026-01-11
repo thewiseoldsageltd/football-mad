@@ -1,0 +1,120 @@
+TEAM HUB v2 — FULL SPEC (Replit Prompt)
+
+Goal:
+Implement a consistent Team Hub experience across all Premier League clubs with clean routing, strong “editorial” feel, and scalable layout. Team Hub pages should feel like the daily destination for fans of that club.
+
+Routes (LOCKED):
+- /teams/:teamSlug                      => Latest (default landing)
+- /teams/:teamSlug/injuries
+- /teams/:teamSlug/transfers
+- /teams/:teamSlug/matches
+- /teams/:teamSlug/fans
+
+Routing Rules:
+- Do NOT create /latest route.
+- “Latest” tab must always navigate to /teams/:teamSlug (no suffix).
+- URL pathname is the single source of truth for active tab + content.
+- Active tab derived from useLocation().pathname (not useParams()).
+- On navigation between tabs, scroll should reset to top.
+- Tabs must always remain clickable, including Latest after leaving it.
+
+Page Layout (Desktop):
+- Global header (existing)
+- Team hero banner
+- Team tab navigation row
+- Main content column (left)
+- Right rail (sticky on desktop, stacks below on mobile)
+- Footer (existing)
+
+Responsive:
+- Tabs become horizontally scrollable on mobile.
+- Right rail collapses under main content on mobile.
+
+Team Hero (v2):
+- Club identity block: crest/avatar, club name, meta line(s)
+  - Meta: Stadium (optional), Manager (optional), Founded year (optional)
+- CTA buttons on right: Follow + Subscribe
+- Subtle club-colour gradient background (accent, not overpowering)
+- Crest-first approach:
+  - Use SVG crest if available
+  - Fallback to PNG
+  - Fallback to letter avatar (current)
+
+Tabs (Canonical):
+- Latest
+- Injuries
+- Transfers
+- Matches
+- Fans
+
+Tab Behaviour:
+- Highlight active tab clearly (pill, underline, or filled state).
+- “Latest” active state when pathname exactly matches /teams/:teamSlug.
+- Other tabs active state when pathname ends with their slug.
+- Clicking tab updates route and content without full reload.
+
+Latest Tab (Default Landing):
+Purpose: Editorial heartbeat for the club.
+Data:
+- Pull articles filtered by teamSlug.
+Ordering priority:
+1) Breaking
+2) Editor’s Pick
+3) Most recent
+UI:
+- Editorial pills (Breaking / Editor’s Pick / Trending etc.)
+- Article card includes: title, excerpt, time, views, read-time (if available)
+- Clicking opens Article Page and must land at top of article page (no mid-page anchor).
+
+Injuries Tab:
+- Injury cards show:
+  - Player name
+  - Injury type
+  - Status badge (OUT / DOUBTFUL etc.)
+  - Expected return
+  - Confidence bar
+  - Source badge (e.g. Official)
+Empty state:
+- “No current injury concerns for {Team}.”
+
+Transfers Tab:
+- Support sections for:
+  - Rumours
+  - Confirmed IN
+  - Confirmed OUT
+Empty state:
+- “No transfer activity at the moment.”
+
+Matches Tab:
+- Show:
+  - Next match (featured card)
+  - Recent results list/cards
+- Include competition badge, venue, date/time.
+Empty state handled gracefully.
+
+Fans Tab:
+- v2 lightweight:
+  - Empty state with encouragement
+  - CTA to post (future-ready)
+  - Logged-out users see sign-in prompt
+- No complex forum features required yet.
+
+Right Rail (Persistent Across Tabs):
+- Team follow card (login-aware):
+  - Logged out => “Log in to follow”
+  - Logged in => Follow/Unfollow toggle
+- Newsletter signup card
+- “More like this” list of relevant articles (team-biased)
+- Share box optional (keep lightweight)
+
+Empty State Standard:
+- Explain why empty (no updates yet)
+- Provide next action (check back soon / follow team / subscribe)
+
+Acceptance Criteria:
+- All routes load without errors for any teamSlug.
+- URL always reflects active tab.
+- Latest tab always returns you to /teams/:teamSlug and shows Latest content + active styling.
+- Navigating between tabs keeps right rail consistent.
+- Scroll resets to top on each tab navigation and when opening an article.
+- Layout looks polished on desktop and mobile.
