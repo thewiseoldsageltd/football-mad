@@ -341,8 +341,8 @@ function InjuriesTabContent({
       };
     }
     
-    const out = availability.filter(p => p.bucket === "OUT" && p.classification === "INJURY").length;
-    const doubtful = availability.filter(p => p.bucket === "RETURNING_SOON" && p.effectiveChance === 75).length;
+    const out = availability.filter(p => p.bucket === "OUT").length;
+    const doubtful = availability.filter(p => p.bucket === "DOUBTFUL").length;
     const suspended = availability.filter(p => p.classification === "SUSPENSION").length;
     const loaned = availability.filter(p => p.classification === "LOAN_OR_TRANSFER").length;
     
