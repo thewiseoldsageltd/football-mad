@@ -1,7 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -972,191 +973,434 @@ function AvailabilitySummaryBadge({ teamSlug }: { teamSlug: string }) {
   );
 }
 
-function NextMatchCard({ 
+// Dummy match data for full season simulation
+interface DummyMatch {
+  id: string;
+  homeTeam: { name: string; shortName: string; slug: string; primaryColor: string };
+  awayTeam: { name: string; shortName: string; slug: string; primaryColor: string };
+  kickoffTime: Date;
+  competition: string;
+  competitionShort: string;
+  matchweek?: number;
+  round?: string;
+  homeScore?: number;
+  awayScore?: number;
+  status: "scheduled" | "finished" | "postponed" | "live";
+  venue: string;
+}
+
+const PL_TEAMS = [
+  { name: "Arsenal", shortName: "ARS", slug: "arsenal", primaryColor: "#EF0107" },
+  { name: "Aston Villa", shortName: "AVL", slug: "aston-villa", primaryColor: "#670E36" },
+  { name: "Bournemouth", shortName: "BOU", slug: "bournemouth", primaryColor: "#DA291C" },
+  { name: "Brentford", shortName: "BRE", slug: "brentford", primaryColor: "#E30613" },
+  { name: "Brighton", shortName: "BHA", slug: "brighton", primaryColor: "#0057B8" },
+  { name: "Chelsea", shortName: "CHE", slug: "chelsea", primaryColor: "#034694" },
+  { name: "Crystal Palace", shortName: "CRY", slug: "crystal-palace", primaryColor: "#1B458F" },
+  { name: "Everton", shortName: "EVE", slug: "everton", primaryColor: "#003399" },
+  { name: "Fulham", shortName: "FUL", slug: "fulham", primaryColor: "#000000" },
+  { name: "Ipswich Town", shortName: "IPS", slug: "ipswich-town", primaryColor: "#0044AA" },
+  { name: "Leicester City", shortName: "LEI", slug: "leicester-city", primaryColor: "#003090" },
+  { name: "Liverpool", shortName: "LIV", slug: "liverpool", primaryColor: "#C8102E" },
+  { name: "Manchester City", shortName: "MCI", slug: "manchester-city", primaryColor: "#6CABDD" },
+  { name: "Manchester United", shortName: "MUN", slug: "manchester-united", primaryColor: "#DA291C" },
+  { name: "Newcastle United", shortName: "NEW", slug: "newcastle", primaryColor: "#241F20" },
+  { name: "Nottingham Forest", shortName: "NFO", slug: "nottingham-forest", primaryColor: "#E53233" },
+  { name: "Southampton", shortName: "SOU", slug: "southampton", primaryColor: "#D71920" },
+  { name: "Tottenham", shortName: "TOT", slug: "tottenham", primaryColor: "#132257" },
+  { name: "West Ham", shortName: "WHU", slug: "west-ham", primaryColor: "#7A263A" },
+  { name: "Wolves", shortName: "WOL", slug: "wolves", primaryColor: "#FDB913" },
+];
+
+const EURO_TEAMS = [
+  { name: "Real Madrid", shortName: "RMA", slug: "real-madrid", primaryColor: "#FEBE10" },
+  { name: "Barcelona", shortName: "BAR", slug: "barcelona", primaryColor: "#A50044" },
+  { name: "Bayern Munich", shortName: "BAY", slug: "bayern-munich", primaryColor: "#DC052D" },
+  { name: "Paris Saint-Germain", shortName: "PSG", slug: "psg", primaryColor: "#004170" },
+  { name: "Inter Milan", shortName: "INT", slug: "inter-milan", primaryColor: "#010E80" },
+  { name: "AC Milan", shortName: "ACM", slug: "ac-milan", primaryColor: "#FB090B" },
+  { name: "Juventus", shortName: "JUV", slug: "juventus", primaryColor: "#000000" },
+  { name: "Borussia Dortmund", shortName: "BVB", slug: "dortmund", primaryColor: "#FDE100" },
+];
+
+function generateDummyMatches(teamSlug: string): DummyMatch[] {
+  const team = PL_TEAMS.find(t => t.slug === teamSlug) || PL_TEAMS[0];
+  const opponents = PL_TEAMS.filter(t => t.slug !== teamSlug);
+  const matches: DummyMatch[] = [];
+  
+  const seasonStart = new Date("2025-08-16");
+  const now = new Date();
+  
+  // Generate 38 Premier League matchweeks
+  opponents.forEach((opp, idx) => {
+    const isHome = idx % 2 === 0;
+    const matchweek = idx + 1;
+    const matchDate = new Date(seasonStart);
+    matchDate.setDate(matchDate.getDate() + (matchweek - 1) * 7);
+    
+    // Saturday 3pm or varied times
+    const hours = [12, 15, 17, 20][idx % 4];
+    matchDate.setHours(hours, idx % 2 === 0 ? 30 : 0, 0, 0);
+    
+    const isPast = matchDate < now;
+    const homeTeam = isHome ? team : opp;
+    const awayTeam = isHome ? opp : team;
+    
+    matches.push({
+      id: `pl-mw${matchweek}-${team.slug}`,
+      homeTeam,
+      awayTeam,
+      kickoffTime: matchDate,
+      competition: "Premier League",
+      competitionShort: "PL",
+      matchweek,
+      homeScore: isPast ? Math.floor(Math.random() * 4) : undefined,
+      awayScore: isPast ? Math.floor(Math.random() * 3) : undefined,
+      status: isPast ? "finished" : "scheduled",
+      venue: isHome ? `${team.name} Stadium` : `${opp.name} Stadium`,
+    });
+  });
+  
+  // Return fixtures (add second half of season)
+  const reverseFixtures = opponents.map((opp, idx) => {
+    const isHome = idx % 2 !== 0; // Flip home/away
+    const matchweek = 20 + idx;
+    const matchDate = new Date(seasonStart);
+    matchDate.setDate(matchDate.getDate() + (matchweek - 1) * 7);
+    
+    const hours = [12, 15, 17, 20][idx % 4];
+    matchDate.setHours(hours, idx % 2 === 0 ? 30 : 0, 0, 0);
+    
+    const isPast = matchDate < now;
+    const homeTeam = isHome ? team : opp;
+    const awayTeam = isHome ? opp : team;
+    
+    return {
+      id: `pl-mw${matchweek}-${team.slug}`,
+      homeTeam,
+      awayTeam,
+      kickoffTime: matchDate,
+      competition: "Premier League",
+      competitionShort: "PL",
+      matchweek,
+      homeScore: isPast ? Math.floor(Math.random() * 4) : undefined,
+      awayScore: isPast ? Math.floor(Math.random() * 3) : undefined,
+      status: isPast ? "finished" as const : "scheduled" as const,
+      venue: isHome ? `${team.name} Stadium` : `${opp.name} Stadium`,
+    };
+  });
+  
+  matches.push(...reverseFixtures);
+  
+  // Add FA Cup matches
+  const faCupRounds = [
+    { round: "Third Round", date: new Date("2026-01-10"), opponent: opponents[5] },
+    { round: "Fourth Round", date: new Date("2026-01-31"), opponent: opponents[8] },
+    { round: "Fifth Round", date: new Date("2026-02-14"), opponent: opponents[12] },
+    { round: "Quarter-Final", date: new Date("2026-03-07"), opponent: opponents[3] },
+    { round: "Semi-Final", date: new Date("2026-04-18"), opponent: opponents[1] },
+    { round: "Final", date: new Date("2026-05-23"), opponent: opponents[11] },
+  ];
+  
+  faCupRounds.forEach((cup, idx) => {
+    const isHome = idx % 2 === 0;
+    const isPast = cup.date < now;
+    
+    matches.push({
+      id: `fa-${cup.round.toLowerCase().replace(/\s+/g, "-")}-${team.slug}`,
+      homeTeam: isHome ? team : cup.opponent,
+      awayTeam: isHome ? cup.opponent : team,
+      kickoffTime: cup.date,
+      competition: "FA Cup",
+      competitionShort: "FAC",
+      round: cup.round,
+      homeScore: isPast ? Math.floor(Math.random() * 3) + 1 : undefined,
+      awayScore: isPast ? Math.floor(Math.random() * 2) : undefined,
+      status: isPast ? "finished" : "scheduled",
+      venue: cup.round === "Final" ? "Wembley Stadium" : (isHome ? `${team.name} Stadium` : `${cup.opponent.name} Stadium`),
+    });
+  });
+  
+  // Add EFL Cup matches
+  const eflCupRounds = [
+    { round: "Third Round", date: new Date("2025-09-24"), opponent: opponents[14] },
+    { round: "Fourth Round", date: new Date("2025-10-29"), opponent: opponents[9] },
+    { round: "Quarter-Final", date: new Date("2025-12-17"), opponent: opponents[6] },
+    { round: "Semi-Final 1st Leg", date: new Date("2026-01-07"), opponent: opponents[2] },
+    { round: "Semi-Final 2nd Leg", date: new Date("2026-01-28"), opponent: opponents[2] },
+    { round: "Final", date: new Date("2026-02-22"), opponent: opponents[0] },
+  ];
+  
+  eflCupRounds.forEach((cup, idx) => {
+    const isHome = idx % 2 === 0 || cup.round.includes("2nd Leg");
+    const isPast = cup.date < now;
+    
+    matches.push({
+      id: `efl-${cup.round.toLowerCase().replace(/\s+/g, "-")}-${team.slug}`,
+      homeTeam: isHome ? team : cup.opponent,
+      awayTeam: isHome ? cup.opponent : team,
+      kickoffTime: cup.date,
+      competition: "EFL Cup",
+      competitionShort: "EFL",
+      round: cup.round,
+      homeScore: isPast ? Math.floor(Math.random() * 3) + 1 : undefined,
+      awayScore: isPast ? Math.floor(Math.random() * 2) : undefined,
+      status: isPast ? "finished" : "scheduled",
+      venue: cup.round === "Final" ? "Wembley Stadium" : (isHome ? `${team.name} Stadium` : `${cup.opponent.name} Stadium`),
+    });
+  });
+  
+  // Add Champions League matches (for top teams)
+  const topTeamSlugs = ["arsenal", "chelsea", "liverpool", "manchester-city", "manchester-united", "tottenham", "aston-villa", "newcastle"];
+  if (topTeamSlugs.includes(teamSlug)) {
+    const clGroupMatches = [
+      { matchday: 1, date: new Date("2025-09-17"), opponent: EURO_TEAMS[0], isHome: true },
+      { matchday: 2, date: new Date("2025-10-01"), opponent: EURO_TEAMS[1], isHome: false },
+      { matchday: 3, date: new Date("2025-10-22"), opponent: EURO_TEAMS[2], isHome: true },
+      { matchday: 4, date: new Date("2025-11-05"), opponent: EURO_TEAMS[3], isHome: false },
+      { matchday: 5, date: new Date("2025-11-26"), opponent: EURO_TEAMS[4], isHome: true },
+      { matchday: 6, date: new Date("2025-12-10"), opponent: EURO_TEAMS[5], isHome: false },
+      { matchday: 7, date: new Date("2026-01-21"), opponent: EURO_TEAMS[6], isHome: true },
+      { matchday: 8, date: new Date("2026-01-29"), opponent: EURO_TEAMS[7], isHome: false },
+    ];
+    
+    clGroupMatches.forEach((cl) => {
+      const isPast = cl.date < now;
+      
+      matches.push({
+        id: `ucl-md${cl.matchday}-${team.slug}`,
+        homeTeam: cl.isHome ? team : cl.opponent,
+        awayTeam: cl.isHome ? cl.opponent : team,
+        kickoffTime: cl.date,
+        competition: "Champions League",
+        competitionShort: "UCL",
+        round: `Matchday ${cl.matchday}`,
+        homeScore: isPast ? Math.floor(Math.random() * 4) : undefined,
+        awayScore: isPast ? Math.floor(Math.random() * 3) : undefined,
+        status: isPast ? "finished" : "scheduled",
+        venue: cl.isHome ? `${team.name} Stadium` : `${cl.opponent.name} Stadium`,
+      });
+    });
+    
+    // Add knockout rounds
+    const clKnockouts = [
+      { round: "Round of 16 - 1st Leg", date: new Date("2026-02-18"), opponent: EURO_TEAMS[2], isHome: false },
+      { round: "Round of 16 - 2nd Leg", date: new Date("2026-03-11"), opponent: EURO_TEAMS[2], isHome: true },
+      { round: "Quarter-Final - 1st Leg", date: new Date("2026-04-08"), opponent: EURO_TEAMS[0], isHome: true },
+      { round: "Quarter-Final - 2nd Leg", date: new Date("2026-04-15"), opponent: EURO_TEAMS[0], isHome: false },
+    ];
+    
+    clKnockouts.forEach((ko) => {
+      const isPast = ko.date < now;
+      
+      matches.push({
+        id: `ucl-${ko.round.toLowerCase().replace(/\s+/g, "-")}-${team.slug}`,
+        homeTeam: ko.isHome ? team : ko.opponent,
+        awayTeam: ko.isHome ? ko.opponent : team,
+        kickoffTime: ko.date,
+        competition: "Champions League",
+        competitionShort: "UCL",
+        round: ko.round,
+        homeScore: isPast ? Math.floor(Math.random() * 3) + 1 : undefined,
+        awayScore: isPast ? Math.floor(Math.random() * 2) : undefined,
+        status: isPast ? "finished" : "scheduled",
+        venue: ko.isHome ? `${team.name} Stadium` : `${ko.opponent.name} Stadium`,
+      });
+    });
+  }
+  
+  return matches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
+}
+
+// Competition badge colors
+const COMPETITION_COLORS: Record<string, { bg: string; text: string }> = {
+  "Premier League": { bg: "bg-purple-600", text: "text-white" },
+  "FA Cup": { bg: "bg-red-600", text: "text-white" },
+  "EFL Cup": { bg: "bg-green-600", text: "text-white" },
+  "Champions League": { bg: "bg-blue-700", text: "text-white" },
+};
+
+function CompetitionBadge({ competition }: { competition: string }) {
+  const colors = COMPETITION_COLORS[competition] || { bg: "bg-gray-600", text: "text-white" };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${colors.bg} ${colors.text}`}>
+      {competition}
+    </span>
+  );
+}
+
+function TeamCrest({ team, size = "sm" }: { team: { name: string; shortName: string; primaryColor: string }; size?: "sm" | "md" | "lg" }) {
+  const sizeClasses = {
+    sm: "w-6 h-6 text-[10px]",
+    md: "w-8 h-8 text-xs",
+    lg: "w-10 h-10 text-sm",
+  };
+  
+  return (
+    <div 
+      className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold shrink-0`}
+      style={{ backgroundColor: team.primaryColor, color: "#fff" }}
+      title={team.name}
+    >
+      {team.shortName.slice(0, 2)}
+    </div>
+  );
+}
+
+function MatchRow({ 
   match, 
-  teamId,
-  teamSlug 
+  teamSlug,
+  showDate = true 
 }: { 
-  match: Match & { homeTeam?: Team; awayTeam?: Team };
-  teamId: string;
+  match: DummyMatch; 
   teamSlug: string;
+  showDate?: boolean;
 }) {
-  const isHome = match.homeTeamId === teamId;
-  const opponent = isHome ? match.awayTeam : match.homeTeam;
-  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
-  const venue = isHome ? (match.venue || match.homeTeam?.stadiumName || "Home") : (match.venue || "Away");
+  const isHome = match.homeTeam.slug === teamSlug;
+  const isFinished = match.status === "finished";
   const isPostponed = match.status === "postponed";
   
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  };
+  
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  };
+  
   return (
-    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <Badge variant="outline" className="text-xs font-medium">
-            {isPostponed ? "Postponed" : "Next Match"}
-          </Badge>
-          <AvailabilitySummaryBadge teamSlug={teamSlug} />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-lg font-bold">{isHome ? "vs" : "@"} {opponentName}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              <span>{match.competition || "Premier League"}</span>
-              <span>•</span>
-              <span>{isHome ? "Home" : "Away"}</span>
-            </div>
-          </div>
-        </div>
-        <Separator />
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{isPostponed ? "TBC" : formatMatchDate(match.kickoffTime)}</span>
-            {!isPostponed && (
-              <span className="text-muted-foreground">• {formatKickoffTime(match.kickoffTime)}</span>
+    <Link 
+      href={isFinished ? `/matches/${match.id}/report` : `/matches/${match.id}`}
+      className="block"
+      data-testid={`match-row-${match.id}`}
+    >
+      <div className="flex items-center gap-2 py-3 px-3 hover-elevate rounded-md border border-border/50 bg-card/50">
+        {/* Date column */}
+        {showDate && (
+          <div className="w-20 shrink-0 text-center">
+            <div className="text-xs font-medium">{formatDate(match.kickoffTime)}</div>
+            {!isFinished && !isPostponed && (
+              <div className="text-xs text-muted-foreground">{formatTime(match.kickoffTime)}</div>
+            )}
+            {isPostponed && (
+              <div className="text-xs text-amber-600 font-medium">TBC</div>
             )}
           </div>
-          <div className="text-muted-foreground">
-            {venue}
-          </div>
+        )}
+        
+        {/* Home team */}
+        <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+          <span className={`text-sm font-medium truncate ${match.homeTeam.slug === teamSlug ? "font-bold" : ""}`}>
+            {match.homeTeam.name}
+          </span>
+          <TeamCrest team={match.homeTeam} size="sm" />
         </div>
-      </CardContent>
-    </Card>
+        
+        {/* Score or time */}
+        <div className="w-16 text-center shrink-0">
+          {isFinished ? (
+            <div className="flex items-center justify-center gap-1">
+              <span className={`text-sm font-bold tabular-nums ${match.homeTeam.slug === teamSlug && (match.homeScore ?? 0) > (match.awayScore ?? 0) ? "text-green-600 dark:text-green-400" : ""}`}>
+                {match.homeScore}
+              </span>
+              <span className="text-xs text-muted-foreground">-</span>
+              <span className={`text-sm font-bold tabular-nums ${match.awayTeam.slug === teamSlug && (match.awayScore ?? 0) > (match.homeScore ?? 0) ? "text-green-600 dark:text-green-400" : ""}`}>
+                {match.awayScore}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground font-medium">vs</span>
+          )}
+        </div>
+        
+        {/* Away team */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <TeamCrest team={match.awayTeam} size="sm" />
+          <span className={`text-sm font-medium truncate ${match.awayTeam.slug === teamSlug ? "font-bold" : ""}`}>
+            {match.awayTeam.name}
+          </span>
+        </div>
+        
+        {/* Home/Away indicator */}
+        <div className="w-6 text-center shrink-0">
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+            isHome 
+              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
+              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+          }`}>
+            {isHome ? "H" : "A"}
+          </span>
+        </div>
+        
+        {/* Competition badge */}
+        <div className="w-24 shrink-0 hidden sm:block">
+          <CompetitionBadge competition={match.competition} />
+        </div>
+        
+        {/* Arrow */}
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+      </div>
+    </Link>
   );
 }
 
-function FixtureRow({ 
-  match, 
-  teamId 
+function MatchweekSelector({ 
+  currentWeek, 
+  totalWeeks, 
+  onWeekChange,
+  label = "Matchweek"
 }: { 
-  match: Match & { homeTeam?: Team; awayTeam?: Team };
-  teamId: string;
+  currentWeek: number; 
+  totalWeeks: number; 
+  onWeekChange: (week: number) => void;
+  label?: string;
 }) {
-  const isHome = match.homeTeamId === teamId;
-  const opponent = isHome ? match.awayTeam : match.homeTeam;
-  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
-  const isPostponed = match.status === "postponed";
-  
   return (
-    <Card>
-      <CardContent className="py-3 px-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-10 text-center">
-              <div className="text-xs font-medium">{isPostponed ? "TBC" : formatMatchDate(match.kickoffTime).split(" ")[0]}</div>
-              <div className="text-xs text-muted-foreground">{isPostponed ? "" : formatMatchDate(match.kickoffTime).split(" ").slice(1).join(" ")}</div>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{isHome ? "vs" : "@"} {opponentName}</div>
-              <div className="text-xs text-muted-foreground truncate">{match.competition || "Premier League"}</div>
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            {isPostponed ? (
-              <Badge variant="outline" className="text-xs text-amber-600 border-amber-600">Postponed</Badge>
-            ) : (
-              <div className="text-sm font-medium">{formatKickoffTime(match.kickoffTime)}</div>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function LatestResultCard({ 
-  match, 
-  teamId 
-}: { 
-  match: Match & { homeTeam?: Team; awayTeam?: Team };
-  teamId: string;
-}) {
-  const isHome = match.homeTeamId === teamId;
-  const opponent = isHome ? match.awayTeam : match.homeTeam;
-  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
-  const result = getMatchResult(match, teamId);
-  const homeScore = match.homeScore ?? 0;
-  const awayScore = match.awayScore ?? 0;
-  
-  return (
-    <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between gap-2">
-          <Badge variant="outline" className="text-xs font-medium">Latest Result</Badge>
-          <ResultBadge result={result} />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="flex items-center justify-center gap-4">
-          <div className="text-center flex-1">
-            <div className="text-sm text-muted-foreground mb-1">{isHome ? "Home" : "Away"}</div>
-            <div className="font-bold">{isHome ? match.homeTeam?.name : opponentName}</div>
-          </div>
-          <div className="text-3xl font-bold tabular-nums">
-            {isHome ? homeScore : awayScore} - {isHome ? awayScore : homeScore}
-          </div>
-          <div className="text-center flex-1">
-            <div className="text-sm text-muted-foreground mb-1">{isHome ? "Away" : "Home"}</div>
-            <div className="font-bold">{isHome ? opponentName : match.homeTeam?.name}</div>
-          </div>
-        </div>
-        <Separator />
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>{match.competition || "Premier League"}</span>
-          <span>{formatMatchDate(match.kickoffTime)}</span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ResultRow({ 
-  match, 
-  teamId 
-}: { 
-  match: Match & { homeTeam?: Team; awayTeam?: Team };
-  teamId: string;
-}) {
-  const isHome = match.homeTeamId === teamId;
-  const opponent = isHome ? match.awayTeam : match.homeTeam;
-  const opponentName = opponent?.name || (isHome ? "Away Team" : "Home Team");
-  const result = getMatchResult(match, teamId);
-  const homeScore = match.homeScore ?? 0;
-  const awayScore = match.awayScore ?? 0;
-  
-  return (
-    <Card>
-      <CardContent className="py-3 px-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <div className="w-10 text-center shrink-0">
-              <ResultBadge result={result} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-medium truncate">{isHome ? "vs" : "@"} {opponentName}</div>
-              <div className="text-xs text-muted-foreground truncate">{match.competition || "Premier League"} • {formatMatchDate(match.kickoffTime)}</div>
-            </div>
-          </div>
-          <div className="text-right shrink-0">
-            <div className="text-lg font-bold tabular-nums">
-              {isHome ? homeScore : awayScore}-{isHome ? awayScore : homeScore}
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex items-center justify-between gap-4 py-3 px-4 bg-muted/30 rounded-lg">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => onWeekChange(Math.max(1, currentWeek - 1))}
+        disabled={currentWeek <= 1}
+        data-testid="btn-prev-week"
+      >
+        <ChevronLeft className="h-5 w-5" />
+      </Button>
+      
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-semibold">{label} {currentWeek}</span>
+        <Select 
+          value={currentWeek.toString()} 
+          onValueChange={(v) => onWeekChange(parseInt(v))}
+        >
+          <SelectTrigger className="w-20 h-8" data-testid="select-matchweek">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
+              <SelectItem key={week} value={week.toString()}>
+                {week}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => onWeekChange(Math.min(totalWeeks, currentWeek + 1))}
+        disabled={currentWeek >= totalWeeks}
+        data-testid="btn-next-week"
+      >
+        <ChevronRight className="h-5 w-5" />
+      </Button>
+    </div>
   );
 }
 
 function MatchesTabContent({ 
-  nextMatch, 
-  recentResults,
-  upcomingFixtures,
   teamName,
-  teamId,
   teamSlug
 }: { 
   nextMatch?: Match & { homeTeam?: Team; awayTeam?: Team };
@@ -1167,15 +1411,88 @@ function MatchesTabContent({
   teamSlug: string;
 }) {
   const [subTab, setSubTab] = useState<MatchSubTab>("fixtures");
+  const [fixtureWeek, setFixtureWeek] = useState(21); // Current matchweek for fixtures
+  const [resultWeek, setResultWeek] = useState(20); // Current matchweek for results
+  const [competitionFilter, setCompetitionFilter] = useState<string>("all");
   
-  const hasFixtures = nextMatch || (upcomingFixtures && upcomingFixtures.length > 0);
-  const hasResults = recentResults && recentResults.length > 0;
-  const latestResult = recentResults?.[0];
-  const otherResults = recentResults?.slice(1) || [];
-  const otherFixtures = upcomingFixtures?.slice(0, 5) || [];
+  const allMatches = useMemo(() => generateDummyMatches(teamSlug), [teamSlug]);
+  const now = new Date();
+  
+  // Separate fixtures and results
+  const fixtures = useMemo(() => 
+    allMatches.filter(m => m.status === "scheduled" || m.status === "postponed"),
+    [allMatches]
+  );
+  
+  const results = useMemo(() => 
+    allMatches.filter(m => m.status === "finished"),
+    [allMatches]
+  );
+  
+  // Group by matchweek/round
+  const fixturesByWeek = useMemo(() => {
+    const groups: Record<number, DummyMatch[]> = {};
+    fixtures.forEach(m => {
+      const week = m.matchweek || 0;
+      if (!groups[week]) groups[week] = [];
+      groups[week].push(m);
+    });
+    return groups;
+  }, [fixtures]);
+  
+  const resultsByWeek = useMemo(() => {
+    const groups: Record<number, DummyMatch[]> = {};
+    results.forEach(m => {
+      const week = m.matchweek || 0;
+      if (!groups[week]) groups[week] = [];
+      groups[week].push(m);
+    });
+    return groups;
+  }, [results]);
+  
+  // Get cup matches separately
+  const cupFixtures = useMemo(() => 
+    fixtures.filter(m => m.competition !== "Premier League"),
+    [fixtures]
+  );
+  
+  const cupResults = useMemo(() => 
+    results.filter(m => m.competition !== "Premier League"),
+    [results]
+  );
+  
+  // Filter by competition
+  const filteredFixtures = useMemo(() => {
+    if (competitionFilter === "all") return fixturesByWeek[fixtureWeek] || [];
+    if (competitionFilter === "cups") return cupFixtures;
+    return (fixturesByWeek[fixtureWeek] || []).filter(m => m.competition === competitionFilter);
+  }, [fixturesByWeek, fixtureWeek, competitionFilter, cupFixtures]);
+  
+  const filteredResults = useMemo(() => {
+    if (competitionFilter === "all") return resultsByWeek[resultWeek] || [];
+    if (competitionFilter === "cups") return cupResults;
+    return (resultsByWeek[resultWeek] || []).filter(m => m.competition === competitionFilter);
+  }, [resultsByWeek, resultWeek, competitionFilter, cupResults]);
+  
+  // Available matchweeks
+  const fixtureWeeks = Object.keys(fixturesByWeek).map(Number).sort((a, b) => a - b);
+  const resultWeeks = Object.keys(resultsByWeek).map(Number).sort((a, b) => b - a);
+  
+  // Find current matchweek
+  useEffect(() => {
+    if (fixtureWeeks.length > 0 && !fixtureWeeks.includes(fixtureWeek)) {
+      setFixtureWeek(fixtureWeeks[0]);
+    }
+    if (resultWeeks.length > 0 && !resultWeeks.includes(resultWeek)) {
+      setResultWeek(resultWeeks[0]);
+    }
+  }, [fixtureWeeks, resultWeeks, fixtureWeek, resultWeek]);
+  
+  const competitions = ["all", "Premier League", "Champions League", "FA Cup", "EFL Cup", "cups"];
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Sub-tabs */}
       <div className="flex gap-2 border-b">
         <button
           onClick={() => setSubTab("fixtures")}
@@ -1201,71 +1518,125 @@ function MatchesTabContent({
         </button>
       </div>
       
+      {/* Competition filter */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {competitions.map((comp) => (
+          <Button
+            key={comp}
+            variant={competitionFilter === comp ? "default" : "outline"}
+            size="sm"
+            onClick={() => setCompetitionFilter(comp)}
+            className="shrink-0"
+            data-testid={`filter-${comp.toLowerCase().replace(/\s+/g, "-")}`}
+          >
+            {comp === "all" ? "All Competitions" : comp === "cups" ? "Cup Competitions" : comp}
+          </Button>
+        ))}
+      </div>
+      
       {subTab === "fixtures" && (
-        <div className="space-y-6">
-          {!hasFixtures ? (
-            <EmptyState
-              icon={Calendar}
-              title="No fixtures scheduled"
-              description={`Upcoming fixtures for ${teamName} will appear here when scheduled.`}
-            />
-          ) : (
+        <div className="space-y-4">
+          {/* Matchweek selector for league matches */}
+          {competitionFilter === "all" || competitionFilter === "Premier League" ? (
             <>
-              {nextMatch && (
-                <section>
-                  <NextMatchCard match={nextMatch} teamId={teamId} teamSlug={teamSlug} />
-                </section>
-              )}
+              <MatchweekSelector
+                currentWeek={fixtureWeek}
+                totalWeeks={38}
+                onWeekChange={setFixtureWeek}
+              />
               
-              {otherFixtures.length > 0 && (
-                <section>
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                    Upcoming Fixtures
-                  </h3>
-                  <div className="space-y-2">
-                    {otherFixtures.map((match) => (
-                      <FixtureRow key={match.id} match={match} teamId={teamId} />
-                    ))}
-                  </div>
-                </section>
+              {filteredFixtures.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No fixtures for Matchweek {fixtureWeek}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredFixtures.map((match) => (
+                    <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                  ))}
+                </div>
               )}
             </>
+          ) : (
+            <div className="space-y-2">
+              {filteredFixtures.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No {competitionFilter} fixtures scheduled</p>
+                </div>
+              ) : (
+                filteredFixtures.map((match) => (
+                  <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                ))
+              )}
+            </div>
           )}
         </div>
       )}
       
       {subTab === "results" && (
-        <div className="space-y-6">
-          {!hasResults ? (
-            <EmptyState
-              icon={Calendar}
-              title="No results yet"
-              description={`Match results for ${teamName} will appear here after matches are played.`}
-            />
-          ) : (
+        <div className="space-y-4">
+          {/* Matchweek selector for league matches */}
+          {competitionFilter === "all" || competitionFilter === "Premier League" ? (
             <>
-              {latestResult && (
-                <section>
-                  <LatestResultCard match={latestResult} teamId={teamId} />
-                </section>
-              )}
+              <MatchweekSelector
+                currentWeek={resultWeek}
+                totalWeeks={Math.max(...resultWeeks, 1)}
+                onWeekChange={setResultWeek}
+              />
               
-              {otherResults.length > 0 && (
-                <section>
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                    Previous Results
-                  </h3>
-                  <div className="space-y-2">
-                    {otherResults.map((match) => (
-                      <ResultRow key={match.id} match={match} teamId={teamId} />
-                    ))}
-                  </div>
-                </section>
+              {filteredResults.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No results for Matchweek {resultWeek}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredResults.map((match) => (
+                    <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                  ))}
+                </div>
               )}
             </>
+          ) : (
+            <div className="space-y-2">
+              {filteredResults.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No {competitionFilter} results yet</p>
+                </div>
+              ) : (
+                filteredResults.map((match) => (
+                  <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                ))
+              )}
+            </div>
           )}
         </div>
       )}
+      
+      {/* Season summary */}
+      <div className="mt-6 pt-4 border-t">
+        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-purple-600" />
+            <span>Premier League: {allMatches.filter(m => m.competition === "Premier League").length} matches</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-blue-700" />
+            <span>Champions League: {allMatches.filter(m => m.competition === "Champions League").length} matches</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-600" />
+            <span>FA Cup: {allMatches.filter(m => m.competition === "FA Cup").length} matches</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-600" />
+            <span>EFL Cup: {allMatches.filter(m => m.competition === "EFL Cup").length} matches</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
