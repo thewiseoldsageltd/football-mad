@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,12 @@ import { NewsletterForm } from "@/components/newsletter-form";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Team, Article, Match, Transfer, Injury, Post } from "@shared/schema";
+import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
+
+interface FplAvailabilityWithRag extends FplPlayerAvailability {
+  ragColor: "green" | "light-green" | "amber" | "orange" | "red" | "unknown";
+  displayPercent: string;
+}
 
 interface NewsFiltersResponse {
   articles: Article[];
@@ -158,71 +163,112 @@ function LatestTabContent({
   );
 }
 
+const RAG_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  green: { bg: "bg-green-500", text: "text-white", label: "Fit" },
+  "light-green": { bg: "bg-green-400", text: "text-white", label: "Available" },
+  amber: { bg: "bg-amber-500", text: "text-white", label: "Doubt" },
+  orange: { bg: "bg-orange-500", text: "text-white", label: "Doubt" },
+  red: { bg: "bg-red-500", text: "text-white", label: "Out" },
+  unknown: { bg: "bg-gray-500", text: "text-white", label: "Unknown" },
+};
+
+function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
+  const ragStyle = RAG_COLORS[player.ragColor] || RAG_COLORS.unknown;
+  const newsAdded = player.newsAdded ? new Date(player.newsAdded) : null;
+  
+  return (
+    <Card className="hover-elevate" data-testid={`card-availability-${player.id}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div 
+            className={`w-12 h-12 rounded-full ${ragStyle.bg} flex items-center justify-center flex-shrink-0`}
+          >
+            <span className={`text-lg font-bold ${ragStyle.text}`}>
+              {player.displayPercent === "—" ? "?" : player.displayPercent.replace("%", "")}
+            </span>
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold truncate">{player.playerName}</h3>
+              <Badge variant="secondary" className="text-xs flex-shrink-0">
+                {player.position}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center gap-2 mb-2">
+              <Badge className={`text-xs ${ragStyle.bg} ${ragStyle.text}`}>
+                {player.displayPercent} chance
+              </Badge>
+            </div>
+            
+            {player.news && (
+              <p className="text-sm text-muted-foreground line-clamp-2">
+                {player.news}
+              </p>
+            )}
+          </div>
+        </div>
+        
+        {newsAdded && (
+          <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border/50">
+            Updated: {newsAdded.toLocaleDateString("en-GB", { 
+              day: "numeric", 
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit"
+            })}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function InjuriesTabContent({ 
-  injuries, 
+  teamSlug,
   teamName,
   relatedArticles,
-  isLoading
 }: { 
-  injuries?: Injury[];
+  teamSlug: string;
   teamName: string;
   relatedArticles?: Article[];
-  isLoading?: boolean;
 }) {
-  const { sortedInjuries, outCount, doubtfulCount, returningSoonCount, lastUpdated } = useMemo(() => {
-    if (!injuries || injuries.length === 0) {
-      return { sortedInjuries: [], outCount: 0, doubtfulCount: 0, returningSoonCount: 0, lastUpdated: null };
+  const [sortBy, setSortBy] = useState<"recent" | "lowest">("recent");
+  
+  const { data: availability, isLoading } = useQuery<FplAvailabilityWithRag[]>({
+    queryKey: ["/api/teams", teamSlug, "availability", sortBy],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${teamSlug}/availability?sort=${sortBy}`);
+      if (!res.ok) throw new Error("Failed to fetch availability");
+      return res.json();
+    },
+  });
+
+  const { outCount, doubtfulCount, lastUpdated } = useMemo(() => {
+    if (!availability || availability.length === 0) {
+      return { outCount: 0, doubtfulCount: 0, lastUpdated: null };
     }
-
-    const statusPriority: Record<string, number> = { OUT: 0, DOUBTFUL: 1, SUSPENDED: 2, AVAILABLE: 3, FIT: 4 };
-    const sorted = [...injuries].sort((a, b) => {
-      const priorityA = statusPriority[a.status || "OUT"] ?? 5;
-      const priorityB = statusPriority[b.status || "OUT"] ?? 5;
-      if (priorityA !== priorityB) return priorityA - priorityB;
-      return (b.confidencePercent ?? 50) - (a.confidencePercent ?? 50);
-    });
-
-    const now = new Date();
-    const currentMonth = now.toLocaleDateString("en-GB", { month: "long" }).toLowerCase();
-    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-      .toLocaleDateString("en-GB", { month: "long" }).toLowerCase();
-
-    let returningSoon = 0;
-    sorted.forEach(injury => {
-      if (injury.expectedReturn) {
-        const returnText = injury.expectedReturn.toLowerCase();
-        const mentionsCurrentMonth = returnText.includes(currentMonth);
-        const mentionsNextMonth = returnText.includes(nextMonth);
-        const isImminent = 
-          returnText.includes("soon") || 
-          returnText.includes("days") || 
-          returnText.includes("week") || 
-          returnText.includes("imminent") ||
-          mentionsCurrentMonth ||
-          (returnText.includes("early") && mentionsNextMonth) ||
-          (returnText.includes("mid") && mentionsCurrentMonth);
-        if (isImminent) {
-          returningSoon++;
-        }
-      }
-    });
-
-    const mostRecentUpdate = sorted.reduce((latest, injury) => {
-      if (injury.updatedAt) {
-        const date = new Date(injury.updatedAt);
+    
+    const out = availability.filter(p => p.ragColor === "red").length;
+    const doubtful = availability.filter(p => 
+      p.ragColor === "amber" || p.ragColor === "orange"
+    ).length;
+    
+    const mostRecent = availability.reduce((latest, p) => {
+      if (p.newsAdded) {
+        const date = new Date(p.newsAdded);
         return date > latest ? date : latest;
       }
       return latest;
     }, new Date(0));
-
+    
     return {
-      sortedInjuries: sorted,
-      outCount: sorted.filter(i => i.status === "OUT").length,
-      doubtfulCount: sorted.filter(i => i.status === "DOUBTFUL").length,
-      returningSoonCount: returningSoon,
-      lastUpdated: mostRecentUpdate.getTime() > 0 ? mostRecentUpdate : null,
+      outCount: out,
+      doubtfulCount: doubtful,
+      lastUpdated: mostRecent.getTime() > 0 ? mostRecent : null,
     };
-  }, [injuries]);
+  }, [availability]);
 
   if (isLoading) {
     return (
@@ -233,7 +279,6 @@ function InjuriesTabContent({
           <div className="flex gap-2 mt-3">
             <Skeleton className="h-6 w-20" />
             <Skeleton className="h-6 w-24" />
-            <Skeleton className="h-6 w-28" />
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -243,7 +288,6 @@ function InjuriesTabContent({
                 <Skeleton className="h-6 w-32" />
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-2 w-full" />
               </CardContent>
             </Card>
           ))}
@@ -255,12 +299,32 @@ function InjuriesTabContent({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold mb-1">Injuries & Availability</h2>
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+          <h2 className="text-xl font-semibold">Injuries & Availability</h2>
+          <div className="flex gap-1">
+            <Button 
+              variant={sortBy === "recent" ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setSortBy("recent")}
+              data-testid="button-sort-recent"
+            >
+              Most Recent
+            </Button>
+            <Button 
+              variant={sortBy === "lowest" ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setSortBy("lowest")}
+              data-testid="button-sort-lowest"
+            >
+              Lowest %
+            </Button>
+          </div>
+        </div>
         <p className="text-sm text-muted-foreground mb-3">
-          Latest squad availability for {teamName}
+          FPL-powered availability for {teamName}
         </p>
         
-        {sortedInjuries.length > 0 && (
+        {(availability && availability.length > 0) && (
           <div className="flex flex-wrap items-center gap-2 mb-2">
             {outCount > 0 && (
               <Badge variant="destructive" className="text-xs" data-testid="badge-out-count">
@@ -270,11 +334,6 @@ function InjuriesTabContent({
             {doubtfulCount > 0 && (
               <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-xs" data-testid="badge-doubtful-count">
                 DOUBTFUL: {doubtfulCount}
-              </Badge>
-            )}
-            {returningSoonCount > 0 && (
-              <Badge variant="secondary" className="text-xs" data-testid="badge-returning-soon-count">
-                RETURNING SOON: {returningSoonCount}
               </Badge>
             )}
           </div>
@@ -293,16 +352,16 @@ function InjuriesTabContent({
         )}
       </div>
 
-      {sortedInjuries.length === 0 ? (
+      {(!availability || availability.length === 0) ? (
         <EmptyState
           icon={Activity}
           title="No injury updates right now"
-          description="We'll post squad availability updates as soon as they're confirmed."
+          description="All players appear fit. Sync FPL data to populate availability."
         />
       ) : (
         <div className="grid sm:grid-cols-2 gap-4">
-          {sortedInjuries.map((injury) => (
-            <InjuryCard key={injury.id} injury={injury} />
+          {availability.map((player) => (
+            <FplAvailabilityCard key={player.id} player={player} />
           ))}
         </div>
       )}
@@ -1258,10 +1317,9 @@ export default function TeamHubPage() {
 
             {activeTab === "injuries" && (
               <InjuriesTabContent 
-                injuries={injuries} 
+                teamSlug={slug}
                 teamName={team.name}
                 relatedArticles={injuryRelatedArticles}
-                isLoading={injuriesLoading}
               />
             )}
 

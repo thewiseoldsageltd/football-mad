@@ -1,0 +1,152 @@
+FPL INJURY INGESTION v1 — SERVER-SIDE SYNC + DB + TEAM HUB INJURIES
+
+Goal
+Automate the Team Hub Injuries tab using the free/public Fantasy Premier League (FPL) data.
+Use FPL “chance of playing” + news fields to power Football Mad availability (FPL-style RAG + % + expected back/news).
+
+Key constraint
+Do NOT fetch FPL API from the frontend due to CORS. Implement server-side sync + store in DB.
+
+Source
+Fetch:
+https://fantasy.premierleague.com/api/bootstrap-static/
+This contains:
+- elements[] (players), including chance_of_playing_this_round, chance_of_playing_next_round, news, news_added, status, team, element_type, etc.
+- teams[] (Premier League clubs)
+- element_types[] (position types)
+
+What to build (high-level)
+1) Add a DB table to store “player availability” per team from FPL.
+2) Add a secure server endpoint that runs the sync.
+3) Add a scheduled job to run sync regularly (e.g. every 6 hours).
+4) Update Team Hub Injuries tab to read from DB (FPL-driven), and display in FPL-style: RAG + % chance + “news/expected back”.
+
+1) Database schema
+Create a table: fpl_player_availability
+
+Fields:
+- id (uuid or serial)
+- fplElementId (int, unique)
+- fplTeamId (int)
+- teamSlug (string)  // maps to /teams/:teamSlug in Football Mad
+- playerName (string)
+- position (enum: GKP, DEF, MID, FWD)  // use FPL-style codes
+- chanceThisRound (int 0-100, nullable)
+- chanceNextRound (int 0-100, nullable)
+- fplStatus (string) // raw FPL status value from API, store as-is
+- news (text)        // raw FPL news string
+- newsAdded (timestamp, nullable)
+- lastSyncedAt (timestamp)
+
+Indexes:
+- (teamSlug)
+- (newsAdded desc)
+- unique(fplElementId)
+
+2) Mapping logic
+A) Map FPL team -> teamSlug
+From bootstrap-static:
+- teams[] includes id + name/short_name.
+- elements[].team is the FPL team id.
+
+Implement teamSlug mapping using:
+- Try match by exact name first (teams[].name) against your internal teams table name.
+- If not found, try match by short_name.
+- If still not found, use a small hardcoded mapping object for edge cases (Man City, Man Utd, Spurs, Wolves, Nott’m Forest etc).
+
+Outcome: each availability row must have a valid Football Mad teamSlug.
+
+B) Map position to GKP/DEF/MID/FWD
+From bootstrap-static:
+- element_types[] defines position types.
+- elements[].element_type references element_types.id
+
+Implement mapping:
+- Determine element_type “singular_name_short” (or similar field) and map:
+  GK -> GKP
+  DEF -> DEF
+  MID -> MID
+  FWD -> FWD
+If field names differ, inspect element_types payload and map accordingly.
+
+3) RAG + % logic (for UI)
+We will display chanceThisRound as the primary % on the Injuries tab.
+Map to RAG:
+- 100% -> Green
+- 75–99% -> Light Green
+- 50–74% -> Amber
+- 25–49% -> Orange/Amber
+- 0–24% (including 0) -> Red
+
+If chanceThisRound is null:
+- If fplStatus indicates unavailable OR news is non-empty, treat as Red with unknown % (display “—”)
+- Otherwise hide from injuries list (player considered available)
+
+4) Sync endpoint (secure)
+Create:
+POST /api/jobs/sync-fpl-availability
+
+Security:
+- Require header: Authorization: Bearer <FPL_SYNC_SECRET>
+- Store secret in env: FPL_SYNC_SECRET
+
+Behaviour:
+- Fetch bootstrap-static (server-side).
+- For each element/player:
+  - Extract: id, first_name, second_name, team, element_type, chance_of_playing_this_round, chance_of_playing_next_round, status, news, news_added
+  - Compute playerName = `${first_name} ${second_name}` trimmed
+  - Map teamSlug
+  - Map position
+  - Upsert into fpl_player_availability by fplElementId
+  - Set lastSyncedAt = now
+- After sync, optionally delete rows not seen in this run (or keep; your choice).
+- Return: { ok: true, updated: N, skipped: M }
+
+5) Scheduling (Replit-friendly)
+Implement one of:
+A) A cron-like scheduled job using node-cron (server runtime) every 6 hours
+OR
+B) A documented “scheduled task” approach compatible with Replit deployments (if available in this project)
+
+If unsure, implement node-cron safely:
+- Only start cron in production/server environment
+- Log when sync runs and N updated
+
+6) Update Team Hub Injuries tab to use FPL data
+Replace mocked injuries list with DB query:
+- GET /api/teams/:teamSlug/availability (new endpoint)
+Return players where:
+- news is not empty OR chanceThisRound < 100 OR chanceThisRound is null but status suggests unavailable
+Sort default:
+- Most recently updated first (newsAdded desc)
+Add UI sort toggles:
+- “Most recently updated” (default)
+- “Lowest % chance first”
+
+UI fields per player card/row:
+- Player name
+- Position (GKP/DEF/MID/FWD)
+- % chance (chanceThisRound, show “—” if null)
+- RAG pill based on % mapping
+- News line (truncate, expandable)
+- If % is low (0 or 25) show “Expected back” by displaying the news string (no parsing needed in v1)
+- “Last updated” derived from newsAdded
+
+7) Admin override (optional but recommended)
+Add a small switch in code (feature flag):
+- If FPL feed fails, fallback to manual injury_updates table (existing) OR show a friendly error state.
+Do not block page rendering.
+
+Acceptance Criteria
+- Running POST /api/jobs/sync-fpl-availability with valid secret populates DB.
+- Team Hub Injuries tab shows FPL-style availability with % + RAG + news.
+- Sorting by lowest % and most recent works.
+- No frontend calls to fantasy.premierleague.com directly.
+- FPL sync can run repeatedly without duplicates (idempotent upsert).
+
+Deliverables
+- DB migration + schema
+- Sync endpoint + mapping logic
+- (Optional) cron scheduler
+- Team Hub Injuries tab wired to the new API
+- Basic logging and error handling

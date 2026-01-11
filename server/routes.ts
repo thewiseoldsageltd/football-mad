@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema } from "@shared/schema";
 import { z } from "zod";
+import { syncFplAvailability, getRagColor } from "./fpl-sync";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -487,6 +488,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error tracking share click:", error);
       res.status(500).json({ error: "Failed to track share" });
+    }
+  });
+
+  // ========== FPL SYNC (Server Job) ==========
+  app.post("/api/jobs/sync-fpl-availability", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const expectedSecret = process.env.FPL_SYNC_SECRET;
+      
+      if (!expectedSecret) {
+        console.warn("FPL_SYNC_SECRET not configured");
+        return res.status(500).json({ error: "Sync not configured" });
+      }
+      
+      if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      console.log("[FPL Sync] Starting sync...");
+      const result = await syncFplAvailability();
+      console.log(`[FPL Sync] Complete: ${result.updated} updated, ${result.skipped} skipped`);
+      
+      if (result.errors.length > 0) {
+        console.warn("[FPL Sync] Errors:", result.errors.slice(0, 5));
+      }
+      
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("[FPL Sync] Error:", error);
+      res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
+  app.get("/api/teams/:teamSlug/availability", async (req, res) => {
+    try {
+      const { teamSlug } = req.params;
+      const sortBy = req.query.sort === "lowest" ? "lowest" : "recent";
+      
+      const availability = await storage.getFplAvailabilityByTeam(teamSlug, sortBy);
+      
+      const enriched = availability.map((player) => {
+        const rag = getRagColor(player.chanceThisRound, player.fplStatus, player.news);
+        return {
+          ...player,
+          ragColor: rag.color,
+          displayPercent: rag.displayPercent,
+        };
+      });
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching availability:", error);
+      res.status(500).json({ error: "Failed to fetch availability" });
     }
   });
 }

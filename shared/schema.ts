@@ -368,6 +368,29 @@ export const insertShareClickSchema = createInsertSchema(shareClicks).omit({ id:
 export type InsertShareClick = z.infer<typeof insertShareClickSchema>;
 export type ShareClick = typeof shareClicks.$inferSelect;
 
+// ============ FPL PLAYER AVAILABILITY (Injuries) ============
+export const fplPlayerAvailability = pgTable("fpl_player_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fplElementId: integer("fpl_element_id").notNull().unique(),
+  fplTeamId: integer("fpl_team_id").notNull(),
+  teamSlug: text("team_slug").notNull(),
+  playerName: text("player_name").notNull(),
+  position: text("position").notNull(), // GKP, DEF, MID, FWD
+  chanceThisRound: integer("chance_this_round"),
+  chanceNextRound: integer("chance_next_round"),
+  fplStatus: text("fpl_status"),
+  news: text("news"),
+  newsAdded: timestamp("news_added"),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow(),
+}, (table) => [
+  index("fpl_availability_team_slug_idx").on(table.teamSlug),
+  index("fpl_availability_news_added_idx").on(table.newsAdded),
+]);
+
+export const insertFplPlayerAvailabilitySchema = createInsertSchema(fplPlayerAvailability).omit({ id: true, lastSyncedAt: true });
+export type InsertFplPlayerAvailability = z.infer<typeof insertFplPlayerAvailabilitySchema>;
+export type FplPlayerAvailability = typeof fplPlayerAvailability.$inferSelect;
+
 // ============ NEWS FILTER CONSTANTS & SCHEMAS ============
 export const NEWS_COMPETITIONS = {
   all: { value: "all", label: "All", slug: "all" },

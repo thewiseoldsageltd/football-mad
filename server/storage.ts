@@ -3,6 +3,7 @@ import { eq, and, desc, ilike, sql, or, inArray, gte } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
+  fplPlayerAvailability,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -16,6 +17,7 @@ import {
   type Product, type InsertProduct,
   type Order, type InsertOrder,
   type Subscriber, type InsertSubscriber,
+  type FplPlayerAvailability,
   NEWS_COMPETITIONS,
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
@@ -96,6 +98,9 @@ export interface IStorage {
   
   // Share Analytics
   trackShareClick(articleId: string, platform: string, userId?: string, userAgent?: string): Promise<void>;
+  
+  // FPL Availability
+  getFplAvailabilityByTeam(teamSlug: string, sortBy?: "recent" | "lowest"): Promise<FplPlayerAvailability[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -502,6 +507,37 @@ export class DatabaseStorage implements IStorage {
       platform,
       userId: userId || null,
       userAgent: userAgent || null,
+    });
+  }
+
+  // FPL Availability
+  async getFplAvailabilityByTeam(teamSlug: string, sortBy: "recent" | "lowest" = "recent"): Promise<FplPlayerAvailability[]> {
+    const results = await db
+      .select()
+      .from(fplPlayerAvailability)
+      .where(
+        and(
+          eq(fplPlayerAvailability.teamSlug, teamSlug),
+          or(
+            sql`${fplPlayerAvailability.news} IS NOT NULL AND ${fplPlayerAvailability.news} != ''`,
+            sql`${fplPlayerAvailability.chanceThisRound} < 100`,
+            sql`${fplPlayerAvailability.chanceThisRound} IS NULL AND ${fplPlayerAvailability.fplStatus} != 'a'`
+          )
+        )
+      );
+    
+    if (sortBy === "lowest") {
+      return results.sort((a, b) => {
+        const aChance = a.chanceThisRound ?? -1;
+        const bChance = b.chanceThisRound ?? -1;
+        return aChance - bChance;
+      });
+    }
+    
+    return results.sort((a, b) => {
+      const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+      const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+      return bDate - aDate;
     });
   }
 }
