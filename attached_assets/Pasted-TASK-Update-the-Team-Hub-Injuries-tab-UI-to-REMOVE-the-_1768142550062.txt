@@ -1,0 +1,49 @@
+TASK: Update the Team Hub > Injuries tab UI to REMOVE the circular percentage badge and REPLACE it with a player headshot/avatar, while keeping sorting/filtering powered by the FPL chance field.
+
+CONTEXT:
+- We are ingesting FPL availability data (chance of playing + news text + last updated).
+- Currently the UI shows a big circular % badge and also shows the % in the news text, which is confusing and can mismatch (e.g. badge says 100 but text says 75%).
+- We want ONE source of truth for the displayed %: the text line derived from the same numeric field used for sorting/filtering.
+
+REQUIREMENTS (UI/UX):
+1) Remove the circular percentage badge entirely.
+2) Replace the left-side circle with:
+   - Player headshot image (preferred)
+   - If headshot URL not available, fallback to:
+     a) a generic player silhouette icon OR
+     b) initials in a subtle circle (same style used elsewhere in the site).
+3) Keep the position pill (GKP/DEF/MID/FWD) visible and consistent with FPL position codes.
+4) The “news” line must display the % ONLY once, e.g.:
+   - "{news} — {chance}% chance of playing" when chance is a number
+   - If chance is null/undefined, show "{news} — Chance unknown"
+   - For 0% chance, prefer: "{news} — Expected return: {returnDateOrUnknown}"
+     If no return date, keep: "Unknown return date"
+5) Sorting/filtering must continue to work off the numeric chance field:
+   - “Most Recent” sorts by last_updated DESC
+   - “Lowest %” sorts by chance ASC (treat null as lowest or push to bottom—choose the most sensible UX and be consistent)
+   - Any existing filters (0%, <=25, etc.) should still work using the stored numeric value, NOT string parsing.
+6) Ensure there is no duplicated % display anywhere else on the card.
+
+DATA MAPPING / SOURCE OF TRUTH:
+- The displayed % must come from the same numeric field used for sorting/filtering (e.g. `chanceOfPlaying` or `chance_of_playing_next_round`).
+- Do not derive the displayed % by parsing the `news` string.
+- If the current ingestion stores both a numeric chance and a news string that contains a different %, ALWAYS trust the numeric chance and do not append a second % from the news.
+
+IMPLEMENTATION NOTES:
+- Update the Injury/Availability card component on the Team Hub Injuries tab.
+- Add a `PlayerAvatar` (or similar) subcomponent:
+  - Props: playerName, photoUrl (optional), fallbackInitials
+  - Size: roughly similar footprint to the old circle badge
+  - Rounded, subtle border, consistent with site design
+- If we already have a player image field in the DB, use it.
+- If not, keep UI ready for it: use `player.photoUrl` if present, else fallback.
+- Don’t break the current layout spacing—keep cards aligned.
+
+ACCEPTANCE TESTS:
+- No circular % badge visible anywhere on Injuries tab.
+- Each card shows a headshot/avatar on the left.
+- The text line shows the % once and matches the numeric value used for sorting.
+- “Lowest %” and “Most Recent” still work exactly as before.
+- No mismatch possible between a badge number and the text.
+
+Please implement the above changes and tell me which files/components were modified.

@@ -163,30 +163,87 @@ function LatestTabContent({
   );
 }
 
-const RAG_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  green: { bg: "bg-green-500", text: "text-white", label: "Fit" },
-  "light-green": { bg: "bg-green-400", text: "text-white", label: "Available" },
-  amber: { bg: "bg-amber-500", text: "text-white", label: "Doubt" },
-  orange: { bg: "bg-orange-500", text: "text-white", label: "Doubt" },
-  red: { bg: "bg-red-500", text: "text-white", label: "Out" },
-  unknown: { bg: "bg-gray-500", text: "text-white", label: "Unknown" },
+const RAG_COLORS: Record<string, { bg: string; border: string }> = {
+  green: { bg: "bg-green-500/10", border: "border-green-500" },
+  "light-green": { bg: "bg-green-400/10", border: "border-green-400" },
+  amber: { bg: "bg-amber-500/10", border: "border-amber-500" },
+  orange: { bg: "bg-orange-500/10", border: "border-orange-500" },
+  red: { bg: "bg-red-500/10", border: "border-red-500" },
+  unknown: { bg: "bg-gray-500/10", border: "border-gray-500" },
 };
 
+function PlayerAvatar({ 
+  playerName, 
+  photoUrl,
+  ragColor 
+}: { 
+  playerName: string; 
+  photoUrl?: string | null;
+  ragColor: string;
+}) {
+  const ragStyle = RAG_COLORS[ragColor] || RAG_COLORS.unknown;
+  const initials = playerName
+    .split(" ")
+    .map(n => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  if (photoUrl) {
+    return (
+      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${ragStyle.border} flex-shrink-0`}>
+        <img 
+          src={photoUrl} 
+          alt={playerName} 
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            e.currentTarget.parentElement?.classList.add('fallback-initials');
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className={`w-12 h-12 rounded-full ${ragStyle.bg} border-2 ${ragStyle.border} flex items-center justify-center flex-shrink-0`}
+    >
+      <span className="text-sm font-medium text-muted-foreground">{initials}</span>
+    </div>
+  );
+}
+
+function formatAvailabilityText(news: string | null, chanceThisRound: number | null): string {
+  const cleanNews = news?.replace(/\s*-\s*\d+%\s*chance\s*(of\s*playing)?/gi, "").trim() || "";
+  
+  if (chanceThisRound === null || chanceThisRound === undefined) {
+    return cleanNews ? `${cleanNews} — Chance unknown` : "Chance unknown";
+  }
+  
+  if (chanceThisRound === 0) {
+    if (cleanNews.toLowerCase().includes("unknown return")) {
+      return cleanNews;
+    }
+    return cleanNews ? `${cleanNews} — 0% chance` : "0% chance of playing";
+  }
+  
+  return cleanNews ? `${cleanNews} — ${chanceThisRound}% chance` : `${chanceThisRound}% chance of playing`;
+}
+
 function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
-  const ragStyle = RAG_COLORS[player.ragColor] || RAG_COLORS.unknown;
   const newsAdded = player.newsAdded ? new Date(player.newsAdded) : null;
+  const availabilityText = formatAvailabilityText(player.news, player.chanceThisRound);
   
   return (
     <Card className="hover-elevate" data-testid={`card-availability-${player.id}`}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
-          <div 
-            className={`w-12 h-12 rounded-full ${ragStyle.bg} flex items-center justify-center flex-shrink-0`}
-          >
-            <span className={`text-lg font-bold ${ragStyle.text}`}>
-              {player.displayPercent === "—" ? "?" : player.displayPercent.replace("%", "")}
-            </span>
-          </div>
+          <PlayerAvatar 
+            playerName={player.playerName} 
+            photoUrl={null}
+            ragColor={player.ragColor}
+          />
           
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
@@ -196,17 +253,9 @@ function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
               </Badge>
             </div>
             
-            <div className="flex items-center gap-2 mb-2">
-              <Badge className={`text-xs ${ragStyle.bg} ${ragStyle.text}`}>
-                {player.displayPercent} chance
-              </Badge>
-            </div>
-            
-            {player.news && (
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {player.news}
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {availabilityText}
+            </p>
           </div>
         </div>
         
