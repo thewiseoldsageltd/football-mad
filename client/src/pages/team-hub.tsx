@@ -159,26 +159,166 @@ function LatestTabContent({
 
 function InjuriesTabContent({ 
   injuries, 
-  teamName 
+  teamName,
+  relatedArticles,
+  isLoading
 }: { 
   injuries?: Injury[];
   teamName: string;
+  relatedArticles?: Article[];
+  isLoading?: boolean;
 }) {
-  if (!injuries || injuries.length === 0) {
+  const { sortedInjuries, outCount, doubtfulCount, returningSoonCount, lastUpdated } = useMemo(() => {
+    if (!injuries || injuries.length === 0) {
+      return { sortedInjuries: [], outCount: 0, doubtfulCount: 0, returningSoonCount: 0, lastUpdated: null };
+    }
+
+    const statusPriority: Record<string, number> = { OUT: 0, DOUBTFUL: 1, SUSPENDED: 2, AVAILABLE: 3, FIT: 4 };
+    const sorted = [...injuries].sort((a, b) => {
+      const priorityA = statusPriority[a.status || "OUT"] ?? 5;
+      const priorityB = statusPriority[b.status || "OUT"] ?? 5;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      return (b.confidencePercent ?? 50) - (a.confidencePercent ?? 50);
+    });
+
+    const now = new Date();
+    const currentMonth = now.toLocaleDateString("en-GB", { month: "long" }).toLowerCase();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      .toLocaleDateString("en-GB", { month: "long" }).toLowerCase();
+
+    let returningSoon = 0;
+    sorted.forEach(injury => {
+      if (injury.expectedReturn) {
+        const returnText = injury.expectedReturn.toLowerCase();
+        const mentionsCurrentMonth = returnText.includes(currentMonth);
+        const mentionsNextMonth = returnText.includes(nextMonth);
+        const isImminent = 
+          returnText.includes("soon") || 
+          returnText.includes("days") || 
+          returnText.includes("week") || 
+          returnText.includes("imminent") ||
+          mentionsCurrentMonth ||
+          (returnText.includes("early") && mentionsNextMonth) ||
+          (returnText.includes("mid") && mentionsCurrentMonth);
+        if (isImminent) {
+          returningSoon++;
+        }
+      }
+    });
+
+    const mostRecentUpdate = sorted.reduce((latest, injury) => {
+      if (injury.updatedAt) {
+        const date = new Date(injury.updatedAt);
+        return date > latest ? date : latest;
+      }
+      return latest;
+    }, new Date(0));
+
+    return {
+      sortedInjuries: sorted,
+      outCount: sorted.filter(i => i.status === "OUT").length,
+      doubtfulCount: sorted.filter(i => i.status === "DOUBTFUL").length,
+      returningSoonCount: returningSoon,
+      lastUpdated: mostRecentUpdate.getTime() > 0 ? mostRecentUpdate : null,
+    };
+  }, [injuries]);
+
+  if (isLoading) {
     return (
-      <EmptyState
-        icon={Activity}
-        title="No current injury concerns"
-        description={`Great news! No ${teamName} players are currently on the injury list.`}
-      />
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-5 w-64" />
+          <div className="flex gap-2 mt-3">
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-6 w-28" />
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-2 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
     );
   }
 
   return (
-    <div className="grid sm:grid-cols-2 gap-4">
-      {injuries.map((injury) => (
-        <InjuryCard key={injury.id} injury={injury} />
-      ))}
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold mb-1">Injuries & Availability</h2>
+        <p className="text-sm text-muted-foreground mb-3">
+          Latest squad availability for {teamName}
+        </p>
+        
+        {sortedInjuries.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            {outCount > 0 && (
+              <Badge variant="destructive" className="text-xs" data-testid="badge-out-count">
+                OUT: {outCount}
+              </Badge>
+            )}
+            {doubtfulCount > 0 && (
+              <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-xs" data-testid="badge-doubtful-count">
+                DOUBTFUL: {doubtfulCount}
+              </Badge>
+            )}
+            {returningSoonCount > 0 && (
+              <Badge variant="secondary" className="text-xs" data-testid="badge-returning-soon-count">
+                RETURNING SOON: {returningSoonCount}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {lastUpdated && (
+          <p className="text-xs text-muted-foreground">
+            Last updated: {lastUpdated.toLocaleDateString("en-GB", { 
+              day: "numeric", 
+              month: "short", 
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit"
+            })}
+          </p>
+        )}
+      </div>
+
+      {sortedInjuries.length === 0 ? (
+        <EmptyState
+          icon={Activity}
+          title="No injury updates right now"
+          description="We'll post squad availability updates as soon as they're confirmed."
+        />
+      ) : (
+        <div className="grid sm:grid-cols-2 gap-4">
+          {sortedInjuries.map((injury) => (
+            <InjuryCard key={injury.id} injury={injury} />
+          ))}
+        </div>
+      )}
+
+      {relatedArticles && relatedArticles.length > 0 && (
+        <section className="pt-4">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Newspaper className="h-4 w-4" />
+            Injury-related News
+          </h3>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {relatedArticles.slice(0, 4).map((article) => (
+              <ArticleCard key={article.id} article={article} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -583,7 +723,7 @@ export default function TeamHubPage() {
     enabled: !!team,
   });
 
-  const { data: injuries } = useQuery<Injury[]>({
+  const { data: injuries, isLoading: injuriesLoading } = useQuery<Injury[]>({
     queryKey: ["/api/injuries", "team", slug],
     queryFn: async () => {
       const res = await fetch(`/api/injuries/team/${slug}`);
@@ -671,11 +811,36 @@ export default function TeamHubPage() {
 
   const articles = newsData?.articles || [];
 
+  const injuryRelatedArticles = useMemo(() => {
+    const injuryKeywords = ["injury", "injured", "injur", "fitness", "recovery", "return", "sidelined", "setback", "hamstring", "acl", "knee", "ankle", "muscle", "surgery"];
+    return articles.filter(article => {
+      const title = article.title.toLowerCase();
+      const excerpt = (article.excerpt || "").toLowerCase();
+      const tags = (article.tags || []).map(t => t.toLowerCase());
+      return injuryKeywords.some(keyword => 
+        title.includes(keyword) || 
+        excerpt.includes(keyword) || 
+        tags.some(tag => tag.includes(keyword))
+      );
+    }).slice(0, 6);
+  }, [articles]);
+
   const tabTitle = TAB_META[activeTab].title;
-  const pageTitle = team ? `${team.name} ${tabTitle} | Football Mad` : "Team | Football Mad";
-  const pageDescription = team 
-    ? `${tabTitle} for ${team.name}. Stay updated with the latest ${tabTitle.toLowerCase()} from your favorite Premier League club.`
-    : "Team hub page on Football Mad";
+  const pageTitle = useMemo(() => {
+    if (!team) return "Team | Football Mad";
+    if (activeTab === "injuries") {
+      return `${team.name} Injuries | Football Mad`;
+    }
+    return `${team.name} ${tabTitle} | Football Mad`;
+  }, [team, activeTab, tabTitle]);
+  
+  const pageDescription = useMemo(() => {
+    if (!team) return "Team hub page on Football Mad";
+    if (activeTab === "injuries") {
+      return `Latest ${team.name} injury news and squad availability updates — return dates, status and confidence.`;
+    }
+    return `${tabTitle} for ${team.name}. Stay updated with the latest ${tabTitle.toLowerCase()} from your favourite Premier League club.`;
+  }, [team, activeTab, tabTitle]);
   const canonicalPath = `/teams/${slug}${activeTab !== "latest" ? `/${activeTab}` : ""}`;
 
   useDocumentMeta(pageTitle, pageDescription, canonicalPath);
@@ -839,7 +1004,9 @@ export default function TeamHubPage() {
             {activeTab === "injuries" && (
               <InjuriesTabContent 
                 injuries={injuries} 
-                teamName={team.name} 
+                teamName={team.name}
+                relatedArticles={injuryRelatedArticles}
+                isLoading={injuriesLoading}
               />
             )}
 

@@ -1,0 +1,145 @@
+TEAM HUB v2.1 — INJURIES TAB (Full Spec + Implementation Notes)
+
+Context:
+- We already have Team Hub v2 layout working with tabs:
+  /teams/:teamSlug (Latest default)
+  /teams/:teamSlug/injuries
+  /teams/:teamSlug/transfers
+  /teams/:teamSlug/matches
+  /teams/:teamSlug/fans
+- Keep everything filtered to News for now (no new competition hub pages yet).
+- Goal: Make /injuries feel like a premium “team destination” with clear status + confidence, without clutter.
+
+PRIMARY GOALS
+1) Make injuries instantly scannable: OUT / DOUBTFUL / RETURN DATE / CONFIDENCE.
+2) Keep styling consistent with Team Hub v2 (hero stays, right rail stays).
+3) Build robust empty/loading/error states.
+4) Ensure URL-driven active tab state is the single source of truth (already done).
+
+ROUTING
+- /teams/:teamSlug/injuries renders the Injuries view inside Team Hub template.
+- Clicking the Injuries tab navigates to /teams/:teamSlug/injuries.
+- Clicking Latest always navigates back to /teams/:teamSlug (no /latest path).
+- Ensure navigation sets scroll to top on tab change (or preserve existing behavior if already consistent sitewide).
+
+LAYOUT (Desktop)
+- Keep the same structure as Team Hub v2:
+  Left: main content column (injuries feed)
+  Right rail: Follow card + Club newsletter card + “More from {Team}” (optional placement depending on existing layout)
+- Injuries tab content should not feel sparse: add a header row with summary + small legend.
+
+INJURIES TAB UI (Main Column)
+
+A) Header / Summary Row
+- Title: “Injuries & Availability”
+- Subtext: “Latest squad availability for {TeamName}”
+- Summary pills (small, neutral):
+  - OUT: X
+  - DOUBTFUL: Y
+  - RETURNING SOON: Z (optional, based on expected return within 14 days)
+- Add a “Last updated” timestamp (from injuries dataset, or fallback to now if not available).
+
+B) Injury Cards Grid
+- Use a responsive grid:
+  - Desktop: 2 columns
+  - Tablet: 2 columns (tight)
+  - Mobile: 1 column
+- Each injury card includes:
+  1. Player name (bold)
+  2. Position (small text) and Team name (optional if already implied)
+  3. Status badge (high-contrast):
+     - OUT (red)
+     - DOUBTFUL (amber/orange)
+     - AVAILABLE (green) — only show if dataset includes availability updates, otherwise omit
+  4. Injury type (e.g., Hamstring, ACL)
+  5. Expected return (text):
+     - If exact date available: “Expected return: 12 Feb”
+     - If approximate: “Expected return: Late Feb”
+     - If unknown: “Expected return: TBD”
+  6. Confidence meter:
+     - Label: “Confidence”
+     - Horizontal bar (0–100%) with subtle fill
+     - Show % on the right (e.g., 70%)
+  7. Source CTA (only if we have a URL/source):
+     - Button style: secondary / outline
+     - Copy: “Official club statement” (or “Source” if generic)
+     - Opens in new tab
+
+Card interactions:
+- Hover: slight lift + shadow (match Team Hub v2 interaction style).
+- Entire card should NOT be clickable if there’s no detail page. Only CTA button clickable.
+
+C) Optional: “Injury News” module (below cards)
+- Keep “filtered to News” approach:
+  - Add a “Injury-related news” row beneath injuries cards:
+    - Pull last 3–6 articles tagged with team + “injury” keyword (or category if exists)
+  - Layout: compact horizontal cards or standard article cards (reuse existing)
+  - This stops the page feeling empty when injuries dataset is small.
+
+RIGHT RAIL (Keep consistent)
+1) Follow {TeamName} card (as already implemented)
+2) {NewsletterName} (e.g., Gunners Mad) subscription card
+3) Optional: “More from {TeamName}” (keep if already present across tabs)
+
+DATA + LOGIC
+- Data model should support:
+  playerName
+  status (OUT | DOUBTFUL | AVAILABLE | SUSPENDED optional)
+  injuryType
+  expectedReturn (string)
+  confidence (0–100 number)
+  sourceLabel (string optional)
+  sourceUrl (url optional)
+  updatedAt (date optional)
+- Sorting priority:
+  1) OUT first
+  2) DOUBTFUL second
+  3) RETURNING SOON (if used) third
+  4) AVAILABLE last (if present)
+  Within each group, sort by highest confidence or soonest return date (choose one and be consistent).
+
+STATES
+1) Loading:
+- Show skeleton grid of 4–6 injury cards
+- Show skeleton for summary row
+
+2) Empty:
+- Friendly empty state:
+  Title: “No injury updates right now”
+  Body: “We’ll post squad availability updates as soon as they’re confirmed.”
+- Show Injury-related news module beneath (if available)
+
+3) Error:
+- Inline error panel:
+  “Couldn’t load injury updates. Please try again.”
+- Provide “Retry” button.
+
+DESIGN CONSISTENCY
+- Typography: match existing Team Hub (bold section title, clean spacing).
+- Color usage:
+  - Use brand green for positive actions and right-rail newsletter card background.
+  - Status badges use strong semantic colours.
+  - Keep surfaces clean: white cards, soft borders, subtle shadows.
+
+SEO + METADATA
+- Page title:
+  “{TeamName} Injuries | Football Mad”
+- Meta description:
+  “Latest {TeamName} injury news and squad availability updates — return dates, status and confidence.”
+- Canonical:
+  /teams/{teamSlug}/injuries
+- Ensure internal linking from the tab nav is standard <Link> and crawlable.
+
+QA CHECKLIST
+- Tab active state correct on hard refresh of /injuries
+- Switching Injuries ↔ Transfers ↔ Matches keeps URL + active style synced
+- Mobile: cards stack nicely, right rail drops below content
+- No dead links or anchors; clicking any article elsewhere should open article at top
+
+IMPLEMENTATION NOTE
+- Reuse existing TeamHub layout component.
+- Implement <TeamInjuriesTab /> as the view.
+- Ensure scroll-to-top behavior on route change (if not global, add in TeamHub nav click handler).
+
+Deliverable:
+- Injuries tab fully styled + connected to existing injuries logic/data, consistent with Team Hub v2.
