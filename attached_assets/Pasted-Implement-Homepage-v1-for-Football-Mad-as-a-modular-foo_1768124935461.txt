@@ -1,0 +1,105 @@
+Implement Homepage v1 for Football Mad as a modular football dashboard that routes users into News, Teams, and key platform areas.
+
+Goals:
+
+Make the homepage immediately understandable in <5 seconds
+
+Encourage repeat visits (habit-forming)
+
+Reuse existing systems (News, Teams, Follow logic)
+
+Avoid redesigning components already in use
+
+1) Page Structure (Top → Bottom)
+
+Render the homepage using the following modules, in this exact order:
+
+1. Hero Story
+
+Show the latest Editor’s Pick if available, otherwise the most recent article
+
+Use the existing hero/article card style
+
+Clicking opens the article page
+
+2. Today’s Matches Strip
+
+Horizontal strip showing today’s fixtures (use seeded/mock data if needed)
+
+Show: teams + kickoff time
+
+If no matches today, hide the module
+
+3. For You (Personalised)
+
+Only visible if user is logged in AND follows at least one team
+
+Show a mixed feed of latest articles prioritised by followed teams
+
+This is ranking-based, not a hard filter (include major stories too)
+
+4. Trending Now
+
+Pull from News using the existing “Trending” sort logic
+
+Show 6–8 articles
+
+Link to /news?sort=trending
+
+5. Latest News
+
+Standard latest articles feed
+
+Link to /news
+
+6. Teams You Follow / Pick Your Teams
+
+If logged in + follows exist: show followed teams with quick links
+
+If not logged in or no follows: show a CTA to pick teams
+
+7. Newsletter CTA
+
+Simple call to action explaining Football Mad newsletters
+
+Button links to /subscribe (placeholder is fine for now)
+
+8. Shop Teaser
+
+Show 3 featured products or placeholders
+
+CTA: “Visit Shop”
+
+2) Behaviour Rules
+
+Homepage must reuse existing components (article cards, team cards)
+
+No duplicate data logic; all content should come from existing APIs
+
+Modules should fail gracefully (hide if no data)
+
+Homepage should feel fast and scannable on mobile
+
+3) Personalisation Logic (For You)
+
+Rank articles higher if they match followed teams
+
+Do not fully exclude non-followed teams
+
+Clearly label the module as “For You”
+
+4) SEO
+
+Set canonical URL to /
+
+Page title: “Football Mad – News, Teams, Transfers & Fan Insight”
+
+Acceptance Criteria:
+
+Logged-out users see Hero, Trending, Latest, and CTAs
+
+Logged-in users who follow teams see a personalised “For You” section
+
+All links route correctly to existing News and Team pages
+
+No visual clutter or duplicated components

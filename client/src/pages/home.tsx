@@ -1,259 +1,503 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowRight, TrendingUp, Calendar, Users } from "lucide-react";
+import { useEffect } from "react";
+import { ArrowRight, TrendingUp, Calendar, Users, Newspaper, ShoppingBag, Mail, ChevronRight, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
-import { MatchCard } from "@/components/cards/match-card";
-import { TransferCard } from "@/components/cards/transfer-card";
 import { NewsletterForm } from "@/components/newsletter-form";
-import { ArticleCardSkeleton, MatchCardSkeleton, TransferCardSkeleton } from "@/components/skeletons";
+import { ArticleCardSkeleton } from "@/components/skeletons";
 import { useAuth } from "@/hooks/use-auth";
-import type { Article, Match, Team, Transfer } from "@shared/schema";
+import { getQueryFn } from "@/lib/queryClient";
+import type { Article, Match, Team, Product } from "@shared/schema";
+import { format, isToday } from "date-fns";
+
+function useSEO() {
+  useEffect(() => {
+    document.title = "Football Mad – News, Teams, Transfers & Fan Insight";
+    
+    const baseUrl = window.location.origin;
+    
+    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = baseUrl + "/";
+
+    const ensureMeta = (property: string, content: string, isProperty = false) => {
+      const attr = isProperty ? "property" : "name";
+      let tag = document.querySelector(`meta[${attr}="${property}"]`) as HTMLMetaElement | null;
+      if (!tag) {
+        tag = document.createElement("meta");
+        tag.setAttribute(attr, property);
+        document.head.appendChild(tag);
+      }
+      tag.content = content;
+    };
+
+    ensureMeta("description", "Your daily destination for Premier League news, match coverage, transfer rumours, and fan community.");
+    ensureMeta("og:title", "Football Mad – News, Teams, Transfers & Fan Insight", true);
+    ensureMeta("og:description", "Your daily destination for Premier League news, match coverage, transfer rumours, and fan community.", true);
+    ensureMeta("og:url", baseUrl + "/", true);
+    ensureMeta("og:type", "website", true);
+    ensureMeta("og:site_name", "Football Mad", true);
+    
+    return () => {
+      document.querySelector('link[rel="canonical"]')?.remove();
+    };
+  }, []);
+}
+
+function HeroStory({ article }: { article: Article }) {
+  return (
+    <section className="mb-8" data-testid="section-hero">
+      <ArticleCard article={article} featured />
+    </section>
+  );
+}
+
+function TodaysMatchesStrip({ matches }: { matches: (Match & { homeTeam?: Team; awayTeam?: Team })[] }) {
+  if (matches.length === 0) return null;
+
+  return (
+    <section className="mb-8" data-testid="section-todays-matches">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">Today's Matches</h2>
+        </div>
+        <Link href="/matches">
+          <Button variant="ghost" size="sm" className="gap-1" data-testid="link-all-matches">
+            All Matches <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {matches.map((match) => {
+          const kickoffTime = new Date(match.kickoffTime);
+          return (
+            <Link key={match.id} href={`/matches/${match.slug}`}>
+              <Card 
+                className="flex-shrink-0 w-[200px] hover-elevate cursor-pointer"
+                data-testid={`card-todays-match-${match.id}`}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div 
+                        className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: match.homeTeam?.primaryColor || "#333" }}
+                      >
+                        <span className="text-[10px] font-bold text-white">
+                          {match.homeTeam?.shortName?.slice(0, 3) || "H"}
+                        </span>
+                      </div>
+                      <span className="text-sm font-medium truncate">{match.homeTeam?.shortName || "Home"}</span>
+                    </div>
+                    {match.homeScore !== null ? (
+                      <span className="font-bold text-sm">{match.homeScore}</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div 
+                        className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: match.awayTeam?.primaryColor || "#333" }}
+                      >
+                        <span className="text-[10px] font-bold text-white">
+                          {match.awayTeam?.shortName?.slice(0, 3) || "A"}
+                        </span>
+                      </div>
+                      <span className="text-sm font-medium truncate">{match.awayTeam?.shortName || "Away"}</span>
+                    </div>
+                    {match.awayScore !== null ? (
+                      <span className="font-bold text-sm">{match.awayScore}</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+                    <span>{format(kickoffTime, "HH:mm")}</span>
+                    {match.status === "live" ? (
+                      <Badge className="bg-red-500 text-white text-[10px] py-0">LIVE</Badge>
+                    ) : match.status === "finished" ? (
+                      <Badge variant="secondary" className="text-[10px] py-0">FT</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] py-0">Upcoming</Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ForYouSection({ 
+  articles, 
+  teams, 
+  followedTeamIds 
+}: { 
+  articles: Article[]; 
+  teams: Team[];
+  followedTeamIds: string[];
+}) {
+  const followedSlugs = teams
+    .filter(t => followedTeamIds.includes(t.id))
+    .map(t => t.slug);
+
+  const rankedArticles = [...articles]
+    .map(article => {
+      const matchCount = article.tags?.filter(tag => followedSlugs.includes(tag)).length || 0;
+      const isBreaking = article.isBreaking ? 5 : 0;
+      const isTrending = article.isTrending ? 3 : 0;
+      const isEditorPick = article.isEditorPick ? 2 : 0;
+      const score = (matchCount * 10) + isBreaking + isTrending + isEditorPick;
+      return { article, score, matchCount };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map(({ article }) => article);
+
+  if (rankedArticles.length === 0) return null;
+
+  return (
+    <section className="mb-8" data-testid="section-for-you">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">For You</h2>
+        </div>
+        <Link href="/news?myTeams=true">
+          <Button variant="ghost" size="sm" className="gap-1" data-testid="link-more-for-you">
+            More <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {rankedArticles.map((article) => (
+          <ArticleCard key={article.id} article={article} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TrendingSection({ articles }: { articles: Article[] }) {
+  const trendingArticles = articles
+    .filter(a => a.isTrending)
+    .slice(0, 8);
+
+  if (trendingArticles.length === 0) return null;
+
+  return (
+    <section className="mb-8" data-testid="section-trending">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">Trending Now</h2>
+        </div>
+        <Link href="/news?sort=trending">
+          <Button variant="ghost" size="sm" className="gap-1" data-testid="link-more-trending">
+            More <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {trendingArticles.slice(0, 4).map((article) => (
+          <ArticleCard key={article.id} article={article} />
+        ))}
+      </div>
+      {trendingArticles.length > 4 && (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+          {trendingArticles.slice(4, 8).map((article) => (
+            <ArticleCard key={article.id} article={article} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LatestNewsSection({ articles, isLoading }: { articles: Article[]; isLoading: boolean }) {
+  return (
+    <section className="mb-8" data-testid="section-latest">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Newspaper className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">Latest News</h2>
+        </div>
+        <Link href="/news">
+          <Button variant="ghost" size="sm" className="gap-1" data-testid="link-more-news">
+            More <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+      {isLoading ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <ArticleCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {articles.slice(0, 6).map((article) => (
+            <ArticleCard key={article.id} article={article} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TeamsSection({ 
+  isAuthenticated, 
+  followedTeams, 
+  allTeams 
+}: { 
+  isAuthenticated: boolean; 
+  followedTeams: Team[];
+  allTeams: Team[];
+}) {
+  const hasFollows = followedTeams.length > 0;
+
+  if (isAuthenticated && hasFollows) {
+    return (
+      <section className="mb-8" data-testid="section-followed-teams">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Heart className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-bold">Your Teams</h2>
+          </div>
+          <Link href="/teams">
+            <Button variant="ghost" size="sm" className="gap-1" data-testid="link-all-teams">
+              All Teams <ChevronRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+          {followedTeams.map((team) => (
+            <Link key={team.id} href={`/teams/${team.slug}`}>
+              <Card 
+                className="flex-shrink-0 w-[140px] hover-elevate cursor-pointer"
+                data-testid={`card-followed-team-${team.slug}`}
+              >
+                <CardContent className="p-4 text-center">
+                  <div 
+                    className="w-12 h-12 mx-auto rounded-lg flex items-center justify-center mb-2"
+                    style={{ backgroundColor: team.primaryColor || "#333" }}
+                  >
+                    {team.logoUrl ? (
+                      <img src={team.logoUrl} alt={team.name} className="w-8 h-8 object-contain" />
+                    ) : (
+                      <span className="text-lg font-bold text-white">
+                        {team.shortName?.[0] || team.name[0]}
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-medium text-sm truncate">{team.name}</p>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mb-8" data-testid="section-pick-teams">
+      <Card className="bg-gradient-to-r from-primary/10 to-transparent border-primary/20">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold mb-1">Pick Your Teams</h2>
+              <p className="text-muted-foreground">
+                Follow your favourite clubs to get personalised news, match updates, and transfer rumours.
+              </p>
+            </div>
+            <Link href="/teams">
+              <Button className="gap-2" data-testid="button-pick-teams">
+                <Heart className="h-4 w-4" />
+                Choose Teams
+              </Button>
+            </Link>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            {allTeams.slice(0, 10).map((team) => (
+              <Link key={team.id} href={`/teams/${team.slug}`}>
+                <Badge 
+                  variant="outline" 
+                  className="cursor-pointer hover-elevate"
+                  data-testid={`badge-team-cta-${team.slug}`}
+                >
+                  {team.shortName || team.name}
+                </Badge>
+              </Link>
+            ))}
+            {allTeams.length > 10 && (
+              <Badge variant="secondary">+{allTeams.length - 10} more</Badge>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function NewsletterCTA() {
+  return (
+    <section className="mb-8" data-testid="section-newsletter">
+      <Card className="bg-gradient-to-br from-primary/5 via-background to-primary/10">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row md:items-center gap-6">
+            <div className="flex-shrink-0">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Mail className="h-8 w-8 text-primary" />
+              </div>
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold mb-1">Stay in the Loop</h2>
+              <p className="text-muted-foreground mb-4">
+                Get the best football news delivered straight to your inbox. Daily updates, transfer scoops, and match previews.
+              </p>
+              <NewsletterForm compact />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+function ShopTeaser({ products }: { products: Product[] }) {
+  const featuredProducts = products.slice(0, 3);
+
+  return (
+    <section className="mb-8" data-testid="section-shop">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <ShoppingBag className="h-5 w-5 text-primary" />
+          <h2 className="text-xl font-bold">Shop</h2>
+        </div>
+        <Link href="/shop">
+          <Button variant="ghost" size="sm" className="gap-1" data-testid="link-visit-shop">
+            Visit Shop <ChevronRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+      <div className="grid sm:grid-cols-3 gap-4">
+        {featuredProducts.length > 0 ? (
+          featuredProducts.map((product) => (
+            <Link key={product.id} href={`/shop`}>
+              <Card className="hover-elevate cursor-pointer" data-testid={`card-product-${product.id}`}>
+                <CardContent className="p-4">
+                  <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
+                    {product.imageUrl ? (
+                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover rounded-lg" />
+                    ) : (
+                      <ShoppingBag className="h-12 w-12 text-muted-foreground/30" />
+                    )}
+                  </div>
+                  <h3 className="font-medium text-sm truncate">{product.name}</h3>
+                  <p className="text-primary font-bold">{product.price}</p>
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        ) : (
+          <>
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="hover-elevate cursor-pointer">
+                <CardContent className="p-4">
+                  <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
+                    <ShoppingBag className="h-12 w-12 text-muted-foreground/30" />
+                  </div>
+                  <div className="h-4 bg-muted rounded w-3/4 mb-2" />
+                  <div className="h-5 bg-muted rounded w-1/4" />
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
+      </div>
+      <div className="text-center mt-4">
+        <Link href="/shop">
+          <Button className="gap-2" data-testid="button-shop-now">
+            <ShoppingBag className="h-4 w-4" />
+            Shop Now
+          </Button>
+        </Link>
+      </div>
+    </section>
+  );
+}
 
 export default function HomePage() {
-  const { user, isAuthenticated } = useAuth();
+  useSEO();
+  const { isAuthenticated } = useAuth();
 
-  const { data: articles, isLoading: articlesLoading } = useQuery<Article[]>({
+  const { data: articles = [], isLoading: articlesLoading } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
   });
 
-  const { data: matches, isLoading: matchesLoading } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
-    queryKey: ["/api/matches", "upcoming"],
+  const { data: allMatches = [] } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
+    queryKey: ["/api/matches"],
   });
 
-  const { data: transfers, isLoading: transfersLoading } = useQuery<Transfer[]>({
-    queryKey: ["/api/transfers", "latest"],
-  });
-
-  const { data: teams } = useQuery<Team[]>({
+  const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
   });
 
-  const { data: followedTeamIds } = useQuery<string[]>({
+  const { data: followedTeamIds = [] } = useQuery<string[]>({
     queryKey: ["/api/follows"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
     enabled: isAuthenticated,
   });
 
-  const featuredArticle = articles?.find((a) => a.isFeatured) || articles?.[0];
-  const regularArticles = articles?.filter((a) => a.id !== featuredArticle?.id).slice(0, 5) || [];
-  const trendingArticles = articles?.filter((a) => a.isTrending).slice(0, 5) || [];
-  const upcomingMatches = matches?.slice(0, 3) || [];
-  const latestTransfers = transfers?.slice(0, 4) || [];
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+  });
 
-  const forYouArticles = isAuthenticated && followedTeamIds?.length
-    ? articles?.filter((a) => 
-        a.tags?.some(tag => 
-          teams?.some(t => followedTeamIds.includes(t.id) && t.slug === tag)
-        )
-      ).slice(0, 4) || []
-    : [];
+  const heroArticle = articles.find((a) => a.isEditorPick) || articles[0];
+  const todaysMatches = allMatches.filter((m) => isToday(new Date(m.kickoffTime)));
+  const followedTeams = teams.filter((t) => followedTeamIds.includes(t.id));
+  const latestArticles = articles.filter((a) => a.id !== heroArticle?.id);
+  const showForYou = isAuthenticated && followedTeamIds.length > 0;
 
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {isAuthenticated && user && (
-          <div className="mb-6 p-4 bg-gradient-to-r from-primary/10 to-transparent rounded-lg border border-primary/20">
-            <p className="text-lg">
-              Welcome back, <span className="font-semibold">{user.firstName || "Fan"}</span>!
-            </p>
-          </div>
+        {heroArticle && <HeroStory article={heroArticle} />}
+
+        <TodaysMatchesStrip matches={todaysMatches} />
+
+        {showForYou && (
+          <ForYouSection 
+            articles={latestArticles} 
+            teams={teams} 
+            followedTeamIds={followedTeamIds} 
+          />
         )}
 
-        {featuredArticle && (
-          <section className="mb-8">
-            <ArticleCard article={featuredArticle} featured />
-          </section>
-        )}
+        <TrendingSection articles={articles} />
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            {forYouArticles.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="h-5 w-5 text-primary" />
-                    <h2 className="text-2xl font-bold">For You</h2>
-                  </div>
-                  <Link href="/news">
-                    <Button variant="ghost" size="sm" className="gap-1" data-testid="link-see-more-for-you">
-                      See more <ArrowRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {forYouArticles.map((article) => (
-                    <ArticleCard key={article.id} article={article} />
-                  ))}
-                </div>
-              </section>
-            )}
+        <LatestNewsSection articles={latestArticles} isLoading={articlesLoading} />
 
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Latest News</h2>
-                <Link href="/news">
-                  <Button variant="ghost" size="sm" className="gap-1" data-testid="link-see-more-news">
-                    See more <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </div>
-              {articlesLoading ? (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <ArticleCardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {regularArticles.map((article) => (
-                    <ArticleCard key={article.id} article={article} />
-                  ))}
-                </div>
-              )}
-            </section>
+        <TeamsSection 
+          isAuthenticated={isAuthenticated} 
+          followedTeams={followedTeams} 
+          allTeams={teams} 
+        />
 
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-primary" />
-                  <h2 className="text-2xl font-bold">Upcoming Matches</h2>
-                </div>
-                <Link href="/matches">
-                  <Button variant="ghost" size="sm" className="gap-1" data-testid="link-see-more-matches">
-                    See more <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </div>
-              {matchesLoading ? (
-                <div className="grid gap-4">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <MatchCardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {upcomingMatches.map((match) => (
-                    <MatchCard key={match.id} match={match} />
-                  ))}
-                </div>
-              )}
-            </section>
+        <NewsletterCTA />
 
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Transfer Centre</h2>
-                <Link href="/transfers">
-                  <Button variant="ghost" size="sm" className="gap-1" data-testid="link-see-more-transfers">
-                    See more <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </div>
-              {transfersLoading ? (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <TransferCardSkeleton key={i} />
-                  ))}
-                </div>
-              ) : (
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {latestTransfers.map((transfer) => (
-                    <TransferCard key={transfer.id} transfer={transfer} />
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          <aside className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  <CardTitle>Trending</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {articlesLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="flex gap-3 items-start">
-                      <span className="text-2xl font-bold text-muted-foreground">{i + 1}</span>
-                      <div className="flex-1">
-                        <div className="h-4 bg-muted rounded animate-pulse mb-1" />
-                        <div className="h-3 w-16 bg-muted rounded animate-pulse" />
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  trendingArticles.map((article, index) => (
-                    <Link key={article.id} href={`/news/${article.slug}`}>
-                      <div className="flex gap-3 items-start group cursor-pointer" data-testid={`link-trending-${article.id}`}>
-                        <span className="text-2xl font-bold text-muted-foreground group-hover:text-primary transition-colors">
-                          {index + 1}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm line-clamp-2 group-hover:text-primary transition-colors">
-                            {article.title}
-                          </p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                            <TrendingUp className="h-3 w-3" />
-                            {article.viewCount?.toLocaleString() || 0} views
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Premier League Teams</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {teams?.slice(0, 10).map((team) => (
-                    <Link key={team.id} href={`/teams/${team.slug}`}>
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer hover:bg-accent transition-colors"
-                        data-testid={`badge-team-${team.slug}`}
-                      >
-                        {team.shortName || team.name}
-                      </Badge>
-                    </Link>
-                  ))}
-                </div>
-                <Link href="/teams">
-                  <Button variant="ghost" size="sm" className="w-full mt-3 gap-1" data-testid="link-view-all-teams">
-                    View all teams <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            <NewsletterForm />
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Shop</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Get the latest Football Mad merchandise and club-edition gear.
-                </p>
-                <Link href="/shop">
-                  <Button className="w-full" data-testid="link-shop-now">
-                    Shop Now
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          </aside>
-        </div>
+        <ShopTeaser products={products} />
       </div>
     </MainLayout>
   );
