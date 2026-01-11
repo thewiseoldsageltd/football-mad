@@ -25,6 +25,11 @@ type Classification = "INJURY" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
 type RingColor = "green" | "amber" | "red" | "gray";
 
+function getTeamInitial(team?: { shortName?: string | null; name?: string | null }): string {
+  const s = (team?.shortName || team?.name || "").trim();
+  return s.length > 0 ? s[0].toUpperCase() : "?";
+}
+
 interface FplAvailabilityWithRag extends FplPlayerAvailability {
   classification: Classification;
   bucket: AvailabilityBucket;
@@ -218,10 +223,11 @@ function PlayerAvatar({
   const style = RING_COLORS[ringColor] || RING_COLORS.gray;
   const initials = playerName
     .split(" ")
+    .filter(n => n.length > 0)
     .map(n => n[0])
     .slice(0, 2)
     .join("")
-    .toUpperCase();
+    .toUpperCase() || "?";
 
   if (photoUrl) {
     return (
@@ -616,11 +622,11 @@ const MOCK_TRANSFER_DATA: Record<string, {
 };
 
 function getPlayerInitials(name: string): string {
-  const parts = name.split(" ");
+  const parts = name.split(" ").filter(p => p.length > 0);
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
   }
-  return name.slice(0, 2).toUpperCase();
+  return (name.slice(0, 2) || "??").toUpperCase();
 }
 
 function ClubCrest({ clubName, size = 24 }: { clubName: string; size?: number }) {
@@ -1381,7 +1387,7 @@ export default function TeamHubPage() {
                 <img src={team.logoUrl} alt={team.name} className="w-16 h-16 md:w-20 md:h-20 object-contain" />
               ) : (
                 <span className="text-3xl md:text-4xl font-bold" style={{ color: team.primaryColor ?? "#1a1a2e" }}>
-                  {team.shortName?.[0] || team.name[0]}
+                  {getTeamInitial(team)}
                 </span>
               )}
             </div>
