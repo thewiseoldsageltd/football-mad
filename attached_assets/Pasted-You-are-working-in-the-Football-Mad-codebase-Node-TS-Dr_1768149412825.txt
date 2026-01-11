@@ -1,0 +1,72 @@
+You are working in the Football Mad codebase (Node/TS + Drizzle). We already have an FPL sync job and need a similar ingestion job for TEAM METADATA (manager + stadium) because some teams are missing these fields and some managers are incorrect.
+
+GOAL
+1) Create a new server sync job that fetches manager + stadium data from Wikidata (free/public) using the Wikidata Query Service SPARQL endpoint.
+2) Update the existing `teams` table rows (by slug) with:
+   - `stadiumName`
+   - `manager`
+   - ensure consistent `name` (display name) exactly as per the list below (do NOT use “Bournemouth FC”, “Brighton”, etc. unless it matches the list).
+3) Add a secret key auth for this sync endpoint, similar to the FPL sync secret (env var).
+4) Add a POST endpoint to trigger the job: POST /api/jobs/sync-team-metadata
+   - Requires header `x-sync-secret: <secret>` or JSON body { secret: "<secret>" } (pick one and be consistent)
+   - Returns { updated: number, skipped: number, errors: string[] }
+
+DISPLAY NAME + SLUG SOURCE OF TRUTH (keep slugs as-is, set `teams.name` to these exact display names)
+- Arsenal (arsenal)
+- Aston Villa (aston-villa)
+- Bournemouth (afc-bournemouth)
+- Brentford (brentford)
+- Brighton (brighton-and-hove-albion)
+- Burnley (burnley)
+- Chelsea (chelsea)
+- Crystal Palace (crystal-palace)
+- Everton (everton)
+- Fulham (fulham)
+- Leeds (leeds-united)
+- Liverpool (liverpool)
+- Man City (manchester-city)
+- Man Utd (manchester-united)
+- Newcastle (newcastle-united)
+- Nottingham Forest (nottingham-forest)
+- Sunderland (sunderland)
+- Tottenham (tottenham-hotspur)
+- West Ham (west-ham-united)
+- Wolves (wolverhampton-wanderers)
+
+IMPORTANT
+- Some stadium/manager values may be missing or returned under slightly different naming. Use sensible fallbacks:
+  - If manager is missing from Wikidata for a club, do not overwrite an existing non-empty `teams.manager`.
+  - If stadium is missing from Wikidata for a club, do not overwrite an existing non-empty `teams.stadiumName`.
+- Create a small “manual override” object in code keyed by slug for any known exceptions we may need later. For now, keep it empty but wired in.
+
+IMPLEMENTATION DETAILS
+A) Create `server/team-metadata-sync.ts` (or similar) that:
+   1) Runs a SPARQL query against:
+      https://query.wikidata.org/sparql?format=json&query=...
+   2) The query should fetch clubs currently associated with the Premier League competition and return:
+      - club label (English)
+      - stadium label (English)
+      - coach/manager label (English)
+   3) Normalize and map results to our slugs using the display-name mapping above.
+      - Normalize comparison by lowercasing, stripping punctuation, trimming spaces.
+      - Ensure “Manchester City” maps to “Man City”, “Manchester United” -> “Man Utd”, “Wolverhampton Wanderers” -> “Wolves”, etc. Use our mapping list as the canonical key.
+
+B) Add a POST route handler in `server/routes.ts` (or your existing jobs router) similar to the FPL job:
+   - POST /api/jobs/sync-team-metadata
+   - Verify secret matches env var TEAM_SYNC_SECRET (create this env var).
+   - Call the sync function and return the results as JSON.
+
+C) Update DB rows:
+   - For each slug in the list above, ensure `teams.name` is set exactly to the display name from the list.
+   - Update `teams.manager` and `teams.stadiumName` if Wikidata provided values (and only overwrite empties unless we explicitly decide otherwise).
+   - Keep any other fields untouched.
+
+D) Add minimal logging and robust error handling:
+   - Collect per-team errors but continue processing.
+   - Return counts.
+
+E) Provide a short note in docs/ or BUILD_LOG.md describing:
+   - How to set TEAM_SYNC_SECRET
+   - How to trigger: curl example
+
+After implementing, run a quick sanity check by printing the updated rows (or add a small console log summary) so we can see which teams were updated and which were skipped.

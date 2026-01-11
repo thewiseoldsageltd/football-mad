@@ -5,6 +5,7 @@ import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema } from "@shared/schema";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
+import { syncTeamMetadata } from "./team-metadata-sync";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -559,6 +560,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     } catch (error) {
       console.error("[FPL Sync] Error:", error);
+      res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  // ========== TEAM METADATA SYNC (Wikidata) ==========
+  app.post("/api/jobs/sync-team-metadata", async (req, res) => {
+    try {
+      const syncSecret = req.headers["x-sync-secret"];
+      const expectedSecret = process.env.TEAM_SYNC_SECRET;
+      
+      if (!expectedSecret) {
+        console.warn("TEAM_SYNC_SECRET not configured");
+        return res.status(500).json({ error: "Sync not configured" });
+      }
+      
+      if (!syncSecret || syncSecret !== expectedSecret) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      console.log("[Team Metadata Sync] Starting sync from Wikidata...");
+      const result = await syncTeamMetadata();
+      
+      console.log(`[Team Metadata Sync] Complete: ${result.updated} updated, ${result.skipped} skipped, ${result.errors.length} errors`);
+      
+      if (result.errors.length > 0) {
+        console.warn("[Team Metadata Sync] Errors:", result.errors.slice(0, 5));
+      }
+      
+      res.json({ 
+        ok: true, 
+        updated: result.updated, 
+        skipped: result.skipped, 
+        errors: result.errors,
+        details: result.details,
+      });
+    } catch (error) {
+      console.error("[Team Metadata Sync] Error:", error);
       res.status(500).json({ error: "Sync failed" });
     }
   });
