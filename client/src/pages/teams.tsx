@@ -62,11 +62,13 @@ export default function TeamsPage() {
     },
   });
 
-  const filteredTeams = teams?.filter((team) => {
-    const matchesSearch = team.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCompetition = competition === "all" || team.league === competition;
-    return matchesSearch && matchesCompetition;
-  });
+  const filteredTeams = teams
+    ?.filter((team) => {
+      const matchesSearch = team.name.toLowerCase().includes(search.toLowerCase());
+      const matchesCompetition = competition === "all" || team.league === competition;
+      return matchesSearch && matchesCompetition;
+    })
+    .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
   const handleFollowToggle = (team: Team) => {
     if (!isAuthenticated) {

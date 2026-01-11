@@ -218,11 +218,11 @@ export async function syncTeamMetadata(): Promise<SyncTeamMetadataResult> {
       const updates: Partial<{ name: string; manager: string; stadiumName: string }> = {};
       const changes: string[] = [];
 
-      if (existingTeam.name !== displayName) {
+      if (!existingTeam.name || existingTeam.name.trim() === "") {
         const [conflictingTeam] = await db.select().from(teams).where(eq(teams.name, displayName));
         if (!conflictingTeam) {
           updates.name = displayName;
-          changes.push(`name: "${existingTeam.name}" -> "${displayName}"`);
+          changes.push(`name: "" -> "${displayName}"`);
         } else {
           console.log(`[team-metadata-sync] Skipping name update for ${slug}: "${displayName}" already exists on another team`);
         }
