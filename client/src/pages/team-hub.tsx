@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -323,77 +323,326 @@ function InjuriesTabContent({
   );
 }
 
+interface TransferSummary {
+  inCount: number;
+  outCount: number;
+  netSpendText: string;
+  lastUpdated: string | null;
+  windowLabel: string;
+}
+
+interface MockTransferRumour {
+  id: string;
+  playerName: string;
+  position?: string;
+  linkedClub: string;
+  direction: "in" | "out";
+  confidencePercent: number;
+  stage?: "Interest" | "Talks" | "Bid" | "Medical";
+  reliabilityTier: string;
+  sourceName: string;
+}
+
+const MOCK_TRANSFER_DATA: Record<string, { 
+  confirmedIn: Transfer[]; 
+  confirmedOut: Transfer[]; 
+  rumours: MockTransferRumour[];
+  summary: TransferSummary;
+}> = {
+  arsenal: {
+    confirmedIn: [],
+    confirmedOut: [],
+    rumours: [
+      {
+        id: "rumour-1",
+        playerName: "Viktor Gyokeres",
+        position: "Striker",
+        linkedClub: "Sporting CP",
+        direction: "in",
+        confidencePercent: 65,
+        stage: "Interest",
+        reliabilityTier: "B",
+        sourceName: "The Athletic",
+      },
+      {
+        id: "rumour-2",
+        playerName: "Nico Williams",
+        position: "Winger",
+        linkedClub: "Athletic Bilbao",
+        direction: "in",
+        confidencePercent: 40,
+        stage: "Interest",
+        reliabilityTier: "C",
+        sourceName: "AS",
+      },
+    ],
+    summary: {
+      inCount: 0,
+      outCount: 0,
+      netSpendText: "—",
+      lastUpdated: new Date().toISOString(),
+      windowLabel: "January Window",
+    },
+  },
+};
+
+function RumourCard({ rumour, teamName }: { rumour: MockTransferRumour; teamName: string }) {
+  const directionColors = {
+    in: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
+    out: "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30",
+  };
+  
+  const tierColors: Record<string, string> = {
+    A: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500",
+    B: "bg-gray-400/20 text-gray-600 dark:text-gray-300 border-gray-400",
+    C: "bg-amber-700/20 text-amber-700 dark:text-amber-500 border-amber-700",
+    D: "bg-gray-300/20 text-gray-500 dark:text-gray-400 border-gray-400",
+  };
+
+  return (
+    <Card className="hover-elevate bg-card/50" data-testid={`card-rumour-${rumour.id}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-lg truncate">{rumour.playerName}</h3>
+            {rumour.position && (
+              <p className="text-sm text-muted-foreground">{rumour.position}</p>
+            )}
+          </div>
+          <div className="flex flex-col items-end gap-2 flex-shrink-0">
+            <Badge 
+              variant="outline" 
+              className={directionColors[rumour.direction]}
+            >
+              {rumour.direction === "in" ? "Linked In" : "Linked Out"}
+            </Badge>
+            <Badge 
+              variant="outline" 
+              className={`text-xs ${tierColors[rumour.reliabilityTier] || tierColors.C}`}
+            >
+              Tier {rumour.reliabilityTier}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+          {rumour.direction === "in" ? (
+            <>
+              <span className="truncate">{rumour.linkedClub}</span>
+              <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="truncate">{teamName}</span>
+            </>
+          ) : (
+            <>
+              <span className="truncate">{teamName}</span>
+              <ArrowRight className="h-4 w-4 text-primary flex-shrink-0" />
+              <span className="truncate">{rumour.linkedClub}</span>
+            </>
+          )}
+        </div>
+
+        <div className="space-y-2 mb-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Confidence</span>
+            <span className="font-medium">{rumour.confidencePercent}%</span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-primary rounded-full transition-all"
+              style={{ width: `${rumour.confidencePercent}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          {rumour.stage && (
+            <Badge variant="secondary" className="text-xs">
+              {rumour.stage}
+            </Badge>
+          )}
+          <span className="text-xs text-muted-foreground">{rumour.sourceName}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TransfersSummaryBar({ summary }: { summary: TransferSummary }) {
+  return (
+    <Card className="mb-6">
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-6">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{summary.inCount}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide">In</div>
+            </div>
+            <Separator orientation="vertical" className="h-8" />
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-600">{summary.outCount}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide">Out</div>
+            </div>
+            <Separator orientation="vertical" className="h-8" />
+            <div className="text-center">
+              <div className="text-2xl font-bold">{summary.netSpendText}</div>
+              <div className="text-xs text-muted-foreground uppercase tracking-wide">Net</div>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-xs">
+            {summary.windowLabel}
+          </Badge>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function TransfersTabContent({ 
   transfers, 
   teamName,
-  teamId
+  teamId,
+  teamSlug
 }: { 
   transfers?: Transfer[];
   teamName: string;
   teamId: string;
+  teamSlug: string;
 }) {
-  const { rumours, confirmedIn, confirmedOut } = useMemo(() => {
-    if (!transfers) return { rumours: [], confirmedIn: [], confirmedOut: [] };
-    const confirmed = transfers.filter(t => t.status === "confirmed");
-    return {
-      rumours: transfers.filter(t => t.status === "rumour"),
-      confirmedIn: confirmed.filter(t => t.toTeamId === teamId),
-      confirmedOut: confirmed.filter(t => t.fromTeamId === teamId),
+  const mockData = MOCK_TRANSFER_DATA[teamSlug];
+  
+  const { rumours, confirmedIn, confirmedOut, summary } = useMemo(() => {
+    const confirmed = (transfers || []).filter(t => t.status === "confirmed");
+    const apiRumours = (transfers || []).filter(t => t.status === "rumour");
+    
+    const combinedIn = [
+      ...confirmed.filter(t => t.toTeamId === teamId),
+      ...(mockData?.confirmedIn || []),
+    ];
+    const combinedOut = [
+      ...confirmed.filter(t => t.fromTeamId === teamId),
+      ...(mockData?.confirmedOut || []),
+    ];
+    
+    const mockRumours = mockData?.rumours || [];
+    
+    const calculatedSummary: TransferSummary = mockData?.summary || {
+      inCount: combinedIn.length,
+      outCount: combinedOut.length,
+      netSpendText: "—",
+      lastUpdated: transfers?.[0]?.updatedAt?.toString() || null,
+      windowLabel: "January Window",
     };
-  }, [transfers, teamId]);
+    
+    return {
+      rumours: mockRumours,
+      apiRumours,
+      confirmedIn: combinedIn,
+      confirmedOut: combinedOut,
+      summary: {
+        ...calculatedSummary,
+        inCount: combinedIn.length,
+        outCount: combinedOut.length,
+      },
+    };
+  }, [transfers, teamId, mockData]);
 
-  if (!transfers || transfers.length === 0) {
-    return (
-      <EmptyState
-        icon={TrendingUp}
-        title="No transfer activity"
-        description={`No transfer rumours or confirmed deals for ${teamName} at the moment.`}
-      />
-    );
-  }
+  const hasActivity = confirmedIn.length > 0 || confirmedOut.length > 0 || rumours.length > 0;
+  const lastUpdatedFormatted = summary.lastUpdated 
+    ? new Date(summary.lastUpdated).toLocaleDateString("en-GB", { 
+        day: "numeric", 
+        month: "short", 
+        year: "numeric" 
+      })
+    : null;
 
   return (
-    <div className="space-y-8">
-      {rumours.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <Badge variant="secondary">Rumours</Badge>
-            <span className="text-sm text-muted-foreground font-normal">({rumours.length})</span>
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {rumours.map((transfer) => (
-              <TransferCard key={transfer.id} transfer={transfer} />
-            ))}
-          </div>
-        </section>
-      )}
+    <div className="space-y-6">
+      <header className="mb-2">
+        <div className="flex items-center gap-3 mb-2 flex-wrap">
+          <h2 className="text-2xl font-bold">Transfers</h2>
+          {hasActivity && (
+            <Badge variant="outline" className="text-xs">
+              {summary.windowLabel}
+            </Badge>
+          )}
+        </div>
+        <p className="text-muted-foreground">
+          Latest rumours and deals for {teamName}
+        </p>
+        {hasActivity && lastUpdatedFormatted && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Last updated: {lastUpdatedFormatted}
+          </p>
+        )}
+      </header>
 
-      {confirmedIn.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <Badge className="bg-green-600">Confirmed IN</Badge>
-            <span className="text-sm text-muted-foreground font-normal">({confirmedIn.length})</span>
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {confirmedIn.map((transfer) => (
-              <TransferCard key={transfer.id} transfer={transfer} />
-            ))}
-          </div>
-        </section>
-      )}
+      {hasActivity && <TransfersSummaryBar summary={summary} />}
 
-      {confirmedOut.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            <Badge className="bg-red-600">Confirmed OUT</Badge>
-            <span className="text-sm text-muted-foreground font-normal">({confirmedOut.length})</span>
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-4">
-            {confirmedOut.map((transfer) => (
-              <TransferCard key={transfer.id} transfer={transfer} />
-            ))}
-          </div>
-        </section>
+      {!hasActivity ? (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+              <TrendingUp className="h-8 w-8 text-muted-foreground" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2">No transfer activity</h3>
+            <p className="text-muted-foreground max-w-md mb-6">
+              No confirmed deals or strong rumours for {teamName} right now. Check back during the transfer window for updates.
+            </p>
+            <Button variant="outline" asChild data-testid="button-see-all-transfers">
+              <Link href="/transfers">
+                See all transfer news
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {(confirmedIn.length > 0 || confirmedOut.length > 0) && (
+            <section>
+              <h3 className="text-lg font-bold mb-4">Confirmed Deals</h3>
+              
+              {confirmedIn.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge className="bg-green-600">In</Badge>
+                    <span className="text-sm text-muted-foreground">({confirmedIn.length})</span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {confirmedIn.map((transfer) => (
+                      <TransferCard key={transfer.id} transfer={transfer} />
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {confirmedOut.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Badge className="bg-red-600">Out</Badge>
+                    <span className="text-sm text-muted-foreground">({confirmedOut.length})</span>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {confirmedOut.map((transfer) => (
+                      <TransferCard key={transfer.id} transfer={transfer} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {rumours.length > 0 && (
+            <section>
+              <h3 className="text-lg font-bold mb-4">Rumours & Links</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {rumours.map((rumour) => (
+                  <RumourCard key={rumour.id} rumour={rumour} teamName={teamName} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
@@ -1015,6 +1264,7 @@ export default function TeamHubPage() {
                 transfers={transfers} 
                 teamName={team.name}
                 teamId={team.id}
+                teamSlug={team.slug}
               />
             )}
 

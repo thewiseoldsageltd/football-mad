@@ -1,0 +1,137 @@
+TEAM HUB v2.2 — TRANSFERS TAB (FULL SPEC + IMPLEMENTATION)
+
+Context
+- We have Team Hub v2 working with tabs: Latest, Injuries, Transfers, Matches, Fans.
+- Injuries tab v2.1 now has a strong layout with left content + right sidebar cards.
+- Transfers tab currently shows a “No transfer activity” empty state.
+- We are NOT implementing ingestion yet; we will implement UI + local mocked data + clear types/interfaces.
+
+Goal
+- Build a premium “Transfers” tab experience that:
+  1) Works great with mocked data now
+  2) Is ready to connect to a feed later
+  3) Feels consistent with Football Mad design system (pills, cards, spacing, subtle shadows, green accents)
+
+Routes
+- Transfers tab URL: /teams/:teamSlug/transfers
+- Ensure clicking Transfers updates URL + active tab highlight.
+- Ensure navigating back to Latest returns to /teams/:teamSlug (no /latest).
+- Ensure scroll-to-top behavior on navigation is correct (already fixed for articles; ensure Team Hub respects it too).
+
+Layout (Desktop)
+- Keep the same overall layout as Injuries:
+  - Left: main transfers content (approx 8/12 columns)
+  - Right: sidebar stack (Follow card, Newsletter card, More from Team)
+- Maintain the same spacing, card radius, borders, shadows used in Injuries.
+
+Transfers Tab: Sections (Left Column)
+1) Header block (top of left content)
+- Title: “Transfers”
+- Subtitle: “Latest rumours and deals for {Team Name}”
+- If there is data: show a small “Window” pill (e.g. “January Window”) and a “Last updated” line.
+- If no data: show “No transfer activity right now” but still keep the tab page looking premium.
+
+2) Transfer Summary Bar (optional but recommended)
+- A compact horizontal bar with three stats:
+  - In: X
+  - Out: Y
+  - Net: £Z (or “Net: —” if unknown)
+- Use pills/badges or mini-cards inside one container.
+- This bar should render if any transfer items exist OR if mocked summary exists.
+
+3) Confirmed Deals (primary section)
+- Heading: “Confirmed Deals”
+- Two sub-tabs OR two rows (simple is fine):
+  - “In” list
+  - “Out” list
+- Each deal is a card with:
+  - Player name
+  - Position (optional)
+  - From/To club
+  - Fee (e.g. “£45m”, “Loan”, “Free”, “Undisclosed”)
+  - Date
+  - Status pill: “Confirmed”
+  - Source text (for now: “Source: Club / Reliable”)
+- Use consistent card styling with injuries cards.
+
+4) Rumours & Links (secondary section)
+- Heading: “Rumours & Links”
+- A list/grid of rumour cards with:
+  - Player name
+  - Linked club (the other club)
+  - Direction pill: “Linked In” / “Linked Out”
+  - Confidence meter (0–100) similar to injuries (simple bar)
+  - “Stage” pill: “Interest”, “Talks”, “Bid”, “Medical” (optional)
+  - Source label (e.g. “Tier 1”, “Tier 2”, “Tabloid” as placeholder)
+- Each rumour card should be slightly lighter than confirmed cards.
+
+5) Empty States (VERY IMPORTANT)
+If there are NO confirmed deals and NO rumours:
+- Show a premium empty state card (not a thin grey box):
+  - Icon
+  - Title: “No transfer activity”
+  - Text: “No confirmed deals or strong rumours for {Team Name} right now.”
+  - Optional CTA button: “See all transfer news” -> /transfers (global nav Transfers)
+- Keep spacing so page doesn’t look empty.
+
+Sidebar (Right Column)
+- Reuse the existing sidebar cards from Team Hub v2:
+  1) Follow {Team Name} card (auth gated)
+  2) {Newsletter Name} card (club-specific e.g. “Gunners Mad” not “ARS Newsletter”)
+  3) More from {Team Name} (list of 3–5 articles)
+- Ensure newsletter name is derived from team nickname mapping (simple mapping object for now).
+  - Example:
+    - arsenal -> Gunners Mad
+    - chelsea -> Blues Mad
+    - liverpool -> Reds Mad
+    - manchester-united -> Red Devils Mad
+  - If missing mapping, fallback: “{Team Name} Mad”
+
+Data Model (Mock now; ready for later)
+- Add a local mock object for transfers keyed by teamSlug:
+  - confirmedIn: []
+  - confirmedOut: []
+  - rumours: []
+  - summary: { inCount, outCount, netSpendText, lastUpdated, windowLabel }
+- Create TypeScript types/interfaces for:
+  - TransferDeal
+  - TransferRumour
+  - TransferSummary
+
+Component Structure (suggested)
+- client/src/pages/TeamHub/TeamTransfers.tsx (or wherever other tab components live)
+- TeamHub shell decides active tab from URL path (already done).
+- TeamTransfers renders:
+  - TransfersHeader
+  - TransfersSummaryBar
+  - ConfirmedDealsSection
+  - RumoursSection
+  - EmptyState (when needed)
+
+UX & Styling
+- Buttons should have subtle lift on hover (shadow + translateY -1px).
+- Pills consistent with article pills:
+  - Confirmed = green or dark
+  - Rumour = grey/amber
+  - Linked In/Out = blue/red (subtle)
+- Keep typography:
+  - Section headings bold
+  - Body text readable like Substack (good line-height)
+
+Acceptance Criteria
+- /teams/arsenal/transfers shows:
+  - Transfers title/subtitle
+  - Confirmed Deals section (can be empty)
+  - Rumours section (can be empty)
+  - Premium empty state if both empty
+  - Sidebar shows Follow + Newsletter (“Gunners Mad”) + More from Arsenal
+- URL updates correctly and Transfers tab highlight is correct.
+- Latest tab always returns to /teams/arsenal and highlights correctly.
+- No console errors.
+
+Implementation Notes
+- Do not build ingestion yet.
+- Keep mocks simple but realistic (2 rumours minimum for Arsenal, 0 confirmed by default).
+- Make sure content area width doesn’t look sparse; align to existing grid.
+
+Please implement this Transfers tab now.
