@@ -837,7 +837,7 @@ function TeamXIColumn({
   return (
     <div className={`flex flex-col h-full ${isRight ? "text-right" : ""}`}>
       {/* Team header - fixed */}
-      <div className={`flex items-center gap-2 mb-2 shrink-0 ${isRight ? "flex-row-reverse" : ""}`}>
+      <div className={`flex items-center gap-2 mb-3 shrink-0 ${isRight ? "flex-row-reverse" : ""}`}>
         <TeamCrest team={team} size="sm" />
         <div className={isRight ? "text-right" : ""}>
           <p className="font-semibold text-sm">{team.name}</p>
@@ -849,12 +849,12 @@ function TeamXIColumn({
         </div>
       </div>
       
-      {/* Starting XI list - tight spacing */}
-      <div className="flex-1 overflow-hidden space-y-1">
+      {/* Starting XI list - scrollable */}
+      <div className="flex-1 overflow-y-auto space-y-0.5">
         {lineup.startingXI.map((player, idx) => (
           <div 
             key={idx} 
-            className={`flex items-baseline gap-3 text-sm w-full ${isRight ? "justify-end" : ""}`}
+            className={`flex items-baseline gap-3 text-sm py-0.5 w-full ${isRight ? "justify-end" : ""}`}
           >
             {isRight ? (
               <>
@@ -879,10 +879,10 @@ function TeamXIColumn({
         ))}
       </div>
       
-      {/* Substitutes - pinned to bottom with minimal gap */}
+      {/* Substitutes - pinned footer */}
       {lineup.substitutes && lineup.substitutes.length > 0 && (
-        <div className={`mt-auto pt-2 border-t border-border/50 shrink-0 text-xs text-muted-foreground ${isRight ? "text-right" : ""}`}>
-          <p className="font-medium mb-0.5">Substitutes</p>
+        <div className={`mt-3 pt-3 border-t border-border/50 shrink-0 text-xs text-muted-foreground ${isRight ? "text-right" : ""}`}>
+          <p className="font-medium mb-1">Substitutes</p>
           <p className="leading-relaxed">
             {lineup.substitutes.map(s => s?.name || "TBC").join(", ")}
           </p>
@@ -907,15 +907,15 @@ function PredictedXI({ match }: { match: MatchData }) {
       <CardContent>
         {/* Desktop 3-column layout (>= lg): Home List | Full Pitch | Away List */}
         {/* Fixed height container - pitch scales DOWN to fit */}
-        <div className="hidden lg:grid lg:grid-cols-3 gap-3 h-[500px]">
-          {/* Home team column */}
+        <div className="hidden lg:grid lg:grid-cols-3 gap-6 h-[520px]">
+          {/* Home team column - h-full flex col with scrollable list */}
           <div className="h-full flex flex-col overflow-hidden">
             <TeamXIColumn team={match.homeTeam} lineup={homeXI} align="left" />
           </div>
           
-          {/* Pitch column - constrained, scales to fit */}
+          {/* Pitch column - constrained, pitch scales to fit */}
           <div className="h-full w-full overflow-hidden flex items-center justify-center">
-            <div className="h-[92%] aspect-[10/18] max-w-full">
+            <div className="h-full max-h-full aspect-[3/5] max-w-full">
               <FullPitchFormation
                 homeLineup={homeXI}
                 awayLineup={awayXI}
@@ -925,7 +925,7 @@ function PredictedXI({ match }: { match: MatchData }) {
             </div>
           </div>
           
-          {/* Away team column */}
+          {/* Away team column - h-full flex col with scrollable list */}
           <div className="h-full flex flex-col overflow-hidden">
             <TeamXIColumn team={match.awayTeam} lineup={awayXI} align="right" />
           </div>
