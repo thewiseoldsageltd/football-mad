@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { format } from "date-fns";
 import { 
-  Calendar, MapPin, ArrowLeft, Users, Trophy, 
-  Target, Activity, AlertCircle, TrendingUp, Zap
+  Calendar, MapPin, ArrowLeft, Users,
+  Target, Activity, AlertCircle, TrendingUp, Zap, ChevronDown, ChevronUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,9 +36,9 @@ interface MatchData {
 }
 
 interface KeyMoment {
-  minute: number;
-  type: "goal" | "red_card" | "yellow_card" | "penalty" | "var" | "substitution";
-  team: "home" | "away";
+  minute: number | "HT" | "FT";
+  type: "goal" | "red_card" | "yellow_card" | "penalty" | "var" | "substitution" | "halftime" | "fulltime";
+  team: "home" | "away" | "neutral";
   player: string;
   detail?: string;
 }
@@ -199,8 +199,9 @@ function generateKeyMoments(match: MatchData): KeyMoment[] {
   
   for (let i = 0; i < homeScore; i++) {
     const seed = match.id.length + i * 7;
+    const minute = 15 + (i * 25) + (seed % 10);
     moments.push({
-      minute: 15 + (i * 25) + (seed % 10),
+      minute: minute > 45 ? minute + 5 : minute,
       type: "goal",
       team: "home",
       player: homeScorers[i % homeScorers.length],
@@ -210,8 +211,9 @@ function generateKeyMoments(match: MatchData): KeyMoment[] {
   
   for (let i = 0; i < awayScore; i++) {
     const seed = match.id.length + i * 11;
+    const minute = 30 + (i * 20) + (seed % 8);
     moments.push({
-      minute: 30 + (i * 20) + (seed % 8),
+      minute: minute > 45 ? minute + 5 : minute,
       type: "goal",
       team: "away",
       player: awayScorers[i % awayScorers.length],
@@ -229,7 +231,62 @@ function generateKeyMoments(match: MatchData): KeyMoment[] {
     });
   }
   
-  return moments.sort((a, b) => a.minute - b.minute);
+  if (seed % 3 === 0) {
+    moments.push({
+      minute: 34,
+      type: "yellow_card",
+      team: "home",
+      player: "Jones",
+    });
+  }
+  
+  const sortedMoments = moments.sort((a, b) => {
+    const minA = typeof a.minute === "number" ? a.minute : 0;
+    const minB = typeof b.minute === "number" ? b.minute : 0;
+    return minA - minB;
+  });
+  
+  const firstHalfGoals = sortedMoments.filter(m => typeof m.minute === "number" && m.minute <= 45 && m.type === "goal");
+  const homeFirstHalf = firstHalfGoals.filter(m => m.team === "home").length;
+  const awayFirstHalf = firstHalfGoals.filter(m => m.team === "away").length;
+  
+  const withMarkers: KeyMoment[] = [];
+  let addedHT = false;
+  
+  for (const moment of sortedMoments) {
+    const min = typeof moment.minute === "number" ? moment.minute : 0;
+    if (!addedHT && min > 45) {
+      withMarkers.push({
+        minute: "HT",
+        type: "halftime",
+        team: "neutral",
+        player: "",
+        detail: `${homeFirstHalf} - ${awayFirstHalf}`,
+      });
+      addedHT = true;
+    }
+    withMarkers.push(moment);
+  }
+  
+  if (!addedHT) {
+    withMarkers.push({
+      minute: "HT",
+      type: "halftime",
+      team: "neutral",
+      player: "",
+      detail: `${homeFirstHalf} - ${awayFirstHalf}`,
+    });
+  }
+  
+  withMarkers.push({
+    minute: "FT",
+    type: "fulltime",
+    team: "neutral",
+    player: "",
+    detail: `${homeScore} - ${awayScore}`,
+  });
+  
+  return withMarkers;
 }
 
 function generateMatchStats(match: MatchData): MatchStats[] {
@@ -348,56 +405,54 @@ function MatchHeader({ match }: { match: MatchData }) {
   return (
     <div className="bg-card border-b" data-testid="match-header">
       <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="flex items-center gap-2 mb-4 flex-wrap justify-center">
+        <div className="flex items-center gap-2 mb-6 flex-wrap justify-center">
           <Badge variant="outline" data-testid="badge-competition">{match.competition}</Badge>
-          {match.matchweek && <Badge variant="secondary" data-testid="badge-matchweek">Matchweek {match.matchweek}</Badge>}
           {match.round && <Badge variant="secondary" data-testid="badge-round">{match.round}</Badge>}
           <StatusBadge match={match} />
         </div>
         
-        <div className="flex items-center justify-center gap-4 sm:gap-8">
+        <div className="flex items-center justify-center gap-6 sm:gap-10">
           <Link href={`/teams/${match.homeTeam.slug}`}>
-            <div className="text-center group cursor-pointer" data-testid="home-team-link">
-              <TeamCrest team={match.homeTeam} size="lg" />
-              <p className="font-semibold mt-2 text-sm sm:text-base group-hover:text-primary transition-colors">
+            <div className="flex flex-col items-center group cursor-pointer" data-testid="home-team-link">
+              <TeamCrest team={match.homeTeam} size="xl" />
+              <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center max-w-[100px] sm:max-w-none">
                 {match.homeTeam.name}
               </p>
             </div>
           </Link>
           
-          <div className="text-center min-w-[80px]">
+          <div className="flex items-center justify-center min-w-[80px] sm:min-w-[100px]">
             {isFinished ? (
-              <div className="text-3xl sm:text-4xl font-bold" data-testid="match-score">
-                {match.homeScore} - {match.awayScore}
+              <div className="text-4xl sm:text-5xl font-bold tabular-nums" data-testid="match-score">
+                {match.homeScore ?? 0} - {match.awayScore ?? 0}
               </div>
             ) : (
-              <>
-                <div className="text-2xl font-bold text-muted-foreground">vs</div>
-                <p className="text-lg font-semibold text-muted-foreground mt-1" data-testid="kickoff-time">
+              <div className="flex flex-col items-center">
+                <p className="text-2xl sm:text-3xl font-semibold text-muted-foreground" data-testid="kickoff-time">
                   {format(kickoff, "HH:mm")}
                 </p>
-              </>
+              </div>
             )}
           </div>
           
           <Link href={`/teams/${match.awayTeam.slug}`}>
-            <div className="text-center group cursor-pointer" data-testid="away-team-link">
-              <TeamCrest team={match.awayTeam} size="lg" />
-              <p className="font-semibold mt-2 text-sm sm:text-base group-hover:text-primary transition-colors">
+            <div className="flex flex-col items-center group cursor-pointer" data-testid="away-team-link">
+              <TeamCrest team={match.awayTeam} size="xl" />
+              <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center max-w-[100px] sm:max-w-none">
                 {match.awayTeam.name}
               </p>
             </div>
           </Link>
         </div>
         
-        <div className="flex items-center justify-center gap-4 sm:gap-6 mt-4 text-xs sm:text-sm text-muted-foreground flex-wrap">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3.5 w-3.5" />
-            {format(kickoff, "EEE d MMM yyyy")}
+        <div className="flex flex-col items-center gap-1.5 mt-6 text-sm text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            {format(kickoff, "EEEE d MMMM yyyy")}
           </span>
-          <span className="flex items-center gap-1">
-            <MapPin className="h-3.5 w-3.5" />
-            {match.venue}
+          <span className="flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            {match.venue || "TBD"}
           </span>
         </div>
       </div>
@@ -611,6 +666,11 @@ function HeadToHeadSection({ match }: { match: MatchData }) {
 
 function KeyMomentsTimeline({ match }: { match: MatchData }) {
   const moments = generateKeyMoments(match);
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const COLLAPSED_LIMIT = 6;
+  const shouldCollapse = moments.length > COLLAPSED_LIMIT;
+  const displayMoments = shouldCollapse && !isExpanded ? moments.slice(0, COLLAPSED_LIMIT) : moments;
   
   if (moments.length === 0) {
     return (
@@ -634,8 +694,46 @@ function KeyMomentsTimeline({ match }: { match: MatchData }) {
       case "red_card": return <div className="w-3 h-4 bg-red-600 rounded-sm" />;
       case "yellow_card": return <div className="w-3 h-4 bg-yellow-500 rounded-sm" />;
       case "penalty": return <Target className="h-4 w-4 text-green-600" />;
+      case "halftime":
+      case "fulltime": return null;
       default: return <Activity className="h-4 w-4" />;
     }
+  };
+  
+  const renderMoment = (moment: KeyMoment, idx: number) => {
+    if (moment.type === "halftime" || moment.type === "fulltime") {
+      return (
+        <div 
+          key={idx} 
+          className="flex items-center justify-center py-2 border-y border-border/50 my-2"
+        >
+          <Badge variant="secondary" className="font-bold">
+            {moment.minute} {moment.detail && `(${moment.detail})`}
+          </Badge>
+        </div>
+      );
+    }
+    
+    const isAway = moment.team === "away";
+    const minuteDisplay = typeof moment.minute === "number" ? `${moment.minute}'` : moment.minute;
+    
+    return (
+      <div 
+        key={idx} 
+        className={`flex items-center gap-3 ${isAway ? "flex-row-reverse text-right" : ""}`}
+      >
+        <div className={`flex items-center gap-2 shrink-0 ${isAway ? "flex-row-reverse" : ""}`}>
+          <span className="text-xs font-medium text-muted-foreground w-8 text-center">{minuteDisplay}</span>
+          {getIcon(moment.type)}
+        </div>
+        <div className="flex-1">
+          {moment.player && <span className="font-medium text-sm">{moment.player}</span>}
+          {moment.detail && (
+            <span className="text-xs text-muted-foreground ml-2">({moment.detail})</span>
+          )}
+        </div>
+      </div>
+    );
   };
   
   return (
@@ -648,24 +746,29 @@ function KeyMomentsTimeline({ match }: { match: MatchData }) {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {moments.map((moment, idx) => (
-            <div 
-              key={idx} 
-              className={`flex items-center gap-3 ${moment.team === "away" ? "flex-row-reverse text-right" : ""}`}
-            >
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs font-medium text-muted-foreground w-8">{moment.minute}'</span>
-                {getIcon(moment.type)}
-              </div>
-              <div className="flex-1">
-                <span className="font-medium text-sm">{moment.player}</span>
-                {moment.detail && (
-                  <span className="text-xs text-muted-foreground ml-2">({moment.detail})</span>
-                )}
-              </div>
-            </div>
-          ))}
+          {displayMoments.map((moment, idx) => renderMoment(moment, idx))}
         </div>
+        {shouldCollapse && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full mt-4"
+            onClick={() => setIsExpanded(!isExpanded)}
+            data-testid="button-toggle-moments"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="h-4 w-4 mr-2" />
+                Show Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4 mr-2" />
+                Show All ({moments.length} events)
+              </>
+            )}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
@@ -723,38 +826,6 @@ function MatchStatsSection({ match }: { match: MatchData }) {
             );
           })}
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function WhatThisMeans({ match }: { match: MatchData }) {
-  const homeScore = match.homeScore ?? 0;
-  const awayScore = match.awayScore ?? 0;
-  
-  let implication = "";
-  if (match.competition === "Premier League") {
-    if (homeScore > awayScore) {
-      implication = `A vital three points for ${match.homeTeam.name} keeps them firmly in the hunt for European places. ${match.awayTeam.name} will need to respond quickly to stay in touch with the top half.`;
-    } else if (awayScore > homeScore) {
-      implication = `${match.awayTeam.name} take all three points on the road, a massive result in their push for a top-four finish. Questions remain for ${match.homeTeam.name} after this home setback.`;
-    } else {
-      implication = `A point apiece means neither side can be truly satisfied. Both teams will feel this was an opportunity missed in a congested table.`;
-    }
-  } else {
-    implication = `${homeScore > awayScore ? match.homeTeam.name : match.awayTeam.name} progress to the next round of the ${match.competition}, keeping their cup dreams alive.`;
-  }
-  
-  return (
-    <Card data-testid="what-this-means">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Trophy className="h-4 w-4" />
-          What This Means
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{implication}</p>
       </CardContent>
     </Card>
   );
@@ -872,10 +943,8 @@ export default function MatchPage() {
           {isPostMatch && (
             <>
               <PostMatchSummary match={match} />
-              <KeyMomentsTimeline match={match} />
               <MatchStatsSection match={match} />
-              <WhatThisMeans match={match} />
-              <HeadToHeadSection match={match} />
+              <KeyMomentsTimeline match={match} />
             </>
           )}
         </div>
