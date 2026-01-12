@@ -582,8 +582,7 @@ function FullPitchFormation({
       className={`relative rounded-lg overflow-hidden ${className}`}
       style={{ 
         background: `linear-gradient(180deg, #2d5a27 0%, #1e4a1c 50%, #2d5a27 100%)`,
-        aspectRatio: "2/3",
-        minHeight: "100%"
+        aspectRatio: "3/5"
       }}
     >
       {/* Full pitch markings */}
@@ -837,9 +836,9 @@ function TeamXIColumn({
   const isRight = align === "right";
   
   return (
-    <div className={`flex flex-col h-full ${isRight ? "lg:pl-6 text-right" : ""}`}>
-      {/* Team header */}
-      <div className={`flex items-center gap-2 mb-3 ${isRight ? "flex-row-reverse" : ""}`}>
+    <div className={`flex flex-col h-full overflow-y-auto ${isRight ? "text-right" : ""}`}>
+      {/* Team header - sticky */}
+      <div className={`flex items-center gap-2 mb-3 sticky top-0 bg-card pb-2 ${isRight ? "flex-row-reverse" : ""}`}>
         <TeamCrest team={team} size="sm" />
         <div className={isRight ? "text-right" : ""}>
           <p className="font-semibold text-sm">{team.name}</p>
@@ -856,7 +855,7 @@ function TeamXIColumn({
         {lineup.startingXI.map((player, idx) => (
           <div 
             key={idx} 
-            className={`flex items-baseline gap-3 text-sm py-0.5 w-full ${isRight ? "justify-end" : ""}`}
+            className={`flex items-baseline gap-2 text-sm py-0.5 w-full ${isRight ? "justify-end" : ""}`}
           >
             {isRight ? (
               <>
@@ -869,7 +868,7 @@ function TeamXIColumn({
               </>
             ) : (
               <>
-                <span className="w-6 text-right tabular-nums text-xs text-muted-foreground font-medium shrink-0">
+                <span className="w-6 text-left tabular-nums text-xs text-muted-foreground font-medium shrink-0">
                   {player?.number ?? idx + 1}
                 </span>
                 <span className="truncate">
@@ -881,9 +880,9 @@ function TeamXIColumn({
         ))}
       </div>
       
-      {/* Substitutes */}
+      {/* Substitutes - compact footer */}
       {lineup.substitutes && lineup.substitutes.length > 0 && (
-        <div className={`mt-3 pt-2 border-t border-border/50 ${isRight ? "text-right" : ""}`}>
+        <div className={`mt-3 pt-2 border-t border-border/50 shrink-0 ${isRight ? "text-right" : ""}`}>
           <p className="text-[10px] font-medium text-muted-foreground mb-1">Substitutes</p>
           <p className="text-[10px] text-muted-foreground leading-relaxed">
             {lineup.substitutes.map(s => s?.name || "TBC").join(", ")}
@@ -908,30 +907,33 @@ function PredictedXI({ match }: { match: MatchData }) {
       </CardHeader>
       <CardContent>
         {/* Desktop 3-column layout (>= lg): Home List | Full Pitch | Away List */}
-        <div className="hidden lg:grid lg:grid-cols-[1fr_minmax(320px,400px)_1fr] gap-6 items-start">
-          {/* Home team column */}
-          <TeamXIColumn team={match.homeTeam} lineup={homeXI} align="left" />
-          
-          {/* Full pitch in center - larger and more prominent */}
-          <div className="flex justify-center">
-            <div className="w-full min-h-[480px]">
-              <FullPitchFormation
-                homeLineup={homeXI}
-                awayLineup={awayXI}
-                homeColor={match.homeTeam.primaryColor}
-                awayColor={match.awayTeam.primaryColor}
-                className="h-full"
-              />
-            </div>
+        {/* Fixed max height with scrollable list columns */}
+        <div className="hidden lg:grid lg:grid-cols-3 gap-4 max-h-[520px]">
+          {/* Home team column - scrollable */}
+          <div className="h-full overflow-hidden">
+            <TeamXIColumn team={match.homeTeam} lineup={homeXI} align="left" />
           </div>
           
-          {/* Away team column */}
-          <TeamXIColumn team={match.awayTeam} lineup={awayXI} align="right" />
+          {/* Pitch column - fills height, no scroll */}
+          <div className="h-full overflow-hidden flex items-center justify-center">
+            <FullPitchFormation
+              homeLineup={homeXI}
+              awayLineup={awayXI}
+              homeColor={match.homeTeam.primaryColor}
+              awayColor={match.awayTeam.primaryColor}
+              className="w-full h-full"
+            />
+          </div>
+          
+          {/* Away team column - scrollable */}
+          <div className="h-full overflow-hidden">
+            <TeamXIColumn team={match.awayTeam} lineup={awayXI} align="right" />
+          </div>
         </div>
         
-        {/* Mobile layout (< lg): Match sheet card + Pitch card stacked */}
+        {/* Mobile layout (< lg): Combined XI card + Pitch below */}
         <div className="lg:hidden space-y-4">
-          {/* Combined match sheet card */}
+          {/* Combined match sheet card - side by side */}
           <div className="grid grid-cols-2 gap-4">
             {/* Home team mini-column */}
             <div>
@@ -946,8 +948,8 @@ function PredictedXI({ match }: { match: MatchData }) {
               </div>
               <div className="space-y-0.5">
                 {homeXI.startingXI.map((player, idx) => (
-                  <div key={idx} className="flex items-center gap-1 text-xs py-0.5">
-                    <span className="w-4 text-[10px] text-muted-foreground font-medium text-right">
+                  <div key={idx} className="flex items-baseline gap-1 text-xs py-0.5">
+                    <span className="w-5 text-left tabular-nums text-[10px] text-muted-foreground font-medium shrink-0">
                       {player?.number ?? idx + 1}
                     </span>
                     <span className="truncate">{player?.name || "TBC"}</span>
@@ -965,28 +967,30 @@ function PredictedXI({ match }: { match: MatchData }) {
             </div>
             
             {/* Away team mini-column */}
-            <div>
+            <div className="text-right">
               <div className="flex items-center gap-2 mb-2 flex-row-reverse">
                 <TeamCrest team={match.awayTeam} size="sm" />
                 <div className="text-right">
                   <p className="font-semibold text-xs">{match.awayTeam.shortName}</p>
-                  <Badge variant="secondary" className="text-[9px] px-1">
-                    {awayXI.formation}
-                  </Badge>
+                  <div className="flex justify-end">
+                    <Badge variant="secondary" className="text-[9px] px-1">
+                      {awayXI.formation}
+                    </Badge>
+                  </div>
                 </div>
               </div>
               <div className="space-y-0.5">
                 {awayXI.startingXI.map((player, idx) => (
-                  <div key={idx} className="flex items-center gap-1 text-xs py-0.5 flex-row-reverse">
-                    <span className="w-4 text-[10px] text-muted-foreground font-medium text-left">
+                  <div key={idx} className="flex items-baseline gap-1 text-xs py-0.5 justify-end">
+                    <span className="truncate">{player?.name || "TBC"}</span>
+                    <span className="w-5 text-right tabular-nums text-[10px] text-muted-foreground font-medium shrink-0">
                       {player?.number ?? idx + 1}
                     </span>
-                    <span className="truncate text-right flex-1">{player?.name || "TBC"}</span>
                   </div>
                 ))}
               </div>
               {awayXI.substitutes && awayXI.substitutes.length > 0 && (
-                <div className="mt-2 pt-1.5 border-t border-border/50 text-right">
+                <div className="mt-2 pt-1.5 border-t border-border/50">
                   <p className="text-[9px] font-medium text-muted-foreground mb-0.5">Subs</p>
                   <p className="text-[9px] text-muted-foreground leading-relaxed">
                     {awayXI.substitutes.map(s => s?.name || "TBC").join(", ")}
@@ -996,14 +1000,16 @@ function PredictedXI({ match }: { match: MatchData }) {
             </div>
           </div>
           
-          {/* Pitch card below */}
-          <FullPitchFormation
-            homeLineup={homeXI}
-            awayLineup={awayXI}
-            homeColor={match.homeTeam.primaryColor}
-            awayColor={match.awayTeam.primaryColor}
-            className="w-full"
-          />
+          {/* Pitch below with fixed height */}
+          <div className="h-[420px]">
+            <FullPitchFormation
+              homeLineup={homeXI}
+              awayLineup={awayXI}
+              homeColor={match.homeTeam.primaryColor}
+              awayColor={match.awayTeam.primaryColor}
+              className="w-full h-full"
+            />
+          </div>
         </div>
       </CardContent>
     </Card>

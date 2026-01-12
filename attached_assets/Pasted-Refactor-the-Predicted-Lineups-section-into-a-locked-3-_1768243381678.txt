@@ -1,0 +1,63 @@
+Refactor the Predicted Lineups section into a “locked” 3-column layout where the pitch can’t grow and break the card’s compactness.
+
+Layout requirements
+
+Make the whole Predicted Lineups card a 3-column grid on desktop:
+
+[Home XI list] [Pitch] [Away XI list]
+
+Each column must be equal height and sit within the same card.
+
+The middle pitch must be constrained to the card height (no growing taller than the lists).
+
+Set a single max height for the module (e.g. max-h-[520px] on desktop, responsive) and make only the lists scroll internally if content exceeds height:
+
+Home list column: overflow-y-auto
+
+Away list column: overflow-y-auto
+
+Pitch column: h-full and overflow-hidden (no scroll)
+
+Pitch sizing:
+
+Pitch should fill the middle column: w-full h-full
+
+Use object-contain / aspect-[3/5] (portrait) so it scales to fit without distortion.
+
+Ensure the pitch does NOT push substitutes down; it must stay inside the fixed-height module.
+
+List styling requirements (visual boundaries)
+
+Home XI list (left column):
+
+Left aligned text
+
+Shirt numbers form the left visual boundary: number first, then player name.
+
+Use tabular-nums and a fixed width for numbers (w-6 text-left tabular-nums).
+
+Away XI list (right column):
+
+Right aligned text
+
+Shirt numbers form the right visual boundary: player name first, then number on the far right.
+
+Use tabular-nums and a fixed width for numbers (w-6 text-right tabular-nums).
+
+Substitutes placement
+
+Keep substitutes visible but compact:
+
+Place substitutes as a small footer area inside each list column (below XI) but still within the same fixed-height column.
+
+If needed, make the whole list column scroll (XI + subs together) so the card height stays fixed.
+
+Responsive (mobile)
+
+Mobile layout:
+
+First row: a single “combined” card with [Home XI | Away XI] side by side (two columns).
+
+Second row: Pitch view below (w-full) with a reasonable fixed height (e.g. h-[420px]) and object-contain.
+
+Ensure the pitch rendering still strictly separates home players (top half) and away players (bottom half), and avoid any team mixing.
