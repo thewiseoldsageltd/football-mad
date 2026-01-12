@@ -482,6 +482,193 @@ function generatePredictedXI(team: MatchTeam): LineupData {
   return { formation, ...lineup };
 }
 
+type FormationSlot = {
+  id: string;
+  role: string;
+  home: { x: number; y: number };
+  away: { x: number; y: number };
+};
+
+const formationTemplates: Record<string, FormationSlot[]> = {
+  "4-3-3": [
+    { id: "GK", role: "GK", home: { x: 50, y: 8 }, away: { x: 50, y: 92 } },
+    { id: "LB", role: "DEF", home: { x: 15, y: 24 }, away: { x: 85, y: 76 } },
+    { id: "LCB", role: "DEF", home: { x: 35, y: 24 }, away: { x: 65, y: 76 } },
+    { id: "RCB", role: "DEF", home: { x: 65, y: 24 }, away: { x: 35, y: 76 } },
+    { id: "RB", role: "DEF", home: { x: 85, y: 24 }, away: { x: 15, y: 76 } },
+    { id: "LCM", role: "MID", home: { x: 25, y: 42 }, away: { x: 75, y: 58 } },
+    { id: "CM", role: "MID", home: { x: 50, y: 38 }, away: { x: 50, y: 62 } },
+    { id: "RCM", role: "MID", home: { x: 75, y: 42 }, away: { x: 25, y: 58 } },
+    { id: "LW", role: "FWD", home: { x: 20, y: 58 }, away: { x: 80, y: 42 } },
+    { id: "ST", role: "FWD", home: { x: 50, y: 62 }, away: { x: 50, y: 38 } },
+    { id: "RW", role: "FWD", home: { x: 80, y: 58 }, away: { x: 20, y: 42 } },
+  ],
+  "4-2-3-1": [
+    { id: "GK", role: "GK", home: { x: 50, y: 8 }, away: { x: 50, y: 92 } },
+    { id: "LB", role: "DEF", home: { x: 15, y: 22 }, away: { x: 85, y: 78 } },
+    { id: "LCB", role: "DEF", home: { x: 35, y: 22 }, away: { x: 65, y: 78 } },
+    { id: "RCB", role: "DEF", home: { x: 65, y: 22 }, away: { x: 35, y: 78 } },
+    { id: "RB", role: "DEF", home: { x: 85, y: 22 }, away: { x: 15, y: 78 } },
+    { id: "LDM", role: "MID", home: { x: 35, y: 34 }, away: { x: 65, y: 66 } },
+    { id: "RDM", role: "MID", home: { x: 65, y: 34 }, away: { x: 35, y: 66 } },
+    { id: "LAM", role: "MID", home: { x: 20, y: 48 }, away: { x: 80, y: 52 } },
+    { id: "CAM", role: "MID", home: { x: 50, y: 46 }, away: { x: 50, y: 54 } },
+    { id: "RAM", role: "MID", home: { x: 80, y: 48 }, away: { x: 20, y: 52 } },
+    { id: "ST", role: "FWD", home: { x: 50, y: 62 }, away: { x: 50, y: 38 } },
+  ],
+  "3-5-2": [
+    { id: "GK", role: "GK", home: { x: 50, y: 8 }, away: { x: 50, y: 92 } },
+    { id: "LCB", role: "DEF", home: { x: 25, y: 22 }, away: { x: 75, y: 78 } },
+    { id: "CB", role: "DEF", home: { x: 50, y: 22 }, away: { x: 50, y: 78 } },
+    { id: "RCB", role: "DEF", home: { x: 75, y: 22 }, away: { x: 25, y: 78 } },
+    { id: "LWB", role: "MID", home: { x: 10, y: 38 }, away: { x: 90, y: 62 } },
+    { id: "LCM", role: "MID", home: { x: 30, y: 42 }, away: { x: 70, y: 58 } },
+    { id: "CM", role: "MID", home: { x: 50, y: 38 }, away: { x: 50, y: 62 } },
+    { id: "RCM", role: "MID", home: { x: 70, y: 42 }, away: { x: 30, y: 58 } },
+    { id: "RWB", role: "MID", home: { x: 90, y: 38 }, away: { x: 10, y: 62 } },
+    { id: "LST", role: "FWD", home: { x: 35, y: 58 }, away: { x: 65, y: 42 } },
+    { id: "RST", role: "FWD", home: { x: 65, y: 58 }, away: { x: 35, y: 42 } },
+  ],
+  "4-4-2": [
+    { id: "GK", role: "GK", home: { x: 50, y: 8 }, away: { x: 50, y: 92 } },
+    { id: "LB", role: "DEF", home: { x: 15, y: 24 }, away: { x: 85, y: 76 } },
+    { id: "LCB", role: "DEF", home: { x: 35, y: 24 }, away: { x: 65, y: 76 } },
+    { id: "RCB", role: "DEF", home: { x: 65, y: 24 }, away: { x: 35, y: 76 } },
+    { id: "RB", role: "DEF", home: { x: 85, y: 24 }, away: { x: 15, y: 76 } },
+    { id: "LM", role: "MID", home: { x: 15, y: 42 }, away: { x: 85, y: 58 } },
+    { id: "LCM", role: "MID", home: { x: 35, y: 42 }, away: { x: 65, y: 58 } },
+    { id: "RCM", role: "MID", home: { x: 65, y: 42 }, away: { x: 35, y: 58 } },
+    { id: "RM", role: "MID", home: { x: 85, y: 42 }, away: { x: 15, y: 58 } },
+    { id: "LST", role: "FWD", home: { x: 35, y: 58 }, away: { x: 65, y: 42 } },
+    { id: "RST", role: "FWD", home: { x: 65, y: 58 }, away: { x: 35, y: 42 } },
+  ],
+  "3-4-3": [
+    { id: "GK", role: "GK", home: { x: 50, y: 8 }, away: { x: 50, y: 92 } },
+    { id: "LCB", role: "DEF", home: { x: 25, y: 22 }, away: { x: 75, y: 78 } },
+    { id: "CB", role: "DEF", home: { x: 50, y: 22 }, away: { x: 50, y: 78 } },
+    { id: "RCB", role: "DEF", home: { x: 75, y: 22 }, away: { x: 25, y: 78 } },
+    { id: "LM", role: "MID", home: { x: 15, y: 40 }, away: { x: 85, y: 60 } },
+    { id: "LCM", role: "MID", home: { x: 35, y: 40 }, away: { x: 65, y: 60 } },
+    { id: "RCM", role: "MID", home: { x: 65, y: 40 }, away: { x: 35, y: 60 } },
+    { id: "RM", role: "MID", home: { x: 85, y: 40 }, away: { x: 15, y: 60 } },
+    { id: "LW", role: "FWD", home: { x: 20, y: 58 }, away: { x: 80, y: 42 } },
+    { id: "ST", role: "FWD", home: { x: 50, y: 62 }, away: { x: 50, y: 38 } },
+    { id: "RW", role: "FWD", home: { x: 80, y: 58 }, away: { x: 20, y: 42 } },
+  ],
+};
+
+function getFormationTemplate(formation: string): FormationSlot[] {
+  return formationTemplates[formation] || formationTemplates["4-3-3"];
+}
+
+const positionNormalization: Record<string, { slotId: string; role: string }> = {
+  "GK": { slotId: "GK", role: "GK" },
+  "RB": { slotId: "RB", role: "DEF" },
+  "LB": { slotId: "LB", role: "DEF" },
+  "CB": { slotId: "CB", role: "DEF" },
+  "RCB": { slotId: "RCB", role: "DEF" },
+  "LCB": { slotId: "LCB", role: "DEF" },
+  "RWB": { slotId: "RWB", role: "DEF" },
+  "LWB": { slotId: "LWB", role: "DEF" },
+  "DEF": { slotId: "CB", role: "DEF" },
+  "CM": { slotId: "CM", role: "MID" },
+  "CDM": { slotId: "CM", role: "MID" },
+  "CAM": { slotId: "CAM", role: "MID" },
+  "DM": { slotId: "CM", role: "MID" },
+  "AM": { slotId: "CAM", role: "MID" },
+  "LM": { slotId: "LM", role: "MID" },
+  "RM": { slotId: "RM", role: "MID" },
+  "LCM": { slotId: "LCM", role: "MID" },
+  "RCM": { slotId: "RCM", role: "MID" },
+  "MID": { slotId: "CM", role: "MID" },
+  "ST": { slotId: "ST", role: "FWD" },
+  "CF": { slotId: "ST", role: "FWD" },
+  "LW": { slotId: "LW", role: "FWD" },
+  "RW": { slotId: "RW", role: "FWD" },
+  "LST": { slotId: "LST", role: "FWD" },
+  "RST": { slotId: "RST", role: "FWD" },
+  "FWD": { slotId: "ST", role: "FWD" },
+  "ATT": { slotId: "ST", role: "FWD" },
+};
+
+function normalizePlayerPosition(pos: string | undefined): { slotId: string; role: string } {
+  if (!pos) return { slotId: "CM", role: "MID" };
+  const norm = positionNormalization[pos.toUpperCase()];
+  return norm || { slotId: "CM", role: "MID" };
+}
+
+function assignPlayersToSlots(
+  lineup: LineupData,
+  isHome: boolean
+): { player: LineupPlayer | null; slotId: string; x: number; y: number }[] {
+  const template = getFormationTemplate(lineup.formation);
+  const players = [...lineup.startingXI];
+  const assigned: { player: LineupPlayer | null; slotId: string; x: number; y: number }[] = [];
+  const usedPlayers = new Set<number>();
+  
+  template.forEach((slot) => {
+    const coords = isHome ? slot.home : slot.away;
+    
+    let bestPlayer: LineupPlayer | null = null;
+    let bestIdx = -1;
+    
+    for (let i = 0; i < players.length; i++) {
+      if (usedPlayers.has(i)) continue;
+      const p = players[i];
+      if (!p) continue;
+      
+      const { slotId: playerSlotId } = normalizePlayerPosition(p.position);
+      
+      if (slot.id === playerSlotId) {
+        bestPlayer = p;
+        bestIdx = i;
+        break;
+      }
+    }
+    
+    if (!bestPlayer) {
+      for (let i = 0; i < players.length; i++) {
+        if (usedPlayers.has(i)) continue;
+        const p = players[i];
+        if (!p) continue;
+        
+        const { role: playerRole } = normalizePlayerPosition(p.position);
+        
+        if (slot.role === playerRole) {
+          bestPlayer = p;
+          bestIdx = i;
+          break;
+        }
+      }
+    }
+    
+    if (!bestPlayer) {
+      for (let i = 0; i < players.length; i++) {
+        if (usedPlayers.has(i)) continue;
+        const p = players[i];
+        if (p) {
+          bestPlayer = p;
+          bestIdx = i;
+          break;
+        }
+      }
+    }
+    
+    if (bestIdx >= 0) {
+      usedPlayers.add(bestIdx);
+    }
+    
+    assigned.push({
+      player: bestPlayer,
+      slotId: slot.id,
+      x: coords.x,
+      y: coords.y,
+    });
+  });
+  
+  return assigned;
+}
+
 function getFormationRows(formation: string): number[] {
   const formationMap: Record<string, number[]> = {
     "4-3-3": [1, 4, 3, 3],
@@ -561,6 +748,140 @@ function getTeamPositions(
   return positions;
 }
 
+function BroadcastPlayerMarker({ 
+  player, 
+  teamColor, 
+  x, 
+  y,
+  headshot
+}: { 
+  player: { name: string; number: number | null; position?: string } | null | undefined;
+  teamColor: string;
+  x: number;
+  y: number;
+  headshot?: string;
+}) {
+  const lastName = player?.name?.split(" ").pop() || "TBC";
+  const number = player?.number ?? 0;
+  const hasHeadshot = !!headshot;
+  
+  return (
+    <div 
+      className="absolute flex flex-col items-center"
+      style={{
+        left: `${x}%`,
+        top: `${y}%`,
+        transform: "translate(-50%, -50%)"
+      }}
+    >
+      {/* Headshot circle or fallback with team color + number */}
+      <div className="relative">
+        {hasHeadshot ? (
+          <img 
+            src={headshot} 
+            alt={lastName}
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover shadow-lg border-2 border-white/50"
+          />
+        ) : (
+          <div 
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shadow-lg border-2 border-white/50 text-white text-xs sm:text-sm font-bold"
+            style={{ backgroundColor: teamColor }}
+          >
+            {number || "?"}
+          </div>
+        )}
+        {/* Number pill - positioned at bottom-right (only if headshot exists) */}
+        {hasHeadshot && (
+          <div className="absolute -bottom-0.5 -right-0.5 bg-gray-900/90 text-white text-[8px] sm:text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center shadow-md">
+            {number}
+          </div>
+        )}
+      </div>
+      {/* Player name label */}
+      <div className="mt-1 bg-gray-900/85 text-white text-[8px] sm:text-[9px] font-medium px-2 py-0.5 rounded-md shadow-md max-w-[60px] sm:max-w-[70px] truncate text-center">
+        {lastName}
+      </div>
+    </div>
+  );
+}
+
+function BroadcastPitch({ 
+  homeLineup, 
+  awayLineup,
+  homeColor,
+  awayColor,
+  className = ""
+}: { 
+  homeLineup: LineupData; 
+  awayLineup: LineupData;
+  homeColor: string;
+  awayColor: string;
+  className?: string;
+}) {
+  const homeSlots = assignPlayersToSlots(homeLineup, true);
+  const awaySlots = assignPlayersToSlots(awayLineup, false);
+  
+  return (
+    <div 
+      className={`relative rounded-lg overflow-hidden ${className}`}
+      style={{ 
+        background: `linear-gradient(180deg, #2d5a27 0%, #1e4a1c 50%, #2d5a27 100%)`
+      }}
+    >
+      {/* Professional pitch markings */}
+      <svg 
+        className="absolute inset-0 w-full h-full" 
+        viewBox="0 0 100 100" 
+        preserveAspectRatio="none"
+        style={{ opacity: 0.4 }}
+      >
+        {/* Pitch outline */}
+        <rect x="2" y="2" width="96" height="96" fill="none" stroke="white" strokeWidth="0.3" />
+        
+        {/* Top half (Home goal at top) */}
+        <rect x="25" y="2" width="50" height="14" fill="none" stroke="white" strokeWidth="0.3" />
+        <rect x="37" y="2" width="26" height="5" fill="none" stroke="white" strokeWidth="0.3" />
+        <circle cx="50" cy="10" r="0.5" fill="white" />
+        <path d="M 37 16 A 8 8 0 0 0 63 16" fill="none" stroke="white" strokeWidth="0.3" />
+        
+        {/* Halfway line and centre circle */}
+        <line x1="2" y1="50" x2="98" y2="50" stroke="white" strokeWidth="0.3" />
+        <circle cx="50" cy="50" r="8" fill="none" stroke="white" strokeWidth="0.3" />
+        <circle cx="50" cy="50" r="0.4" fill="white" />
+        
+        {/* Bottom half (Away goal at bottom) */}
+        <rect x="25" y="84" width="50" height="14" fill="none" stroke="white" strokeWidth="0.3" />
+        <rect x="37" y="93" width="26" height="5" fill="none" stroke="white" strokeWidth="0.3" />
+        <circle cx="50" cy="90" r="0.5" fill="white" />
+        <path d="M 37 84 A 8 8 0 0 1 63 84" fill="none" stroke="white" strokeWidth="0.3" />
+      </svg>
+      
+      {/* Player markers - broadcast style with role-based positioning */}
+      <div className="absolute inset-0">
+        {homeSlots.map((slot, idx) => (
+          <BroadcastPlayerMarker
+            key={`home-${slot.slotId}-${idx}`}
+            player={slot.player}
+            teamColor={homeColor}
+            x={slot.x}
+            y={slot.y}
+          />
+        ))}
+        
+        {awaySlots.map((slot, idx) => (
+          <BroadcastPlayerMarker
+            key={`away-${slot.slotId}-${idx}`}
+            player={slot.player}
+            teamColor={awayColor}
+            x={slot.x}
+            y={slot.y}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FullPitchFormation({ 
   homeLineup, 
   awayLineup,
@@ -574,102 +895,14 @@ function FullPitchFormation({
   awayColor: string;
   className?: string;
 }) {
-  const homePositions = getTeamPositions(homeLineup, true);
-  const awayPositions = getTeamPositions(awayLineup, false);
-  
   return (
-    <div 
-      className={`relative rounded-lg overflow-hidden w-full h-full ${className}`}
-      style={{ 
-        background: `linear-gradient(180deg, #2d5a27 0%, #1e4a1c 50%, #2d5a27 100%)`
-      }}
-    >
-      {/* Full pitch markings */}
-      <svg 
-        className="absolute inset-0 w-full h-full" 
-        viewBox="0 0 100 150" 
-        preserveAspectRatio="none"
-        style={{ opacity: 0.35 }}
-      >
-        {/* Pitch outline */}
-        <rect x="0" y="0" width="100" height="150" fill="none" stroke="white" strokeWidth="0.5" />
-        
-        {/* Top half (Home goal at top) */}
-        {/* Penalty box */}
-        <rect x="20" y="0" width="60" height="18" fill="none" stroke="white" strokeWidth="0.5" />
-        {/* 6-yard box */}
-        <rect x="35" y="0" width="30" height="7" fill="none" stroke="white" strokeWidth="0.5" />
-        {/* Penalty spot */}
-        <circle cx="50" cy="12" r="0.8" fill="white" />
-        {/* Penalty arc (D) */}
-        <path d="M 35 18 A 10 10 0 0 0 65 18" fill="none" stroke="white" strokeWidth="0.5" />
-        
-        {/* Halfway line */}
-        <line x1="0" y1="75" x2="100" y2="75" stroke="white" strokeWidth="0.5" />
-        {/* Centre circle */}
-        <circle cx="50" cy="75" r="10" fill="none" stroke="white" strokeWidth="0.5" />
-        {/* Centre spot */}
-        <circle cx="50" cy="75" r="0.6" fill="white" />
-        
-        {/* Bottom half (Away goal at bottom) */}
-        {/* Penalty box */}
-        <rect x="20" y="132" width="60" height="18" fill="none" stroke="white" strokeWidth="0.5" />
-        {/* 6-yard box */}
-        <rect x="35" y="143" width="30" height="7" fill="none" stroke="white" strokeWidth="0.5" />
-        {/* Penalty spot */}
-        <circle cx="50" cy="138" r="0.8" fill="white" />
-        {/* Penalty arc (D) */}
-        <path d="M 35 132 A 10 10 0 0 1 65 132" fill="none" stroke="white" strokeWidth="0.5" />
-      </svg>
-      
-      {/* Player markers - both teams use direct Y percentages */}
-      <div className="absolute inset-0">
-        {homePositions.map((positioned, idx) => (
-          <div 
-            key={`home-${idx}`}
-            className="absolute flex flex-col items-center gap-0.5"
-            style={{
-              left: `${positioned.x}%`,
-              top: `${positioned.y}%`,
-              transform: "translate(-50%, -50%)"
-            }}
-          >
-            <div 
-              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold shadow-md border-2 border-white/40"
-              style={{ backgroundColor: homeColor, color: "white" }}
-            >
-              {positioned.player?.number ?? getPlayerInitials(positioned.player?.name || "TBC")}
-            </div>
-            <span className="text-[7px] sm:text-[8px] text-white font-medium text-center max-w-[40px] sm:max-w-[50px] truncate drop-shadow-md whitespace-nowrap">
-              {positioned.player?.name?.split(" ").pop() || "TBC"}
-            </span>
-          </div>
-        ))}
-        
-        {/* Away team (bottom half) */}
-        {awayPositions.map((positioned, idx) => (
-          <div 
-            key={`away-${idx}`}
-            className="absolute flex flex-col items-center gap-0.5"
-            style={{
-              left: `${positioned.x}%`,
-              top: `${positioned.y}%`,
-              transform: "translate(-50%, -50%)"
-            }}
-          >
-            <div 
-              className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold shadow-md border-2 border-white/40"
-              style={{ backgroundColor: awayColor, color: "white" }}
-            >
-              {positioned.player?.number ?? getPlayerInitials(positioned.player?.name || "TBC")}
-            </div>
-            <span className="text-[7px] sm:text-[8px] text-white font-medium text-center max-w-[40px] sm:max-w-[50px] truncate drop-shadow-md whitespace-nowrap">
-              {positioned.player?.name?.split(" ").pop() || "TBC"}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <BroadcastPitch
+      homeLineup={homeLineup}
+      awayLineup={awayLineup}
+      homeColor={homeColor}
+      awayColor={awayColor}
+      className={className}
+    />
   );
 }
 
@@ -906,33 +1139,35 @@ function PredictedXI({ match }: { match: MatchData }) {
       </CardHeader>
       <CardContent>
         {/* Desktop 3-column layout (>= lg): Home List | Full Pitch | Away List */}
-        {/* Lists define height; pitch fills full grid row */}
-        <div className="hidden lg:grid lg:grid-cols-3 gap-4 items-start">
-          {/* Home team column - natural height */}
-          <div>
+        {/* Pitch drives section height; lists scroll within bounds */}
+        <div className="hidden lg:grid lg:grid-cols-[minmax(140px,180px)_minmax(0,1fr)_minmax(140px,180px)] gap-4 items-start">
+          {/* Home team column - scrollable within max height */}
+          <div className="max-h-[520px] overflow-y-auto">
             <TeamXIColumn team={match.homeTeam} lineup={homeXI} align="left" />
           </div>
           
-          {/* Pitch column - fills full row height */}
-          <div className="row-span-1 self-stretch">
-            <FullPitchFormation
-              homeLineup={homeXI}
-              awayLineup={awayXI}
-              homeColor={match.homeTeam.primaryColor}
-              awayColor={match.awayTeam.primaryColor}
-              className="w-full h-full"
-            />
+          {/* Pitch column - drives section height via aspect ratio */}
+          <div className="flex items-center justify-center">
+            <div className="w-full max-w-[300px] aspect-[3/5]">
+              <BroadcastPitch
+                homeLineup={homeXI}
+                awayLineup={awayXI}
+                homeColor={match.homeTeam.primaryColor}
+                awayColor={match.awayTeam.primaryColor}
+                className="w-full h-full"
+              />
+            </div>
           </div>
           
-          {/* Away team column - natural height */}
-          <div>
+          {/* Away team column - scrollable within max height */}
+          <div className="max-h-[520px] overflow-y-auto">
             <TeamXIColumn team={match.awayTeam} lineup={awayXI} align="right" />
           </div>
         </div>
         
-        {/* Mobile layout (< lg): Combined XI card + Pitch below */}
+        {/* Mobile layout (< lg): XI lists side-by-side above pitch */}
         <div className="lg:hidden space-y-4">
-          {/* Combined match sheet card - side by side */}
+          {/* Combined match sheet - side by side */}
           <div className="grid grid-cols-2 gap-4">
             {/* Home team mini-column */}
             <div>
@@ -999,14 +1234,15 @@ function PredictedXI({ match }: { match: MatchData }) {
             </div>
           </div>
           
-          {/* Pitch below with fixed height */}
-          <div className="h-[420px] overflow-hidden flex justify-center">
-            <div className="h-full max-h-full aspect-[3/5] max-w-full">
-              <FullPitchFormation
+          {/* Pitch below with fixed aspect ratio */}
+          <div className="flex justify-center">
+            <div className="w-full max-w-md aspect-[3/5]">
+              <BroadcastPitch
                 homeLineup={homeXI}
                 awayLineup={awayXI}
                 homeColor={match.homeTeam.primaryColor}
                 awayColor={match.awayTeam.primaryColor}
+                className="w-full h-full"
               />
             </div>
           </div>
