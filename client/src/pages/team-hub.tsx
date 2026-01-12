@@ -1246,7 +1246,7 @@ function TeamCrest({ team, size = "sm" }: { team: { name: string; shortName: str
   );
 }
 
-function formatDayHeader(date: Date): string {
+function formatDateShort(date: Date): string {
   return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
@@ -1254,32 +1254,58 @@ function formatKickoffTimeShort(date: Date): string {
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-
-function groupMatchesByDay(matches: DummyMatch[]): { date: string; matches: DummyMatch[] }[] {
-  const groups: Record<string, DummyMatch[]> = {};
+function CompetitionLogo({ competition, size = 16 }: { competition: string; size?: number }) {
+  const logos: Record<string, JSX.Element> = {
+    "Premier League": (
+      <svg viewBox="0 0 24 24" width={size} height={size} className="shrink-0">
+        <circle cx="12" cy="12" r="11" fill="#3D195B" />
+        <path d="M12 4c-1.5 0-2.8.8-3.5 2l3.5 6 3.5-6c-.7-1.2-2-2-3.5-2z" fill="#00FF85" />
+        <path d="M8.5 6L5 12l3.5 6c.7 1.2 2 2 3.5 2s2.8-.8 3.5-2l3.5-6-3.5-6" fill="none" stroke="#fff" strokeWidth="1" />
+      </svg>
+    ),
+    "Champions League": (
+      <svg viewBox="0 0 24 24" width={size} height={size} className="shrink-0">
+        <circle cx="12" cy="12" r="11" fill="#1A237E" />
+        <path d="M12 3l2.5 5.5L20 9.5l-4 4.5 1.5 5.5-5.5-3.5-5.5 3.5 1.5-5.5-4-4.5 5.5-1L12 3z" fill="#fff" />
+      </svg>
+    ),
+    "FA Cup": (
+      <svg viewBox="0 0 24 24" width={size} height={size} className="shrink-0">
+        <circle cx="12" cy="12" r="11" fill="#E30613" />
+        <path d="M7 8h10v2c0 3-2 5-5 6-3-1-5-3-5-6V8z" fill="#fff" />
+        <rect x="10" y="14" width="4" height="4" fill="#fff" />
+        <rect x="8" y="18" width="8" height="2" fill="#FFD700" />
+      </svg>
+    ),
+    "EFL Cup": (
+      <svg viewBox="0 0 24 24" width={size} height={size} className="shrink-0">
+        <circle cx="12" cy="12" r="11" fill="#00A651" />
+        <path d="M8 7h8v3c0 2.5-1.5 4.5-4 5.5-2.5-1-4-3-4-5.5V7z" fill="#fff" />
+        <rect x="10" y="13" width="4" height="3" fill="#fff" />
+        <rect x="9" y="16" width="6" height="2" fill="#C0C0C0" />
+      </svg>
+    ),
+  };
   
-  matches.forEach(match => {
-    const dateKey = match.kickoffTime.toDateString();
-    if (!groups[dateKey]) groups[dateKey] = [];
-    groups[dateKey].push(match);
-  });
-  
-  return Object.entries(groups)
-    .map(([dateStr, dayMatches]) => ({
-      date: formatDayHeader(new Date(dateStr)),
-      matches: dayMatches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime())
-    }))
-    .sort((a, b) => new Date(a.matches[0].kickoffTime).getTime() - new Date(b.matches[0].kickoffTime).getTime());
+  return logos[competition] || (
+    <div 
+      className="rounded-full bg-muted flex items-center justify-center shrink-0" 
+      style={{ width: size, height: size }}
+    >
+      <span className="text-[8px] font-bold text-muted-foreground">
+        {competition.charAt(0)}
+      </span>
+    </div>
+  );
 }
 
-function MatchRowMobile({ 
+function MatchRow({ 
   match, 
   teamSlug
 }: { 
   match: DummyMatch; 
   teamSlug: string;
 }) {
-  const isHome = match.homeTeam.slug === teamSlug;
   const isFinished = match.status === "finished";
   const isPostponed = match.status === "postponed";
   
@@ -1289,30 +1315,28 @@ function MatchRowMobile({
       className="block"
       data-testid={`match-row-${match.id}`}
     >
-      <div className="flex items-center gap-1.5 py-2.5 px-2 hover-elevate rounded-md border border-border/50 bg-card/50">
-        {/* Home/Away indicator - leftmost */}
-        <div className="shrink-0">
-          <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${
-            isHome 
-              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
-              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-          }`}>
-            {isHome ? "H" : "A"}
+      <div className="flex items-center gap-2 py-2 px-2 sm:px-3 hover-elevate rounded-md border border-border/50 bg-card/50">
+        {/* Date - leftmost */}
+        <div className="w-[72px] sm:w-20 shrink-0 text-left">
+          <span className="text-[11px] sm:text-xs text-muted-foreground font-medium">
+            {formatDateShort(match.kickoffTime)}
           </span>
         </div>
         
-        {/* Home team - crest + name */}
+        {/* Home team - name + crest, right-aligned */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span className={`text-[13px] leading-tight text-right ${match.homeTeam.slug === teamSlug ? "font-bold" : "font-medium"}`}>
+          <span className={`text-[13px] sm:text-sm leading-tight text-right truncate ${
+            match.homeTeam.slug === teamSlug ? "font-bold" : "font-medium"
+          }`}>
             {match.homeTeam.name}
           </span>
           <TeamCrest team={match.homeTeam} size="sm" />
         </div>
         
-        {/* Center: Time (fixtures) or Score (results) */}
-        <div className="w-14 sm:w-16 text-center shrink-0 px-1">
+        {/* Center: Time or Score - fixed width for perfect centering */}
+        <div className="w-[52px] flex items-center justify-center shrink-0">
           {isFinished ? (
-            <div className="flex items-center justify-center gap-0.5">
+            <div className="flex items-center justify-center">
               <span className={`text-sm font-bold tabular-nums ${
                 match.homeTeam.slug === teamSlug && (match.homeScore ?? 0) > (match.awayScore ?? 0) 
                   ? "text-green-600 dark:text-green-400" 
@@ -1330,46 +1354,33 @@ function MatchRowMobile({
               </span>
             </div>
           ) : isPostponed ? (
-            <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">TBC</span>
+            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">TBC</span>
           ) : (
-            <span className="text-[12px] font-medium text-muted-foreground tabular-nums">
+            <span className="text-[12px] font-semibold text-muted-foreground tabular-nums">
               {formatKickoffTimeShort(match.kickoffTime)}
             </span>
           )}
         </div>
         
-        {/* Away team - crest + name */}
+        {/* Away team - crest + name, left-aligned */}
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <TeamCrest team={match.awayTeam} size="sm" />
-          <span className={`text-[13px] leading-tight ${match.awayTeam.slug === teamSlug ? "font-bold" : "font-medium"}`}>
+          <span className={`text-[13px] sm:text-sm leading-tight truncate ${
+            match.awayTeam.slug === teamSlug ? "font-bold" : "font-medium"
+          }`}>
             {match.awayTeam.name}
           </span>
         </div>
         
-        {/* Competition badge - hidden on very small screens */}
-        <div className="shrink-0 hidden xs:block sm:block">
-          <CompetitionBadge competition={match.competition} />
+        {/* Competition logo */}
+        <div className="shrink-0">
+          <CompetitionLogo competition={match.competition} size={18} />
         </div>
         
         {/* Arrow */}
-        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 hidden sm:block" />
       </div>
     </Link>
-  );
-}
-
-function DayGroup({ date, matches, teamSlug }: { date: string; matches: DummyMatch[]; teamSlug: string }) {
-  return (
-    <div className="space-y-1">
-      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide py-1.5 px-1 border-b border-border/50">
-        {date}
-      </div>
-      <div className="space-y-1">
-        {matches.map((match) => (
-          <MatchRowMobile key={match.id} match={match} teamSlug={teamSlug} />
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -1506,8 +1517,6 @@ function MatchesTabContent({
     return matches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
   }, [allMatches, selectedMonth, selectedYear, competitionFilter]);
   
-  // Group matches by date
-  const groupedMatches = useMemo(() => groupMatchesByDay(filteredMatches), [filteredMatches]);
   
   // Default to current month on mount
   useEffect(() => {
@@ -1573,16 +1582,16 @@ function MatchesTabContent({
         {monthStats.upcoming > 0 && <span>{monthStats.upcoming} upcoming</span>}
       </div>
       
-      {/* Matches list grouped by date */}
-      {groupedMatches.length === 0 ? (
+      {/* Matches list - chronological */}
+      {filteredMatches.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
           <p>No matches in {MONTH_NAMES[selectedMonth]} {selectedYear}</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {groupedMatches.map((group) => (
-            <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
+        <div className="space-y-1.5">
+          {filteredMatches.map((match) => (
+            <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
           ))}
         </div>
       )}
