@@ -325,23 +325,257 @@ function generateHeadToHead(match: MatchData): HeadToHead[] {
   return results;
 }
 
-function generatePredictedXI(team: MatchTeam): { formation: string; players: string[] } {
+interface LineupPlayer {
+  name: string;
+  number: number | null;
+  position: string;
+}
+
+interface LineupData {
+  formation: string;
+  startingXI: LineupPlayer[];
+  substitutes: LineupPlayer[];
+}
+
+function generatePredictedXI(team: MatchTeam): LineupData {
   const formations = ["4-3-3", "4-2-3-1", "3-4-3", "3-5-2"];
   const formation = formations[team.name.length % formations.length];
   
-  const playersByTeam: Record<string, string[]> = {
-    "arsenal": ["Raya", "White", "Saliba", "Gabriel", "Zinchenko", "Rice", "Odegaard", "Havertz", "Saka", "Martinelli", "Jesus"],
-    "liverpool": ["Alisson", "Alexander-Arnold", "Konate", "Van Dijk", "Robertson", "Mac Allister", "Gravenberch", "Szoboszlai", "Salah", "Gakpo", "Diaz"],
-    "manchester-city": ["Ederson", "Walker", "Dias", "Akanji", "Gvardiol", "Rodri", "De Bruyne", "Bernardo", "Foden", "Grealish", "Haaland"],
-    "chelsea": ["Sanchez", "James", "Fofana", "Colwill", "Cucurella", "Caicedo", "Fernandez", "Palmer", "Madueke", "Jackson", "Mudryk"],
-    "tottenham": ["Vicario", "Porro", "Romero", "Van de Ven", "Udogie", "Bentancur", "Bissouma", "Maddison", "Kulusevski", "Son", "Richarlison"],
+  const playersByTeam: Record<string, { startingXI: LineupPlayer[]; substitutes: LineupPlayer[] }> = {
+    "arsenal": {
+      startingXI: [
+        { name: "Raya", number: 22, position: "GK" },
+        { name: "White", number: 4, position: "RB" },
+        { name: "Saliba", number: 2, position: "CB" },
+        { name: "Gabriel", number: 6, position: "CB" },
+        { name: "Zinchenko", number: 35, position: "LB" },
+        { name: "Rice", number: 41, position: "CDM" },
+        { name: "Odegaard", number: 8, position: "CM" },
+        { name: "Havertz", number: 29, position: "CM" },
+        { name: "Saka", number: 7, position: "RW" },
+        { name: "Martinelli", number: 11, position: "LW" },
+        { name: "Jesus", number: 9, position: "ST" },
+      ],
+      substitutes: [
+        { name: "Ramsdale", number: 1, position: "GK" },
+        { name: "Tomiyasu", number: 18, position: "DEF" },
+        { name: "Kiwior", number: 15, position: "DEF" },
+        { name: "Jorginho", number: 20, position: "MID" },
+        { name: "Trossard", number: 19, position: "FWD" },
+      ],
+    },
+    "liverpool": {
+      startingXI: [
+        { name: "Alisson", number: 1, position: "GK" },
+        { name: "Alexander-Arnold", number: 66, position: "RB" },
+        { name: "Konate", number: 5, position: "CB" },
+        { name: "Van Dijk", number: 4, position: "CB" },
+        { name: "Robertson", number: 26, position: "LB" },
+        { name: "Mac Allister", number: 10, position: "CM" },
+        { name: "Gravenberch", number: 38, position: "CM" },
+        { name: "Szoboszlai", number: 8, position: "CAM" },
+        { name: "Salah", number: 11, position: "RW" },
+        { name: "Gakpo", number: 18, position: "LW" },
+        { name: "Diaz", number: 7, position: "ST" },
+      ],
+      substitutes: [
+        { name: "Kelleher", number: 62, position: "GK" },
+        { name: "Gomez", number: 2, position: "DEF" },
+        { name: "Jones", number: 17, position: "MID" },
+        { name: "Elliott", number: 19, position: "MID" },
+        { name: "Nunez", number: 9, position: "FWD" },
+      ],
+    },
+    "manchester-city": {
+      startingXI: [
+        { name: "Ederson", number: 31, position: "GK" },
+        { name: "Walker", number: 2, position: "RB" },
+        { name: "Dias", number: 3, position: "CB" },
+        { name: "Akanji", number: 25, position: "CB" },
+        { name: "Gvardiol", number: 24, position: "LB" },
+        { name: "Rodri", number: 16, position: "CDM" },
+        { name: "De Bruyne", number: 17, position: "CM" },
+        { name: "Bernardo", number: 20, position: "CM" },
+        { name: "Foden", number: 47, position: "RW" },
+        { name: "Grealish", number: 10, position: "LW" },
+        { name: "Haaland", number: 9, position: "ST" },
+      ],
+      substitutes: [
+        { name: "Ortega", number: 18, position: "GK" },
+        { name: "Stones", number: 5, position: "DEF" },
+        { name: "Kovacic", number: 8, position: "MID" },
+        { name: "Doku", number: 11, position: "FWD" },
+        { name: "Alvarez", number: 19, position: "FWD" },
+      ],
+    },
+    "chelsea": {
+      startingXI: [
+        { name: "Sanchez", number: 1, position: "GK" },
+        { name: "James", number: 24, position: "RB" },
+        { name: "Fofana", number: 33, position: "CB" },
+        { name: "Colwill", number: 26, position: "CB" },
+        { name: "Cucurella", number: 3, position: "LB" },
+        { name: "Caicedo", number: 25, position: "CDM" },
+        { name: "Fernandez", number: 8, position: "CM" },
+        { name: "Palmer", number: 20, position: "CAM" },
+        { name: "Madueke", number: 11, position: "RW" },
+        { name: "Jackson", number: 15, position: "ST" },
+        { name: "Mudryk", number: 10, position: "LW" },
+      ],
+      substitutes: [
+        { name: "Petrovic", number: 28, position: "GK" },
+        { name: "Disasi", number: 2, position: "DEF" },
+        { name: "Gallagher", number: 23, position: "MID" },
+        { name: "Sterling", number: 7, position: "FWD" },
+        { name: "Nkunku", number: 18, position: "FWD" },
+      ],
+    },
+    "tottenham": {
+      startingXI: [
+        { name: "Vicario", number: 1, position: "GK" },
+        { name: "Porro", number: 23, position: "RB" },
+        { name: "Romero", number: 17, position: "CB" },
+        { name: "Van de Ven", number: 37, position: "CB" },
+        { name: "Udogie", number: 13, position: "LB" },
+        { name: "Bentancur", number: 30, position: "CDM" },
+        { name: "Bissouma", number: 38, position: "CM" },
+        { name: "Maddison", number: 10, position: "CAM" },
+        { name: "Kulusevski", number: 21, position: "RW" },
+        { name: "Son", number: 7, position: "LW" },
+        { name: "Richarlison", number: 9, position: "ST" },
+      ],
+      substitutes: [
+        { name: "Forster", number: 20, position: "GK" },
+        { name: "Emerson", number: 12, position: "DEF" },
+        { name: "Sarr", number: 29, position: "MID" },
+        { name: "Werner", number: 16, position: "FWD" },
+        { name: "Johnson", number: 22, position: "FWD" },
+      ],
+    },
   };
   
-  const players = playersByTeam[team.slug] || [
-    "GK", "RB", "CB", "CB", "LB", "CDM", "CM", "CM", "RW", "LW", "ST"
-  ];
+  const defaultLineup: { startingXI: LineupPlayer[]; substitutes: LineupPlayer[] } = {
+    startingXI: [
+      { name: "Goalkeeper", number: 1, position: "GK" },
+      { name: "Right Back", number: 2, position: "RB" },
+      { name: "Center Back", number: 4, position: "CB" },
+      { name: "Center Back", number: 5, position: "CB" },
+      { name: "Left Back", number: 3, position: "LB" },
+      { name: "Midfielder", number: 6, position: "CDM" },
+      { name: "Midfielder", number: 8, position: "CM" },
+      { name: "Midfielder", number: 10, position: "CM" },
+      { name: "Right Winger", number: 7, position: "RW" },
+      { name: "Left Winger", number: 11, position: "LW" },
+      { name: "Striker", number: 9, position: "ST" },
+    ],
+    substitutes: [
+      { name: "Sub Keeper", number: 12, position: "GK" },
+      { name: "Sub Defender", number: 14, position: "DEF" },
+      { name: "Sub Midfielder", number: 15, position: "MID" },
+      { name: "Sub Forward", number: 17, position: "FWD" },
+      { name: "Sub Forward", number: 18, position: "FWD" },
+    ],
+  };
   
-  return { formation, players };
+  const lineup = playersByTeam[team.slug] || defaultLineup;
+  
+  return { formation, ...lineup };
+}
+
+function getFormationRows(formation: string): number[] {
+  const formationMap: Record<string, number[]> = {
+    "4-3-3": [1, 4, 3, 3],
+    "4-2-3-1": [1, 4, 2, 3, 1],
+    "3-4-3": [1, 3, 4, 3],
+    "3-5-2": [1, 3, 5, 2],
+    "4-4-2": [1, 4, 4, 2],
+    "5-3-2": [1, 5, 3, 2],
+    "4-1-4-1": [1, 4, 1, 4, 1],
+  };
+  return formationMap[formation] || [1, 4, 3, 3];
+}
+
+function getPlayerInitials(name: string): string {
+  if (!name) return "??";
+  const parts = name.split(" ");
+  if (parts.length === 1) {
+    return name.slice(0, 2).toUpperCase();
+  }
+  return parts.map(p => p[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function HalfPitchFormation({ 
+  lineup, 
+  teamColor, 
+  isAway = false 
+}: { 
+  lineup: LineupData; 
+  teamColor: string; 
+  isAway?: boolean;
+}) {
+  const rows = getFormationRows(lineup.formation);
+  let playerIndex = 0;
+  
+  const formationRows = rows.map((count) => {
+    const rowPlayers = lineup.startingXI.slice(playerIndex, playerIndex + count);
+    playerIndex += count;
+    return rowPlayers;
+  });
+  
+  // For home team: reverse so GK is at bottom (near penalty box at bottom)
+  // For away team: keep as-is so GK is at top (near penalty box at top)
+  if (!isAway) {
+    formationRows.reverse();
+  }
+  
+  return (
+    <div 
+      className="relative rounded-lg overflow-hidden mb-4"
+      style={{ 
+        background: `linear-gradient(180deg, #2d5a27 0%, #1e4a1c 100%)`,
+        minHeight: "200px"
+      }}
+    >
+      <div className="absolute inset-0 opacity-20">
+        {/* Penalty box - at bottom for home, at top for away */}
+        {isAway ? (
+          <>
+            <div className="absolute left-1/4 right-1/4 top-0 h-12 border-b border-l border-r border-white rounded-b-sm" />
+            <div className="absolute left-1/3 right-1/3 top-0 h-4 border-b border-l border-r border-white rounded-b-sm" />
+          </>
+        ) : (
+          <>
+            <div className="absolute left-1/4 right-1/4 bottom-0 h-12 border-t border-l border-r border-white rounded-t-sm" />
+            <div className="absolute left-1/3 right-1/3 bottom-0 h-4 border-t border-l border-r border-white rounded-t-sm" />
+          </>
+        )}
+      </div>
+      
+      <div className="relative flex flex-col justify-between py-3 px-2" style={{ minHeight: "200px" }}>
+        {formationRows.map((rowPlayers, rowIdx) => (
+          <div 
+            key={rowIdx} 
+            className="flex justify-around items-center"
+            style={{ flex: 1 }}
+          >
+            {rowPlayers.map((player, idx) => (
+              <div key={idx} className="flex flex-col items-center gap-0.5">
+                <div 
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-md border-2 border-white/30"
+                  style={{ backgroundColor: teamColor, color: "white" }}
+                >
+                  {player?.number ?? getPlayerInitials(player?.name || "")}
+                </div>
+                <span className="text-[10px] text-white font-medium text-center max-w-[50px] truncate drop-shadow-sm">
+                  {player?.name || "Unknown"}
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function generateKeyAbsences(team: MatchTeam): { player: string; reason: string; status: "out" | "doubt" }[] {
@@ -494,6 +728,59 @@ function PostMatchSummary({ match }: { match: MatchData }) {
   );
 }
 
+function TeamLineup({ 
+  team, 
+  lineup, 
+  isAway = false 
+}: { 
+  team: MatchTeam; 
+  lineup: LineupData; 
+  isAway?: boolean;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <TeamCrest team={team} size="sm" />
+        <div>
+          <p className="font-semibold text-sm">{team.name}</p>
+          <Badge variant="secondary" className="text-[10px] px-1.5">
+            {lineup.formation}
+          </Badge>
+        </div>
+      </div>
+      
+      <HalfPitchFormation 
+        lineup={lineup} 
+        teamColor={team.primaryColor} 
+        isAway={isAway} 
+      />
+      
+      <div className="mb-3">
+        <p className="text-xs font-medium text-muted-foreground mb-2">Starting XI</p>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          {lineup.startingXI.map((player, idx) => (
+            <div key={idx} className="flex items-center gap-1.5 text-sm py-0.5">
+              <span className="w-5 text-xs text-muted-foreground font-medium">
+                {player?.number ?? idx + 1}
+              </span>
+              <span className="truncate">{player?.name || "Unknown"}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {lineup.substitutes && lineup.substitutes.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">Substitutes</p>
+          <p className="text-xs text-muted-foreground">
+            {lineup.substitutes.map(s => s?.name || "Unknown").join(", ")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PredictedXI({ match }: { match: MatchData }) {
   const homeXI = generatePredictedXI(match.homeTeam);
   const awayXI = generatePredictedXI(match.awayTeam);
@@ -507,42 +794,9 @@ function PredictedXI({ match }: { match: MatchData }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid sm:grid-cols-2 gap-6">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <TeamCrest team={match.homeTeam} size="sm" />
-              <div>
-                <p className="font-semibold text-sm">{match.homeTeam.name}</p>
-                <p className="text-xs text-muted-foreground">{homeXI.formation}</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              {homeXI.players.map((player, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm py-0.5">
-                  <span className="w-5 text-xs text-muted-foreground">{idx + 1}</span>
-                  <span>{player}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <TeamCrest team={match.awayTeam} size="sm" />
-              <div>
-                <p className="font-semibold text-sm">{match.awayTeam.name}</p>
-                <p className="text-xs text-muted-foreground">{awayXI.formation}</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              {awayXI.players.map((player, idx) => (
-                <div key={idx} className="flex items-center gap-2 text-sm py-0.5">
-                  <span className="w-5 text-xs text-muted-foreground">{idx + 1}</span>
-                  <span>{player}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <TeamLineup team={match.homeTeam} lineup={homeXI} isAway={false} />
+          <TeamLineup team={match.awayTeam} lineup={awayXI} isAway={true} />
         </div>
       </CardContent>
     </Card>
