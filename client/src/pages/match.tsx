@@ -516,19 +516,39 @@ function HalfPitchFormation({
   className?: string;
 }) {
   const rows = getFormationRows(lineup.formation);
+  
+  // Calculate player positions with deterministic layout
+  // Each row gets a fixed Y band, players evenly spaced on X axis
+  const totalRows = rows.length;
+  const sidePadding = 10; // percentage padding on each side
+  
+  // Build positioned players array
+  const positionedPlayers: { player: typeof lineup.startingXI[0]; x: number; y: number }[] = [];
   let playerIndex = 0;
   
-  const formationRows = rows.map((count) => {
-    const rowPlayers = lineup.startingXI.slice(playerIndex, playerIndex + count);
-    playerIndex += count;
-    return rowPlayers;
+  rows.forEach((count, rowIdx) => {
+    // Y position: evenly distribute rows from top to bottom
+    // Row 0 (GK) gets ~12% from goal line, last row (attackers) gets ~88%
+    const yBase = 12 + (rowIdx * (76 / (totalRows - 1 || 1)));
+    
+    for (let i = 0; i < count; i++) {
+      const player = lineup.startingXI[playerIndex++];
+      // X position: evenly space players with side padding
+      const xSpan = 100 - (2 * sidePadding);
+      const x = count === 1 
+        ? 50 
+        : sidePadding + (i * xSpan / (count - 1));
+      
+      positionedPlayers.push({ player, x, y: yBase });
+    }
   });
   
-  // For home team: reverse so GK is at bottom (near penalty box at bottom)
-  // For away team: keep as-is so GK is at top (near penalty box at top)
-  if (!isAway) {
-    formationRows.reverse();
-  }
+  // For home pitch: invert Y so GK is at bottom (y becomes 100-y)
+  // For away pitch: keep Y as-is so GK is at top
+  const finalPlayers = positionedPlayers.map(p => ({
+    ...p,
+    y: isAway ? p.y : 100 - p.y
+  }));
   
   return (
     <div 
@@ -538,41 +558,69 @@ function HalfPitchFormation({
         minHeight: "200px"
       }}
     >
-      <div className="absolute inset-0 opacity-20">
-        {/* Penalty box - at bottom for home, at top for away */}
+      {/* Pitch markings */}
+      <svg 
+        className="absolute inset-0 w-full h-full" 
+        viewBox="0 0 100 100" 
+        preserveAspectRatio="none"
+        style={{ opacity: 0.3 }}
+      >
         {isAway ? (
           <>
-            <div className="absolute left-1/4 right-1/4 top-0 h-12 border-b border-l border-r border-white rounded-b-sm" />
-            <div className="absolute left-1/3 right-1/3 top-0 h-4 border-b border-l border-r border-white rounded-b-sm" />
+            {/* Away: Goal at top, centre circle arc at bottom */}
+            {/* Penalty box (18-yard box) */}
+            <rect x="20" y="0" width="60" height="18" fill="none" stroke="white" strokeWidth="0.5" />
+            {/* 6-yard box */}
+            <rect x="35" y="0" width="30" height="7" fill="none" stroke="white" strokeWidth="0.5" />
+            {/* Penalty spot */}
+            <circle cx="50" cy="13" r="0.8" fill="white" />
+            {/* Penalty arc (D) */}
+            <path d="M 35 18 A 10 10 0 0 0 65 18" fill="none" stroke="white" strokeWidth="0.5" />
+            {/* Halfway line at bottom */}
+            <line x1="0" y1="100" x2="100" y2="100" stroke="white" strokeWidth="0.5" />
+            {/* Centre circle arc at bottom */}
+            <path d="M 35 100 A 15 15 0 0 1 65 100" fill="none" stroke="white" strokeWidth="0.5" />
           </>
         ) : (
           <>
-            <div className="absolute left-1/4 right-1/4 bottom-0 h-12 border-t border-l border-r border-white rounded-t-sm" />
-            <div className="absolute left-1/3 right-1/3 bottom-0 h-4 border-t border-l border-r border-white rounded-t-sm" />
+            {/* Home: Goal at bottom, centre circle arc at top */}
+            {/* Penalty box (18-yard box) */}
+            <rect x="20" y="82" width="60" height="18" fill="none" stroke="white" strokeWidth="0.5" />
+            {/* 6-yard box */}
+            <rect x="35" y="93" width="30" height="7" fill="none" stroke="white" strokeWidth="0.5" />
+            {/* Penalty spot */}
+            <circle cx="50" cy="87" r="0.8" fill="white" />
+            {/* Penalty arc (D) */}
+            <path d="M 35 82 A 10 10 0 0 1 65 82" fill="none" stroke="white" strokeWidth="0.5" />
+            {/* Halfway line at top */}
+            <line x1="0" y1="0" x2="100" y2="0" stroke="white" strokeWidth="0.5" />
+            {/* Centre circle arc at top */}
+            <path d="M 35 0 A 15 15 0 0 0 65 0" fill="none" stroke="white" strokeWidth="0.5" />
           </>
         )}
-      </div>
+      </svg>
       
-      <div className="relative flex flex-col justify-between py-3 px-2" style={{ minHeight: "200px" }}>
-        {formationRows.map((rowPlayers, rowIdx) => (
+      {/* Player markers */}
+      <div className="absolute inset-0">
+        {finalPlayers.map((positioned, idx) => (
           <div 
-            key={rowIdx} 
-            className="flex justify-around items-center"
-            style={{ flex: 1 }}
+            key={idx}
+            className="absolute flex flex-col items-center gap-0.5"
+            style={{
+              left: `${positioned.x}%`,
+              top: `${positioned.y}%`,
+              transform: "translate(-50%, -50%)"
+            }}
           >
-            {rowPlayers.map((player, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-0.5">
-                <div 
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-md border-2 border-white/30"
-                  style={{ backgroundColor: teamColor, color: "white" }}
-                >
-                  {player?.number ?? getPlayerInitials(player?.name || "TBC")}
-                </div>
-                <span className="text-[10px] text-white font-medium text-center max-w-[50px] truncate drop-shadow-sm">
-                  {player?.name || "TBC"}
-                </span>
-              </div>
-            ))}
+            <div 
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold shadow-md border-2 border-white/40"
+              style={{ backgroundColor: teamColor, color: "white" }}
+            >
+              {positioned.player?.number ?? getPlayerInitials(positioned.player?.name || "TBC")}
+            </div>
+            <span className="text-[8px] sm:text-[10px] text-white font-medium text-center max-w-[45px] sm:max-w-[55px] truncate drop-shadow-md whitespace-nowrap">
+              {positioned.player?.name?.split(" ").pop() || "TBC"}
+            </span>
           </div>
         ))}
       </div>
