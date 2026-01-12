@@ -579,9 +579,11 @@ function FullPitchFormation({
   
   return (
     <div 
-      className={`relative rounded-lg overflow-hidden aspect-[2/3] ${className}`}
+      className={`relative rounded-lg overflow-hidden ${className}`}
       style={{ 
-        background: `linear-gradient(180deg, #2d5a27 0%, #1e4a1c 50%, #2d5a27 100%)`
+        background: `linear-gradient(180deg, #2d5a27 0%, #1e4a1c 50%, #2d5a27 100%)`,
+        aspectRatio: "2/3",
+        minHeight: "100%"
       }}
     >
       {/* Full pitch markings */}
@@ -835,7 +837,7 @@ function TeamXIColumn({
   const isRight = align === "right";
   
   return (
-    <div className={`flex flex-col h-full ${isRight ? "lg:pl-8 text-right" : ""}`}>
+    <div className={`flex flex-col h-full ${isRight ? "lg:pl-6 text-right" : ""}`}>
       {/* Team header */}
       <div className={`flex items-center gap-2 mb-3 ${isRight ? "flex-row-reverse" : ""}`}>
         <TeamCrest team={team} size="sm" />
@@ -854,14 +856,27 @@ function TeamXIColumn({
         {lineup.startingXI.map((player, idx) => (
           <div 
             key={idx} 
-            className={`flex items-center gap-2 text-sm py-0.5 ${isRight ? "justify-end" : ""}`}
+            className={`flex items-baseline gap-3 text-sm py-0.5 w-full ${isRight ? "justify-end" : ""}`}
           >
-            <span className={`w-5 text-xs text-muted-foreground font-medium shrink-0 text-right`}>
-              {player?.number ?? idx + 1}
-            </span>
-            <span className={`truncate ${isRight ? "text-right" : ""}`}>
-              {player?.name || "TBC"}
-            </span>
+            {isRight ? (
+              <>
+                <span className="truncate">
+                  {player?.name || "TBC"}
+                </span>
+                <span className="w-6 text-right tabular-nums text-xs text-muted-foreground font-medium shrink-0">
+                  {player?.number ?? idx + 1}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="w-6 text-right tabular-nums text-xs text-muted-foreground font-medium shrink-0">
+                  {player?.number ?? idx + 1}
+                </span>
+                <span className="truncate">
+                  {player?.name || "TBC"}
+                </span>
+              </>
+            )}
           </div>
         ))}
       </div>
@@ -893,18 +908,21 @@ function PredictedXI({ match }: { match: MatchData }) {
       </CardHeader>
       <CardContent>
         {/* Desktop 3-column layout (>= lg): Home List | Full Pitch | Away List */}
-        <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-6">
+        <div className="hidden lg:grid lg:grid-cols-[1fr_minmax(320px,400px)_1fr] gap-6 items-start">
           {/* Home team column */}
           <TeamXIColumn team={match.homeTeam} lineup={homeXI} align="left" />
           
-          {/* Full pitch in center */}
-          <div className="w-[280px]">
-            <FullPitchFormation
-              homeLineup={homeXI}
-              awayLineup={awayXI}
-              homeColor={match.homeTeam.primaryColor}
-              awayColor={match.awayTeam.primaryColor}
-            />
+          {/* Full pitch in center - larger and more prominent */}
+          <div className="flex justify-center">
+            <div className="w-full min-h-[480px]">
+              <FullPitchFormation
+                homeLineup={homeXI}
+                awayLineup={awayXI}
+                homeColor={match.homeTeam.primaryColor}
+                awayColor={match.awayTeam.primaryColor}
+                className="h-full"
+              />
+            </div>
           </div>
           
           {/* Away team column */}
