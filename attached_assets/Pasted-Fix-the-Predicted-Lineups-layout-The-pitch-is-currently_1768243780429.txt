@@ -1,0 +1,77 @@
+Fix the Predicted Lineups layout. The pitch is currently overflowing the card and breaking the page flow. Refactor so the entire module is strictly contained inside the card with a fixed height and no overflow.
+
+Non-negotiables
+
+Nothing in PredictedLineups may use position: absolute for overall layout (only allowed for placing players inside the pitch canvas).
+
+The card must clip children: add overflow-hidden to the main card wrapper.
+
+The layout must be a true 3-column grid on desktop:
+
+Left: Home XI
+
+Middle: Pitch
+
+Right: Away XI
+
+Hard constraints (stop the pitch escaping)
+
+Wrap the three columns in a container with a fixed height:
+
+Desktop: h-[520px] (or min-h + max-h if preferred, but must be bounded)
+
+Example: <div className="grid grid-cols-3 gap-6 h-[520px]"> ... </div>
+
+Pitch column must be fully constrained:
+
+Wrapper: h-full w-full overflow-hidden flex items-center justify-center
+
+Pitch element (svg/div): h-full w-full max-h-full max-w-full
+
+Enforce portrait ratio: use aspect-[3/5] on the pitch itself and h-full so it scales DOWN not UP.
+
+Example pitch wrapper:
+
+<div className="h-full w-full overflow-hidden flex items-center justify-center">
+
+<div className="h-full aspect-[3/5] max-w-full"> ...pitch... </div>
+
+Lists must not change card height
+
+Left + right columns must be h-full flex flex-col and the XI list area must scroll:
+
+List container: flex-1 overflow-y-auto
+
+Subs footer: pinned at bottom inside the column: mt-3 pt-3 border-t text-xs text-muted-foreground
+
+Away list formatting (numbers on the outside)
+
+Away team rows must be right aligned with number on the far right:
+
+Structure each row: [name][number]
+
+Use flex justify-end gap-3
+
+Name: text-right
+
+Number: w-6 text-right tabular-nums
+
+Mobile
+
+Mobile layout should be:
+
+First: Home XI | Away XI side-by-side (2 columns) inside one bounded card section
+
+Second: Pitch below with h-[420px] overflow-hidden flex justify-center
+
+Debug checklist
+
+Ensure the pitch wrapper is NOT absolute and NOT fixed
+
+Ensure the grid parent has a fixed height (h-[520px])
+
+Ensure the card has overflow-hidden
+
+Ensure the pitch element uses aspect-[3/5] and h-full so it scales to the grid height
+
+Make these changes directly in the PredictedLineups component and any pitch subcomponent it uses.
