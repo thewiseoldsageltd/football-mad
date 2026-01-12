@@ -1247,26 +1247,55 @@ function TeamCrest({ team, size = "sm" }: { team: { name: string; shortName: str
   );
 }
 
-function MatchRow({ 
+function formatDayHeader(date: Date): string {
+  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatKickoffTimeShort(date: Date): string {
+  return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function getMatchweekDateRange(matches: DummyMatch[]): string {
+  if (matches.length === 0) return "";
+  const sorted = [...matches].sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
+  const first = sorted[0].kickoffTime;
+  const last = sorted[sorted.length - 1].kickoffTime;
+  
+  const formatShort = (d: Date) => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  
+  if (first.toDateString() === last.toDateString()) {
+    return formatShort(first);
+  }
+  return `${formatShort(first)} to ${formatShort(last)}`;
+}
+
+function groupMatchesByDay(matches: DummyMatch[]): { date: string; matches: DummyMatch[] }[] {
+  const groups: Record<string, DummyMatch[]> = {};
+  
+  matches.forEach(match => {
+    const dateKey = match.kickoffTime.toDateString();
+    if (!groups[dateKey]) groups[dateKey] = [];
+    groups[dateKey].push(match);
+  });
+  
+  return Object.entries(groups)
+    .map(([dateStr, dayMatches]) => ({
+      date: formatDayHeader(new Date(dateStr)),
+      matches: dayMatches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime())
+    }))
+    .sort((a, b) => new Date(a.matches[0].kickoffTime).getTime() - new Date(b.matches[0].kickoffTime).getTime());
+}
+
+function MatchRowMobile({ 
   match, 
-  teamSlug,
-  showDate = true 
+  teamSlug
 }: { 
   match: DummyMatch; 
   teamSlug: string;
-  showDate?: boolean;
 }) {
   const isHome = match.homeTeam.slug === teamSlug;
   const isFinished = match.status === "finished";
   const isPostponed = match.status === "postponed";
-  
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-  };
-  
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  };
   
   return (
     <Link 
@@ -1274,56 +1303,10 @@ function MatchRow({
       className="block"
       data-testid={`match-row-${match.id}`}
     >
-      <div className="flex items-center gap-2 py-3 px-3 hover-elevate rounded-md border border-border/50 bg-card/50">
-        {/* Date column */}
-        {showDate && (
-          <div className="w-20 shrink-0 text-center">
-            <div className="text-xs font-medium">{formatDate(match.kickoffTime)}</div>
-            {!isFinished && !isPostponed && (
-              <div className="text-xs text-muted-foreground">{formatTime(match.kickoffTime)}</div>
-            )}
-            {isPostponed && (
-              <div className="text-xs text-amber-600 font-medium">TBC</div>
-            )}
-          </div>
-        )}
-        
-        {/* Home team */}
-        <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-          <span className={`text-sm font-medium truncate ${match.homeTeam.slug === teamSlug ? "font-bold" : ""}`}>
-            {match.homeTeam.name}
-          </span>
-          <TeamCrest team={match.homeTeam} size="sm" />
-        </div>
-        
-        {/* Score or time */}
-        <div className="w-16 text-center shrink-0">
-          {isFinished ? (
-            <div className="flex items-center justify-center gap-1">
-              <span className={`text-sm font-bold tabular-nums ${match.homeTeam.slug === teamSlug && (match.homeScore ?? 0) > (match.awayScore ?? 0) ? "text-green-600 dark:text-green-400" : ""}`}>
-                {match.homeScore}
-              </span>
-              <span className="text-xs text-muted-foreground">-</span>
-              <span className={`text-sm font-bold tabular-nums ${match.awayTeam.slug === teamSlug && (match.awayScore ?? 0) > (match.homeScore ?? 0) ? "text-green-600 dark:text-green-400" : ""}`}>
-                {match.awayScore}
-              </span>
-            </div>
-          ) : (
-            <span className="text-xs text-muted-foreground font-medium">vs</span>
-          )}
-        </div>
-        
-        {/* Away team */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <TeamCrest team={match.awayTeam} size="sm" />
-          <span className={`text-sm font-medium truncate ${match.awayTeam.slug === teamSlug ? "font-bold" : ""}`}>
-            {match.awayTeam.name}
-          </span>
-        </div>
-        
-        {/* Home/Away indicator */}
-        <div className="w-6 text-center shrink-0">
-          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+      <div className="flex items-center gap-1.5 py-2.5 px-2 hover-elevate rounded-md border border-border/50 bg-card/50">
+        {/* Home/Away indicator - leftmost */}
+        <div className="shrink-0">
+          <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${
             isHome 
               ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" 
               : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
@@ -1332,8 +1315,53 @@ function MatchRow({
           </span>
         </div>
         
-        {/* Competition badge */}
-        <div className="w-24 shrink-0 hidden sm:block">
+        {/* Home team - crest + name */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
+          <span className={`text-[13px] leading-tight text-right ${match.homeTeam.slug === teamSlug ? "font-bold" : "font-medium"}`}>
+            {match.homeTeam.name}
+          </span>
+          <TeamCrest team={match.homeTeam} size="sm" />
+        </div>
+        
+        {/* Center: Time (fixtures) or Score (results) */}
+        <div className="w-14 sm:w-16 text-center shrink-0 px-1">
+          {isFinished ? (
+            <div className="flex items-center justify-center gap-0.5">
+              <span className={`text-sm font-bold tabular-nums ${
+                match.homeTeam.slug === teamSlug && (match.homeScore ?? 0) > (match.awayScore ?? 0) 
+                  ? "text-green-600 dark:text-green-400" 
+                  : ""
+              }`}>
+                {match.homeScore}
+              </span>
+              <span className="text-xs text-muted-foreground mx-0.5">-</span>
+              <span className={`text-sm font-bold tabular-nums ${
+                match.awayTeam.slug === teamSlug && (match.awayScore ?? 0) > (match.homeScore ?? 0) 
+                  ? "text-green-600 dark:text-green-400" 
+                  : ""
+              }`}>
+                {match.awayScore}
+              </span>
+            </div>
+          ) : isPostponed ? (
+            <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400">TBC</span>
+          ) : (
+            <span className="text-[12px] font-medium text-muted-foreground tabular-nums">
+              {formatKickoffTimeShort(match.kickoffTime)}
+            </span>
+          )}
+        </div>
+        
+        {/* Away team - crest + name */}
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+          <TeamCrest team={match.awayTeam} size="sm" />
+          <span className={`text-[13px] leading-tight ${match.awayTeam.slug === teamSlug ? "font-bold" : "font-medium"}`}>
+            {match.awayTeam.name}
+          </span>
+        </div>
+        
+        {/* Competition badge - hidden on very small screens */}
+        <div className="shrink-0 hidden xs:block sm:block">
           <CompetitionBadge competition={match.competition} />
         </div>
         
@@ -1344,57 +1372,84 @@ function MatchRow({
   );
 }
 
+function DayGroup({ date, matches, teamSlug }: { date: string; matches: DummyMatch[]; teamSlug: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide py-1.5 px-1 border-b border-border/50">
+        {date}
+      </div>
+      <div className="space-y-1">
+        {matches.map((match) => (
+          <MatchRowMobile key={match.id} match={match} teamSlug={teamSlug} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MatchweekSelector({ 
   currentWeek, 
   totalWeeks, 
   onWeekChange,
+  dateRange,
   label = "Matchweek"
 }: { 
   currentWeek: number; 
   totalWeeks: number; 
   onWeekChange: (week: number) => void;
+  dateRange?: string;
   label?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 px-4 bg-muted/30 rounded-lg">
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onWeekChange(Math.max(1, currentWeek - 1))}
-        disabled={currentWeek <= 1}
-        data-testid="btn-prev-week"
-      >
-        <ChevronLeft className="h-5 w-5" />
-      </Button>
-      
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold">{label} {currentWeek}</span>
-        <Select 
-          value={currentWeek.toString()} 
-          onValueChange={(v) => onWeekChange(parseInt(v))}
+    <div className="flex flex-col items-center gap-1 py-3 px-2 bg-muted/30 rounded-lg">
+      <div className="flex items-center justify-between w-full gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onWeekChange(Math.max(1, currentWeek - 1))}
+          disabled={currentWeek <= 1}
+          data-testid="btn-prev-week"
+          className="h-8 w-8"
         >
-          <SelectTrigger className="w-20 h-8" data-testid="select-matchweek">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
-              <SelectItem key={week} value={week.toString()}>
-                {week}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold">{label} {currentWeek}</span>
+          <Select 
+            value={currentWeek.toString()} 
+            onValueChange={(v: string) => onWeekChange(parseInt(v))}
+          >
+            <SelectTrigger className="w-16 h-7 text-xs" data-testid="select-matchweek">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
+                <SelectItem key={week} value={week.toString()}>
+                  {week}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onWeekChange(Math.min(totalWeeks, currentWeek + 1))}
+          disabled={currentWeek >= totalWeeks}
+          data-testid="btn-next-week"
+          className="h-8 w-8"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
       </div>
       
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onWeekChange(Math.min(totalWeeks, currentWeek + 1))}
-        disabled={currentWeek >= totalWeeks}
-        data-testid="btn-next-week"
-      >
-        <ChevronRight className="h-5 w-5" />
-      </Button>
+      {dateRange && (
+        <div className="text-xs text-muted-foreground">
+          {dateRange}
+        </div>
+      )}
     </div>
   );
 }
@@ -1536,13 +1591,13 @@ function MatchesTabContent({
       
       {subTab === "fixtures" && (
         <div className="space-y-4">
-          {/* Matchweek selector for league matches */}
           {competitionFilter === "all" || competitionFilter === "Premier League" ? (
             <>
               <MatchweekSelector
                 currentWeek={fixtureWeek}
                 totalWeeks={38}
                 onWeekChange={setFixtureWeek}
+                dateRange={getMatchweekDateRange(filteredFixtures)}
               />
               
               {filteredFixtures.length === 0 ? (
@@ -1551,23 +1606,23 @@ function MatchesTabContent({
                   <p>No fixtures for Matchweek {fixtureWeek}</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {filteredFixtures.map((match) => (
-                    <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                <div className="space-y-4">
+                  {groupMatchesByDay(filteredFixtures).map((group) => (
+                    <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
                   ))}
                 </div>
               )}
             </>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-4">
               {filteredFixtures.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No {competitionFilter} fixtures scheduled</p>
                 </div>
               ) : (
-                filteredFixtures.map((match) => (
-                  <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                groupMatchesByDay(filteredFixtures).map((group) => (
+                  <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
                 ))
               )}
             </div>
@@ -1577,13 +1632,13 @@ function MatchesTabContent({
       
       {subTab === "results" && (
         <div className="space-y-4">
-          {/* Matchweek selector for league matches */}
           {competitionFilter === "all" || competitionFilter === "Premier League" ? (
             <>
               <MatchweekSelector
                 currentWeek={resultWeek}
                 totalWeeks={Math.max(...resultWeeks, 1)}
                 onWeekChange={setResultWeek}
+                dateRange={getMatchweekDateRange(filteredResults)}
               />
               
               {filteredResults.length === 0 ? (
@@ -1592,23 +1647,23 @@ function MatchesTabContent({
                   <p>No results for Matchweek {resultWeek}</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {filteredResults.map((match) => (
-                    <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                <div className="space-y-4">
+                  {groupMatchesByDay(filteredResults).map((group) => (
+                    <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
                   ))}
                 </div>
               )}
             </>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-4">
               {filteredResults.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No {competitionFilter} results yet</p>
                 </div>
               ) : (
-                filteredResults.map((match) => (
-                  <MatchRow key={match.id} match={match} teamSlug={teamSlug} />
+                groupMatchesByDay(filteredResults).map((group) => (
+                  <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
                 ))
               )}
             </div>
