@@ -906,15 +906,15 @@ function PredictedXI({ match }: { match: MatchData }) {
       </CardHeader>
       <CardContent>
         {/* Desktop 3-column layout (>= lg): Home List | Full Pitch | Away List */}
-        {/* Lists define height; pitch stretches to match */}
-        <div className="hidden lg:grid lg:grid-cols-3 gap-4 items-stretch">
+        {/* Lists define height; pitch fills full grid row */}
+        <div className="hidden lg:grid lg:grid-cols-3 gap-4 items-start">
           {/* Home team column - natural height */}
           <div>
             <TeamXIColumn team={match.homeTeam} lineup={homeXI} align="left" />
           </div>
           
-          {/* Pitch column - stretches to match list height */}
-          <div className="flex items-center justify-center">
+          {/* Pitch column - fills full row height */}
+          <div className="row-span-1 self-stretch">
             <FullPitchFormation
               homeLineup={homeXI}
               awayLineup={awayXI}
