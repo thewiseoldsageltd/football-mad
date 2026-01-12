@@ -506,28 +506,53 @@ function getPlayerInitials(name: string): string {
 
 function getTeamPositions(
   lineup: LineupData, 
-  isHome: boolean, 
-  sidePadding: number = 8
+  isHome: boolean
 ): { player: typeof lineup.startingXI[0]; x: number; y: number }[] {
   const rows = getFormationRows(lineup.formation);
-  const totalRows = rows.length;
   const positions: { player: typeof lineup.startingXI[0]; x: number; y: number }[] = [];
   let playerIndex = 0;
   
+  // Fixed row bands for consistent positioning (user-specified values)
+  // Home team (top half): GK=12%, DEF=26%, MID=42%, ATT=58%
+  // Away team (bottom half): ATT=42%, MID=58%, DEF=74%, GK=88%
+  const homeRowBands = [12, 26, 42, 58]; // GK, DEF, MID, ATT
+  const awayRowBands = [88, 74, 58, 42]; // GK, DEF, MID, ATT
+  
+  // Get Y position based on row index and formation structure
+  const getYPosition = (rowIdx: number, totalRows: number): number => {
+    const bands = isHome ? homeRowBands : awayRowBands;
+    
+    if (totalRows === 4) {
+      // Standard 4-row formation (GK + DEF + MID + ATT)
+      return bands[rowIdx] ?? bands[bands.length - 1];
+    } else if (totalRows === 5) {
+      // 5-row formation (e.g., 4-2-3-1): interpolate middle rows
+      const fiveRowBands = isHome 
+        ? [12, 26, 34, 42, 58]   // GK, DEF, DM, AM, ATT
+        : [88, 74, 66, 58, 42]; // GK, DEF, DM, AM, ATT
+      return fiveRowBands[rowIdx] ?? fiveRowBands[fiveRowBands.length - 1];
+    } else {
+      // Fallback: interpolate between first and last band
+      if (rowIdx === 0) return bands[0];
+      const lastBand = bands[bands.length - 1];
+      const firstOutfield = bands[1];
+      return firstOutfield + ((rowIdx - 1) * (lastBand - firstOutfield) / (totalRows - 2 || 1));
+    }
+  };
+  
+  // X positioning: evenly distributed between 15% and 85%
+  const xMin = 15;
+  const xMax = 85;
+  
   rows.forEach((count, rowIdx) => {
-    // For home team (top half): Y from 6% (GK near top goal) to 44% (strikers near midfield)
-    // For away team (bottom half): Y from 94% (GK near bottom goal) to 56% (strikers near midfield)
-    const yRange = 38; // each half uses 38% of the pitch
-    const yStart = isHome ? 6 : 94;
-    const yDirection = isHome ? 1 : -1;
-    const yBase = yStart + yDirection * (rowIdx * yRange / (totalRows - 1 || 1));
+    const yBase = getYPosition(rowIdx, rows.length);
     
     for (let i = 0; i < count; i++) {
       const player = lineup.startingXI[playerIndex++];
-      const xSpan = 100 - (2 * sidePadding);
+      // X position: evenly space players between xMin and xMax
       const x = count === 1 
         ? 50 
-        : sidePadding + (i * xSpan / (count - 1));
+        : xMin + (i * (xMax - xMin) / (count - 1));
       
       positions.push({ player, x, y: yBase });
     }
@@ -810,15 +835,17 @@ function TeamXIColumn({
   const isRight = align === "right";
   
   return (
-    <div className="flex flex-col h-full">
+    <div className={`flex flex-col h-full ${isRight ? "lg:pl-8 text-right" : ""}`}>
       {/* Team header */}
       <div className={`flex items-center gap-2 mb-3 ${isRight ? "flex-row-reverse" : ""}`}>
         <TeamCrest team={team} size="sm" />
         <div className={isRight ? "text-right" : ""}>
           <p className="font-semibold text-sm">{team.name}</p>
-          <Badge variant="secondary" className="text-[10px] px-1.5">
-            {lineup.formation}
-          </Badge>
+          <div className={isRight ? "flex justify-end" : ""}>
+            <Badge variant="secondary" className="text-[10px] px-1.5">
+              {lineup.formation}
+            </Badge>
+          </div>
         </div>
       </div>
       
@@ -827,12 +854,14 @@ function TeamXIColumn({
         {lineup.startingXI.map((player, idx) => (
           <div 
             key={idx} 
-            className={`flex items-center gap-2 text-sm py-0.5 ${isRight ? "flex-row-reverse" : ""}`}
+            className={`flex items-center gap-2 text-sm py-0.5 ${isRight ? "justify-end" : ""}`}
           >
-            <span className={`w-5 text-xs text-muted-foreground font-medium ${isRight ? "text-left" : "text-right"}`}>
+            <span className={`w-5 text-xs text-muted-foreground font-medium shrink-0 text-right`}>
               {player?.number ?? idx + 1}
             </span>
-            <span className="truncate flex-1">{player?.name || "TBC"}</span>
+            <span className={`truncate ${isRight ? "text-right" : ""}`}>
+              {player?.name || "TBC"}
+            </span>
           </div>
         ))}
       </div>
