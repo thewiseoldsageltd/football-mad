@@ -564,10 +564,10 @@ function HalfPitchFormation({
                   className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shadow-md border-2 border-white/30"
                   style={{ backgroundColor: teamColor, color: "white" }}
                 >
-                  {player?.number ?? getPlayerInitials(player?.name || "")}
+                  {player?.number ?? getPlayerInitials(player?.name || "TBC")}
                 </div>
                 <span className="text-[10px] text-white font-medium text-center max-w-[50px] truncate drop-shadow-sm">
-                  {player?.name || "Unknown"}
+                  {player?.name || "TBC"}
                 </span>
               </div>
             ))}
@@ -738,8 +738,8 @@ function TeamLineup({
   isAway?: boolean;
 }) {
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
+    <div className="border-b border-border/50 last:border-b-0 pb-6 last:pb-0">
+      <div className="flex items-center gap-2 mb-4">
         <TeamCrest team={team} size="sm" />
         <div>
           <p className="font-semibold text-sm">{team.name}</p>
@@ -749,34 +749,69 @@ function TeamLineup({
         </div>
       </div>
       
-      <HalfPitchFormation 
-        lineup={lineup} 
-        teamColor={team.primaryColor} 
-        isAway={isAway} 
-      />
+      {/* Desktop: 2-column grid (list left, pitch right) */}
+      <div className="hidden md:grid md:grid-cols-2 gap-4">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Starting XI</p>
+          <div className="space-y-1">
+            {lineup.startingXI.map((player, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-sm py-0.5">
+                <span className="w-6 text-xs text-muted-foreground font-medium text-right">
+                  {player?.number ?? idx + 1}
+                </span>
+                <span className="truncate">{player?.name || "TBC"}</span>
+              </div>
+            ))}
+          </div>
+          
+          {lineup.substitutes && lineup.substitutes.length > 0 && (
+            <div className="mt-4">
+              <p className="text-xs font-medium text-muted-foreground mb-1">Substitutes</p>
+              <p className="text-xs text-muted-foreground">
+                {lineup.substitutes.map(s => s?.name || "TBC").join(", ")}
+              </p>
+            </div>
+          )}
+        </div>
+        
+        <div>
+          <HalfPitchFormation 
+            lineup={lineup} 
+            teamColor={team.primaryColor} 
+            isAway={isAway} 
+          />
+        </div>
+      </div>
       
-      <div className="mb-3">
+      {/* Mobile: stacked layout (list, then pitch, then subs) */}
+      <div className="md:hidden">
         <p className="text-xs font-medium text-muted-foreground mb-2">Starting XI</p>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-4">
           {lineup.startingXI.map((player, idx) => (
             <div key={idx} className="flex items-center gap-1.5 text-sm py-0.5">
               <span className="w-5 text-xs text-muted-foreground font-medium">
                 {player?.number ?? idx + 1}
               </span>
-              <span className="truncate">{player?.name || "Unknown"}</span>
+              <span className="truncate">{player?.name || "TBC"}</span>
             </div>
           ))}
         </div>
+        
+        <HalfPitchFormation 
+          lineup={lineup} 
+          teamColor={team.primaryColor} 
+          isAway={isAway} 
+        />
+        
+        {lineup.substitutes && lineup.substitutes.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Substitutes</p>
+            <p className="text-xs text-muted-foreground">
+              {lineup.substitutes.map(s => s?.name || "TBC").join(", ")}
+            </p>
+          </div>
+        )}
       </div>
-      
-      {lineup.substitutes && lineup.substitutes.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-muted-foreground mb-1">Substitutes</p>
-          <p className="text-xs text-muted-foreground">
-            {lineup.substitutes.map(s => s?.name || "Unknown").join(", ")}
-          </p>
-        </div>
-      )}
     </div>
   );
 }
@@ -794,7 +829,7 @@ function PredictedXI({ match }: { match: MatchData }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="space-y-6">
           <TeamLineup team={match.homeTeam} lineup={homeXI} isAway={false} />
           <TeamLineup team={match.awayTeam} lineup={awayXI} isAway={true} />
         </div>
