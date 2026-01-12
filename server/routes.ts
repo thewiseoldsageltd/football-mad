@@ -627,4 +627,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: "Failed to fetch availability" });
     }
   });
+
+  // Global availability endpoint for Treatment Room page
+  app.get("/api/availability", async (req, res) => {
+    try {
+      const availability = await storage.getAllFplAvailability();
+      const teams = await storage.getTeams();
+      
+      const teamMap = new Map(teams.map(t => [t.slug, { name: t.name, shortName: t.shortName }]));
+      
+      const enriched = availability.map((player) => {
+        const result = classifyPlayer(player.chanceNextRound, player.chanceThisRound, player.fplStatus, player.news);
+        const teamInfo = teamMap.get(player.teamSlug);
+        return {
+          ...player,
+          teamName: teamInfo?.name || player.teamSlug,
+          teamShortName: teamInfo?.shortName || player.teamSlug.toUpperCase().slice(0, 3),
+          classification: result.classification,
+          bucket: result.bucket,
+          ringColor: result.ringColor,
+          displayPercent: result.displayPercent,
+          effectiveChance: result.effectiveChance,
+        };
+      });
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching global availability:", error);
+      res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  });
 }

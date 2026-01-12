@@ -1,0 +1,43 @@
+You are building Football Mad (React + Tailwind). We already have a Team Hub "Injuries & Availability" tab that pulls factual availability/injury data from the Fantasy Premier League (FPL) feed.
+
+Task: Create a GLOBAL Injuries page linked from the main header nav item "Injuries". Keep the top nav label as "Injuries", but the page H1 must be "Treatment Room" (NOT Injury Room). This global page must reuse the same data + card UI logic as the Team Hub injuries tab, but aggregated across ALL teams.
+
+Requirements:
+1) Data
+- Reuse the same FPL availability dataset and parsing logic used on the Team Hub injuries tab.
+- Build a normalized schema per player: playerId, playerName, teamId, teamName, teamShortCode, position, status (e.g. OUT/DOUBTFUL/FIT/SUSPENDED/RETURNING_SOON), injuryType, expectedReturnText, chancePercent, lastUpdated.
+- The global view should include all players across all teams by default.
+
+2) UI Layout
+- Page title: "Treatment Room"
+- Subtitle: "Player injuries and expected returns (FPL-powered)"
+- Controls row:
+  - Team dropdown: default "All Teams", options for each team (use teamShortCode + teamName)
+  - Status tabs: All, Out, Doubtful, Fit (and Suspended if available in data)
+  - Sort dropdown (simple): "Most relevant" (default), "Last updated", "Highest confidence", "Lowest confidence"
+- Results area: card grid matching the Team Hub injuries card style. Each card shows:
+  - Player name + team name
+  - Status badge (Out red, Doubtful amber, Fit green, etc.)
+  - Injury type
+  - Expected return (text)
+  - Confidence bar using chancePercent
+  - Last updated timestamp
+
+3) Sorting / filtering behaviour
+- Default sort "Most relevant": Out first, then Doubtful, then Returning Soon, then Fit; within each group, most recently updated first.
+- Team dropdown filters the dataset.
+- Tabs filter by status.
+- All filters should work together.
+
+4) Consistency
+- Match the existing Football Mad layout widths, spacing, and typography. Do NOT make this page narrower than other pages.
+- Use the same header and overall container sizing as the rest of the site.
+
+5) Implementation notes
+- Build this as a route: /injuries
+- Do not hardcode sample players; if the FPL feed is missing, create a small mocked fallback dataset behind a flag so UI still renders.
+- Keep the code modular: reuse the existing InjuryCard component and the same data parsing utilities if they exist.
+
+Deliverables:
+- Add the /injuries page and wire it into the header nav "Injuries".
+- Ensure the page header reads "Treatment Room".

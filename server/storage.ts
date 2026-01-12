@@ -101,6 +101,7 @@ export interface IStorage {
   
   // FPL Availability
   getFplAvailabilityByTeam(teamSlug: string, sortBy?: "recent" | "lowest"): Promise<FplPlayerAvailability[]>;
+  getAllFplAvailability(): Promise<FplPlayerAvailability[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -533,6 +534,25 @@ export class DatabaseStorage implements IStorage {
         return aChance - bChance;
       });
     }
+    
+    return results.sort((a, b) => {
+      const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+      const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+      return bDate - aDate;
+    });
+  }
+
+  async getAllFplAvailability(): Promise<FplPlayerAvailability[]> {
+    const results = await db
+      .select()
+      .from(fplPlayerAvailability)
+      .where(
+        or(
+          sql`${fplPlayerAvailability.news} IS NOT NULL AND ${fplPlayerAvailability.news} != ''`,
+          sql`COALESCE(${fplPlayerAvailability.chanceNextRound}, ${fplPlayerAvailability.chanceThisRound}) < 100`,
+          sql`${fplPlayerAvailability.chanceNextRound} IS NULL AND ${fplPlayerAvailability.chanceThisRound} IS NULL AND ${fplPlayerAvailability.fplStatus} != 'a'`
+        )
+      );
     
     return results.sort((a, b) => {
       const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
