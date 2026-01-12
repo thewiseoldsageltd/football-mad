@@ -33,6 +33,7 @@ function Router() {
       <Route path="/teams/:slug/:tab" component={TeamHubPage} />
       <Route path="/matches" component={MatchesPage} />
       <Route path="/matches/:slug" component={MatchPage} />
+      <Route path="/matches/:slug/report" component={MatchPage} />
       <Route path="/transfers" component={TransfersPage} />
       <Route path="/injuries" component={InjuriesPage} />
       <Route path="/fpl" component={FPLPage} />

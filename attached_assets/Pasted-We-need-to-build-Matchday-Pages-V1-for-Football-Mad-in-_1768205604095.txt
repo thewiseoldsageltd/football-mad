@@ -1,0 +1,89 @@
+We need to build Matchday Pages (V1) for Football Mad in our React/Next.js app.
+
+Context:
+
+We already have Team Hub → Matches working (month-based list) and each match row is clickable with a chevron.
+
+Clicking a match should navigate to a matchday page.
+
+Matchday pages must support two states:
+
+Pre-match (fixture-oriented)
+
+Post-match (result-oriented)
+
+We have an injury system already (FPL-powered) and want match pages to be fan-first and narrative-first.
+
+Requirements:
+
+Routing
+
+Create a matchday route like /matches/[matchId] (or align with existing routes if already started).
+
+The match row click should navigate to this matchday page using the match’s id.
+
+Shared Match Header (Always visible at top)
+
+Home crest + Away crest
+
+Team names
+
+Kick-off time (pre-match) OR final score (post-match)
+
+Competition + round (where available)
+
+Stadium + date
+
+Status badge: “Today”, “FT”, “Postponed” (live can be placeholder for later)
+
+Pre-match Mode (fixture)
+
+Show a short match narrative (2–3 sentences) at the top under the header (dummy copy is fine).
+
+Show a Predicted XI (basic) section:
+
+formation label (e.g. 4-3-3)
+
+list of likely starters (simple list is fine for V1)
+
+Show Key absences pulling from our injury availability data if available (fallback to dummy data).
+
+Show a light Head-to-head snippet (last 3–5 meetings) using dummy data.
+
+Post-match Mode (result)
+
+Replace narrative with a short match summary (2–3 sentences) (dummy copy ok).
+
+Show a Key moments timeline (goals, red cards, notable incidents) (dummy data ok).
+
+Show Key stats (keep it curated to 4–5 stats max: xG, shots on target, possession, big chances, etc.) using dummy data for now.
+
+Show a What this means section (league/cup implications in 1–2 lines) (dummy data ok).
+
+Data
+
+Use dummy matchday data initially, but structure it so it can later be powered by:
+
+FPL fixtures/results for Premier League
+
+another provider for cups/Europe
+
+Keep the match model/provider-agnostic (fixture/result status should drive which mode renders).
+
+Ensure null-safe rendering (no broken UI if optional data is missing).
+
+UI/UX
+
+Mobile-first, clean, scannable layout.
+
+Use the existing Football Mad design language (cards, spacing, typography, right rail stays as-is where applicable).
+
+Do not refactor other Team Hub tabs (Latest/Injuries/Transfers).
+
+Deliverable:
+
+Implement the matchday page with both modes working.
+
+Make sure clicking a match row in Team Hub opens the matchday page.
+
+Use solid dummy data so the page feels “real” even before live feeds are wired in.

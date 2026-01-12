@@ -1319,7 +1319,7 @@ function MatchRow({
   
   return (
     <Link 
-      href={isFinished ? `/matches/${match.id}/report` : `/matches/${match.id}`}
+      href={`/matches/${match.id}`}
       className="block"
       data-testid={`match-row-${match.id}`}
     >
