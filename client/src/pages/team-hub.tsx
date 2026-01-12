@@ -889,7 +889,6 @@ function TransfersTabContent({
   );
 }
 
-type MatchSubTab = "fixtures" | "results";
 
 function formatMatchDate(dateStr: string | Date): string {
   const date = new Date(dateStr);
@@ -1255,19 +1254,6 @@ function formatKickoffTimeShort(date: Date): string {
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
-function getMatchweekDateRange(matches: DummyMatch[]): string {
-  if (matches.length === 0) return "";
-  const sorted = [...matches].sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
-  const first = sorted[0].kickoffTime;
-  const last = sorted[sorted.length - 1].kickoffTime;
-  
-  const formatShort = (d: Date) => d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
-  
-  if (first.toDateString() === last.toDateString()) {
-    return formatShort(first);
-  }
-  return `${formatShort(first)} to ${formatShort(last)}`;
-}
 
 function groupMatchesByDay(matches: DummyMatch[]): { date: string; matches: DummyMatch[] }[] {
   const groups: Record<string, DummyMatch[]> = {};
@@ -1387,69 +1373,84 @@ function DayGroup({ date, matches, teamSlug }: { date: string; matches: DummyMat
   );
 }
 
-function MatchweekSelector({ 
-  currentWeek, 
-  totalWeeks, 
-  onWeekChange,
-  dateRange,
-  label = "Matchweek"
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+function MonthSelector({ 
+  currentMonth, 
+  currentYear,
+  availableMonths,
+  onMonthChange
 }: { 
-  currentWeek: number; 
-  totalWeeks: number; 
-  onWeekChange: (week: number) => void;
-  dateRange?: string;
-  label?: string;
+  currentMonth: number; 
+  currentYear: number;
+  availableMonths: { month: number; year: number }[];
+  onMonthChange: (month: number, year: number) => void;
 }) {
+  const currentIndex = availableMonths.findIndex(m => m.month === currentMonth && m.year === currentYear);
+  const canGoPrev = currentIndex > 0;
+  const canGoNext = currentIndex < availableMonths.length - 1;
+  
+  const goToPrev = () => {
+    if (canGoPrev) {
+      const prev = availableMonths[currentIndex - 1];
+      onMonthChange(prev.month, prev.year);
+    }
+  };
+  
+  const goToNext = () => {
+    if (canGoNext) {
+      const next = availableMonths[currentIndex + 1];
+      onMonthChange(next.month, next.year);
+    }
+  };
+  
   return (
-    <div className="flex flex-col items-center gap-1 py-3 px-2 bg-muted/30 rounded-lg">
-      <div className="flex items-center justify-between w-full gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onWeekChange(Math.max(1, currentWeek - 1))}
-          disabled={currentWeek <= 1}
-          data-testid="btn-prev-week"
-          className="h-8 w-8"
+    <div className="flex items-center justify-between gap-2 py-3 px-3 bg-muted/30 rounded-lg">
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={goToPrev}
+        disabled={!canGoPrev}
+        data-testid="btn-prev-month"
+        className="h-8 w-8"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </Button>
+      
+      <div className="flex items-center gap-2">
+        <Select 
+          value={`${currentMonth}-${currentYear}`}
+          onValueChange={(v: string) => {
+            const [m, y] = v.split("-").map(Number);
+            onMonthChange(m, y);
+          }}
         >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">{label} {currentWeek}</span>
-          <Select 
-            value={currentWeek.toString()} 
-            onValueChange={(v: string) => onWeekChange(parseInt(v))}
-          >
-            <SelectTrigger className="w-16 h-7 text-xs" data-testid="select-matchweek">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((week) => (
-                <SelectItem key={week} value={week.toString()}>
-                  {week}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onWeekChange(Math.min(totalWeeks, currentWeek + 1))}
-          disabled={currentWeek >= totalWeeks}
-          data-testid="btn-next-week"
-          className="h-8 w-8"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+          <SelectTrigger className="w-36 h-8" data-testid="select-month">
+            <SelectValue>{MONTH_NAMES[currentMonth]} {currentYear}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {availableMonths.map(({ month, year }) => (
+              <SelectItem key={`${month}-${year}`} value={`${month}-${year}`}>
+                {MONTH_NAMES[month]} {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       
-      {dateRange && (
-        <div className="text-xs text-muted-foreground">
-          {dateRange}
-        </div>
-      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={goToNext}
+        disabled={!canGoNext}
+        data-testid="btn-next-month"
+        className="h-8 w-8"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -1465,113 +1466,89 @@ function MatchesTabContent({
   teamId: string;
   teamSlug: string;
 }) {
-  const [subTab, setSubTab] = useState<MatchSubTab>("fixtures");
-  const [fixtureWeek, setFixtureWeek] = useState(21); // Current matchweek for fixtures
-  const [resultWeek, setResultWeek] = useState(20); // Current matchweek for results
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [competitionFilter, setCompetitionFilter] = useState<string>("all");
   
   const allMatches = useMemo(() => generateDummyMatches(teamSlug), [teamSlug]);
-  const now = new Date();
   
-  // Separate fixtures and results
-  const fixtures = useMemo(() => 
-    allMatches.filter(m => m.status === "scheduled" || m.status === "postponed"),
-    [allMatches]
-  );
-  
-  const results = useMemo(() => 
-    allMatches.filter(m => m.status === "finished"),
-    [allMatches]
-  );
-  
-  // Group by matchweek/round
-  const fixturesByWeek = useMemo(() => {
-    const groups: Record<number, DummyMatch[]> = {};
-    fixtures.forEach(m => {
-      const week = m.matchweek || 0;
-      if (!groups[week]) groups[week] = [];
-      groups[week].push(m);
+  // Get available months from all matches
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    allMatches.forEach(m => {
+      const key = `${m.kickoffTime.getMonth()}-${m.kickoffTime.getFullYear()}`;
+      monthSet.add(key);
     });
-    return groups;
-  }, [fixtures]);
+    return Array.from(monthSet)
+      .map(key => {
+        const [month, year] = key.split("-").map(Number);
+        return { month, year };
+      })
+      .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+  }, [allMatches]);
   
-  const resultsByWeek = useMemo(() => {
-    const groups: Record<number, DummyMatch[]> = {};
-    results.forEach(m => {
-      const week = m.matchweek || 0;
-      if (!groups[week]) groups[week] = [];
-      groups[week].push(m);
-    });
-    return groups;
-  }, [results]);
+  // Filter matches by selected month and competition
+  const filteredMatches = useMemo(() => {
+    let matches = allMatches.filter(m => 
+      m.kickoffTime.getMonth() === selectedMonth && 
+      m.kickoffTime.getFullYear() === selectedYear
+    );
+    
+    if (competitionFilter !== "all") {
+      if (competitionFilter === "cups") {
+        matches = matches.filter(m => m.competition !== "Premier League");
+      } else {
+        matches = matches.filter(m => m.competition === competitionFilter);
+      }
+    }
+    
+    return matches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
+  }, [allMatches, selectedMonth, selectedYear, competitionFilter]);
   
-  // Get cup matches separately
-  const cupFixtures = useMemo(() => 
-    fixtures.filter(m => m.competition !== "Premier League"),
-    [fixtures]
-  );
+  // Group matches by date
+  const groupedMatches = useMemo(() => groupMatchesByDay(filteredMatches), [filteredMatches]);
   
-  const cupResults = useMemo(() => 
-    results.filter(m => m.competition !== "Premier League"),
-    [results]
-  );
-  
-  // Filter by competition
-  const filteredFixtures = useMemo(() => {
-    if (competitionFilter === "all") return fixturesByWeek[fixtureWeek] || [];
-    if (competitionFilter === "cups") return cupFixtures;
-    return (fixturesByWeek[fixtureWeek] || []).filter(m => m.competition === competitionFilter);
-  }, [fixturesByWeek, fixtureWeek, competitionFilter, cupFixtures]);
-  
-  const filteredResults = useMemo(() => {
-    if (competitionFilter === "all") return resultsByWeek[resultWeek] || [];
-    if (competitionFilter === "cups") return cupResults;
-    return (resultsByWeek[resultWeek] || []).filter(m => m.competition === competitionFilter);
-  }, [resultsByWeek, resultWeek, competitionFilter, cupResults]);
-  
-  // Available matchweeks
-  const fixtureWeeks = Object.keys(fixturesByWeek).map(Number).sort((a, b) => a - b);
-  const resultWeeks = Object.keys(resultsByWeek).map(Number).sort((a, b) => b - a);
-  
-  // Find current matchweek
+  // Default to current month on mount
   useEffect(() => {
-    if (fixtureWeeks.length > 0 && !fixtureWeeks.includes(fixtureWeek)) {
-      setFixtureWeek(fixtureWeeks[0]);
+    const hasCurrentMonth = availableMonths.some(
+      m => m.month === now.getMonth() && m.year === now.getFullYear()
+    );
+    if (!hasCurrentMonth && availableMonths.length > 0) {
+      // Find closest month to current date
+      const closest = availableMonths.reduce((prev, curr) => {
+        const prevDiff = Math.abs(new Date(prev.year, prev.month).getTime() - now.getTime());
+        const currDiff = Math.abs(new Date(curr.year, curr.month).getTime() - now.getTime());
+        return currDiff < prevDiff ? curr : prev;
+      });
+      setSelectedMonth(closest.month);
+      setSelectedYear(closest.year);
     }
-    if (resultWeeks.length > 0 && !resultWeeks.includes(resultWeek)) {
-      setResultWeek(resultWeeks[0]);
-    }
-  }, [fixtureWeeks, resultWeeks, fixtureWeek, resultWeek]);
+  }, [availableMonths, now]);
+  
+  const handleMonthChange = (month: number, year: number) => {
+    setSelectedMonth(month);
+    setSelectedYear(year);
+  };
   
   const competitions = ["all", "Premier League", "Champions League", "FA Cup", "EFL Cup", "cups"];
   
+  // Stats for current month
+  const monthStats = useMemo(() => {
+    const completed = filteredMatches.filter(m => m.status === "finished").length;
+    const upcoming = filteredMatches.filter(m => m.status === "scheduled" || m.status === "postponed").length;
+    return { completed, upcoming, total: filteredMatches.length };
+  }, [filteredMatches]);
+  
   return (
     <div className="space-y-4">
-      {/* Sub-tabs */}
-      <div className="flex gap-2 border-b">
-        <button
-          onClick={() => setSubTab("fixtures")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            subTab === "fixtures"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="subtab-fixtures"
-        >
-          Fixtures
-        </button>
-        <button
-          onClick={() => setSubTab("results")}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            subTab === "results"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="subtab-results"
-        >
-          Results
-        </button>
-      </div>
+      {/* Month selector */}
+      <MonthSelector
+        currentMonth={selectedMonth}
+        currentYear={selectedYear}
+        availableMonths={availableMonths}
+        onMonthChange={handleMonthChange}
+      />
       
       {/* Competition filter */}
       <div className="flex gap-2 overflow-x-auto pb-2">
@@ -1584,90 +1561,29 @@ function MatchesTabContent({
             className="shrink-0"
             data-testid={`filter-${comp.toLowerCase().replace(/\s+/g, "-")}`}
           >
-            {comp === "all" ? "All Competitions" : comp === "cups" ? "Cup Competitions" : comp}
+            {comp === "all" ? "All" : comp === "cups" ? "Cups" : comp}
           </Button>
         ))}
       </div>
       
-      {subTab === "fixtures" && (
-        <div className="space-y-4">
-          {competitionFilter === "all" || competitionFilter === "Premier League" ? (
-            <>
-              <MatchweekSelector
-                currentWeek={fixtureWeek}
-                totalWeeks={38}
-                onWeekChange={setFixtureWeek}
-                dateRange={getMatchweekDateRange(filteredFixtures)}
-              />
-              
-              {filteredFixtures.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No fixtures for Matchweek {fixtureWeek}</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {groupMatchesByDay(filteredFixtures).map((group) => (
-                    <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="space-y-4">
-              {filteredFixtures.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No {competitionFilter} fixtures scheduled</p>
-                </div>
-              ) : (
-                groupMatchesByDay(filteredFixtures).map((group) => (
-                  <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Month summary */}
+      <div className="flex gap-4 text-xs text-muted-foreground px-1">
+        <span>{monthStats.total} match{monthStats.total !== 1 ? "es" : ""}</span>
+        {monthStats.completed > 0 && <span>{monthStats.completed} played</span>}
+        {monthStats.upcoming > 0 && <span>{monthStats.upcoming} upcoming</span>}
+      </div>
       
-      {subTab === "results" && (
+      {/* Matches list grouped by date */}
+      {groupedMatches.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p>No matches in {MONTH_NAMES[selectedMonth]} {selectedYear}</p>
+        </div>
+      ) : (
         <div className="space-y-4">
-          {competitionFilter === "all" || competitionFilter === "Premier League" ? (
-            <>
-              <MatchweekSelector
-                currentWeek={resultWeek}
-                totalWeeks={Math.max(...resultWeeks, 1)}
-                onWeekChange={setResultWeek}
-                dateRange={getMatchweekDateRange(filteredResults)}
-              />
-              
-              {filteredResults.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No results for Matchweek {resultWeek}</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {groupMatchesByDay(filteredResults).map((group) => (
-                    <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="space-y-4">
-              {filteredResults.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No {competitionFilter} results yet</p>
-                </div>
-              ) : (
-                groupMatchesByDay(filteredResults).map((group) => (
-                  <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
-                ))
-              )}
-            </div>
-          )}
+          {groupedMatches.map((group) => (
+            <DayGroup key={group.date} date={group.date} matches={group.matches} teamSlug={teamSlug} />
+          ))}
         </div>
       )}
       
@@ -1676,19 +1592,19 @@ function MatchesTabContent({
         <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-purple-600" />
-            <span>Premier League: {allMatches.filter(m => m.competition === "Premier League").length} matches</span>
+            <span>PL: {allMatches.filter(m => m.competition === "Premier League").length}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-700" />
-            <span>Champions League: {allMatches.filter(m => m.competition === "Champions League").length} matches</span>
+            <span>UCL: {allMatches.filter(m => m.competition === "Champions League").length}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-600" />
-            <span>FA Cup: {allMatches.filter(m => m.competition === "FA Cup").length} matches</span>
+            <span>FA Cup: {allMatches.filter(m => m.competition === "FA Cup").length}</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-600" />
-            <span>EFL Cup: {allMatches.filter(m => m.competition === "EFL Cup").length} matches</span>
+            <span>EFL Cup: {allMatches.filter(m => m.competition === "EFL Cup").length}</span>
           </div>
         </div>
       </div>
