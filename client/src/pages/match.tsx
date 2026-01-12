@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { format } from "date-fns";
 import { 
-  Calendar, MapPin, ArrowLeft, Users,
-  Target, Activity, AlertCircle, TrendingUp, Zap, ChevronDown, ChevronUp
+  Calendar, MapPin, ArrowLeft, Users, Star,
+  Target, Activity, AlertCircle, TrendingUp, Zap, ChevronDown, ChevronUp, BarChart3, User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -404,41 +404,39 @@ function MatchHeader({ match }: { match: MatchData }) {
   
   return (
     <div className="bg-card border-b" data-testid="match-header">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center gap-2 mb-6 flex-wrap justify-center">
           <Badge variant="outline" data-testid="badge-competition">{match.competition}</Badge>
           {match.round && <Badge variant="secondary" data-testid="badge-round">{match.round}</Badge>}
           <StatusBadge match={match} />
         </div>
         
-        <div className="flex items-center justify-center gap-6 sm:gap-10">
+        <div className="grid grid-cols-3 items-center gap-4">
           <Link href={`/teams/${match.homeTeam.slug}`}>
-            <div className="flex flex-col items-center group cursor-pointer" data-testid="home-team-link">
+            <div className="flex flex-col items-center group cursor-pointer h-[120px] justify-center" data-testid="home-team-link">
               <TeamCrest team={match.homeTeam} size="xl" />
-              <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center max-w-[100px] sm:max-w-none">
+              <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center line-clamp-2">
                 {match.homeTeam.name}
               </p>
             </div>
           </Link>
           
-          <div className="flex items-center justify-center min-w-[80px] sm:min-w-[100px]">
+          <div className="flex items-center justify-center h-[120px]">
             {isFinished ? (
               <div className="text-4xl sm:text-5xl font-bold tabular-nums" data-testid="match-score">
                 {match.homeScore ?? 0} - {match.awayScore ?? 0}
               </div>
             ) : (
-              <div className="flex flex-col items-center">
-                <p className="text-2xl sm:text-3xl font-semibold text-muted-foreground" data-testid="kickoff-time">
-                  {format(kickoff, "HH:mm")}
-                </p>
-              </div>
+              <p className="text-2xl sm:text-3xl font-semibold text-muted-foreground" data-testid="kickoff-time">
+                {format(kickoff, "HH:mm")}
+              </p>
             )}
           </div>
           
           <Link href={`/teams/${match.awayTeam.slug}`}>
-            <div className="flex flex-col items-center group cursor-pointer" data-testid="away-team-link">
+            <div className="flex flex-col items-center group cursor-pointer h-[120px] justify-center" data-testid="away-team-link">
               <TeamCrest team={match.awayTeam} size="xl" />
-              <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center max-w-[100px] sm:max-w-none">
+              <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center line-clamp-2">
                 {match.awayTeam.name}
               </p>
             </div>
@@ -551,18 +549,18 @@ function PredictedXI({ match }: { match: MatchData }) {
   );
 }
 
-function KeyAbsences({ match }: { match: MatchData }) {
+function InjuriesAndSuspensions({ match }: { match: MatchData }) {
   const homeAbsences = generateKeyAbsences(match.homeTeam);
   const awayAbsences = generateKeyAbsences(match.awayTeam);
   
   if (homeAbsences.length === 0 && awayAbsences.length === 0) return null;
   
   return (
-    <Card data-testid="key-absences">
+    <Card data-testid="injuries-suspensions">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <AlertCircle className="h-4 w-4" />
-          Key Absences
+          Injuries & Suspensions
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -664,7 +662,7 @@ function HeadToHeadSection({ match }: { match: MatchData }) {
   );
 }
 
-function KeyMomentsTimeline({ match }: { match: MatchData }) {
+function Timeline({ match }: { match: MatchData }) {
   const moments = generateKeyMoments(match);
   const [isExpanded, setIsExpanded] = useState(false);
   
@@ -674,11 +672,11 @@ function KeyMomentsTimeline({ match }: { match: MatchData }) {
   
   if (moments.length === 0) {
     return (
-      <Card data-testid="key-moments">
+      <Card data-testid="timeline">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Zap className="h-4 w-4" />
-            Key Moments
+            Timeline
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -737,11 +735,11 @@ function KeyMomentsTimeline({ match }: { match: MatchData }) {
   };
   
   return (
-    <Card data-testid="key-moments">
+    <Card data-testid="timeline">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Zap className="h-4 w-4" />
-          Key Moments
+          Timeline
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -754,7 +752,7 @@ function KeyMomentsTimeline({ match }: { match: MatchData }) {
             size="sm"
             className="w-full mt-4"
             onClick={() => setIsExpanded(!isExpanded)}
-            data-testid="button-toggle-moments"
+            data-testid="button-toggle-timeline"
           >
             {isExpanded ? (
               <>
@@ -831,10 +829,184 @@ function MatchStatsSection({ match }: { match: MatchData }) {
   );
 }
 
+function FormLast5({ match }: { match: MatchData }) {
+  const generateForm = (team: MatchTeam): ("W" | "D" | "L")[] => {
+    const seed = team.name.length * 7;
+    const results: ("W" | "D" | "L")[] = [];
+    for (let i = 0; i < 5; i++) {
+      const val = (seed + i * 3) % 5;
+      if (val < 2) results.push("W");
+      else if (val < 3) results.push("D");
+      else results.push("L");
+    }
+    return results;
+  };
+  
+  const homeForm = generateForm(match.homeTeam);
+  const awayForm = generateForm(match.awayTeam);
+  
+  const getFormColor = (result: "W" | "D" | "L") => {
+    switch (result) {
+      case "W": return "bg-green-600 text-white";
+      case "D": return "bg-amber-500 text-white";
+      case "L": return "bg-red-600 text-white";
+    }
+  };
+  
+  return (
+    <Card data-testid="form-last-5">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BarChart3 className="h-4 w-4" />
+          Form (Last 5)
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm font-medium mb-2" style={{ color: match.homeTeam.primaryColor }}>
+              {match.homeTeam.name}
+            </p>
+            <div className="flex gap-1">
+              {homeForm.map((result, idx) => (
+                <div 
+                  key={idx}
+                  className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold ${getFormColor(result)}`}
+                >
+                  {result}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-2" style={{ color: match.awayTeam.primaryColor }}>
+              {match.awayTeam.name}
+            </p>
+            <div className="flex gap-1">
+              {awayForm.map((result, idx) => (
+                <div 
+                  key={idx}
+                  className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold ${getFormColor(result)}`}
+                >
+                  {result}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TopPerformers({ match }: { match: MatchData }) {
+  const performers = [
+    { name: "Player A", team: match.homeTeam, rating: 8.5, goals: 1, assists: 1 },
+    { name: "Player B", team: match.awayTeam, rating: 8.2, goals: 0, assists: 2 },
+    { name: "Player C", team: match.homeTeam, rating: 7.9, goals: 1, assists: 0 },
+  ];
+  
+  return (
+    <Card data-testid="top-performers">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Star className="h-4 w-4" />
+          Top Performers
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid sm:grid-cols-3 gap-3">
+          {performers.map((player, idx) => (
+            <div 
+              key={idx}
+              className="p-3 rounded-lg border bg-muted/30"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div 
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: player.team.primaryColor }}
+                >
+                  <User className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">{player.name}</p>
+                  <p className="text-xs text-muted-foreground">{player.team.shortName}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Rating</span>
+                <Badge variant="secondary" className="font-bold">{player.rating.toFixed(1)}</Badge>
+              </div>
+              {(player.goals > 0 || player.assists > 0) && (
+                <div className="flex gap-2 mt-1 text-xs text-muted-foreground">
+                  {player.goals > 0 && <span>{player.goals}G</span>}
+                  {player.assists > 0 && <span>{player.assists}A</span>}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function Momentum({ match }: { match: MatchData }) {
+  const segments = [
+    { start: 0, end: 15, team: "home" as const, intensity: 0.6 },
+    { start: 15, end: 30, team: "away" as const, intensity: 0.8 },
+    { start: 30, end: 45, team: "home" as const, intensity: 0.5 },
+    { start: 45, end: 60, team: "away" as const, intensity: 0.7 },
+    { start: 60, end: 75, team: "home" as const, intensity: 0.9 },
+    { start: 75, end: 90, team: "home" as const, intensity: 0.4 },
+  ];
+  
+  return (
+    <Card data-testid="momentum">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Activity className="h-4 w-4" />
+          Momentum
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-0.5 h-6 rounded overflow-hidden">
+          {segments.map((segment, idx) => (
+            <div 
+              key={idx}
+              className="flex-1 transition-all"
+              style={{ 
+                backgroundColor: segment.team === "home" ? match.homeTeam.primaryColor : match.awayTeam.primaryColor,
+                opacity: segment.intensity
+              }}
+              title={`${segment.start}'-${segment.end}': ${segment.team === "home" ? match.homeTeam.shortName : match.awayTeam.shortName}`}
+            />
+          ))}
+        </div>
+        <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+          <span>0'</span>
+          <span>45'</span>
+          <span>90'</span>
+        </div>
+        <div className="flex justify-center gap-4 mt-3">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: match.homeTeam.primaryColor }} />
+            <span className="text-xs">{match.homeTeam.shortName}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded" style={{ backgroundColor: match.awayTeam.primaryColor }} />
+            <span className="text-xs">{match.awayTeam.shortName}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <MainLayout>
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <Skeleton className="h-8 w-32 mb-6" />
         <Skeleton className="h-48 w-full rounded-lg mb-8" />
         <div className="space-y-4">
@@ -880,7 +1052,7 @@ export default function MatchPage() {
   if (!isDummy && isError) {
     return (
       <MainLayout>
-        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <div className="max-w-7xl mx-auto px-4 py-16 text-center">
           <h1 className="text-2xl font-bold mb-4">Match not found</h1>
           <p className="text-muted-foreground mb-6">We couldn't find the match you're looking for.</p>
           <Link href="/matches">
@@ -897,7 +1069,7 @@ export default function MatchPage() {
   if (!match) {
     return (
       <MainLayout>
-        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <div className="max-w-7xl mx-auto px-4 py-16 text-center">
           <h1 className="text-2xl font-bold mb-4">Match not found</h1>
           <p className="text-muted-foreground mb-6">We couldn't find the match you're looking for.</p>
           <Link href="/matches">
@@ -916,27 +1088,40 @@ export default function MatchPage() {
   
   const backLink = match.homeTeam.slug ? `/teams/${match.homeTeam.slug}/matches` : "/matches";
   
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      window.history.back();
+    } else {
+      window.location.href = backLink;
+    }
+  };
+  
   return (
     <MainLayout>
-      <div className="mb-4 px-4 pt-4 max-w-4xl mx-auto">
-        <Link href={backLink}>
-          <Button variant="ghost" size="sm" className="-ml-2" data-testid="button-back">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Matches
-          </Button>
-        </Link>
+      <div className="mb-4 px-4 pt-4 max-w-7xl mx-auto">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="-ml-2" 
+          onClick={handleBack}
+          data-testid="button-back"
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back
+        </Button>
       </div>
       
       <MatchHeader match={match} />
       
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="space-y-4">
           {isPreMatch && (
             <>
               <PreMatchNarrative match={match} />
-              <PredictedXI match={match} />
-              <KeyAbsences match={match} />
               <HeadToHeadSection match={match} />
+              <FormLast5 match={match} />
+              <InjuriesAndSuspensions match={match} />
+              <PredictedXI match={match} />
             </>
           )}
           
@@ -944,7 +1129,9 @@ export default function MatchPage() {
             <>
               <PostMatchSummary match={match} />
               <MatchStatsSection match={match} />
-              <KeyMomentsTimeline match={match} />
+              <Timeline match={match} />
+              <TopPerformers match={match} />
+              <Momentum match={match} />
             </>
           )}
         </div>
