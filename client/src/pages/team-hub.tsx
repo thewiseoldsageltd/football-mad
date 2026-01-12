@@ -1246,8 +1246,16 @@ function TeamCrest({ team, size = "sm" }: { team: { name: string; shortName: str
   );
 }
 
-function formatDateShort(date: Date): string {
+function formatDateInline(date: Date): string {
   return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
+function formatDayAbbrev(date: Date): string {
+  return date.toLocaleDateString("en-GB", { weekday: "short" });
+}
+
+function formatDayMonth(date: Date): string {
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 function formatKickoffTimeShort(date: Date): string {
@@ -1315,17 +1323,27 @@ function MatchRow({
       className="block"
       data-testid={`match-row-${match.id}`}
     >
-      <div className="flex items-center gap-2 py-2 px-2 sm:px-3 hover-elevate rounded-md border border-border/50 bg-card/50">
-        {/* Date - leftmost */}
-        <div className="w-[72px] sm:w-20 shrink-0 text-left">
-          <span className="text-[11px] sm:text-xs text-muted-foreground font-medium">
-            {formatDateShort(match.kickoffTime)}
+      <div className="flex items-center gap-1.5 sm:gap-2 py-2 px-2 sm:px-3 hover-elevate rounded-md border border-border/50 bg-card/50">
+        {/* Date - stacked on mobile, inline on desktop */}
+        <div className="w-10 sm:w-[76px] shrink-0">
+          {/* Mobile: stacked */}
+          <div className="flex flex-col items-center sm:hidden">
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase leading-tight">
+              {formatDayAbbrev(match.kickoffTime)}
+            </span>
+            <span className="text-[10px] text-muted-foreground leading-tight">
+              {formatDayMonth(match.kickoffTime)}
+            </span>
+          </div>
+          {/* Desktop: inline */}
+          <span className="hidden sm:block text-xs text-muted-foreground font-medium">
+            {formatDateInline(match.kickoffTime)}
           </span>
         </div>
         
         {/* Home team - name + crest, right-aligned */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0 justify-end">
-          <span className={`text-[13px] sm:text-sm leading-tight text-right truncate ${
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 justify-end">
+          <span className={`text-[12px] sm:text-sm leading-tight text-right truncate ${
             match.homeTeam.slug === teamSlug ? "font-bold" : "font-medium"
           }`}>
             {match.homeTeam.name}
@@ -1334,18 +1352,18 @@ function MatchRow({
         </div>
         
         {/* Center: Time or Score - fixed width for perfect centering */}
-        <div className="w-[52px] flex items-center justify-center shrink-0">
+        <div className="w-11 sm:w-[52px] flex items-center justify-center shrink-0">
           {isFinished ? (
             <div className="flex items-center justify-center">
-              <span className={`text-sm font-bold tabular-nums ${
+              <span className={`text-[13px] sm:text-sm font-bold tabular-nums ${
                 match.homeTeam.slug === teamSlug && (match.homeScore ?? 0) > (match.awayScore ?? 0) 
                   ? "text-green-600 dark:text-green-400" 
                   : ""
               }`}>
                 {match.homeScore}
               </span>
-              <span className="text-xs text-muted-foreground mx-0.5">-</span>
-              <span className={`text-sm font-bold tabular-nums ${
+              <span className="text-[10px] sm:text-xs text-muted-foreground mx-0.5">-</span>
+              <span className={`text-[13px] sm:text-sm font-bold tabular-nums ${
                 match.awayTeam.slug === teamSlug && (match.awayScore ?? 0) > (match.homeScore ?? 0) 
                   ? "text-green-600 dark:text-green-400" 
                   : ""
@@ -1354,18 +1372,18 @@ function MatchRow({
               </span>
             </div>
           ) : isPostponed ? (
-            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">TBC</span>
+            <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400">TBC</span>
           ) : (
-            <span className="text-[12px] font-semibold text-muted-foreground tabular-nums">
+            <span className="text-[11px] sm:text-[12px] font-semibold text-muted-foreground tabular-nums">
               {formatKickoffTimeShort(match.kickoffTime)}
             </span>
           )}
         </div>
         
         {/* Away team - crest + name, left-aligned */}
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0">
           <TeamCrest team={match.awayTeam} size="sm" />
-          <span className={`text-[13px] sm:text-sm leading-tight truncate ${
+          <span className={`text-[12px] sm:text-sm leading-tight truncate ${
             match.awayTeam.slug === teamSlug ? "font-bold" : "font-medium"
           }`}>
             {match.awayTeam.name}
@@ -1377,7 +1395,7 @@ function MatchRow({
           <CompetitionLogo competition={match.competition} size={18} />
         </div>
         
-        {/* Arrow */}
+        {/* Arrow - desktop only */}
         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 hidden sm:block" />
       </div>
     </Link>
