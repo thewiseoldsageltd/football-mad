@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { SlidersHorizontal, Search, X, Zap, Users } from "lucide-react";
+import { SlidersHorizontal, Search, X, Zap, Users, Newspaper } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNewsFilters, type ContentTypeSlug, type CompetitionSlug } from "@/hooks/use-news-filters";
 import { NEWS_COMPETITIONS, NEWS_CONTENT_TYPES, NEWS_SORT_OPTIONS, NEWS_TIME_RANGES, type Team, type NewsFiltersResponse } from "@shared/schema";
@@ -163,11 +163,14 @@ export default function NewsPage() {
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2">News</h1>
-          <p className="text-muted-foreground text-lg">
-            {currentCompetition?.subheading}
-          </p>
+        <div className="flex items-center gap-3 mb-8">
+          <Newspaper className="h-8 w-8 text-primary shrink-0" aria-hidden="true" />
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">News</h1>
+            <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
+              {currentCompetition?.subheading}
+            </p>
+          </div>
         </div>
 
         <Tabs value={filters.comp} onValueChange={handleCompetitionChange} className="w-full">

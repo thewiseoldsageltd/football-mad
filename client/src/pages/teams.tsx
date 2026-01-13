@@ -4,7 +4,7 @@ import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trophy } from "lucide-react";
+import { Search, Trophy, Shield } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -87,11 +87,14 @@ export default function TeamsPage() {
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2">Teams</h1>
-          <p className="text-muted-foreground text-lg">
-            Browse and follow your favourite clubs
-          </p>
+        <div className="flex items-center gap-3 mb-8">
+          <Shield className="h-8 w-8 text-primary shrink-0" aria-hidden="true" />
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">Teams</h1>
+            <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
+              Browse and follow your favourite clubs
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
