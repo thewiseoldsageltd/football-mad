@@ -414,65 +414,117 @@ export default function InjuriesPage() {
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-8">
-          <div className="flex items-center gap-3">
-            <Activity className="h-8 w-8 text-red-500" />
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">Treatment Room</h1>
-              <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
-                Player injuries and expected returns (FPL-powered)
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger className="w-[200px]" data-testid="select-team-filter">
-                <SelectValue placeholder="All Teams" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Teams</SelectItem>
-                {plTeams.map((team) => (
-                  <SelectItem key={team.slug} value={team.slug}>
-                    {team.code} – {team.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
-              <SelectTrigger className="w-[180px]" data-testid="select-sort">
-                <ArrowUpDown className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="closest_return">Closest return</SelectItem>
-                <SelectItem value="updated">Last updated</SelectItem>
-                <SelectItem value="highest">Highest confidence</SelectItem>
-                <SelectItem value="lowest">Lowest confidence</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Page Title */}
+        <div className="flex items-center gap-3 mb-6">
+          <Activity className="h-8 w-8 text-red-500" />
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">Treatment Room</h1>
+            <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
+              Player injuries and expected returns (FPL-powered)
+            </p>
           </div>
         </div>
 
         <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as StatusTab)} className="w-full">
-          <TabsList className="mb-6 flex-wrap h-auto gap-1" data-testid="tabs-status">
-            <TabsTrigger value="all" data-testid="tab-all">
-              Overview ({counts.all})
-            </TabsTrigger>
-            <TabsTrigger value="returning_soon" className="text-amber-600 dark:text-amber-400" data-testid="tab-returning">
-              Returning ({counts.returning_soon})
-            </TabsTrigger>
-            <TabsTrigger value="coin_flip" className="text-orange-600 dark:text-orange-400" data-testid="tab-coinflip">
-              Coin flip ({counts.coin_flip})
-            </TabsTrigger>
-            <TabsTrigger value="doubtful" className="text-red-600 dark:text-red-400" data-testid="tab-doubtful">
-              Doubtful ({counts.doubtful})
-            </TabsTrigger>
-            <TabsTrigger value="out" className="text-slate-600 dark:text-slate-400" data-testid="tab-out">
-              Out ({counts.out})
-            </TabsTrigger>
-          </TabsList>
+          {/* Desktop: Tabs + Filters on same row */}
+          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
+            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-status">
+              <TabsTrigger value="all" data-testid="tab-all">
+                Overview ({counts.all})
+              </TabsTrigger>
+              <TabsTrigger value="returning_soon" className="text-amber-600 dark:text-amber-400" data-testid="tab-returning">
+                Returning ({counts.returning_soon})
+              </TabsTrigger>
+              <TabsTrigger value="coin_flip" className="text-orange-600 dark:text-orange-400" data-testid="tab-coinflip">
+                Coin flip ({counts.coin_flip})
+              </TabsTrigger>
+              <TabsTrigger value="doubtful" className="text-red-600 dark:text-red-400" data-testid="tab-doubtful">
+                Doubtful ({counts.doubtful})
+              </TabsTrigger>
+              <TabsTrigger value="out" className="text-slate-600 dark:text-slate-400" data-testid="tab-out">
+                Out ({counts.out})
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex items-center gap-3 shrink-0">
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger className="w-[200px]" data-testid="select-team-filter">
+                  <SelectValue placeholder="All Teams" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
+                  {plTeams.map((team) => (
+                    <SelectItem key={team.slug} value={team.slug}>
+                      {team.code} – {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
+                <SelectTrigger className="w-[180px]" data-testid="select-sort">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="closest_return">Closest return</SelectItem>
+                  <SelectItem value="updated">Last updated</SelectItem>
+                  <SelectItem value="highest">Highest confidence</SelectItem>
+                  <SelectItem value="lowest">Lowest confidence</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Mobile: Tabs first, then filters stacked below */}
+          <div className="md:hidden space-y-4 mb-6">
+            <TabsList className="w-full flex-wrap h-auto gap-1 justify-start" data-testid="tabs-status-mobile">
+              <TabsTrigger value="all" data-testid="tab-all-mobile">
+                Overview ({counts.all})
+              </TabsTrigger>
+              <TabsTrigger value="returning_soon" className="text-amber-600 dark:text-amber-400" data-testid="tab-returning-mobile">
+                Returning ({counts.returning_soon})
+              </TabsTrigger>
+              <TabsTrigger value="coin_flip" className="text-orange-600 dark:text-orange-400" data-testid="tab-coinflip-mobile">
+                Coin flip ({counts.coin_flip})
+              </TabsTrigger>
+              <TabsTrigger value="doubtful" className="text-red-600 dark:text-red-400" data-testid="tab-doubtful-mobile">
+                Doubtful ({counts.doubtful})
+              </TabsTrigger>
+              <TabsTrigger value="out" className="text-slate-600 dark:text-slate-400" data-testid="tab-out-mobile">
+                Out ({counts.out})
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex flex-col gap-3">
+              <Select value={teamFilter} onValueChange={setTeamFilter}>
+                <SelectTrigger className="w-full" data-testid="select-team-filter-mobile">
+                  <SelectValue placeholder="All Teams" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Teams</SelectItem>
+                  {plTeams.map((team) => (
+                    <SelectItem key={team.slug} value={team.slug}>
+                      {team.code} – {team.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
+                <SelectTrigger className="w-full" data-testid="select-sort-mobile">
+                  <ArrowUpDown className="h-4 w-4 mr-2" />
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="closest_return">Closest return</SelectItem>
+                  <SelectItem value="updated">Last updated</SelectItem>
+                  <SelectItem value="highest">Highest confidence</SelectItem>
+                  <SelectItem value="lowest">Lowest confidence</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <TabsContent value={statusTab} forceMount className={statusTab === statusTab ? "" : "hidden"}>
             {isLoading ? (
