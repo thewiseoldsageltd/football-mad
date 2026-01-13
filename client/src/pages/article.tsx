@@ -19,6 +19,7 @@ import { TaxonomyPill } from "@/components/taxonomy-pill";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
+import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 
 const CATEGORY_ICONS: Record<string, typeof Newspaper> = {
@@ -48,7 +49,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setArticleUrl(`${window.location.origin}/article/${canonicalSlug}`);
+      setArticleUrl(`${window.location.origin}${newsArticle(canonicalSlug)}`);
     }
   }, [canonicalSlug]);
 
@@ -112,7 +113,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
       createdElements.push(jsonLd);
     }
     
-    const baseUrl = articleUrl.replace(`/article/${canonicalSlug}`, "");
+    const baseUrl = articleUrl.replace(newsArticle(canonicalSlug), "");
     jsonLd.textContent = JSON.stringify({
       "@context": "https://schema.org",
       "@type": "NewsArticle",
@@ -287,7 +288,7 @@ function RightRail({
             <CardContent className="p-4 pt-0">
               <div className="space-y-3">
                 {relatedArticles.slice(0, 3).map((a) => (
-                  <Link key={a.id} href={`/article/${a.slug}`}>
+                  <Link key={a.id} href={newsArticle(a.slug)}>
                     <div className="group flex gap-3 hover-elevate rounded p-1 -m-1 cursor-pointer" data-testid={`link-related-${a.id}`}>
                       <div className="w-16 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
                         {a.coverImage ? (
@@ -484,20 +485,6 @@ function ArticleSkeleton() {
   );
 }
 
-function LegacyRedirect() {
-  const { slug } = useParams<{ slug: string }>();
-  const [, setLocation] = useLocation();
-  
-  useEffect(() => {
-    if (slug) {
-      setLocation(`/article/${slug}`, { replace: true });
-    }
-  }, [slug, setLocation]);
-  
-  return <ArticleSkeleton />;
-}
-
-export { LegacyRedirect as LegacyArticleRedirect };
 
 export default function ArticlePage() {
   const { slug } = useParams<{ slug: string }>();

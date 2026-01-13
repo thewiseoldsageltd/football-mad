@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Heart, HeartOff } from "lucide-react";
+import { teamHub } from "@/lib/urls";
 import type { Team } from "@shared/schema";
 
 interface TeamCardProps {
@@ -15,7 +16,7 @@ export function TeamCard({ team, isFollowing = false, onFollowToggle, showFollow
   return (
     <Card className="group hover-elevate active-elevate-2" data-testid={`card-team-${team.slug}`}>
       <CardContent className="p-4">
-        <Link href={`/teams/${team.slug}`} className="flex items-center gap-4">
+        <Link href={teamHub(team.slug)} className="flex items-center gap-4">
           <div 
             className="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: team.primaryColor || "#1a1a2e" }}

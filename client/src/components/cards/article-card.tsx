@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Clock, Eye, Zap, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { newsArticle } from "@/lib/urls";
 import type { Article } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
@@ -20,7 +21,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor }:
   
   if (featured) {
     return (
-      <Link href={`/article/${article.slug}`}>
+      <Link href={newsArticle(article.slug)}>
         <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-article-featured-${article.id}`}>
           <div className="relative aspect-[16/9] overflow-hidden">
             {article.coverImage ? (
@@ -89,7 +90,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor }:
   }
 
   return (
-    <Link href={`/article/${article.slug}`}>
+    <Link href={newsArticle(article.slug)}>
       <Card 
         className={`group h-full overflow-hidden hover-elevate active-elevate-2 cursor-pointer border ${teamColor ? "team-card-hover" : ""}`}
         style={teamCardStyle}

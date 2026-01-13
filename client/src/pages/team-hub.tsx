@@ -20,6 +20,7 @@ import { NewsletterForm } from "@/components/newsletter-form";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { newsArticle } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
@@ -2045,7 +2046,7 @@ function TeamRightRail({
             <ul className="space-y-3">
               {relatedArticles.map((article, idx) => (
                 <li key={article.id}>
-                  <Link href={`/article/${article.slug}`}>
+                  <Link href={newsArticle(article.slug)}>
                     <div className="group flex items-start gap-2 hover-elevate rounded-md p-2 -mx-2 cursor-pointer">
                       <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
                       <div className="min-w-0">

@@ -1,0 +1,119 @@
+TASK: Implement final Football Mad URL taxonomy (pre-launch, no redirects required)
+
+CONTEXT:
+The site is not yet indexed. We are locking the canonical URL structure now.
+Articles are published once and may belong to multiple entities via tags.
+News entity pages use Option A (flat URLs, no /team or /competition nesting).
+
+--------------------------------
+A) CANONICAL ROUTES
+--------------------------------
+
+News:
+- /news                         (news home)
+- /news/:slug                   (EITHER entity index OR article page)
+
+Teams:
+- /teams
+- /teams/:teamSlug
+- /teams/:teamSlug/injuries
+- /teams/:teamSlug/discipline
+- /teams/:teamSlug/transfers
+- /teams/:teamSlug/matches
+- /teams/:teamSlug/fans
+- /teams/:teamSlug/squad
+
+Players:
+- /players/:playerSlug
+
+Matches:
+- /matches
+- /matches/:competitionSlug     (listing only)
+- /matches/:matchSlug           (matchSlug = home-vs-away-YYYY-MM-DD)
+
+Global hubs:
+- /injuries                     (Treatment Room)
+- /transfers
+- /fpl
+- /community
+- /shop
+- /shop/:teamSlug
+
+--------------------------------
+B) NEWS ROUTING LOGIC (OPTION A)
+--------------------------------
+
+For route /news/:slug:
+
+1) Maintain a canonical list/map of entity slugs:
+   - Teams (arsenal, liverpool, man-city, etc)
+   - Competitions (premier-league, fa-cup, etc)
+
+2) When resolving /news/:slug:
+   - If :slug matches a known entity slug:
+       -> render NewsEntityIndexPage
+       -> fetch all articles tagged with that entity
+   - Else:
+       -> render NewsArticlePage
+       -> fetch article by slug
+
+3) Slug collision prevention:
+   - Maintain a reservedSlugs set including:
+     - All entity slugs
+     - System words: search, tag, page, rss, feed, amp, category
+   - When generating article slugs:
+     - If slug collides with reservedSlugs, append "-news" or "-report"
+
+--------------------------------
+C) SLUG RULES
+--------------------------------
+
+- Team slug: fan-friendly, lowercase, hyphenated
+  Examples:
+    "Manchester City" -> "man-city"
+    "Manchester United" -> "man-utd"
+    "Nottingham Forest" -> "nottingham-forest"
+    "Wolverhampton Wanderers" -> "wolves"
+
+- Player slug: "bukayo-saka"
+- Match slug: "{homeSlug}-vs-{awaySlug}-{YYYY-MM-DD}"
+
+--------------------------------
+D) CENTRAL URL HELPERS
+--------------------------------
+
+Create a single URL helper module (e.g. src/lib/urls.ts) with functions:
+- newsIndex()
+- newsEntity(slug)
+- newsArticle(slug)
+- teamsIndex()
+- teamHub(teamSlug)
+- teamSection(teamSlug, section)
+- playerProfile(playerSlug)
+- matchesIndex()
+- matchesCompetition(competitionSlug)
+- matchDetail(homeSlug, awaySlug, dateISO)
+- injuriesGlobal()
+- transfersGlobal()
+- fplHub()
+- communityHub()
+- shopHub()
+- shopTeam(teamSlug)
+
+Replace all hardcoded routes with these helpers.
+
+--------------------------------
+E) ACCEPTANCE CRITERIA
+--------------------------------
+
+- /news/arsenal shows Arsenal news index
+- /news/premier-league shows PL news index
+- /news/<article-slug> shows article page
+- No article URL includes category paths
+- Team pages work without competition in the URL
+- Match pages use team-vs-team-date format
+- No old URL structures remain in the UI
+- App never crashes on unknown slugs (404 gracefully)
+
+--------------------------------
+END
