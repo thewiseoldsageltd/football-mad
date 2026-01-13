@@ -318,7 +318,7 @@ export function classifyPlayer(
       return {
         classification: "MEDICAL",
         bucket: "OUT",
-        ringColor: "gray",
+        ringColor: "red",
         displayPercent: "0%",
         effectiveChance: 0,
       };
@@ -362,7 +362,7 @@ export function classifyPlayer(
     return {
       classification: "MEDICAL",
       bucket: "OUT",
-      ringColor: "gray",
+      ringColor: "red",
       displayPercent,
       effectiveChance,
     };

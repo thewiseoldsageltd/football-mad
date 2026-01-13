@@ -34,9 +34,9 @@ const statusConfig: Record<MedicalBucket, {
   label: string;
 }> = {
   OUT: { 
-    color: "text-slate-600 dark:text-slate-400", 
+    color: "text-red-600 dark:text-red-400", 
     icon: AlertCircle, 
-    badgeBg: "bg-slate-600 hover:bg-slate-700 text-white",
+    badgeBg: "bg-red-600 hover:bg-red-700 text-white",
     label: "Out (0%)"
   },
   DOUBTFUL: { 

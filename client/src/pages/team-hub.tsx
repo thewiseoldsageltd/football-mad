@@ -189,14 +189,14 @@ const BUCKET_TO_RING_COLOR: Record<MedicalBucket, RingColor> = {
   RETURNING_SOON: "amber",
   COIN_FLIP: "orange",
   DOUBTFUL: "red",
-  OUT: "gray",
+  OUT: "red",
 };
 
 const BUCKET_BADGE_STYLES: Record<MedicalBucket, string> = {
   RETURNING_SOON: "bg-amber-500 hover:bg-amber-600 text-white",
   COIN_FLIP: "bg-orange-500 hover:bg-orange-600 text-white",
   DOUBTFUL: "bg-red-600 hover:bg-red-700 text-white",
-  OUT: "bg-slate-600 hover:bg-slate-700 text-white",
+  OUT: "bg-red-600 hover:bg-red-700 text-white",
 };
 
 const BUCKET_LABELS: Record<MedicalBucket, string> = {

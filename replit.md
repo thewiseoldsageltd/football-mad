@@ -70,3 +70,19 @@ Preferred communication style: Simple, everyday language.
 - Color scheme: HSL-based CSS variables with primary green accent
 - Responsive breakpoints following Tailwind defaults
 - Custom elevation/shadow system for interactive states
+
+### LOCKED: Player Availability Color Rules
+**Medical Status (Treatment Room):**
+- Returning Soon (75%) → AMBER
+- Coin Flip (50%) → ORANGE
+- Doubtful (25%) → RED
+- Out (0%) → RED
+
+**Additional Rules:**
+- Suspended → RED
+- Loaned/Transferred → GREY
+- GREEN (100%) must NEVER appear in Treatment Room
+
+**Color Meaning:**
+- Red = unavailable
+- Grey = informational only
