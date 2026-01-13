@@ -34,27 +34,27 @@ const statusConfig: Record<MedicalBucket, {
   label: string;
 }> = {
   OUT: { 
-    color: "text-red-600 dark:text-red-400", 
+    color: "text-slate-600 dark:text-slate-400", 
     icon: AlertCircle, 
-    badgeBg: "bg-red-600 hover:bg-red-700 text-white",
+    badgeBg: "bg-slate-600 hover:bg-slate-700 text-white",
     label: "Out (0%)"
   },
   DOUBTFUL: { 
-    color: "text-amber-600 dark:text-amber-400", 
+    color: "text-red-600 dark:text-red-400", 
     icon: AlertTriangle, 
-    badgeBg: "bg-amber-500 hover:bg-amber-600 text-white",
+    badgeBg: "bg-red-600 hover:bg-red-700 text-white",
     label: "Doubtful (25%)"
   },
   COIN_FLIP: { 
-    color: "text-yellow-600 dark:text-yellow-400", 
+    color: "text-orange-600 dark:text-orange-400", 
     icon: Clock, 
-    badgeBg: "bg-yellow-500 hover:bg-yellow-600 text-white",
+    badgeBg: "bg-orange-500 hover:bg-orange-600 text-white",
     label: "Coin flip (50%)"
   },
   RETURNING_SOON: { 
-    color: "text-green-600 dark:text-green-400", 
+    color: "text-amber-600 dark:text-amber-400", 
     icon: CheckCircle, 
-    badgeBg: "bg-green-600 hover:bg-green-700 text-white",
+    badgeBg: "bg-amber-500 hover:bg-amber-600 text-white",
     label: "Returning (75%)"
   },
 };
@@ -329,16 +329,16 @@ export default function InjuriesPage() {
             <TabsTrigger value="all" data-testid="tab-all">
               Overview ({counts.all})
             </TabsTrigger>
-            <TabsTrigger value="returning_soon" className="text-green-600 dark:text-green-400" data-testid="tab-returning">
+            <TabsTrigger value="returning_soon" className="text-amber-600 dark:text-amber-400" data-testid="tab-returning">
               Returning ({counts.returning_soon})
             </TabsTrigger>
-            <TabsTrigger value="coin_flip" className="text-yellow-600 dark:text-yellow-400" data-testid="tab-coinflip">
+            <TabsTrigger value="coin_flip" className="text-orange-600 dark:text-orange-400" data-testid="tab-coinflip">
               Coin flip ({counts.coin_flip})
             </TabsTrigger>
-            <TabsTrigger value="doubtful" className="text-amber-600 dark:text-amber-400" data-testid="tab-doubtful">
+            <TabsTrigger value="doubtful" className="text-red-600 dark:text-red-400" data-testid="tab-doubtful">
               Doubtful ({counts.doubtful})
             </TabsTrigger>
-            <TabsTrigger value="out" className="text-red-600 dark:text-red-400" data-testid="tab-out">
+            <TabsTrigger value="out" className="text-slate-600 dark:text-slate-400" data-testid="tab-out">
               Out ({counts.out})
             </TabsTrigger>
           </TabsList>

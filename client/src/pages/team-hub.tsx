@@ -24,7 +24,7 @@ import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailabilit
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
-type RingColor = "green" | "amber" | "red" | "gray";
+type RingColor = "green" | "amber" | "orange" | "red" | "gray";
 
 function getTeamInitial(team?: { shortName?: string | null; name?: string | null }): string {
   const s = (team?.shortName || team?.name || "").trim();
@@ -178,10 +178,32 @@ function LatestTabContent({
 }
 
 const RING_COLORS: Record<RingColor, { bg: string; border: string }> = {
-  green: { bg: "bg-green-500/10", border: "border-green-500" },
   amber: { bg: "bg-amber-500/10", border: "border-amber-500" },
+  orange: { bg: "bg-orange-500/10", border: "border-orange-500" },
   red: { bg: "bg-red-500/10", border: "border-red-500" },
   gray: { bg: "bg-gray-500/10", border: "border-gray-500" },
+  green: { bg: "bg-green-500/10", border: "border-green-500" },
+};
+
+const BUCKET_TO_RING_COLOR: Record<MedicalBucket, RingColor> = {
+  RETURNING_SOON: "amber",
+  COIN_FLIP: "orange",
+  DOUBTFUL: "red",
+  OUT: "gray",
+};
+
+const BUCKET_BADGE_STYLES: Record<MedicalBucket, string> = {
+  RETURNING_SOON: "bg-amber-500 hover:bg-amber-600 text-white",
+  COIN_FLIP: "bg-orange-500 hover:bg-orange-600 text-white",
+  DOUBTFUL: "bg-red-600 hover:bg-red-700 text-white",
+  OUT: "bg-slate-600 hover:bg-slate-700 text-white",
+};
+
+const BUCKET_LABELS: Record<MedicalBucket, string> = {
+  RETURNING_SOON: "75%",
+  COIN_FLIP: "50%",
+  DOUBTFUL: "25%",
+  OUT: "0%",
 };
 
 type MedicalBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT";
@@ -284,6 +306,11 @@ function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
   const newsAdded = player.newsAdded ? new Date(player.newsAdded) : null;
   const availabilityText = formatAvailabilityTextV2(player);
   const statusLabel = getStatusLabel(player);
+  const bucket = player.bucket as MedicalBucket | undefined;
+  const isMedical = player.classification === "MEDICAL";
+  const isValidMedicalBucket = isMedical && bucket && (bucket === "RETURNING_SOON" || bucket === "COIN_FLIP" || bucket === "DOUBTFUL" || bucket === "OUT");
+  const badgeStyle = isValidMedicalBucket ? BUCKET_BADGE_STYLES[bucket] : null;
+  const chanceLabel = isValidMedicalBucket ? BUCKET_LABELS[bucket] : null;
   
   return (
     <Card className="hover-elevate" data-testid={`card-availability-${player.id}`}>
@@ -301,6 +328,13 @@ function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
               <Badge variant="secondary" className="text-xs flex-shrink-0">
                 {player.position}
               </Badge>
+              {isValidMedicalBucket && badgeStyle && chanceLabel && (
+                <Badge 
+                  className={`text-xs flex-shrink-0 ${badgeStyle}`}
+                >
+                  {chanceLabel}
+                </Badge>
+              )}
               {statusLabel && (
                 <Badge 
                   variant="outline" 

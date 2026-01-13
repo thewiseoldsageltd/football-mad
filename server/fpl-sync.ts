@@ -257,7 +257,7 @@ export async function syncFplTeams(): Promise<{ upserted: number; demoted: numbe
 
 export type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 export type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
-export type RingColor = "green" | "amber" | "red" | "gray";
+export type RingColor = "green" | "amber" | "orange" | "red" | "gray";
 
 export const MEDICAL_BUCKETS: AvailabilityBucket[] = ["RETURNING_SOON", "COIN_FLIP", "DOUBTFUL", "OUT"];
 
@@ -318,7 +318,7 @@ export function classifyPlayer(
       return {
         classification: "MEDICAL",
         bucket: "OUT",
-        ringColor: "red",
+        ringColor: "gray",
         displayPercent: "0%",
         effectiveChance: 0,
       };
@@ -326,7 +326,7 @@ export function classifyPlayer(
     return {
       classification: "MEDICAL",
       bucket: "RETURNING_SOON",
-      ringColor: "green",
+      ringColor: "amber",
       displayPercent: "75%",
       effectiveChance: 75,
     };
@@ -338,7 +338,7 @@ export function classifyPlayer(
     return {
       classification: "MEDICAL",
       bucket: "RETURNING_SOON",
-      ringColor: "green",
+      ringColor: "amber",
       displayPercent,
       effectiveChance,
     };
@@ -346,7 +346,7 @@ export function classifyPlayer(
     return {
       classification: "MEDICAL",
       bucket: "COIN_FLIP",
-      ringColor: "amber",
+      ringColor: "orange",
       displayPercent,
       effectiveChance,
     };
@@ -362,7 +362,7 @@ export function classifyPlayer(
     return {
       classification: "MEDICAL",
       bucket: "OUT",
-      ringColor: "red",
+      ringColor: "gray",
       displayPercent,
       effectiveChance,
     };
@@ -375,13 +375,13 @@ export function getRagColor(
   fplStatus: string | null, 
   news: string | null
 ): {
-  color: "green" | "amber" | "red";
+  color: "amber" | "orange" | "red" | "gray";
   displayPercent: string;
   effectiveChance: number | null;
 } {
   const result = classifyPlayer(chanceNextRound, chanceThisRound, fplStatus, news);
   return {
-    color: result.ringColor === "gray" ? "red" : result.ringColor,
+    color: result.ringColor === "green" ? "amber" : result.ringColor,
     displayPercent: result.displayPercent,
     effectiveChance: result.effectiveChance,
   };
