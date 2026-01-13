@@ -1,0 +1,89 @@
+Build update request for the Treatment Room (Injuries) page UI.
+
+Goal
+
+Refine navigation + filters hierarchy for mobile, while keeping desktop layout exactly as it currently looks.
+
+1) Mobile sub-navigation: make it one-line + horizontally scrollable
+
+On mobile breakpoints (<= 768px):
+
+The sub-navigation tabs (Overview, Returning, Coin flip, Doubtful, Out) should be one single row, not wrapped onto 2 lines.
+
+The tab row should be horizontally scrollable with touch swipe.
+
+Tabs should have white-space: nowrap.
+
+Keep the same styling (pill/tabs) but ensure the container uses something like:
+
+display: flex
+
+overflow-x: auto
+
+-webkit-overflow-scrolling: touch
+
+scrollbar-width: none and hide scrollbar visually
+
+Add a subtle left/right fade gradient (optional but preferred) to hint that the tab row scrolls.
+
+Keep the active tab clearly indicated (current styling is fine).
+
+Desktop (>= 769px):
+
+The sub-navigation remains exactly as it is now (single row, fully visible, no scrolling needed).
+
+2) Filters placement: keep current hierarchy, but ensure mobile order is:
+
+On mobile:
+
+Sub-navigation row (scrollable)
+
+“All Teams” dropdown
+
+Sort dropdown (Closest return, etc.)
+
+On desktop:
+
+Keep filters right-aligned on the same horizontal line as the sub-navigation (current state is good).
+
+3) Center the “All Teams” label text inside the dropdown
+
+Currently, “All Teams” label appears left-aligned.
+
+Update the dropdown trigger so:
+
+The label text is centered horizontally in the button area.
+
+The caret icon remains right-aligned.
+
+The left icon (if any) remains left-aligned.
+
+This should work consistently across mobile + desktop.
+
+Implementation hint:
+
+Use a 3-column layout inside the trigger:
+
+left slot (icon or empty)
+
+center slot (label text, centered)
+
+right slot (caret)
+
+Ensure the center text stays centered even when left icon is missing.
+
+4) Don’t break anything else
+
+Do not change data logic, sorting logic, card layout, colours, or typography.
+
+This task is strictly layout + alignment polish.
+
+Acceptance checks
+
+Mobile: tabs are one row and scroll horizontally.
+
+Mobile: dropdowns are full width and sit below the tabs (as now).
+
+Desktop: layout remains unchanged.
+
+“All Teams” label is visually centered in its dropdown trigger.

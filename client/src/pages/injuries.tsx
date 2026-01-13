@@ -448,8 +448,10 @@ export default function InjuriesPage() {
 
             <div className="flex items-center gap-3 shrink-0">
               <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger className="w-[200px]" data-testid="select-team-filter">
-                  <SelectValue placeholder="All Teams" />
+                <SelectTrigger className="w-[200px] grid grid-cols-[1fr_auto] items-center" data-testid="select-team-filter">
+                  <span className="text-center truncate">
+                    {teamFilter === "all" ? "All Teams" : plTeams.find(t => t.slug === teamFilter)?.name || teamFilter}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
@@ -462,9 +464,13 @@ export default function InjuriesPage() {
               </Select>
 
               <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
-                <SelectTrigger className="w-[180px]" data-testid="select-sort">
-                  <ArrowUpDown className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Sort by" />
+                <SelectTrigger className="w-[180px] grid grid-cols-[auto_1fr_auto] items-center" data-testid="select-sort">
+                  <ArrowUpDown className="h-4 w-4" />
+                  <span className="text-center truncate">
+                    {sortOption === "closest_return" ? "Closest return" : 
+                     sortOption === "updated" ? "Last updated" :
+                     sortOption === "highest" ? "Highest confidence" : "Lowest confidence"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="closest_return">Closest return</SelectItem>
@@ -476,30 +482,47 @@ export default function InjuriesPage() {
             </div>
           </div>
 
-          {/* Mobile: Tabs first, then filters stacked below */}
+          {/* Mobile: Tabs first (horizontally scrollable), then filters stacked below */}
           <div className="md:hidden space-y-4 mb-6">
-            <TabsList className="w-full flex-wrap h-auto gap-1 justify-start" data-testid="tabs-status-mobile">
-              <TabsTrigger value="all" data-testid="tab-all-mobile">
-                Overview ({counts.all})
-              </TabsTrigger>
-              <TabsTrigger value="returning_soon" className="text-amber-600 dark:text-amber-400" data-testid="tab-returning-mobile">
-                Returning ({counts.returning_soon})
-              </TabsTrigger>
-              <TabsTrigger value="coin_flip" className="text-orange-600 dark:text-orange-400" data-testid="tab-coinflip-mobile">
-                Coin flip ({counts.coin_flip})
-              </TabsTrigger>
-              <TabsTrigger value="doubtful" className="text-red-600 dark:text-red-400" data-testid="tab-doubtful-mobile">
-                Doubtful ({counts.doubtful})
-              </TabsTrigger>
-              <TabsTrigger value="out" className="text-slate-600 dark:text-slate-400" data-testid="tab-out-mobile">
-                Out ({counts.out})
-              </TabsTrigger>
-            </TabsList>
+            {/* Scrollable tabs container with fade hints */}
+            <div className="relative">
+              <div 
+                className="overflow-x-auto scrollbar-hide"
+                style={{ 
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none'
+                }}
+              >
+                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-status-mobile">
+                  <TabsTrigger value="all" className="whitespace-nowrap" data-testid="tab-all-mobile">
+                    Overview ({counts.all})
+                  </TabsTrigger>
+                  <TabsTrigger value="returning_soon" className="whitespace-nowrap text-amber-600 dark:text-amber-400" data-testid="tab-returning-mobile">
+                    Returning ({counts.returning_soon})
+                  </TabsTrigger>
+                  <TabsTrigger value="coin_flip" className="whitespace-nowrap text-orange-600 dark:text-orange-400" data-testid="tab-coinflip-mobile">
+                    Coin flip ({counts.coin_flip})
+                  </TabsTrigger>
+                  <TabsTrigger value="doubtful" className="whitespace-nowrap text-red-600 dark:text-red-400" data-testid="tab-doubtful-mobile">
+                    Doubtful ({counts.doubtful})
+                  </TabsTrigger>
+                  <TabsTrigger value="out" className="whitespace-nowrap text-slate-600 dark:text-slate-400" data-testid="tab-out-mobile">
+                    Out ({counts.out})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              {/* Fade gradient hints */}
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+            </div>
 
             <div className="flex flex-col gap-3">
               <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger className="w-full" data-testid="select-team-filter-mobile">
-                  <SelectValue placeholder="All Teams" />
+                <SelectTrigger className="w-full grid grid-cols-[1fr_auto] items-center" data-testid="select-team-filter-mobile">
+                  <span className="text-center truncate">
+                    {teamFilter === "all" ? "All Teams" : plTeams.find(t => t.slug === teamFilter)?.name || teamFilter}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Teams</SelectItem>
@@ -512,9 +535,13 @@ export default function InjuriesPage() {
               </Select>
 
               <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
-                <SelectTrigger className="w-full" data-testid="select-sort-mobile">
-                  <ArrowUpDown className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Sort by" />
+                <SelectTrigger className="w-full grid grid-cols-[auto_1fr_auto] items-center" data-testid="select-sort-mobile">
+                  <ArrowUpDown className="h-4 w-4" />
+                  <span className="text-center truncate">
+                    {sortOption === "closest_return" ? "Closest return" : 
+                     sortOption === "updated" ? "Last updated" :
+                     sortOption === "highest" ? "Highest confidence" : "Lowest confidence"}
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="closest_return">Closest return</SelectItem>
