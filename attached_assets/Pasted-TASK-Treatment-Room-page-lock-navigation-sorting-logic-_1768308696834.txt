@@ -1,0 +1,106 @@
+TASK: Treatment Room page – lock navigation + sorting logic + clean Team filter options
+
+CONTEXT:
+We have a Treatment Room page (global Injuries) powered by FPL data.
+We already have sub-navigation tabs:
+- Overview
+- Returning (75%)
+- Coin flip (50%)
+- Doubtful (25%)
+- Out (0%)
+
+We also currently have a sort dropdown with options like “Most relevant”, “Last updated”, “Highest confidence”, “Lowest confidence”.
+We also have a Team dropdown that currently contains duplicates and non-Prem teams.
+
+GOALS:
+1) Keep the sub-navigation tabs as the primary “state” selector.
+2) Keep the sort dropdown, but make it purely “ordering” (not state).
+3) Clean the Team dropdown so it only shows current Premier League clubs, with no duplicates or non-PL entries.
+
+A) SORT DROPDOWN CHANGES (UI + logic)
+- Rename sort option “Most relevant” to “Closest return”.
+- Make “Closest return” the DEFAULT sort option on first load.
+- Keep these sort options:
+  1. Closest return (default)
+  2. Last updated
+  3. Highest confidence
+  4. Lowest confidence
+
+Sorting logic:
+- For all tabs, sorting applies AFTER filtering by tab/team.
+- “Closest return”:
+   - Primary: earliest expected_return_date (ascending)
+   - If expected_return_date is missing or “Unknown”/null, push to bottom
+   - Secondary: higher chance_of_playing first (descending)
+   - Tertiary: most recently updated (descending)
+- “Last updated”: most recently updated first.
+- “Highest confidence”: highest confidence first.
+- “Lowest confidence”: lowest confidence first.
+Notes:
+- If confidence is missing, treat as null and push to bottom for highest-confidence sort, and push to top for lowest-confidence sort (or keep missing at bottom for both—pick one and be consistent; prefer missing at bottom for both to avoid weirdness).
+
+B) TEAM DROPDOWN CLEANUP (dedupe + PL-only)
+The Team filter should only show current Premier League clubs, one entry each, using this exact display format:
+CODE – Short name
+
+Allowlist the following only (and remove everything else, including Championship variants, long-name duplicates, and clubs not in the Premier League):
+- ARS – Arsenal
+- AVL – Aston Villa
+- BOU – Bournemouth
+- BRE – Brentford
+- BHA – Brighton
+- BUR – Burnley
+- CHE – Chelsea
+- CRY – Crystal Palace
+- EVE – Everton
+- FUL – Fulham
+- LEE – Leeds
+- LIV – Liverpool
+- MCI – Man City
+- MUN – Man Utd
+- NEW – Newcastle
+- NFO – Nottingham Forest
+- SUN – Sunderland
+- TOT – Tottenham
+- WHU – West Ham
+- WOL – Wolves
+
+Implementation detail:
+- Use a canonical team mapping layer. If the FPL feed returns multiple team name variants (e.g. “Brighton” vs “Brighton and Hove Albion”), map them to the canonical entry above.
+- The dropdown must not show duplicates under any circumstance.
+
+C) TAB LOGIC (state filtering)
+Tab-to-state mapping:
+- Returning tab: chance_of_playing == 75
+- Coin flip tab: chance_of_playing == 50
+- Doubtful tab: chance_of_playing == 25
+- Out tab: chance_of_playing == 0
+- Overview tab: includes ALL injury records (0/25/50/75). It should default-sort using “Closest return” so users see Returners first, then Coin flip, then Doubtful, then Out.
+
+For Overview only, apply an additional “availability tier” ordering before the “Closest return” ordering:
+Tier order: 75% first, then 50%, then 25%, then 0%.
+Within each tier, apply the selected sort ordering.
+
+D) ACCEPTANCE CRITERIA
+✅ Default state on page load:
+- Overview tab selected
+- Sort dropdown = “Closest return”
+- Cards show 75% players first (earliest return dates first), then 50%, then 25%, then 0%
+
+✅ Sort dropdown does NOT duplicate the job of tabs.
+It only changes ordering.
+
+✅ Team dropdown:
+- Contains ONLY the allowlist clubs above
+- No “Bournemouth (Championship)”
+- No “Brighton and Hove Albion”
+- No duplicates like “Newcastle” + “Newcastle United”
+- No removed clubs like Ipswich, Leicester, Southampton, etc.
+
+✅ Changing Team filter + Tab filter + Sort works in combination:
+Data is filtered by Team + Tab first, then sorted by selected sort.
+
+Please implement this cleanly with small helper functions:
+- normalizeTeam(teamNameOrCode) -> canonicalTeam
+- getFilteredPlayers({tab, team}) -> list
+- sortPlayers(list, sortMode, tab) -> list

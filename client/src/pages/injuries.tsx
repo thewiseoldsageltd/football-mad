@@ -23,9 +23,57 @@ interface EnrichedAvailability extends FplPlayerAvailability {
 }
 
 type StatusTab = "all" | "returning_soon" | "coin_flip" | "doubtful" | "out";
-type SortOption = "relevant" | "updated" | "highest" | "lowest";
+type SortOption = "closest_return" | "updated" | "highest" | "lowest";
 
 const BUCKET_ORDER_OVERVIEW: MedicalBucket[] = ["RETURNING_SOON", "COIN_FLIP", "DOUBTFUL", "OUT"];
+
+const PL_TEAM_ALLOWLIST: Record<string, { code: string; name: string; slug: string }> = {
+  "arsenal": { code: "ARS", name: "Arsenal", slug: "arsenal" },
+  "aston-villa": { code: "AVL", name: "Aston Villa", slug: "aston-villa" },
+  "bournemouth": { code: "BOU", name: "Bournemouth", slug: "bournemouth" },
+  "brentford": { code: "BRE", name: "Brentford", slug: "brentford" },
+  "brighton": { code: "BHA", name: "Brighton", slug: "brighton" },
+  "burnley": { code: "BUR", name: "Burnley", slug: "burnley" },
+  "chelsea": { code: "CHE", name: "Chelsea", slug: "chelsea" },
+  "crystal-palace": { code: "CRY", name: "Crystal Palace", slug: "crystal-palace" },
+  "everton": { code: "EVE", name: "Everton", slug: "everton" },
+  "fulham": { code: "FUL", name: "Fulham", slug: "fulham" },
+  "leeds": { code: "LEE", name: "Leeds", slug: "leeds" },
+  "liverpool": { code: "LIV", name: "Liverpool", slug: "liverpool" },
+  "manchester-city": { code: "MCI", name: "Man City", slug: "manchester-city" },
+  "manchester-united": { code: "MUN", name: "Man Utd", slug: "manchester-united" },
+  "newcastle": { code: "NEW", name: "Newcastle", slug: "newcastle" },
+  "nottingham-forest": { code: "NFO", name: "Nottingham Forest", slug: "nottingham-forest" },
+  "sunderland": { code: "SUN", name: "Sunderland", slug: "sunderland" },
+  "tottenham": { code: "TOT", name: "Tottenham", slug: "tottenham" },
+  "west-ham": { code: "WHU", name: "West Ham", slug: "west-ham" },
+  "wolves": { code: "WOL", name: "Wolves", slug: "wolves" },
+};
+
+function normalizeTeamSlug(slug: string | undefined): string | null {
+  if (!slug) return null;
+  const normalized = slug.toLowerCase().replace(/\s+/g, "-");
+  if (PL_TEAM_ALLOWLIST[normalized]) return normalized;
+  
+  const variants: Record<string, string> = {
+    "man-city": "manchester-city",
+    "man-utd": "manchester-united",
+    "man-united": "manchester-united",
+    "spurs": "tottenham",
+    "nottm-forest": "nottingham-forest",
+    "nott'm-forest": "nottingham-forest",
+    "brighton-hove": "brighton",
+    "brighton-and-hove-albion": "brighton",
+    "wolverhampton": "wolves",
+    "wolverhampton-wanderers": "wolves",
+    "newcastle-united": "newcastle",
+    "west-ham-united": "west-ham",
+    "leeds-united": "leeds",
+    "afc-bournemouth": "bournemouth",
+  };
+  
+  return variants[normalized] || null;
+}
 
 function parseExpectedReturnDate(news: string | null): Date | null {
   if (!news) return null;
@@ -219,10 +267,106 @@ function AvailabilityCardSkeleton() {
   );
 }
 
+function getFilteredPlayers(
+  players: EnrichedAvailability[],
+  tab: StatusTab,
+  teamSlug: string
+): EnrichedAvailability[] {
+  let filtered = players;
+  
+  if (teamSlug !== "all") {
+    filtered = filtered.filter(p => {
+      const normalizedPlayerTeam = normalizeTeamSlug(p.teamSlug);
+      return normalizedPlayerTeam === teamSlug;
+    });
+  }
+  
+  if (tab !== "all") {
+    switch (tab) {
+      case "out":
+        filtered = filtered.filter(p => p.bucket === "OUT");
+        break;
+      case "doubtful":
+        filtered = filtered.filter(p => p.bucket === "DOUBTFUL");
+        break;
+      case "coin_flip":
+        filtered = filtered.filter(p => p.bucket === "COIN_FLIP");
+        break;
+      case "returning_soon":
+        filtered = filtered.filter(p => p.bucket === "RETURNING_SOON");
+        break;
+    }
+  }
+  
+  return filtered;
+}
+
+function sortPlayers(
+  players: EnrichedAvailability[],
+  sortMode: SortOption,
+  isOverviewTab: boolean
+): EnrichedAvailability[] {
+  const sorted = [...players];
+  
+  sorted.sort((a, b) => {
+    if (isOverviewTab) {
+      const aOrder = BUCKET_ORDER_OVERVIEW.indexOf(a.bucket as MedicalBucket);
+      const bOrder = BUCKET_ORDER_OVERVIEW.indexOf(b.bucket as MedicalBucket);
+      if (aOrder !== bOrder) return aOrder - bOrder;
+    }
+    
+    switch (sortMode) {
+      case "closest_return": {
+        const aReturn = parseExpectedReturnDate(a.news);
+        const bReturn = parseExpectedReturnDate(b.news);
+        
+        if (aReturn && bReturn) {
+          const returnDiff = aReturn.getTime() - bReturn.getTime();
+          if (returnDiff !== 0) return returnDiff;
+        } else if (aReturn && !bReturn) {
+          return -1;
+        } else if (!aReturn && bReturn) {
+          return 1;
+        }
+        
+        const aChance = a.effectiveChance ?? -1;
+        const bChance = b.effectiveChance ?? -1;
+        if (aChance !== bChance) return bChance - aChance;
+        
+        const aUpdated = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+        const bUpdated = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+        return bUpdated - aUpdated;
+      }
+      
+      case "updated": {
+        const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+        const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+        return bDate - aDate;
+      }
+      
+      case "highest": {
+        const aChance = a.effectiveChance ?? -1;
+        const bChance = b.effectiveChance ?? -1;
+        return bChance - aChance;
+      }
+      
+      case "lowest": {
+        const aChance = a.effectiveChance ?? 101;
+        const bChance = b.effectiveChance ?? 101;
+        return aChance - bChance;
+      }
+    }
+    
+    return 0;
+  });
+  
+  return sorted;
+}
+
 export default function InjuriesPage() {
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
-  const [sortOption, setSortOption] = useState<SortOption>("relevant");
+  const [sortOption, setSortOption] = useState<SortOption>("closest_return");
 
   const { data: availability, isLoading } = useQuery<EnrichedAvailability[]>({
     queryKey: ["/api/availability"],
@@ -241,86 +385,21 @@ export default function InjuriesPage() {
   }, [availability]);
 
   const filteredAndSorted = useMemo(() => {
-    let filtered = medicalPlayers;
-
-    if (teamFilter !== "all") {
-      filtered = filtered.filter(p => p.teamSlug === teamFilter);
-    }
-
-    if (statusTab !== "all") {
-      switch (statusTab) {
-        case "out":
-          filtered = filtered.filter(p => p.bucket === "OUT");
-          break;
-        case "doubtful":
-          filtered = filtered.filter(p => p.bucket === "DOUBTFUL");
-          break;
-        case "coin_flip":
-          filtered = filtered.filter(p => p.bucket === "COIN_FLIP");
-          break;
-        case "returning_soon":
-          filtered = filtered.filter(p => p.bucket === "RETURNING_SOON");
-          break;
-      }
-    }
-
-    const sorted = [...filtered];
-
-    switch (sortOption) {
-      case "relevant":
-        sorted.sort((a, b) => {
-          const aOrder = BUCKET_ORDER_OVERVIEW.indexOf(a.bucket as MedicalBucket);
-          const bOrder = BUCKET_ORDER_OVERVIEW.indexOf(b.bucket as MedicalBucket);
-          if (aOrder !== bOrder) return aOrder - bOrder;
-          
-          const aReturn = parseExpectedReturnDate(a.news);
-          const bReturn = parseExpectedReturnDate(b.news);
-          if (aReturn && bReturn) {
-            const returnDiff = aReturn.getTime() - bReturn.getTime();
-            if (returnDiff !== 0) return returnDiff;
-          } else if (aReturn && !bReturn) {
-            return -1;
-          } else if (!aReturn && bReturn) {
-            return 1;
-          }
-          
-          const aUpdated = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
-          const bUpdated = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
-          if (aUpdated !== bUpdated) return bUpdated - aUpdated;
-          
-          return a.playerName.localeCompare(b.playerName);
-        });
-        break;
-      case "updated":
-        sorted.sort((a, b) => {
-          const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
-          const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
-          return bDate - aDate;
-        });
-        break;
-      case "highest":
-        sorted.sort((a, b) => {
-          const aChance = a.effectiveChance ?? 0;
-          const bChance = b.effectiveChance ?? 0;
-          return bChance - aChance;
-        });
-        break;
-      case "lowest":
-        sorted.sort((a, b) => {
-          const aChance = a.effectiveChance ?? 100;
-          const bChance = b.effectiveChance ?? 100;
-          return aChance - bChance;
-        });
-        break;
-    }
-
-    return sorted;
+    const filtered = getFilteredPlayers(medicalPlayers, statusTab, teamFilter);
+    return sortPlayers(filtered, sortOption, statusTab === "all");
   }, [medicalPlayers, teamFilter, statusTab, sortOption]);
+  
+  const plTeams = useMemo(() => {
+    return Object.values(PL_TEAM_ALLOWLIST).sort((a, b) => a.code.localeCompare(b.code));
+  }, []);
 
   const counts = useMemo(() => {
     let filtered = medicalPlayers;
     if (teamFilter !== "all") {
-      filtered = filtered.filter(p => p.teamSlug === teamFilter);
+      filtered = filtered.filter(p => {
+        const normalizedTeam = normalizeTeamSlug(p.teamSlug);
+        return normalizedTeam === teamFilter;
+      });
     }
 
     return {
@@ -353,9 +432,9 @@ export default function InjuriesPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Teams</SelectItem>
-                {teams?.map((team) => (
-                  <SelectItem key={team.id} value={team.slug}>
-                    {team.shortName} — {team.name}
+                {plTeams.map((team) => (
+                  <SelectItem key={team.slug} value={team.slug}>
+                    {team.code} – {team.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -367,7 +446,7 @@ export default function InjuriesPage() {
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="relevant">Most relevant</SelectItem>
+                <SelectItem value="closest_return">Closest return</SelectItem>
                 <SelectItem value="updated">Last updated</SelectItem>
                 <SelectItem value="highest">Highest confidence</SelectItem>
                 <SelectItem value="lowest">Lowest confidence</SelectItem>
