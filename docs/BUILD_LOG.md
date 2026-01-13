@@ -200,3 +200,32 @@ Team Hub (Injuries & Availability), FPL ingestion, Team metadata, Teams index po
 ➡ Ready for Day 3 (Matches, Lineups, FPL overlays, SEO)
 
 ---
+
+# BUILD LOG — Day 3
+
+- Focus: Injuries system consolidation + global availability view
+- Status: Core functionality complete, polish queued for Day 4
+
+## What was built
+
+- Implemented a global Injuries page in the main header using the same FPL feed and data logic already powering the Team Hub Injuries tab.
+- Successfully aggregated all teams’ injury/availability data into a single consolidated view.
+- Reused the existing injury card UI pattern (status badge, injury type, expected return, confidence bar, last updated).
+- Maintained factual, feed-driven integrity — no editorial or inferred data added.
+- Navigation label remains “Injuries” while page header was intentionally renamed to “Treatment Room”.
+
+## What’s working well
+
+- FPL feed ingestion is stable and scalable.
+- Injury status filtering logic (Out / Doubtful / Fit etc.) behaves consistently across Team Hub and global view.
+- Visual consistency between Team Hub Injuries and global Injuries page is strong.
+- This establishes a single source of truth for injuries across the site.
+
+## Known follow-ups (Day 4)
+
+- UI polish and spacing refinements.
+- Potential enhancements to sorting priority and grouping logic.
+- Headshots integration (players + injuries) to improve visual scanning.
+- Performance checks once data volume increases
+
+---

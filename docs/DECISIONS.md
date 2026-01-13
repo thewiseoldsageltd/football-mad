@@ -206,3 +206,59 @@ Decision:
 - Reduce surprises
 
 Status: LOCKED ✅
+
+---
+
+# DECISION LOG — Day 3
+
+## Key decisions made
+
+1. Reuse the FPL feed for global injuries
+
+Decision: Yes
+
+Rationale:
+
+- Already trusted, factual, and in production use
+- Avoids data duplication or conflicting injury states
+- Enables automatic consistency between Team Hub and global views
+
+2. Keep main nav label as “Injuries”
+
+Decision: Yes
+
+Rationale:
+
+- Clear, universally understood navigation term
+- Avoids discoverability issues
+
+3. Rename page header to “Treatment Room”
+
+Decision: Yes
+
+Rationale:
+
+- More editorial, football-native language
+- Differentiates the page from raw data tables
+- Aligns with Football Mad’s tone without sacrificing clarity
+
+4. Replicate Team Hub injury card UI
+
+Decision: Yes
+
+Rationale:
+
+- Proven, readable, and already familiar to users
+- Speeds up development and reduces UX inconsistency
+
+5. Park lineup pitch refinements
+
+Decision: Yes
+
+Rationale:
+
+- Core logic was solid but last 5–10% is visual precision work
+- Better handled by a developer or after a design reset
+- Avoids sunk-cost iteration during a productive data win
+
+---

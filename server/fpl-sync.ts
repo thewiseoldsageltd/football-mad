@@ -255,9 +255,11 @@ export async function syncFplTeams(): Promise<{ upserted: number; demoted: numbe
   }
 }
 
-export type Classification = "INJURY" | "SUSPENSION" | "LOAN_OR_TRANSFER";
+export type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 export type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
 export type RingColor = "green" | "amber" | "red" | "gray";
+
+export const MEDICAL_BUCKETS: AvailabilityBucket[] = ["RETURNING_SOON", "COIN_FLIP", "DOUBTFUL", "OUT"];
 
 function isLoanOrTransfer(news: string | null): boolean {
   if (!news) return false;
@@ -291,16 +293,6 @@ export function classifyPlayer(
 } {
   const effectiveChance = chanceNextRound ?? chanceThisRound ?? null;
   
-  if (fplStatus === "s") {
-    return {
-      classification: "SUSPENSION",
-      bucket: "SUSPENDED",
-      ringColor: "red",
-      displayPercent: "—",
-      effectiveChance,
-    };
-  }
-  
   if (isLoanOrTransfer(news)) {
     return {
       classification: "LOAN_OR_TRANSFER",
@@ -311,54 +303,56 @@ export function classifyPlayer(
     };
   }
   
+  if (fplStatus === "s") {
+    return {
+      classification: "SUSPENSION",
+      bucket: "SUSPENDED",
+      ringColor: "red",
+      displayPercent: "—",
+      effectiveChance,
+    };
+  }
+  
   if (effectiveChance === null) {
     if ((fplStatus && fplStatus !== "a") || (news && news.length > 0)) {
       return {
-        classification: "INJURY",
+        classification: "MEDICAL",
         bucket: "OUT",
         ringColor: "red",
-        displayPercent: "—",
-        effectiveChance: null,
+        displayPercent: "0%",
+        effectiveChance: 0,
       };
     }
     return {
-      classification: "INJURY",
+      classification: "MEDICAL",
       bucket: "RETURNING_SOON",
       ringColor: "green",
-      displayPercent: "100%",
-      effectiveChance: 100,
+      displayPercent: "75%",
+      effectiveChance: 75,
     };
   }
   
   const displayPercent = `${effectiveChance}%`;
   
-  if (effectiveChance === 100) {
+  if (effectiveChance >= 75) {
     return {
-      classification: "INJURY",
+      classification: "MEDICAL",
       bucket: "RETURNING_SOON",
       ringColor: "green",
       displayPercent,
       effectiveChance,
     };
-  } else if (effectiveChance === 75) {
-    return {
-      classification: "INJURY",
-      bucket: "RETURNING_SOON",
-      ringColor: "amber",
-      displayPercent,
-      effectiveChance,
-    };
   } else if (effectiveChance === 50) {
     return {
-      classification: "INJURY",
+      classification: "MEDICAL",
       bucket: "COIN_FLIP",
       ringColor: "amber",
       displayPercent,
       effectiveChance,
     };
-  } else if (effectiveChance > 0 && effectiveChance < 50) {
+  } else if (effectiveChance === 25) {
     return {
-      classification: "INJURY",
+      classification: "MEDICAL",
       bucket: "DOUBTFUL",
       ringColor: "red",
       displayPercent,
@@ -366,7 +360,7 @@ export function classifyPlayer(
     };
   } else {
     return {
-      classification: "INJURY",
+      classification: "MEDICAL",
       bucket: "OUT",
       ringColor: "red",
       displayPercent,

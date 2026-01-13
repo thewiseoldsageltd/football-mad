@@ -7,27 +7,27 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, AlertTriangle, CheckCircle, Ban, Activity, Clock, ArrowUpDown } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle, Clock, Activity, ArrowUpDown } from "lucide-react";
 import type { Team, FplPlayerAvailability } from "@shared/schema";
 
-type AvailabilityBucket = "AVAILABLE" | "RETURNING_SOON" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
+type MedicalBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT";
 
 interface EnrichedAvailability extends FplPlayerAvailability {
   teamName: string;
   teamShortName: string;
   classification: string;
-  bucket: AvailabilityBucket;
+  bucket: string;
   ringColor: string;
   displayPercent: string;
   effectiveChance: number | null;
 }
 
-type StatusTab = "all" | "out" | "doubtful" | "suspended" | "fit";
+type StatusTab = "all" | "returning_soon" | "coin_flip" | "doubtful" | "out";
 type SortOption = "relevant" | "updated" | "highest" | "lowest";
 
-const BUCKET_ORDER: AvailabilityBucket[] = ["OUT", "DOUBTFUL", "RETURNING_SOON", "AVAILABLE", "SUSPENDED", "LEFT_CLUB"];
+const BUCKET_ORDER: MedicalBucket[] = ["OUT", "DOUBTFUL", "COIN_FLIP", "RETURNING_SOON"];
 
-const statusConfig: Record<AvailabilityBucket, { 
+const statusConfig: Record<MedicalBucket, { 
   color: string; 
   icon: React.ElementType; 
   badgeBg: string;
@@ -37,42 +37,31 @@ const statusConfig: Record<AvailabilityBucket, {
     color: "text-red-600 dark:text-red-400", 
     icon: AlertCircle, 
     badgeBg: "bg-red-600 hover:bg-red-700 text-white",
-    label: "Out"
-  },
-  SUSPENDED: { 
-    color: "text-orange-600 dark:text-orange-400", 
-    icon: Ban, 
-    badgeBg: "bg-orange-600 hover:bg-orange-700 text-white",
-    label: "Suspended"
+    label: "Out (0%)"
   },
   DOUBTFUL: { 
     color: "text-amber-600 dark:text-amber-400", 
     icon: AlertTriangle, 
     badgeBg: "bg-amber-500 hover:bg-amber-600 text-white",
-    label: "Doubtful"
+    label: "Doubtful (25%)"
+  },
+  COIN_FLIP: { 
+    color: "text-yellow-600 dark:text-yellow-400", 
+    icon: Clock, 
+    badgeBg: "bg-yellow-500 hover:bg-yellow-600 text-white",
+    label: "Coin flip (50%)"
   },
   RETURNING_SOON: { 
-    color: "text-blue-600 dark:text-blue-400", 
-    icon: Clock, 
-    badgeBg: "bg-blue-500 hover:bg-blue-600 text-white",
-    label: "Returning"
-  },
-  AVAILABLE: { 
     color: "text-green-600 dark:text-green-400", 
     icon: CheckCircle, 
     badgeBg: "bg-green-600 hover:bg-green-700 text-white",
-    label: "Fit"
-  },
-  LEFT_CLUB: { 
-    color: "text-gray-600 dark:text-gray-400", 
-    icon: AlertCircle, 
-    badgeBg: "bg-gray-600 hover:bg-gray-700 text-white",
-    label: "Left Club"
+    label: "Returning (75%)"
   },
 };
 
 function AvailabilityCard({ player }: { player: EnrichedAvailability }) {
-  const config = statusConfig[player.bucket] || statusConfig.OUT;
+  const bucket = player.bucket as MedicalBucket;
+  const config = statusConfig[bucket] || statusConfig.OUT;
   const StatusIcon = config.icon;
   const newsDate = player.newsAdded ? new Date(player.newsAdded) : null;
 
@@ -102,9 +91,6 @@ function AvailabilityCard({ player }: { player: EnrichedAvailability }) {
           }
           break;
         }
-      }
-      if (!injuryType && player.bucket === "SUSPENDED") {
-        injuryType = "Suspension";
       }
       if (!injuryType && cleanNews.length > 0) {
         injuryType = cleanNews.split(/[,.!?]/)[0].trim().slice(0, 40);
@@ -208,10 +194,16 @@ export default function InjuriesPage() {
     queryKey: ["/api/teams"],
   });
 
-  const filteredAndSorted = useMemo(() => {
+  const medicalPlayers = useMemo(() => {
     if (!availability) return [];
+    return availability.filter(p => 
+      p.classification === "MEDICAL" && 
+      (p.bucket === "RETURNING_SOON" || p.bucket === "COIN_FLIP" || p.bucket === "DOUBTFUL" || p.bucket === "OUT")
+    );
+  }, [availability]);
 
-    let filtered = availability;
+  const filteredAndSorted = useMemo(() => {
+    let filtered = medicalPlayers;
 
     if (teamFilter !== "all") {
       filtered = filtered.filter(p => p.teamSlug === teamFilter);
@@ -223,13 +215,13 @@ export default function InjuriesPage() {
           filtered = filtered.filter(p => p.bucket === "OUT");
           break;
         case "doubtful":
-          filtered = filtered.filter(p => p.bucket === "DOUBTFUL" || p.bucket === "RETURNING_SOON");
+          filtered = filtered.filter(p => p.bucket === "DOUBTFUL");
           break;
-        case "suspended":
-          filtered = filtered.filter(p => p.bucket === "SUSPENDED");
+        case "coin_flip":
+          filtered = filtered.filter(p => p.bucket === "COIN_FLIP");
           break;
-        case "fit":
-          filtered = filtered.filter(p => p.bucket === "AVAILABLE");
+        case "returning_soon":
+          filtered = filtered.filter(p => p.bucket === "RETURNING_SOON");
           break;
       }
     }
@@ -239,8 +231,8 @@ export default function InjuriesPage() {
     switch (sortOption) {
       case "relevant":
         sorted.sort((a, b) => {
-          const aOrder = BUCKET_ORDER.indexOf(a.bucket);
-          const bOrder = BUCKET_ORDER.indexOf(b.bucket);
+          const aOrder = BUCKET_ORDER.indexOf(a.bucket as MedicalBucket);
+          const bOrder = BUCKET_ORDER.indexOf(b.bucket as MedicalBucket);
           if (aOrder !== bOrder) return aOrder - bOrder;
           const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
           const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
@@ -271,12 +263,10 @@ export default function InjuriesPage() {
     }
 
     return sorted;
-  }, [availability, teamFilter, statusTab, sortOption]);
+  }, [medicalPlayers, teamFilter, statusTab, sortOption]);
 
   const counts = useMemo(() => {
-    if (!availability) return { all: 0, out: 0, doubtful: 0, suspended: 0, fit: 0 };
-    
-    let filtered = availability;
+    let filtered = medicalPlayers;
     if (teamFilter !== "all") {
       filtered = filtered.filter(p => p.teamSlug === teamFilter);
     }
@@ -284,11 +274,11 @@ export default function InjuriesPage() {
     return {
       all: filtered.length,
       out: filtered.filter(p => p.bucket === "OUT").length,
-      doubtful: filtered.filter(p => p.bucket === "DOUBTFUL" || p.bucket === "RETURNING_SOON").length,
-      suspended: filtered.filter(p => p.bucket === "SUSPENDED").length,
-      fit: filtered.filter(p => p.bucket === "AVAILABLE").length,
+      doubtful: filtered.filter(p => p.bucket === "DOUBTFUL").length,
+      coin_flip: filtered.filter(p => p.bucket === "COIN_FLIP").length,
+      returning_soon: filtered.filter(p => p.bucket === "RETURNING_SOON").length,
     };
-  }, [availability, teamFilter]);
+  }, [medicalPlayers, teamFilter]);
 
   return (
     <MainLayout>
@@ -335,23 +325,21 @@ export default function InjuriesPage() {
         </div>
 
         <Tabs value={statusTab} onValueChange={(v) => setStatusTab(v as StatusTab)} className="w-full">
-          <TabsList className="mb-6" data-testid="tabs-status">
+          <TabsList className="mb-6 flex-wrap h-auto gap-1" data-testid="tabs-status">
             <TabsTrigger value="all" data-testid="tab-all">
-              All ({counts.all})
+              Overview ({counts.all})
             </TabsTrigger>
-            <TabsTrigger value="out" className="text-red-600 dark:text-red-400" data-testid="tab-out">
-              Out ({counts.out})
+            <TabsTrigger value="returning_soon" className="text-green-600 dark:text-green-400" data-testid="tab-returning">
+              Returning ({counts.returning_soon})
+            </TabsTrigger>
+            <TabsTrigger value="coin_flip" className="text-yellow-600 dark:text-yellow-400" data-testid="tab-coinflip">
+              Coin flip ({counts.coin_flip})
             </TabsTrigger>
             <TabsTrigger value="doubtful" className="text-amber-600 dark:text-amber-400" data-testid="tab-doubtful">
               Doubtful ({counts.doubtful})
             </TabsTrigger>
-            {counts.suspended > 0 && (
-              <TabsTrigger value="suspended" className="text-orange-600 dark:text-orange-400" data-testid="tab-suspended">
-                Suspended ({counts.suspended})
-              </TabsTrigger>
-            )}
-            <TabsTrigger value="fit" className="text-green-600 dark:text-green-400" data-testid="tab-fit">
-              Fit ({counts.fit})
+            <TabsTrigger value="out" className="text-red-600 dark:text-red-400" data-testid="tab-out">
+              Out ({counts.out})
             </TabsTrigger>
           </TabsList>
 
@@ -373,8 +361,8 @@ export default function InjuriesPage() {
                 <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">
                   {statusTab === "all" 
-                    ? "No availability issues to display." 
-                    : `No players currently ${statusTab === "out" ? "ruled out" : statusTab === "suspended" ? "suspended" : statusTab === "fit" ? "returning from injury" : "listed as doubtful"}.`}
+                    ? "No medical issues to display." 
+                    : `No players currently in this category.`}
                 </p>
               </div>
             )}

@@ -1,0 +1,77 @@
+We need to lock and implement a final availability taxonomy across Football Mad using the existing FPL feed.
+
+GOAL
+- Treatment Room (medical only) must reconcile counts exactly (Overview = sum of state tabs).
+- Remove “Loans/Transfers” from Treatment Room entirely (move to Transfers tab).
+- Move “Suspended” out of Treatment Room into a new Discipline tab (v1 supports Suspended only).
+- Apply the same taxonomy to both Team Hub Injuries tab and the global Injuries page (H1 = Treatment Room, nav label stays Injuries).
+
+FINAL TAXONOMY
+1) Medical (Treatment Room):
+- Returning Soon (75%)
+- Coin Flip (50%)
+- Doubtful (25%)
+- Out (0%)
+Overview count must equal Returning Soon + Coin Flip + Doubtful + Out.
+
+2) Discipline:
+- Suspended (only, for now)
+
+3) Squad:
+- Loaned / Transferred (moved to Transfers tab)
+
+IMPLEMENTATION TASKS
+
+A) TEAM HUB CHANGES (important)
+1) Update Team Hub Injuries tab:
+- Tabs should be:
+  - Overview
+  - Returning Soon
+  - Coin Flip
+  - Doubtful
+  - Out
+- Remove any “Loans/Transfers” tab from Injuries.
+- Remove “Suspended” from Injuries.
+- Ensure Overview count is the sum of those 4 medical states and matches the displayed number.
+
+2) Add a new Team Hub tab: “Discipline”
+- v1 shows only “Suspended”
+- Reuse existing player row/card styles; keep it simple and factual.
+- If FPL doesn’t provide suspension detail beyond a flag/status, still list the player(s) with a “Suspended” badge and null-safe placeholders.
+
+3) Transfers tab:
+- Add/extend a “Loaned/Transferred” section driven by the FPL feed.
+- These players should not appear anywhere in Treatment Room.
+- Keep it clean: player name, destination/status if available, otherwise show “Loaned/Transferred”.
+
+B) GLOBAL PAGE CHANGES
+1) Main header nav remains “Injuries”.
+2) Global page route remains /injuries, but:
+- Page H1 must be “Treatment Room”
+- It should aggregate medical statuses across ALL teams using the same rules as Team Hub:
+  - Returning Soon (75%)
+  - Coin Flip (50%)
+  - Doubtful (25%)
+  - Out (0%)
+- Overview must reconcile to the sum of those states.
+- Add Team filter dropdown (All teams + each team) and state tabs (Overview + 4 states).
+- Do NOT include Suspended or Loaned/Transferred on this page.
+
+3) Optional (if easy): Add a link or secondary nav to /transfers for “Loaned/Transferred” and to /discipline later, but only if routing already exists. Otherwise keep global injuries page medical-only.
+
+DATA SPLITTING RULES (CRITICAL)
+- “Loaned/Transferred” wins over medical: if a player is flagged as loaned/transferred, they must be excluded from Treatment Room even if chance/status exists.
+- “Suspended” is excluded from Treatment Room and appears only in Discipline.
+- Only players classified into one of the 4 medical states appear in Treatment Room.
+- Null-safe rendering everywhere (no UI breaks if expected return/injury type missing).
+
+UI CONSISTENCY
+- Keep container width consistent with other hub pages (avoid narrow layout).
+- Reuse the existing InjuryCard / availability UI styles and badges.
+- Ensure counts on tabs and overview always match filtered results.
+
+DELIVERABLES
+- Team Hub Injuries tab updated to 4 medical tabs + Overview with correct counts.
+- New Team Hub Discipline tab showing Suspended players (v1).
+- Transfers tab includes Loaned/Transferred list sourced from FPL.
+- Global /injuries page shows Treatment Room (medical-only) aggregated across all teams with tabs + team filter.

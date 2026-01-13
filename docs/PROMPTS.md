@@ -152,3 +152,181 @@ Ensure back navigation never crashes even during hydration/loading.
 ## Guiding Principle
 If Football Mad disagrees with FPL or official club reality, Football Mad is wrong.
 Match fan expectations first.
+
+---
+
+# Prompts — Day 3
+
+## Matchday Page – Core Structure (Pre / Post Match)
+
+You are building a Matchday page for Football Mad.
+
+Each Matchday page must support two states:
+- Pre-match (fixture-focused)
+- Post-match (result-focused)
+
+The page should dynamically switch based on whether kickoff has passed.
+
+Pre-match state should prioritise:
+- Predicted lineups
+- Formation shapes
+- Injuries & suspensions
+- Kickoff time and venue
+
+Post-match state should prioritise:
+- Final score and result
+- Goals, assists, cards
+- Confirmed lineups
+- Key stats and momentum
+
+Design with a modular layout so additional blocks can be added later without restructuring the page.
+
+---
+
+## Lineups – Two-Team, Side-by-Side Concept
+
+Create a Predicted Lineups section with two teams displayed side by side.
+
+Layout concept:
+- Left side: Home team
+- Right side: Away team
+
+Each team should show:
+- Team badge + formation
+- Starting XI (list format)
+- Substitutes listed beneath
+
+Lineup rows must be clickable and link to a full matchday lineup view.
+
+---
+
+## Lineups – Four-Column Desktop Layout (Early Iteration)
+
+Desktop layout requirement for predicted lineups:
+
+Four columns across the page:
+[Home team list] [Home pitch graphic] [Away pitch graphic] [Away team list]
+
+Each pitch graphic should:
+- Be portrait orientation
+- Match the height of the 11-player list
+- Show correct formation spacing
+
+This layout is desktop-only and may collapse differently on mobile.
+
+---
+
+## Lineups – Refined Three-Column Layout (Final Direction)
+
+Refactor predicted lineups into a three-column layout.
+
+Desktop:
+[Home XI list] [Full pitch view with both teams] [Away XI list]
+
+Rules:
+- Home team appears at the TOP of the pitch
+- Away team appears at the BOTTOM of the pitch
+- Pitch is the visual divider between teams
+- All three columns must be equal height within the section container
+
+The pitch must not exceed the height of the team lists or substitutes.
+
+---
+
+## Text Alignment & Visual Boundaries (Away Team)
+
+Improve visual balance of the away team lineup list.
+
+Requirements:
+- Away team player names must be right-aligned
+- Shirt numbers must appear on the RIGHT of player names
+- Shirt numbers should form a clean vertical visual boundary
+- Avoid text appearing too close to the pitch column
+
+---
+
+## Goalkeeper Position Logic (Important Rule)
+
+Important lineup logic rule:
+
+Goalkeepers must always be rendered in the goalkeeper position on the pitch graphic, regardless of shirt number.
+
+Do NOT assume the goalkeeper wears shirt number 1.
+Position placement must be driven by role (GKP), not shirt number.
+
+---
+
+## Responsive Behaviour – Mobile Layout
+
+Define responsive behaviour for predicted lineups.
+
+Desktop:
+[Home XI] [Pitch View] [Away XI]
+
+Mobile:
+- Combine Home XI and Away XI into a single card
+- Home team on the left, Away team on the right
+- Pitch view displayed either ABOVE or BELOW the combined XI card
+
+Ensure spacing, alignment, and hierarchy remain clear on small screens.
+
+---
+
+## Pitch View Constraints & Scaling
+
+Pitch view constraints:
+
+- Pitch height must NEVER exceed the height of the surrounding lineup lists
+- Pitch must stretch to fill the vertical space of the section container
+- Avoid pitch overflow that pushes substitutes out of view
+- Pitch should feel like a divider, not the dominant element
+
+---
+
+## Player Headshots (Lineups + Injuries)
+
+Enhancement request: add player headshots.
+
+Requirements:
+- Circular headshots
+- Used in:
+  - Pitch lineup view
+  - Injury cards
+- Fallback to initials if no headshot is available
+- Headshots must not break alignment or spacing
+- Prioritise clarity over size (small but recognisable)
+
+---
+
+## Global Injuries Page (Treatment Room)
+
+You are building Football Mad (React + Tailwind).
+
+Create a GLOBAL injuries page linked from the main header nav item "Injuries".
+
+Rules:
+- Keep navigation label as "Injuries"
+- Page H1 must be "Treatment Room"
+- Subtitle: "Player injuries and expected returns (FPL-powered)"
+
+Data:
+- Reuse the same Fantasy Premier League (FPL) feed and logic used in the Team Hub Injuries tab
+- Aggregate injuries across ALL teams
+- Single source of truth for player availability
+
+UI:
+- Filters: All, Out, Doubtful, Fit
+- Team dropdown (default: All Teams)
+- Injury cards reused from Team Hub design
+
+Sorting:
+- Default order: Out → Doubtful → Returning Soon → Fit
+
+---
+
+## Internal Guiding Principle (Implicit Prompt)
+
+If a feature reaches ~90–95% quality but the remaining issues are visual precision rather than logic, pause iteration and plan to hand off to a developer for refinement.
+
+---
+

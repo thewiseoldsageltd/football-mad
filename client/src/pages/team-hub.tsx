@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
 
-type Classification = "INJURY" | "SUSPENSION" | "LOAN_OR_TRANSFER";
+type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
 type RingColor = "green" | "amber" | "red" | "gray";
 
@@ -44,12 +44,13 @@ interface NewsFiltersResponse {
   appliedFilters: Record<string, unknown>;
 }
 
-const VALID_TABS = ["latest", "injuries", "transfers", "matches", "fans"] as const;
+const VALID_TABS = ["latest", "injuries", "discipline", "transfers", "matches", "fans"] as const;
 type TabValue = typeof VALID_TABS[number];
 
 const TAB_META: Record<TabValue, { icon: typeof Newspaper; label: string; title: string }> = {
   latest: { icon: Newspaper, label: "Latest", title: "News" },
-  injuries: { icon: Activity, label: "Injuries", title: "Injuries" },
+  injuries: { icon: Activity, label: "Injuries", title: "Treatment Room" },
+  discipline: { icon: Ban, label: "Discipline", title: "Discipline" },
   transfers: { icon: TrendingUp, label: "Transfers", title: "Transfers" },
   matches: { icon: Calendar, label: "Matches", title: "Matches" },
   fans: { icon: Users, label: "Fans", title: "Fan Zone" },
@@ -183,33 +184,29 @@ const RING_COLORS: Record<RingColor, { bg: string; border: string }> = {
   gray: { bg: "bg-gray-500/10", border: "border-gray-500" },
 };
 
-type TabKey = "OVERVIEW" | AvailabilityBucket;
+type MedicalBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT";
+type MedicalTabKey = "OVERVIEW" | MedicalBucket;
 
-const TAB_OPTIONS: { key: TabKey; label: string }[] = [
+const MEDICAL_TAB_OPTIONS: { key: MedicalTabKey; label: string }[] = [
   { key: "OVERVIEW", label: "Overview" },
+  { key: "RETURNING_SOON", label: "Returning soon" },
   { key: "COIN_FLIP", label: "Coin flip" },
   { key: "DOUBTFUL", label: "Doubtful" },
   { key: "OUT", label: "Out" },
-  { key: "SUSPENDED", label: "Suspended" },
-  { key: "LEFT_CLUB", label: "Loans/Transfers" },
 ];
 
-const SECTION_ORDER: AvailabilityBucket[] = [
+const MEDICAL_SECTION_ORDER: MedicalBucket[] = [
   "RETURNING_SOON",
   "COIN_FLIP", 
   "DOUBTFUL",
   "OUT",
-  "SUSPENDED",
-  "LEFT_CLUB",
 ];
 
-const SECTION_LABELS: Record<AvailabilityBucket, string> = {
+const MEDICAL_SECTION_LABELS: Record<MedicalBucket, string> = {
   RETURNING_SOON: "Returning soon (75%)",
   COIN_FLIP: "Coin flip (50%)",
   DOUBTFUL: "Doubtful (25%)",
   OUT: "Out (0%)",
-  SUSPENDED: "Suspended",
-  LEFT_CLUB: "Loans/Transfers",
 };
 
 function PlayerAvatar({ 
@@ -348,7 +345,7 @@ function InjuriesTabContent({
   teamName: string;
   relatedArticles?: Article[];
 }) {
-  const [activeTab, setActiveTab] = useState<TabKey>("OVERVIEW");
+  const [activeTab, setActiveTab] = useState<MedicalTabKey>("OVERVIEW");
   
   const { data: availability, isLoading } = useQuery<FplAvailabilityWithRag[]>({
     queryKey: ["/api/teams", teamSlug, "availability"],
@@ -367,40 +364,42 @@ function InjuriesTabContent({
     });
   };
 
-  const { bucketCounts, groupedPlayers, totalCount, lastUpdated } = useMemo(() => {
-    const counts: Record<AvailabilityBucket, number> = {
+  const { bucketCounts, groupedPlayers, medicalTotal, lastUpdated } = useMemo(() => {
+    const counts: Record<MedicalBucket, number> = {
       RETURNING_SOON: 0,
       COIN_FLIP: 0,
       DOUBTFUL: 0,
       OUT: 0,
-      SUSPENDED: 0,
-      LEFT_CLUB: 0,
     };
-    const grouped: Record<AvailabilityBucket, FplAvailabilityWithRag[]> = {
+    const grouped: Record<MedicalBucket, FplAvailabilityWithRag[]> = {
       RETURNING_SOON: [],
       COIN_FLIP: [],
       DOUBTFUL: [],
       OUT: [],
-      SUSPENDED: [],
-      LEFT_CLUB: [],
     };
     
     if (!availability) {
-      return { bucketCounts: counts, groupedPlayers: grouped, totalCount: 0, lastUpdated: null };
+      return { bucketCounts: counts, groupedPlayers: grouped, medicalTotal: 0, lastUpdated: null };
     }
     
-    availability.forEach(p => {
-      counts[p.bucket]++;
-      grouped[p.bucket].push(p);
+    const medicalPlayers = availability.filter(p => 
+      p.classification === "MEDICAL" && 
+      (p.bucket === "RETURNING_SOON" || p.bucket === "COIN_FLIP" || p.bucket === "DOUBTFUL" || p.bucket === "OUT")
+    );
+    
+    medicalPlayers.forEach(p => {
+      const bucket = p.bucket as MedicalBucket;
+      counts[bucket]++;
+      grouped[bucket].push(p);
     });
     
     Object.keys(grouped).forEach(key => {
-      grouped[key as AvailabilityBucket] = sortByRecent(grouped[key as AvailabilityBucket]);
+      grouped[key as MedicalBucket] = sortByRecent(grouped[key as MedicalBucket]);
     });
     
     const total = Object.values(counts).reduce((sum, c) => sum + c, 0);
     
-    const mostRecent = availability.reduce((latest, p) => {
+    const mostRecent = medicalPlayers.reduce((latest, p) => {
       if (p.newsAdded) {
         const date = new Date(p.newsAdded);
         return date > latest ? date : latest;
@@ -411,14 +410,14 @@ function InjuriesTabContent({
     return {
       bucketCounts: counts,
       groupedPlayers: grouped,
-      totalCount: total,
+      medicalTotal: total,
       lastUpdated: mostRecent.getTime() > 0 ? mostRecent : null,
     };
   }, [availability]);
 
-  const getTabCount = (tabKey: TabKey): number => {
-    if (tabKey === "OVERVIEW") return totalCount;
-    return bucketCounts[tabKey as AvailabilityBucket] || 0;
+  const getTabCount = (tabKey: MedicalTabKey): number => {
+    if (tabKey === "OVERVIEW") return medicalTotal;
+    return bucketCounts[tabKey as MedicalBucket] || 0;
   };
 
   if (isLoading) {
@@ -428,7 +427,7 @@ function InjuriesTabContent({
           <Skeleton className="h-7 w-48" />
           <Skeleton className="h-5 w-64" />
           <div className="flex gap-2 mt-3 flex-wrap">
-            {Array.from({ length: 6 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-8 w-24" />
             ))}
           </div>
@@ -448,14 +447,14 @@ function InjuriesTabContent({
     );
   }
 
-  const renderOverviewSection = (bucket: AvailabilityBucket) => {
+  const renderOverviewSection = (bucket: MedicalBucket) => {
     const players = groupedPlayers[bucket];
     if (players.length === 0) return null;
     
     return (
       <section key={bucket} className="space-y-3">
         <h3 className="text-base font-semibold text-muted-foreground flex items-center gap-2">
-          {SECTION_LABELS[bucket]}
+          {MEDICAL_SECTION_LABELS[bucket]}
           <Badge variant="secondary" className="text-xs">{players.length}</Badge>
         </h3>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -467,13 +466,13 @@ function InjuriesTabContent({
     );
   };
 
-  const renderSingleTabContent = (bucket: AvailabilityBucket) => {
+  const renderSingleTabContent = (bucket: MedicalBucket) => {
     const players = groupedPlayers[bucket];
     if (players.length === 0) {
       return (
         <EmptyState
           icon={Activity}
-          title={`No players in "${TAB_OPTIONS.find(o => o.key === bucket)?.label}"`}
+          title={`No players in "${MEDICAL_TAB_OPTIONS.find(o => o.key === bucket)?.label}"`}
           description="No players currently match this status."
         />
       );
@@ -490,13 +489,13 @@ function InjuriesTabContent({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold mb-1">Injuries & Availability</h2>
+        <h2 className="text-xl font-semibold mb-1">Treatment Room</h2>
         <p className="text-sm text-muted-foreground mb-3">
-          FPL-powered availability for {teamName}
+          FPL-powered medical availability for {teamName}
         </p>
 
         <div className="flex flex-wrap gap-2 mb-4">
-          {TAB_OPTIONS.map((option) => {
+          {MEDICAL_TAB_OPTIONS.map((option) => {
             const count = getTabCount(option.key);
             return (
               <Button
@@ -527,19 +526,19 @@ function InjuriesTabContent({
       </div>
 
       {activeTab === "OVERVIEW" ? (
-        totalCount === 0 ? (
+        medicalTotal === 0 ? (
           <EmptyState
             icon={Activity}
-            title="No availability issues"
+            title="No medical issues"
             description="All players appear fit and available."
           />
         ) : (
           <div className="space-y-6">
-            {SECTION_ORDER.map(bucket => renderOverviewSection(bucket))}
+            {MEDICAL_SECTION_ORDER.map(bucket => renderOverviewSection(bucket))}
           </div>
         )
       ) : (
-        renderSingleTabContent(activeTab as AvailabilityBucket)
+        renderSingleTabContent(activeTab as MedicalBucket)
       )}
 
       {relatedArticles && relatedArticles.length > 0 && (
@@ -554,6 +553,123 @@ function InjuriesTabContent({
             ))}
           </div>
         </section>
+      )}
+    </div>
+  );
+}
+
+function DisciplineTabContent({ 
+  teamSlug,
+  teamName,
+}: { 
+  teamSlug: string;
+  teamName: string;
+}) {
+  const { data: availability, isLoading } = useQuery<FplAvailabilityWithRag[]>({
+    queryKey: ["/api/teams", teamSlug, "availability"],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${teamSlug}/availability?sort=recent`);
+      if (!res.ok) throw new Error("Failed to fetch availability");
+      return res.json();
+    },
+  });
+
+  const suspendedPlayers = useMemo(() => {
+    if (!availability) return [];
+    return availability
+      .filter(p => p.classification === "SUSPENSION" || p.bucket === "SUSPENDED")
+      .sort((a, b) => {
+        const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+        const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+        return bDate - aDate;
+      });
+  }, [availability]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-48" />
+          <Skeleton className="h-5 w-64" />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4 space-y-3">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-24" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold mb-1">Discipline</h2>
+        <p className="text-sm text-muted-foreground mb-3">
+          Suspended players for {teamName}
+        </p>
+      </div>
+
+      {suspendedPlayers.length === 0 ? (
+        <EmptyState
+          icon={Ban}
+          title="No suspensions"
+          description="No players are currently suspended."
+        />
+      ) : (
+        <div className="space-y-4">
+          <h3 className="text-base font-semibold text-muted-foreground flex items-center gap-2">
+            Suspended
+            <Badge variant="secondary" className="text-xs">{suspendedPlayers.length}</Badge>
+          </h3>
+          <div className="grid sm:grid-cols-2 gap-4">
+            {suspendedPlayers.map((player) => (
+              <Card key={player.id} className="hover-elevate" data-testid={`card-suspended-${player.id}`}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <PlayerAvatar 
+                      playerName={player.playerName} 
+                      photoUrl={null}
+                      ringColor="red"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <h3 className="font-semibold truncate">{player.playerName}</h3>
+                        <Badge variant="secondary" className="text-xs flex-shrink-0">
+                          {player.position}
+                        </Badge>
+                        <Badge 
+                          variant="outline" 
+                          className="text-xs flex-shrink-0 border-red-500 text-red-600"
+                        >
+                          Suspended
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {player.news || "Serving suspension"}
+                      </p>
+                    </div>
+                  </div>
+                  {player.newsAdded && (
+                    <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border/50">
+                      Updated: {new Date(player.newsAdded).toLocaleDateString("en-GB", { 
+                        day: "numeric", 
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit"
+                      })}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -752,6 +868,26 @@ function TransfersTabContent({
 }) {
   const mockData = MOCK_TRANSFER_DATA[teamSlug];
   
+  const { data: availability } = useQuery<FplAvailabilityWithRag[]>({
+    queryKey: ["/api/teams", teamSlug, "availability"],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${teamSlug}/availability?sort=recent`);
+      if (!res.ok) throw new Error("Failed to fetch availability");
+      return res.json();
+    },
+  });
+
+  const loanedTransferredPlayers = useMemo(() => {
+    if (!availability) return [];
+    return availability
+      .filter(p => p.classification === "LOAN_OR_TRANSFER" || p.bucket === "LEFT_CLUB")
+      .sort((a, b) => {
+        const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+        const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+        return bDate - aDate;
+      });
+  }, [availability]);
+  
   const { rumours, apiRumours, confirmedIn, confirmedOut, summary } = useMemo(() => {
     const confirmed = (transfers || []).filter(t => t.status === "confirmed");
     const apiRumoursData = (transfers || []).filter(t => t.status === "rumour");
@@ -784,7 +920,7 @@ function TransfersTabContent({
     };
   }, [transfers, teamId, mockData]);
 
-  const hasActivity = confirmedIn.length > 0 || confirmedOut.length > 0 || rumours.length > 0 || apiRumours.length > 0;
+  const hasActivity = confirmedIn.length > 0 || confirmedOut.length > 0 || rumours.length > 0 || apiRumours.length > 0 || loanedTransferredPlayers.length > 0;
   const lastUpdatedFormatted = summary.lastUpdated 
     ? new Date(summary.lastUpdated).toLocaleDateString("en-GB", { 
         day: "numeric", 
@@ -881,6 +1017,57 @@ function TransfersTabContent({
                   </div>
                 </div>
               )}
+            </section>
+          )}
+
+          {loanedTransferredPlayers.length > 0 && (
+            <section>
+              <h3 className="text-lg font-bold mb-4">Loaned / Transferred Out (FPL)</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Players who have left on loan or transfer according to FPL data
+              </p>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {loanedTransferredPlayers.map((player) => (
+                  <Card key={player.id} className="hover-elevate" data-testid={`card-loaned-${player.id}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <PlayerAvatar 
+                          playerName={player.playerName} 
+                          photoUrl={null}
+                          ringColor="gray"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h3 className="font-semibold truncate">{player.playerName}</h3>
+                            <Badge variant="secondary" className="text-xs flex-shrink-0">
+                              {player.position}
+                            </Badge>
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs flex-shrink-0 border-gray-400 text-gray-500"
+                            >
+                              Loaned/Transferred
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {player.news || "Left club"}
+                          </p>
+                        </div>
+                      </div>
+                      {player.newsAdded && (
+                        <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border/50">
+                          Updated: {new Date(player.newsAdded).toLocaleDateString("en-GB", { 
+                            day: "numeric", 
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </section>
           )}
         </>
@@ -2207,6 +2394,13 @@ export default function TeamHubPage() {
                 teamSlug={slug}
                 teamName={team.name}
                 relatedArticles={injuryRelatedArticles}
+              />
+            )}
+
+            {activeTab === "discipline" && (
+              <DisciplineTabContent 
+                teamSlug={slug}
+                teamName={team.name}
               />
             )}
 
