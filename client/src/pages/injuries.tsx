@@ -25,7 +25,45 @@ interface EnrichedAvailability extends FplPlayerAvailability {
 type StatusTab = "all" | "returning_soon" | "coin_flip" | "doubtful" | "out";
 type SortOption = "relevant" | "updated" | "highest" | "lowest";
 
-const BUCKET_ORDER: MedicalBucket[] = ["OUT", "DOUBTFUL", "COIN_FLIP", "RETURNING_SOON"];
+const BUCKET_ORDER_OVERVIEW: MedicalBucket[] = ["RETURNING_SOON", "COIN_FLIP", "DOUBTFUL", "OUT"];
+
+function parseExpectedReturnDate(news: string | null): Date | null {
+  if (!news) return null;
+  const match = news.match(/Expected back\s+(.*?)(?:\.|$)/i);
+  if (!match) return null;
+  
+  const dateStr = match[1].trim().toLowerCase();
+  const now = new Date();
+  
+  if (dateStr.includes("unknown") || dateStr.includes("tbd")) return null;
+  
+  const monthMatch = dateStr.match(/(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{1,2})?/i);
+  if (monthMatch) {
+    const months: Record<string, number> = {
+      january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+      july: 6, august: 7, september: 8, october: 9, november: 10, december: 11
+    };
+    const month = months[monthMatch[1].toLowerCase()];
+    const day = monthMatch[2] ? parseInt(monthMatch[2]) : 15;
+    let year = now.getFullYear();
+    const targetDate = new Date(year, month, day);
+    if (targetDate < now) {
+      year++;
+    }
+    return new Date(year, month, day);
+  }
+  
+  if (dateStr.includes("gameweek") || dateStr.includes("gw")) {
+    const gwMatch = dateStr.match(/(\d+)/);
+    if (gwMatch) {
+      const gw = parseInt(gwMatch[1]);
+      const seasonStart = new Date(now.getFullYear(), 7, 15);
+      return new Date(seasonStart.getTime() + gw * 7 * 24 * 60 * 60 * 1000);
+    }
+  }
+  
+  return null;
+}
 
 const statusConfig: Record<MedicalBucket, { 
   color: string; 
@@ -231,12 +269,26 @@ export default function InjuriesPage() {
     switch (sortOption) {
       case "relevant":
         sorted.sort((a, b) => {
-          const aOrder = BUCKET_ORDER.indexOf(a.bucket as MedicalBucket);
-          const bOrder = BUCKET_ORDER.indexOf(b.bucket as MedicalBucket);
+          const aOrder = BUCKET_ORDER_OVERVIEW.indexOf(a.bucket as MedicalBucket);
+          const bOrder = BUCKET_ORDER_OVERVIEW.indexOf(b.bucket as MedicalBucket);
           if (aOrder !== bOrder) return aOrder - bOrder;
-          const aDate = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
-          const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
-          return bDate - aDate;
+          
+          const aReturn = parseExpectedReturnDate(a.news);
+          const bReturn = parseExpectedReturnDate(b.news);
+          if (aReturn && bReturn) {
+            const returnDiff = aReturn.getTime() - bReturn.getTime();
+            if (returnDiff !== 0) return returnDiff;
+          } else if (aReturn && !bReturn) {
+            return -1;
+          } else if (!aReturn && bReturn) {
+            return 1;
+          }
+          
+          const aUpdated = a.newsAdded ? new Date(a.newsAdded).getTime() : 0;
+          const bUpdated = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
+          if (aUpdated !== bUpdated) return bUpdated - aUpdated;
+          
+          return a.playerName.localeCompare(b.playerName);
         });
         break;
       case "updated":
