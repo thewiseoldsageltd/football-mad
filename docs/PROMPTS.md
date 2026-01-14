@@ -330,3 +330,296 @@ If a feature reaches ~90–95% quality but the remaining issues are visual preci
 
 ---
 
+# Football Mad – Day 4 Prompt Log (Summary)
+
+Below is a consolidated list of prompts used or prepared on Day 4:
+
+Treatment Room taxonomy split (Medical vs Discipline vs Transfers)
+
+Colour logic correction (75% ≠ green)
+
+Overview sorting logic (availability-first)
+
+Navigation hierarchy (tabs vs filters)
+
+Team dropdown deduplication & PL-only filtering
+
+Header icon consistency (News & Teams)
+
+Mobile scrollable sub-navigation implementation
+
+URL taxonomy implementation (site-wide)
+
+News routing logic (Option A – entity vs article resolution)
+
+Slug collision prevention logic
+
+Central URL helper module creation (urls.ts)
+
+(All prompts were consolidated into final “single source of truth” prompts where applicable.)
+
+---
+
+====================================
+DAY 4 – PROMPT LOG (FULL)
+====================================
+
+------------------------------------
+1) TREATMENT ROOM TAXONOMY (LOCK)
+------------------------------------
+We need to lock and implement a final availability taxonomy across Football Mad using the existing FPL feed.
+
+GOAL
+- Treatment Room must be medical-only.
+- Overview count must always equal the sum of medical states.
+- Loaned / Transferred must be removed from Treatment Room and moved to Transfers.
+- Suspended must be removed from Treatment Room and moved to a new Discipline tab.
+
+FINAL TAXONOMY
+Medical (Treatment Room):
+- Returning Soon (75%)
+- Coin Flip (50%)
+- Doubtful (25%)
+- Out (0%)
+
+Discipline:
+- Suspended (v1 only)
+
+Squad:
+- Loaned / Transferred (Transfers tab)
+
+IMPLEMENTATION
+- Update Team Hub Injuries tab to show only the 4 medical states + Overview.
+- Add Discipline tab showing Suspended players.
+- Ensure Treatment Room Overview reconciles exactly.
+- Apply same logic to global /injuries page (H1 = Treatment Room).
+
+------------------------------------
+2) COLOUR LOGIC FIX (PL-ALIGNED)
+------------------------------------
+BUG / REGRESSION FIX – Treatment Room colours
+
+LOCKED COLOUR MAPPING:
+- Returning Soon (75%) → AMBER
+- Coin Flip (50%) → ORANGE
+- Doubtful (25%) → RED
+- Out (0%) → RED
+- Suspended → RED
+- Loaned / Transferred → GREY
+
+RULES:
+- Green (100%) must NEVER appear in Treatment Room.
+- Red always means unavailable.
+- Grey is informational only.
+
+Apply consistently across:
+- Team Hub → Treatment Room
+- Global /injuries page
+
+------------------------------------
+3) OVERVIEW SORTING LOGIC
+------------------------------------
+UPDATE: Treatment Room – Overview ordering
+
+Goal:
+Overview should show players closest to returning first (FPL-first logic).
+
+Default sorting on Overview:
+1) Availability DESC:
+   - 75% → 50% → 25% → 0%
+2) expected_return_date ASC (earliest first)
+3) updated_at DESC
+4) player_name ASC (fallback)
+
+This logic applies only to Overview.
+Individual tabs retain their own natural ordering.
+
+------------------------------------
+4) FILTER & SORT LOGIC CLEANUP
+------------------------------------
+Update Treatment Room filters and sorting.
+
+- Rename “Most relevant” → “Closest return”.
+- Make “Closest return” the DEFAULT sort option.
+- Keep sort options:
+  - Closest return
+  - Last updated
+  - Highest confidence
+  - Lowest confidence
+
+Tabs define STATE.
+Sort dropdown defines ORDER.
+Do not duplicate responsibilities.
+
+------------------------------------
+5) TEAM FILTER CLEANUP (PL ONLY)
+------------------------------------
+Clean Team dropdown to remove duplicates and non-Premier League clubs.
+
+Allow ONLY the following (CODE – Name):
+- ARS – Arsenal
+- AVL – Aston Villa
+- BOU – Bournemouth
+- BRE – Brentford
+- BHA – Brighton
+- BUR – Burnley
+- CHE – Chelsea
+- CRY – Crystal Palace
+- EVE – Everton
+- FUL – Fulham
+- LEE – Leeds
+- LIV – Liverpool
+- MCI – Man City
+- MUN – Man Utd
+- NEW – Newcastle
+- NFO – Nottingham Forest
+- SUN – Sunderland
+- TOT – Tottenham
+- WHU – West Ham
+- WOL – Wolves
+
+Implementation:
+- Add canonical team mapping layer.
+- Deduplicate all aliases (e.g. “Brighton and Hove Albion”).
+- Exclude Championship and relegated teams.
+
+------------------------------------
+6) HEADER ICON CONSISTENCY
+------------------------------------
+UI consistency fix for main navigation pages.
+
+Problem:
+News and Teams pages are missing header icons.
+
+Requirements:
+- Add newspaper/article icon to News header.
+- Add shield/squad icon to Teams header.
+- Match size, alignment, colour, and spacing used on other pages.
+- Icons must be decorative (aria-hidden).
+
+------------------------------------
+7) MOBILE SUB-NAVIGATION (SCROLLABLE)
+------------------------------------
+Refine Treatment Room navigation layout.
+
+Mobile (<=768px):
+- Sub-navigation tabs must be ONE horizontal row.
+- Tabs must scroll horizontally (no wrapping).
+- Use flex + overflow-x: auto.
+- Active tab must remain clearly highlighted.
+- Optional fade gradient to hint scroll.
+
+Desktop:
+- Keep current layout unchanged.
+
+------------------------------------
+8) FILTER PLACEMENT & ALIGNMENT
+------------------------------------
+Navigation hierarchy update.
+
+Desktop:
+- Tabs left-aligned.
+- Filters right-aligned on SAME horizontal row.
+
+Mobile:
+- Tabs first.
+- Filters stacked below tabs.
+- Filters must be full-width and match nav container width.
+
+------------------------------------
+9) CENTER “ALL TEAMS” DROPDOWN TEXT
+------------------------------------
+UI polish request.
+
+- Center-align “All Teams” text horizontally and vertically.
+- Keep caret icon right-aligned.
+- Maintain layout consistency across desktop and mobile.
+
+------------------------------------
+10) FINAL URL TAXONOMY (SITE-WIDE)
+------------------------------------
+Implement final Football Mad URL structure (pre-launch).
+
+CANONICAL ROUTES
+
+/news
+/news/:slug        (entity OR article)
+
+/teams
+/teams/:teamSlug
+/teams/:teamSlug/injuries
+/teams/:teamSlug/discipline
+/teams/:teamSlug/transfers
+/teams/:teamSlug/matches
+/teams/:teamSlug/fans
+/teams/:teamSlug/squad
+
+/players/:playerSlug
+
+/matches
+/matches/:competitionSlug      (listing only)
+/matches/:matchSlug            (home-vs-away-YYYY-MM-DD)
+
+/injuries
+/transfers
+/fpl
+/community
+/shop
+/shop/:teamSlug
+
+------------------------------------
+11) NEWS ROUTING LOGIC (OPTION A)
+------------------------------------
+Use flat URLs for News entity pages.
+
+Routing for /news/:slug:
+- If slug matches known entity (team or competition):
+    → render NewsEntityIndexPage
+- Else:
+    → render NewsArticlePage
+
+Slug collision prevention:
+- Maintain reservedSlugs set:
+  - All entity slugs
+  - System words (search, page, rss, feed, amp, category)
+- If article slug collides, append “-news” or “-report”.
+
+------------------------------------
+12) SLUG RULES & HELPERS
+------------------------------------
+Slug rules:
+- Team: fan-friendly, lowercase, hyphenated
+  Examples:
+    man-city
+    man-utd
+    nottingham-forest
+    wolves
+- Player: bukayo-saka
+- Match: home-vs-away-YYYY-MM-DD
+
+Create central URL helper module (urls.ts):
+- newsIndex()
+- newsEntity(slug)
+- newsArticle(slug)
+- teamsIndex()
+- teamHub(teamSlug)
+- teamSection(teamSlug, section)
+- playerProfile(playerSlug)
+- matchesIndex()
+- matchesCompetition(slug)
+- matchDetail(home, away, date)
+- injuriesGlobal()
+- transfersGlobal()
+- fplHub()
+- communityHub()
+- shopHub()
+- shopTeam(teamSlug)
+
+Replace all hardcoded links with helpers.
+
+====================================
+END – DAY 4 PROMPTS
+====================================
+
+---
+

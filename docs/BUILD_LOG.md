@@ -229,3 +229,111 @@ Team Hub (Injuries & Availability), FPL ingestion, Team metadata, Teams index po
 - Performance checks once data volume increases
 
 ---
+
+# Football Mad – Day 4 Build Log (FULL)
+
+Day: 4
+Focus: Treatment Room (Global Injuries), Navigation polish, URL taxonomy, SEO foundations
+Status: Completed
+
+## Overview
+
+Day 4 focused on locking availability taxonomy, perfecting the Treatment Room UX, and defining the final URL structure for the entire platform before launch. This was a foundational day with long-term SEO, scalability, and FPL relevance in mind.
+
+The session moved from data correctness → UX hierarchy → navigation polish → URL architecture → publishing workflow alignment.
+
+## Key Areas Worked On
+
+### Treatment Room Taxonomy (Locked)
+
+- Confirmed medical-only Treatment Room logic.
+- Final medical states:
+- Returning Soon (75%)
+- Coin Flip (50%)
+- Doubtful (25%)
+- Out (0%)
+- Overview tab must always reconcile exactly to the sum of the four states.
+
+Explicit exclusions:
+- Loaned / Transferred → Transfers tab
+- Suspended → Discipline tab (separate availability pillar)
+
+### Colour System (Premier League aligned)
+
+- Returning Soon (75%) → Amber
+- Coin Flip (50%) → Orange
+- Doubtful (25%) → Red
+- Out (0%) → Red
+- Suspended → Red
+- Loaned / Transferred → Grey
+- Green (100%) explicitly banned from Treatment Room
+
+### Overview Sorting Logic (Global Injuries)
+
+- Default ordering changed to match Team Hub logic.
+- Sorted by usefulness to FPL managers, not severity.
+
+Locked order:
+- Returning Soon (75%)
+- Coin Flip (50%)
+- Doubtful (25%)
+- Out (0%)
+
+Secondary sorting:
+- Expected return date (earliest first)
+- Last updated
+- Alphabetical fallback
+
+### Navigation & Filters UX
+
+- Sub-navigation (Overview / Returning / Coin Flip / Doubtful / Out) confirmed as primary navigation.
+- Filters confirmed as secondary modifiers, not state selectors.
+
+Changes made:
+- “Most relevant” renamed to “Closest return”
+- Default sort set to “Closest return”
+- Filters moved onto the same horizontal row as sub-nav on desktop.
+
+On mobile:
+- Sub-nav is single-line, horizontally scrollable
+- Filters stacked below nav
+- Filters are full-width and aligned to nav container
+
+### Team Filter Data Hygiene
+
+- Deduplicated team list.
+- Removed non–Premier League clubs.
+- Removed long-name duplicates (e.g. “Brighton and Hove Albion”).
+- Canonical short, fan-friendly names locked.
+
+### Header Consistency
+
+- Added missing header icons for:
+- News
+- Teams
+- All main navigation pages now have a consistent visual header language.
+
+### URL Taxonomy (Major Foundation Work)
+
+- Confirmed site is pre-launch / not indexed, allowing URL changes without redirects.
+- Designed and implemented final URL structure across the entire platform.
+- Removed internal logic (gameweeks, IDs) from URLs.
+- Adopted entity-first, canonical URLs.
+
+### News Publishing Workflow (PA Media)
+
+- Confirmed existing PA Media → Ghost automation remains valid.
+- Articles published once at a single canonical URL.
+- Categories/entities act as indexes, not URL parents.
+- No category paths added to article URLs.
+
+## Day 4 Outcome
+
+- Treatment Room UX and logic fully locked.
+- Navigation hierarchy refined and polished.
+- URL architecture finalised and implemented.
+- Publishing workflow preserved with zero rewrite.
+- Platform now has a stable, scalable foundation for launch.
+
+---
+

@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { newsArticle } from "@/lib/urls";
+import { getTeamStyle } from "@/lib/team-styles";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
@@ -235,13 +236,16 @@ const MEDICAL_SECTION_LABELS: Record<MedicalBucket, string> = {
 function PlayerAvatar({ 
   playerName, 
   photoUrl,
-  ringColor 
+  ringColor,
+  teamName
 }: { 
   playerName: string; 
   photoUrl?: string | null;
   ringColor: RingColor;
+  teamName?: string | null;
 }) {
-  const style = RING_COLORS[ringColor] || RING_COLORS.gray;
+  const ringStyle = RING_COLORS[ringColor] || RING_COLORS.gray;
+  const teamStyle = teamName ? getTeamStyle(teamName) : null;
   const initials = playerName
     .split(" ")
     .filter(n => n.length > 0)
@@ -252,7 +256,7 @@ function PlayerAvatar({
 
   if (photoUrl) {
     return (
-      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${style.border} flex-shrink-0`}>
+      <div className={`w-12 h-12 rounded-full overflow-hidden border-2 ${ringStyle.border} flex-shrink-0`}>
         <img 
           src={photoUrl} 
           alt={playerName} 
@@ -266,9 +270,20 @@ function PlayerAvatar({
     );
   }
 
+  if (teamStyle) {
+    return (
+      <div 
+        className={`w-12 h-12 rounded-full border-2 ${ringStyle.border} flex items-center justify-center flex-shrink-0`}
+        style={{ backgroundColor: teamStyle.bg }}
+      >
+        <span className="text-sm font-bold" style={{ color: teamStyle.fg }}>{initials}</span>
+      </div>
+    );
+  }
+
   return (
     <div 
-      className={`w-12 h-12 rounded-full ${style.bg} border-2 ${style.border} flex items-center justify-center flex-shrink-0`}
+      className={`w-12 h-12 rounded-full ${ringStyle.bg} border-2 ${ringStyle.border} flex items-center justify-center flex-shrink-0`}
     >
       <span className="text-sm font-medium text-muted-foreground">{initials}</span>
     </div>
@@ -303,7 +318,7 @@ function formatAvailabilityTextV2(player: FplAvailabilityWithRag): string {
   return cleanNews ? `${cleanNews} — ${player.effectiveChance}% chance` : `${player.effectiveChance}% chance of playing`;
 }
 
-function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
+function FplAvailabilityCard({ player, teamName }: { player: FplAvailabilityWithRag; teamName?: string }) {
   const newsAdded = player.newsAdded ? new Date(player.newsAdded) : null;
   const availabilityText = formatAvailabilityTextV2(player);
   const statusLabel = getStatusLabel(player);
@@ -321,6 +336,7 @@ function FplAvailabilityCard({ player }: { player: FplAvailabilityWithRag }) {
             playerName={player.playerName} 
             photoUrl={null}
             ringColor={player.ringColor}
+            teamName={teamName}
           />
           
           <div className="flex-1 min-w-0">
@@ -494,7 +510,7 @@ function InjuriesTabContent({
         </h3>
         <div className="grid sm:grid-cols-2 gap-4">
           {players.map((player) => (
-            <FplAvailabilityCard key={player.id} player={player} />
+            <FplAvailabilityCard key={player.id} player={player} teamName={teamName} />
           ))}
         </div>
       </section>
@@ -515,7 +531,7 @@ function InjuriesTabContent({
     return (
       <div className="grid sm:grid-cols-2 gap-4">
         {players.map((player) => (
-          <FplAvailabilityCard key={player.id} player={player} />
+          <FplAvailabilityCard key={player.id} player={player} teamName={teamName} />
         ))}
       </div>
     );
@@ -671,6 +687,7 @@ function DisciplineTabContent({
                       playerName={player.playerName} 
                       photoUrl={null}
                       ringColor="red"
+                      teamName={teamName}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -1070,6 +1087,7 @@ function TransfersTabContent({
                           playerName={player.playerName} 
                           photoUrl={null}
                           ringColor="gray"
+                          teamName={teamName}
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
