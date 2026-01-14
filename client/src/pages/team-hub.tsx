@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Crown, Clock } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { getSquadData, getPlayerSlugFromSquadPlayer, type GoalserveSquadPlayer, type GoalservePosition, type AvailabilityEntry } from "@/lib/mock/goalserveMock";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -2085,16 +2085,20 @@ function GoalservePlayerCard({
               <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
                 {getPlayerInitials(player.name)}
               </div>
-              {player.isCaptain === 1 && (
-                <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-0.5" title="Captain">
-                  <Crown className="h-3 w-3 text-white" />
-                </div>
-              )}
             </div>
             
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-medium text-sm truncate">{player.name}</h4>
+                {player.isCaptain === 1 && (
+                  <span 
+                    className="inline-flex items-center justify-center w-4 h-4 text-[10px] font-medium border border-muted-foreground/50 rounded-full text-muted-foreground"
+                    title="Club captain"
+                    aria-label="Club captain"
+                  >
+                    ©
+                  </span>
+                )}
                 <span className="text-xs text-muted-foreground">#{player.number}</span>
               </div>
               
