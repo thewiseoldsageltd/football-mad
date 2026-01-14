@@ -14,7 +14,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SlidersHorizontal, Search, X, Zap, Users, Newspaper } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNewsFilters, type ContentTypeSlug, type CompetitionSlug } from "@/hooks/use-news-filters";
@@ -178,20 +177,13 @@ export default function NewsPage() {
           <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
             <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-news">
               {competitionsList.map((comp) => (
-                <Tooltip key={comp.value}>
-                  <TooltipTrigger asChild>
-                    <TabsTrigger 
-                      value={comp.value} 
-                      data-testid={`tab-competition-${comp.value}`}
-                      aria-label={comp.label}
-                    >
-                      {comp.label}
-                    </TabsTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {comp.label}
-                  </TooltipContent>
-                </Tooltip>
+                <TabsTrigger 
+                  key={comp.value}
+                  value={comp.value} 
+                  data-testid={`tab-competition-${comp.value}`}
+                >
+                  {comp.label}
+                </TabsTrigger>
               ))}
             </TabsList>
 
