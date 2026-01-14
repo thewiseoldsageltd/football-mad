@@ -38,19 +38,54 @@ export default function MatchesPage() {
         </div>
 
         <Tabs defaultValue="today" className="w-full">
-          <TabsList className="mb-6 flex-wrap h-auto gap-1">
-            <TabsTrigger value="today" className="gap-2">
-              Today
-              {todaysMatches.length > 0 && (
-                <span className="bg-primary text-primary-foreground text-xs px-1.5 py-0.5 rounded-full">
-                  {todaysMatches.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="tomorrow">Tomorrow</TabsTrigger>
-            <TabsTrigger value="upcoming">This Week</TabsTrigger>
-            <TabsTrigger value="results">Results</TabsTrigger>
-          </TabsList>
+          {/* Desktop: Tabs on single row */}
+          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
+            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-matches">
+              <TabsTrigger value="today" data-testid="tab-today">
+                Today ({todaysMatches.length})
+              </TabsTrigger>
+              <TabsTrigger value="tomorrow" data-testid="tab-tomorrow">
+                Tomorrow ({tomorrowsMatches.length})
+              </TabsTrigger>
+              <TabsTrigger value="upcoming" data-testid="tab-upcoming">
+                This Week ({upcomingMatches.length})
+              </TabsTrigger>
+              <TabsTrigger value="results" data-testid="tab-results">
+                Results ({pastMatches.length})
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Mobile: Horizontally scrollable tabs */}
+          <div className="md:hidden mb-6">
+            <div className="relative">
+              <div 
+                className="overflow-x-auto scrollbar-hide"
+                style={{ 
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none'
+                }}
+              >
+                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-matches-mobile">
+                  <TabsTrigger value="today" className="whitespace-nowrap" data-testid="tab-today-mobile">
+                    Today ({todaysMatches.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="tomorrow" className="whitespace-nowrap" data-testid="tab-tomorrow-mobile">
+                    Tomorrow ({tomorrowsMatches.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="upcoming" className="whitespace-nowrap" data-testid="tab-upcoming-mobile">
+                    This Week ({upcomingMatches.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="results" className="whitespace-nowrap" data-testid="tab-results-mobile">
+                    Results ({pastMatches.length})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+            </div>
+          </div>
 
           <TabsContent value="today">
             {isLoading ? (

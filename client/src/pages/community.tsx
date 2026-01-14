@@ -143,22 +143,52 @@ export default function CommunityPage() {
         )}
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="all">
-              <MessageSquare className="h-4 w-4 mr-2" />
-              All Posts
-            </TabsTrigger>
-            {isAuthenticated && followedTeamIds?.length ? (
-              <TabsTrigger value="following">
-                <Users className="h-4 w-4 mr-2" />
-                Following
+          {/* Desktop: Tabs on single row */}
+          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
+            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-community">
+              <TabsTrigger value="all" data-testid="tab-all">
+                All Posts ({posts?.length || 0})
               </TabsTrigger>
-            ) : null}
-            <TabsTrigger value="trending">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              Trending
-            </TabsTrigger>
-          </TabsList>
+              {isAuthenticated && followedTeamIds?.length ? (
+                <TabsTrigger value="following" data-testid="tab-following">
+                  Following ({followedPosts.length})
+                </TabsTrigger>
+              ) : null}
+              <TabsTrigger value="trending" data-testid="tab-trending">
+                Trending ({trendingPosts.length})
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Mobile: Horizontally scrollable tabs */}
+          <div className="md:hidden mb-6">
+            <div className="relative">
+              <div 
+                className="overflow-x-auto scrollbar-hide"
+                style={{ 
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none'
+                }}
+              >
+                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-community-mobile">
+                  <TabsTrigger value="all" className="whitespace-nowrap" data-testid="tab-all-mobile">
+                    All Posts ({posts?.length || 0})
+                  </TabsTrigger>
+                  {isAuthenticated && followedTeamIds?.length ? (
+                    <TabsTrigger value="following" className="whitespace-nowrap" data-testid="tab-following-mobile">
+                      Following ({followedPosts.length})
+                    </TabsTrigger>
+                  ) : null}
+                  <TabsTrigger value="trending" className="whitespace-nowrap" data-testid="tab-trending-mobile">
+                    Trending ({trendingPosts.length})
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+            </div>
+          </div>
 
           <TabsContent value="all" className="space-y-4">
             {isLoading ? (

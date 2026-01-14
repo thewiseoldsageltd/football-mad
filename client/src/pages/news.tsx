@@ -174,8 +174,9 @@ export default function NewsPage() {
         </div>
 
         <Tabs value={filters.comp} onValueChange={handleCompetitionChange} className="w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <TabsList className="flex-wrap h-auto gap-1">
+          {/* Desktop: Tabs + Filters on same row */}
+          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
+            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-news">
               {competitionsList.map((comp) => (
                 <Tooltip key={comp.value}>
                   <TooltipTrigger asChild>
@@ -184,35 +185,81 @@ export default function NewsPage() {
                       data-testid={`tab-competition-${comp.value}`}
                       aria-label={comp.label}
                     >
-                      <span className="sm:hidden">{comp.shortLabel}</span>
-                      <span className="hidden sm:inline">{comp.label}</span>
+                      {comp.label}
                     </TabsTrigger>
                   </TooltipTrigger>
-                  <TooltipContent className="sm:hidden">
+                  <TooltipContent>
                     {comp.label}
                   </TooltipContent>
                 </Tooltip>
               ))}
             </TabsList>
 
-            <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-              <SheetTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  className="gap-2" 
-                  data-testid="button-filters"
-                  aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <Badge variant="secondary" className="ml-1">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent className="w-full sm:max-w-md">
+            <Button 
+              variant="outline" 
+              className="gap-2 shrink-0" 
+              onClick={() => setIsFiltersOpen(true)}
+              data-testid="button-filters"
+              aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+          </div>
+
+          {/* Mobile: Tabs first (horizontally scrollable), then filters stacked below */}
+          <div className="md:hidden space-y-4 mb-6">
+            <div className="relative">
+              <div 
+                className="overflow-x-auto scrollbar-hide"
+                style={{ 
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none'
+                }}
+              >
+                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-news-mobile">
+                  {competitionsList.map((comp) => (
+                    <TabsTrigger 
+                      key={comp.value}
+                      value={comp.value} 
+                      className="whitespace-nowrap"
+                      data-testid={`tab-competition-${comp.value}-mobile`}
+                    >
+                      {comp.shortLabel}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+            </div>
+
+            <Button 
+              variant="outline" 
+              className="w-full gap-2" 
+              onClick={() => setIsFiltersOpen(true)}
+              data-testid="button-filters-mobile"
+              aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-1">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+          </div>
+
+          {/* Shared Sheet for filters */}
+          <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
+            <SheetContent className="w-full sm:max-w-md">
                 <SheetHeader>
                   <div className="flex items-center justify-between gap-2">
                     <SheetTitle>Filters</SheetTitle>
@@ -372,9 +419,8 @@ export default function NewsPage() {
                     Show {articles.length} articles
                   </Button>
                 </div>
-              </SheetContent>
-            </Sheet>
-          </div>
+            </SheetContent>
+          </Sheet>
 
           <div className="flex flex-wrap gap-2 mb-6">
             {isAuthenticated && followedTeamIds.length > 0 && (
