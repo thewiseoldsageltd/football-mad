@@ -55,6 +55,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/players/:slug", async (req, res) => {
+    try {
+      const player = await storage.getPlayerBySlug(req.params.slug);
+      if (!player) {
+        return res.status(404).json({ error: "Player not found" });
+      }
+      res.json(player);
+    } catch (error) {
+      console.error("Error fetching player:", error);
+      res.status(500).json({ error: "Failed to fetch player" });
+    }
+  });
+
   // ========== NEWS (with URL-driven filters) ==========
   app.get("/api/news", async (req: any, res) => {
     try {

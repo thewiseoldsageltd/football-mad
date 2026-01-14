@@ -20,6 +20,8 @@ import CommunityPage from "@/pages/community";
 import ShopPage from "@/pages/shop";
 import CartPage from "@/pages/cart";
 import AccountPage from "@/pages/account";
+import PlayerProfilePage from "@/pages/player-profile";
+import ManagerProfilePage from "@/pages/manager-profile";
 
 function Router() {
   return (
@@ -33,7 +35,8 @@ function Router() {
       <Route path="/matches" component={MatchesPage} />
       <Route path="/matches/:competitionSlug" component={MatchesPage} />
       <Route path="/matches/:homeSlug-vs-:awaySlug-:date" component={MatchPage} />
-      <Route path="/players/:playerSlug" component={NotFound} />
+      <Route path="/players/:slug" component={PlayerProfilePage} />
+      <Route path="/managers/:slug" component={ManagerProfilePage} />
       <Route path="/transfers" component={TransfersPage} />
       <Route path="/injuries" component={InjuriesPage} />
       <Route path="/fpl" component={FPLPage} />

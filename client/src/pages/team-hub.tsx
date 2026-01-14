@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -20,8 +20,8 @@ import { NewsletterForm } from "@/components/newsletter-form";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { newsArticle } from "@/lib/urls";
-import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability } from "@shared/schema";
+import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
+import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player } from "@shared/schema";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -45,7 +45,7 @@ interface NewsFiltersResponse {
   appliedFilters: Record<string, unknown>;
 }
 
-const VALID_TABS = ["latest", "injuries", "discipline", "transfers", "matches", "fans"] as const;
+const VALID_TABS = ["latest", "injuries", "discipline", "transfers", "matches", "squad", "fans"] as const;
 type TabValue = typeof VALID_TABS[number];
 
 const TAB_META: Record<TabValue, { icon: typeof Newspaper; label: string; title: string }> = {
@@ -54,6 +54,7 @@ const TAB_META: Record<TabValue, { icon: typeof Newspaper; label: string; title:
   discipline: { icon: Ban, label: "Discipline", title: "Discipline" },
   transfers: { icon: TrendingUp, label: "Transfers", title: "Transfers" },
   matches: { icon: Calendar, label: "Matches", title: "Matches" },
+  squad: { icon: UserCircle2, label: "Squad", title: "Squad" },
   fans: { icon: Users, label: "Fans", title: "Fan Zone" },
 };
 
@@ -1945,6 +1946,238 @@ function FansTabContent({
   );
 }
 
+type PositionGroup = "GK" | "DEF" | "MID" | "FWD";
+
+const POSITION_GROUPS: { key: PositionGroup; label: string; fullLabel: string }[] = [
+  { key: "GK", label: "GK", fullLabel: "Goalkeepers" },
+  { key: "DEF", label: "DEF", fullLabel: "Defenders" },
+  { key: "MID", label: "MID", fullLabel: "Midfielders" },
+  { key: "FWD", label: "FWD", fullLabel: "Forwards" },
+];
+
+function mapPositionToGroup(position: string | null | undefined): PositionGroup {
+  if (!position) return "MID";
+  const p = position.toLowerCase();
+  if (p.includes("goalkeeper") || p === "gk") return "GK";
+  if (p.includes("defender") || p.includes("back") || p === "def") return "DEF";
+  if (p.includes("forward") || p.includes("striker") || p.includes("winger") || p === "fwd") return "FWD";
+  return "MID";
+}
+
+function createManagerSlug(managerName: string): string {
+  return managerName
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+}
+
+function PlayerCard({ player }: { player: Player }) {
+  return (
+    <Link href={playerProfile(player.slug)}>
+      <Card className="hover-elevate cursor-pointer h-full">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <Avatar className="h-12 w-12 shrink-0">
+              <AvatarFallback className="bg-muted text-muted-foreground text-sm font-medium">
+                {player.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                {player.number && (
+                  <span className="text-xs font-bold text-muted-foreground">#{player.number}</span>
+                )}
+                <h4 className="font-semibold text-sm truncate">{player.name}</h4>
+              </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {player.position && (
+                  <Badge variant="secondary" className="text-xs">{player.position}</Badge>
+                )}
+                {player.nationality && (
+                  <span className="text-xs text-muted-foreground">{player.nationality}</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t">
+            <span className="text-xs text-primary font-medium flex items-center gap-1">
+              View profile <ChevronRight className="h-3 w-3" />
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function ManagerCard({ managerName, teamName }: { managerName: string; teamName: string }) {
+  const slug = createManagerSlug(managerName);
+  
+  return (
+    <Link href={managerProfile(slug)}>
+      <Card className="hover-elevate cursor-pointer">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-16 w-16">
+              <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
+                {managerName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <h4 className="font-semibold text-lg">{managerName}</h4>
+              <p className="text-sm text-muted-foreground">Manager / Head Coach</p>
+              <p className="text-xs text-muted-foreground mt-1">{teamName}</p>
+            </div>
+            <span className="text-sm text-primary font-medium flex items-center gap-1 shrink-0">
+              View profile <ChevronRight className="h-4 w-4" />
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
+function SquadTabContent({ 
+  players, 
+  isLoading, 
+  manager, 
+  teamName 
+}: { 
+  players: Player[]; 
+  isLoading: boolean;
+  manager: string | null | undefined;
+  teamName: string;
+}) {
+  const [positionFilter, setPositionFilter] = useState<"all" | PositionGroup>("all");
+
+  const groupedPlayers = useMemo(() => {
+    const groups: Record<PositionGroup, Player[]> = { GK: [], DEF: [], MID: [], FWD: [] };
+    players.forEach(p => {
+      const group = mapPositionToGroup(p.position);
+      groups[group].push(p);
+    });
+    Object.keys(groups).forEach(key => {
+      groups[key as PositionGroup].sort((a, b) => {
+        if (a.number && b.number) return a.number - b.number;
+        if (a.number) return -1;
+        if (b.number) return 1;
+        return a.name.localeCompare(b.name);
+      });
+    });
+    return groups;
+  }, [players]);
+
+  const filteredPlayers = useMemo(() => {
+    if (positionFilter === "all") return null;
+    return groupedPlayers[positionFilter];
+  }, [groupedPlayers, positionFilter]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-24 w-full rounded-lg" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h2 className="text-2xl font-bold">Squad</h2>
+          {players.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-1">{players.length} players</p>
+          )}
+        </div>
+      </div>
+
+      {manager && (
+        <section>
+          <h3 className="text-lg font-semibold mb-3">Manager</h3>
+          <ManagerCard managerName={manager} teamName={teamName} />
+        </section>
+      )}
+
+      {!manager && (
+        <section>
+          <h3 className="text-lg font-semibold mb-3">Manager</h3>
+          <Card className="border-dashed">
+            <CardContent className="py-6 text-center text-muted-foreground">
+              Manager: TBC
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      <section>
+        <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
+          <h3 className="text-lg font-semibold">Players</h3>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={positionFilter === "all" ? "default" : "outline"}
+              onClick={() => setPositionFilter("all")}
+              data-testid="filter-position-all"
+            >
+              All
+            </Button>
+            {POSITION_GROUPS.map(({ key, label }) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={positionFilter === key ? "default" : "outline"}
+                onClick={() => setPositionFilter(key)}
+                data-testid={`filter-position-${key.toLowerCase()}`}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {players.length === 0 ? (
+          <EmptyState
+            icon={UserCircle2}
+            title="Squad data coming soon"
+            description={`Player information for ${teamName} is being prepared. Check back soon!`}
+          />
+        ) : positionFilter === "all" ? (
+          <div className="space-y-8">
+            {POSITION_GROUPS.map(({ key, fullLabel }) => {
+              const groupPlayers = groupedPlayers[key];
+              if (groupPlayers.length === 0) return null;
+              return (
+                <div key={key}>
+                  <h4 className="text-base font-medium text-muted-foreground mb-3">{fullLabel}</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {groupPlayers.map(player => (
+                      <PlayerCard key={player.id} player={player} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {filteredPlayers?.map(player => (
+              <PlayerCard key={player.id} player={player} />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function TeamRightRail({ 
   team, 
   articles,
@@ -2158,6 +2391,16 @@ export default function TeamHubPage() {
     queryFn: async () => {
       const res = await fetch(`/api/posts/team/${slug}`);
       if (!res.ok) throw new Error("Failed to fetch posts");
+      return res.json();
+    },
+    enabled: !!team,
+  });
+
+  const { data: squadPlayers, isLoading: squadLoading } = useQuery<Player[]>({
+    queryKey: ["/api/players", "team", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/players/team/${slug}`);
+      if (!res.ok) throw new Error("Failed to fetch squad");
       return res.json();
     },
     enabled: !!team,
@@ -2456,6 +2699,15 @@ export default function TeamHubPage() {
                 teamName={team.name}
                 teamId={team.id}
                 teamSlug={team.slug}
+              />
+            )}
+
+            {activeTab === "squad" && (
+              <SquadTabContent 
+                players={squadPlayers ?? []}
+                isLoading={squadLoading}
+                manager={team.manager}
+                teamName={team.name}
               />
             )}
 

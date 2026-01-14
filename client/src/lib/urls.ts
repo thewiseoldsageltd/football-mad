@@ -142,6 +142,11 @@ export function playerProfile(playerSlug: string): string {
   return `/players/${playerSlug}`;
 }
 
+// MANAGERS
+export function managerProfile(managerSlug: string): string {
+  return `/managers/${managerSlug}`;
+}
+
 // MATCHES
 export function matchesIndex(): string {
   return "/matches";

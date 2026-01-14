@@ -41,6 +41,7 @@ export interface IStorage {
   
   // Players
   getPlayersByTeam(teamId: string): Promise<Player[]>;
+  getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined>;
   createPlayer(data: InsertPlayer): Promise<Player>;
   
   // Articles
@@ -128,6 +129,25 @@ export class DatabaseStorage implements IStorage {
   // Players
   async getPlayersByTeam(teamId: string): Promise<Player[]> {
     return db.select().from(players).where(eq(players.teamId, teamId));
+  }
+
+  async getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined> {
+    const result = await db
+      .select({
+        player: players,
+        team: teams,
+      })
+      .from(players)
+      .leftJoin(teams, eq(players.teamId, teams.id))
+      .where(eq(players.slug, slug))
+      .limit(1);
+
+    if (result.length === 0) return undefined;
+
+    return {
+      ...result[0].player,
+      team: result[0].team,
+    };
   }
 
   async createPlayer(data: InsertPlayer): Promise<Player> {

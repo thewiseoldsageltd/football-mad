@@ -1,0 +1,84 @@
+FEATURE: Add “Squad” tab to Team Hub pages (Premier League teams)
+
+CONTEXT:
+We have Team Hub pages with tabs: Latest, Injuries, Discipline, Transfers, Matches, Fans (see current UI). There is currently no Squad tab. We need a Squad tab that lists the club’s manager + player cards and links to profile pages.
+
+GOALS:
+1) Add a new Team Hub tab labelled “Squad” alongside existing tabs.
+2) Create a Squad tab page that renders:
+   - Manager / Head Coach card (top section)
+   - Player cards grouped by position (GK, DEF, MID, FWD) or by “Position Group” if that’s what the dataset supports.
+3) Each card drills down into:
+   - Player profile page (canonical player entity URL)
+   - Manager profile page (canonical manager entity URL)
+4) Must be null-safe and must not break existing Team Hub tabs.
+5) Use current design system + components (same spacing, typography, card styles, and mobile behavior as existing Team Hub tabs).
+6) Do NOT introduce team crests/headshots changes in this PR. Keep avatar/initials behavior unchanged for now.
+
+URL / ROUTING:
+- Add a new canonical Team Hub route:
+  /teams/[teamSlug]/squad
+- Ensure the tab navigation points to this route and highlights correctly when active.
+
+DATA REQUIREMENTS:
+- Use existing entity-first approach: Team -> Players, Team -> Manager/Staff.
+- If there is already a Team entity object available on Team Hub pages, extend it (or fetch additional fields) to include:
+  - team.manager (or staff.manager)
+  - team.players (array)
+- If players are not yet available in your data layer, implement the tab with safe placeholders:
+  - “Squad data coming soon” state, but keep the route, tab, and layout ready.
+- Null-safe rendering:
+  - If manager missing => hide manager section or show “Manager: TBC”
+  - If players missing/empty => show empty state card with messaging and no errors.
+
+UI SPEC:
+Squad Tab Layout:
+A) Header row:
+   - “Squad” title
+   - Optional: small count summary, e.g. “25 players” if players exist
+B) Manager section:
+   - Section label: “Manager”
+   - Card with: name, role (Manager/Head Coach), nationality (if available), joined date (if available)
+   - CTA link: “View profile” -> manager profile URL
+C) Players section:
+   - Section label: “Players”
+   - Provide filter chips (mobile-friendly):
+       All | Goalkeepers | Defenders | Midfielders | Forwards
+     Default = All
+   - In All view, group players by position group with subheadings.
+   - Player cards in a responsive grid (2 columns mobile, 3-4 columns desktop, consistent with current site patterns).
+   - Player card fields (only show what exists; hide missing fields):
+       - Name
+       - Position (short)
+       - Shirt number (if available)
+       - Availability indicator (optional, only if you already have injury/suspension status at player level; do not implement complex joins if not already present)
+       - Small link: “View profile”
+   - Use existing avatar treatment (initials or headshot if already supported). Do NOT alter global avatar logic.
+
+ENTITY PAGES:
+- If player/manager profile routes already exist, link to them.
+- If they do not exist yet, create minimal stub pages that are canonical and future-proof:
+   /players/[playerSlug]
+   /managers/[managerSlug]
+  Each stub should render:
+   - Name + basic facts + “More data coming soon”
+  Do not block Squad tab launch on fully built profiles.
+
+IMPLEMENTATION CONSTRAINTS (IMPORTANT):
+- Keep changes scoped.
+- Prefer adding new components rather than rewriting Team Hub.
+- Touch the fewest files possible:
+  - Team Hub tab nav component to add “Squad”
+  - New Squad tab page component
+  - (Optional) New small components: ManagerCard, PlayerCard, PositionFilter
+- Do not refactor unrelated tabs or URL logic.
+- Maintain canonical URLs and no internal logic in URLs.
+
+ACCEPTANCE CRITERIA:
+- Squad tab appears on every Team Hub and routes to /teams/[teamSlug]/squad
+- Page loads without errors even if manager/players data is missing (null-safe)
+- When data exists, manager + players render with filters and position groupings
+- Player and manager cards link to their entity pages (existing or stub)
+- Design feels native to current Football Mad UI and works on mobile first
+
+Proceed to implement now.
