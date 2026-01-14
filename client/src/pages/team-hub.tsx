@@ -2090,16 +2090,6 @@ function GoalservePlayerCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-medium text-sm truncate">{player.name}</h4>
-                {player.isCaptain === 1 && (
-                  <span 
-                    className="inline-flex items-center justify-center w-[14px] h-[14px] text-[9px] font-bold border border-muted-foreground/70 rounded-full text-muted-foreground leading-none"
-                    style={{ borderWidth: '1.5px' }}
-                    title="Club captain"
-                    aria-label="Club captain"
-                  >
-                    C
-                  </span>
-                )}
                 <span className="text-xs text-muted-foreground">#{player.number}</span>
               </div>
               
@@ -2122,12 +2112,6 @@ function GoalservePlayerCard({
                   </Badge>
                 )}
               </div>
-              
-              {(isMissing || isQuestionable) && (
-                <p className="text-[11px] text-muted-foreground/70 mt-2 line-clamp-2">
-                  {isMissing?.status || isQuestionable?.status}
-                </p>
-              )}
             </div>
           </div>
           
