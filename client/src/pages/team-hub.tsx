@@ -2092,7 +2092,7 @@ function GoalservePlayerCard({
                 <h4 className="font-medium text-sm truncate">{player.name}</h4>
                 {player.isCaptain === 1 && (
                   <span 
-                    className="inline-flex items-center justify-center w-[14px] h-[14px] text-[9px] font-semibold border border-muted-foreground/60 rounded-full text-muted-foreground leading-none"
+                    className="inline-flex items-center justify-center w-[14px] h-[14px] text-[9px] font-bold border border-muted-foreground/70 rounded-full text-muted-foreground leading-none"
                     style={{ borderWidth: '1.5px' }}
                     title="Club captain"
                     aria-label="Club captain"
@@ -2124,7 +2124,7 @@ function GoalservePlayerCard({
               </div>
               
               {(isMissing || isQuestionable) && (
-                <p className="text-xs text-muted-foreground mt-1 truncate">
+                <p className="text-[11px] text-muted-foreground/70 mt-2 line-clamp-2">
                   {isMissing?.status || isQuestionable?.status}
                 </p>
               )}
