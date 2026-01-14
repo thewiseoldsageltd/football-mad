@@ -1,7 +1,9 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2 } from "lucide-react";
+import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Crown, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { getSquadData, getPlayerSlugFromSquadPlayer, type GoalserveSquadPlayer, type GoalservePosition, type AvailabilityEntry } from "@/lib/mock/goalserveMock";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -2040,56 +2042,214 @@ function ManagerCard({ managerName, teamName }: { managerName: string; teamName:
   );
 }
 
+function getGoalservePositionLabel(position: GoalservePosition): string {
+  switch (position) {
+    case "G": return "GK";
+    case "D": return "DEF";
+    case "M": return "MID";
+    case "A": return "FWD";
+    default: return position;
+  }
+}
+
+function getGoalservePositionColor(position: GoalservePosition): string {
+  switch (position) {
+    case "G": return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    case "D": return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
+    case "M": return "bg-green-500/10 text-green-600 dark:text-green-400";
+    case "A": return "bg-red-500/10 text-red-600 dark:text-red-400";
+    default: return "bg-muted text-muted-foreground";
+  }
+}
+
+function GoalservePlayerCard({ 
+  player, 
+  toMiss, 
+  questionable 
+}: { 
+  player: GoalserveSquadPlayer; 
+  toMiss: AvailabilityEntry[]; 
+  questionable: AvailabilityEntry[];
+}) {
+  const playerSlug = getPlayerSlugFromSquadPlayer(player);
+  const isMissing = toMiss.find((e) => e.playerId === player.id);
+  const isQuestionable = questionable.find((e) => e.playerId === player.id);
+  const isGoalkeeper = player.position === "G";
+
+  return (
+    <Link href={playerProfile(playerSlug)}>
+      <Card className="hover-elevate cursor-pointer transition-all h-full" data-testid={`card-player-${player.id}`}>
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
+                {getPlayerInitials(player.name)}
+              </div>
+              {player.isCaptain === 1 && (
+                <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-0.5" title="Captain">
+                  <Crown className="h-3 w-3 text-white" />
+                </div>
+              )}
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="font-medium text-sm truncate">{player.name}</h4>
+                <span className="text-xs text-muted-foreground">#{player.number}</span>
+              </div>
+              
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <Badge variant="outline" className={`text-xs ${getGoalservePositionColor(player.position)}`}>
+                  {getGoalservePositionLabel(player.position)}
+                </Badge>
+                
+                {isMissing && (
+                  <Badge variant="destructive" className="text-xs gap-1">
+                    <Activity className="h-3 w-3" />
+                    Out
+                  </Badge>
+                )}
+                
+                {isQuestionable && !isMissing && (
+                  <Badge className="text-xs gap-1 bg-orange-500 hover:bg-orange-600">
+                    <Clock className="h-3 w-3" />
+                    Doubtful
+                  </Badge>
+                )}
+              </div>
+              
+              {(isMissing || isQuestionable) && (
+                <p className="text-xs text-muted-foreground mt-1 truncate">
+                  {isMissing?.status || isQuestionable?.status}
+                </p>
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-3 pt-3 border-t">
+            <div className="grid grid-cols-5 gap-1 text-center">
+              <div>
+                <div className="text-xs text-muted-foreground">Mins</div>
+                <div className="text-sm font-medium">{player.minutes || "–"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Apps</div>
+                <div className="text-sm font-medium">{player.appearances || "–"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Goals</div>
+                <div className="text-sm font-medium">{player.goals || "0"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground">Asst</div>
+                <div className="text-sm font-medium">{player.assists || "0"}</div>
+              </div>
+              {isGoalkeeper ? (
+                <div>
+                  <div className="text-xs text-muted-foreground">Saves</div>
+                  <div className="text-sm font-medium">{player.saves || "0"}</div>
+                </div>
+              ) : (
+                <div>
+                  <div className="text-xs text-muted-foreground">Rating</div>
+                  <div className="text-sm font-medium">{player.rating || "–"}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
+
 function SquadTabContent({ 
-  players, 
-  isLoading, 
+  teamSlug,
   manager, 
   teamName 
 }: { 
-  players: Player[]; 
-  isLoading: boolean;
+  teamSlug: string;
   manager: string | null | undefined;
   teamName: string;
 }) {
-  const [positionFilter, setPositionFilter] = useState<"all" | PositionGroup>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
+  const [sortBy, setSortBy] = useState<"rating" | "minutes" | "goals" | "assists" | "number">("rating");
+
+  const squadData = useMemo(() => {
+    return getSquadData(teamSlug);
+  }, [teamSlug]);
+
+  const players = squadData?.players || [];
+  const toMiss = squadData?.to_miss || [];
+  const questionable = squadData?.questionable || [];
+
+  const mapGoalservePosition = (pos: GoalservePosition): "GK" | "DEF" | "MID" | "FWD" => {
+    switch (pos) {
+      case "G": return "GK";
+      case "D": return "DEF";
+      case "M": return "MID";
+      case "A": return "FWD";
+      default: return "MID";
+    }
+  };
+
+  const filteredAndSortedPlayers = useMemo(() => {
+    let result = [...players];
+    
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(p => p.name.toLowerCase().includes(q));
+    }
+    
+    if (positionFilter !== "all") {
+      result = result.filter(p => mapGoalservePosition(p.position) === positionFilter);
+    }
+    
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case "rating":
+          return parseFloat(b.rating || "0") - parseFloat(a.rating || "0");
+        case "minutes":
+          return parseInt(b.minutes || "0") - parseInt(a.minutes || "0");
+        case "goals":
+          return parseInt(b.goals || "0") - parseInt(a.goals || "0");
+        case "assists":
+          return parseInt(b.assists || "0") - parseInt(a.assists || "0");
+        case "number":
+          return parseInt(a.number || "99") - parseInt(b.number || "99");
+        default:
+          return 0;
+      }
+    });
+    
+    return result;
+  }, [players, searchQuery, positionFilter, sortBy]);
 
   const groupedPlayers = useMemo(() => {
-    const groups: Record<PositionGroup, Player[]> = { GK: [], DEF: [], MID: [], FWD: [] };
-    players.forEach(p => {
-      const group = mapPositionToGroup(p.position);
+    if (positionFilter !== "all") return null;
+    
+    const groups: Record<"GK" | "DEF" | "MID" | "FWD", GoalserveSquadPlayer[]> = { 
+      GK: [], DEF: [], MID: [], FWD: [] 
+    };
+    
+    filteredAndSortedPlayers.forEach(p => {
+      const group = mapGoalservePosition(p.position);
       groups[group].push(p);
     });
-    Object.keys(groups).forEach(key => {
-      groups[key as PositionGroup].sort((a, b) => {
-        if (a.number && b.number) return a.number - b.number;
-        if (a.number) return -1;
-        if (b.number) return 1;
-        return a.name.localeCompare(b.name);
-      });
-    });
+    
     return groups;
-  }, [players]);
+  }, [filteredAndSortedPlayers, positionFilter]);
 
-  const filteredPlayers = useMemo(() => {
-    if (positionFilter === "all") return null;
-    return groupedPlayers[positionFilter];
-  }, [groupedPlayers, positionFilter]);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-24 w-full rounded-lg" />
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-32 rounded-lg" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const positionLabels: Record<"GK" | "DEF" | "MID" | "FWD", string> = {
+    GK: "Goalkeepers",
+    DEF: "Defenders",
+    MID: "Midfielders",
+    FWD: "Attackers"
+  };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-2xl font-bold">Squad</h2>
@@ -2117,29 +2277,46 @@ function SquadTabContent({
         </section>
       )}
 
-      <section>
-        <div className="flex items-center justify-between flex-wrap gap-4 mb-4">
-          <h3 className="text-lg font-semibold">Players</h3>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant={positionFilter === "all" ? "default" : "outline"}
-              onClick={() => setPositionFilter("all")}
-              data-testid="filter-position-all"
-            >
-              All
-            </Button>
-            {POSITION_GROUPS.map(({ key, label }) => (
-              <Button
-                key={key}
-                size="sm"
-                variant={positionFilter === key ? "default" : "outline"}
-                onClick={() => setPositionFilter(key)}
-                data-testid={`filter-position-${key.toLowerCase()}`}
-              >
-                {label}
-              </Button>
-            ))}
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search players..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-squad-search"
+            />
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex gap-1">
+              {(["all", "GK", "DEF", "MID", "FWD"] as const).map((filter) => (
+                <Button
+                  key={filter}
+                  variant={positionFilter === filter ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPositionFilter(filter)}
+                  data-testid={`button-filter-${filter.toLowerCase()}`}
+                >
+                  {filter === "all" ? "All" : filter}
+                </Button>
+              ))}
+            </div>
+            
+            <Select value={sortBy} onValueChange={(val) => setSortBy(val as typeof sortBy)}>
+              <SelectTrigger className="w-[130px]" data-testid="select-sort">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="rating">Rating</SelectItem>
+                <SelectItem value="minutes">Minutes</SelectItem>
+                <SelectItem value="goals">Goals</SelectItem>
+                <SelectItem value="assists">Assists</SelectItem>
+                <SelectItem value="number">Shirt No.</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
@@ -2149,17 +2326,30 @@ function SquadTabContent({
             title="Squad data coming soon"
             description={`Player information for ${teamName} is being prepared. Check back soon!`}
           />
-        ) : positionFilter === "all" ? (
+        ) : filteredAndSortedPlayers.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No players match your filters"
+            description="Try adjusting your search or filter criteria."
+          />
+        ) : positionFilter === "all" && groupedPlayers ? (
           <div className="space-y-8">
-            {POSITION_GROUPS.map(({ key, fullLabel }) => {
+            {(["GK", "DEF", "MID", "FWD"] as const).map((key) => {
               const groupPlayers = groupedPlayers[key];
               if (groupPlayers.length === 0) return null;
               return (
-                <div key={key}>
-                  <h4 className="text-base font-medium text-muted-foreground mb-3">{fullLabel}</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div key={key} className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    {positionLabels[key]} ({groupPlayers.length})
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {groupPlayers.map(player => (
-                      <PlayerCard key={player.id} player={player} />
+                      <GoalservePlayerCard
+                        key={player.id}
+                        player={player}
+                        toMiss={toMiss}
+                        questionable={questionable}
+                      />
                     ))}
                   </div>
                 </div>
@@ -2167,9 +2357,14 @@ function SquadTabContent({
             })}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredPlayers?.map(player => (
-              <PlayerCard key={player.id} player={player} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredAndSortedPlayers.map(player => (
+              <GoalservePlayerCard
+                key={player.id}
+                player={player}
+                toMiss={toMiss}
+                questionable={questionable}
+              />
             ))}
           </div>
         )}
@@ -2704,8 +2899,7 @@ export default function TeamHubPage() {
 
             {activeTab === "squad" && (
               <SquadTabContent 
-                players={squadPlayers ?? []}
-                isLoading={squadLoading}
+                teamSlug={slug}
                 manager={team.manager}
                 teamName={team.name}
               />

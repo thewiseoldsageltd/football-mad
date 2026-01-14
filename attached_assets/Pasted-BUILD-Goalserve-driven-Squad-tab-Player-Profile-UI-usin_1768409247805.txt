@@ -1,0 +1,143 @@
+BUILD: Goalserve-driven “Squad” tab + Player Profile UI using MOCK DATA (no API calls yet)
+
+CONTEXT:
+We have Football Mad Team Hub pages with tabs. “Squad” tab route exists now (structure in place) but needs final UI driven by Goalserve Soccer Data Feed fields. We want a realistic preview before API key arrives.
+
+IMPORTANT CONSTRAINTS:
+- NO live API calls.
+- Use mock data objects shaped like Goalserve responses.
+- Keep changes scoped: do not refactor other Team Hub tabs.
+- Null-safe rendering everywhere.
+- Use existing design system/components and match current Football Mad UI style (mobile-first).
+
+ROUTES:
+1) Team Squad tab:
+   /teams/[teamSlug]/squad
+
+2) Player profile page:
+   /players/[playerSlug]
+(If playerSlug mapping doesn’t exist, create a minimal helper that slugifies player name for now.)
+
+DATA SHAPE (MOCK):
+Create mock data that mimics Goalserve squad + player profile:
+
+A) Squad list items should include these fields (strings OK):
+- id
+- name
+- position: "G" | "D" | "M" | "A"
+- number
+- isCaptain (0/1)
+- minutes
+- appearances
+- goals
+- assists
+- yellowcards
+- redcards
+- rating
+- shots_total
+- shots_ontarget
+- key_passes
+- tackles
+- saves
+- goals_conceded
+(These are based on squad stats fields in Goalserve league/team feeds.)
+
+B) Availability mapping mock (based on Goalserve injuries feed concept):
+Create two arrays:
+- to_miss: [{ playerId, status }]
+- questionable: [{ playerId, status }]
+Use these to show availability pills on player cards:
+- to_miss => “Out (next match)”
+- questionable => “Doubtful (next match)”
+Include the injury status text (e.g. “Hamstring injury”).
+If not present in either list => no pill (or “Available” only if you already have such a pattern).
+
+C) Player Profile mock object:
+- id
+- name
+- positionText: "Goalkeeper" | "Defender" | "Midfielder" | "Attacker"
+- imageBase64 (can be empty string to test fallback; do not fetch external images)
+- nationality (optional)
+- age (optional)
+- height (optional)
+- preferredFoot (optional)
+- currentClubName (optional)
+- seasonSummary: minutes, appearances, goals, assists, yellowcards, redcards, rating
+- careerStatsTabs:
+   - domesticLeague: array of seasons
+   - domesticCups: array of seasons
+   - intlClubCups: array of seasons
+   - international: array of seasons
+Each season row: season, club, apps, goals, assists, minutes (all optional).
+- transfers: array of { date, from, to, fee }
+- sidelined: array of { type, start, end, description } (injury/suspension history)
+- trophies: array of { competition, season }
+
+UI REQUIREMENTS: SQUAD TAB PAGE
+1) Page header:
+- Title: “Squad”
+- Player count (e.g. “25 players”) if squad exists.
+
+2) Controls row (mobile-friendly):
+- Search input (filters by player name)
+- Position filter chips: All | GK | DEF | MID | FWD
+- Sort dropdown: Rating | Minutes | Goals | Assists | Shirt No.
+Sorting should work on the currently filtered list.
+
+3) Grouped view:
+When filter = All, group players into sections:
+- Goalkeepers (position "G")
+- Defenders ("D")
+- Midfielders ("M")
+- Attackers ("A")
+Each section has a heading and a responsive card grid.
+
+4) Player card:
+- Avatar circle (initials) – do not change global avatar system, but for this mock UI use a simple initials circle.
+- Name (clickable -> /players/[playerSlug])
+- Position label + shirt number
+- Captain badge if isCaptain=1
+- Availability pill if player in to_miss/questionable (use distinct styles but do NOT implement injury ring logic here).
+- Key stats row (compact):
+  Everyone: Minutes, Apps, Goals, Assists, Rating
+  If GK: show Saves + Conceded instead of Shots/Key passes/tackles
+  If outfield: optionally show Key Passes OR Shots on target (choose one to avoid clutter)
+Hide stats that are missing/empty.
+
+5) Empty states:
+- If no squad: show “Squad data coming soon.”
+- If filters return no players: show “No players match your filters.”
+
+UI REQUIREMENTS: PLAYER PROFILE PAGE
+1) Header:
+- Avatar image if imageBase64 exists (render as data URL); else initials fallback.
+- Name, positionText, nationality (if present), and a small current club link back to team hub (if available).
+2) “This season” quick block:
+- Minutes, Apps, Goals, Assists, Cards, Rating (only what exists)
+3) Tabs:
+- Domestic League | Domestic Cups | Intl Club Cups | International
+Each tab shows a table of season rows (Season, Club, Apps, Goals, Assists, Minutes)
+4) Transfers section:
+- Timeline/list
+5) Injury/Suspension history section:
+- Timeline rendering of sidelined entries
+6) Trophies section:
+- Simple list grouped by competition if possible
+
+ENGINEERING REQUIREMENTS:
+- Implement this as a UI-only preview using mock data in a dedicated file/module (e.g. /lib/mock/goalserveMock.ts).
+- Add a feature flag constant (e.g. USE_GOALSERVE_MOCK = true) so later we can swap the data source cleanly.
+- Create small reusable components:
+  - SquadControls
+  - PlayerCard
+  - PositionGroup
+  - PlayerProfileHeader
+  - StatsTabs
+  - TimelineList
+- Keep styling consistent with the existing Football Mad UI (cards, spacing, typography).
+- Ensure mobile responsiveness (stack controls, 2-column grid on mobile).
+
+DELIVERABLE:
+After implementation, the Squad tab should look “real” with mock data and clicking a player should navigate to a complete-looking Player Profile page populated from mock data.
+
+Proceed to implement now.
