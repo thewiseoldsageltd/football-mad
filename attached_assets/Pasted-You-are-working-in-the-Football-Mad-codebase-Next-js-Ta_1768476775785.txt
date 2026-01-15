@@ -1,0 +1,55 @@
+You are working in the Football Mad codebase (Next.js + Tailwind). Update the Matches page UI (desktop + mobile) with small, high-impact UX improvements, keeping the existing design system and layout.
+
+GOALS (do all):
+1) Section header clarity
+- Wherever the page currently renders a group label like “Today”, “Tomorrow”, “This Week”, “Results”, update the heading to include a short date context.
+  Examples:
+  - “Today — Thu 15 Jan”
+  - “Tomorrow — Fri 16 Jan”
+  - For “This Week”, render the range: “This Week — Mon 12 Jan – Sun 18 Jan”
+- Use the user’s locale for formatting (en-GB). Keep typography consistent with existing H2/H3 styles.
+
+2) Make score/time the visual hero (desktop + mobile)
+- In match cards, slightly increase emphasis of the central value:
+  - If the match is LIVE/FT: the score “2 – 1” should be visually stronger (font-semibold).
+  - If not started: the kick-off time “15:00” should be visually stronger (font-semibold).
+- Reduce the visual weight of the meta row (date + venue) slightly (e.g., text-sm / text-muted-foreground), without removing it.
+
+3) LIVE urgency cue (subtle)
+- For LIVE matches only:
+  - Add a thin left accent border on the match card using the existing red (e.g., border-l-4 border-red-500).
+  - Keep the current LIVE lozenge/badge as-is.
+  - Do NOT add heavy animations; no pulsing required.
+
+4) Cards should feel tappable (even if routes aren’t built yet)
+- Entire match card should have:
+  - cursor-pointer on desktop
+  - subtle hover state on desktop (slight shadow increase or bg tint)
+  - subtle active/pressed state on mobile (bg tint)
+- Ensure accessibility: add focus-visible ring for keyboard navigation.
+- If the card is wrapped in a Link already, apply these states to the clickable container.
+
+5) Filters: desktop alignment + mobile usability
+- Desktop:
+  - Keep filters on the same row as sub-navigation (already close). Ensure spacing is consistent and right-aligned. No layout shifts.
+- Mobile:
+  - Keep filters stacked full-width as currently shown.
+  - Ensure the “Search team…” input does NOT autofocus on page load (avoid keyboard popping).
+  - If there is any autofocus attribute or autoFocus prop on mobile, remove it.
+
+6) Empty states (future-proof for Goalserve)
+- Add an empty state component for each tab when there are no matches:
+  - Message: “No matches scheduled.”
+  - Secondary: “Try Tomorrow or Results.”
+- Keep it lightweight and consistent with existing empty states (centered text, muted).
+
+CONSTRAINTS:
+- Do not change the current overall information architecture (tabs stay: Today, Tomorrow, This Week, Results).
+- Do not remove any existing filters; just refine behaviour and styling.
+- Keep Tailwind classes consistent with the rest of the project.
+- No new dependencies.
+- Ensure everything looks good on both desktop and mobile.
+
+DELIVERABLE:
+- Implement changes in the Matches page and any shared MatchCard component used by it.
+- Ensure TypeScript passes and the page renders with dummy data as before.

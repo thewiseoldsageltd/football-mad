@@ -60,9 +60,14 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
 export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
   const kickoffTime = new Date(match.kickOffTime);
   const showScore = match.status === "live" || match.status === "finished";
+  const isLive = match.status === "live";
 
   return (
-    <Card className="group hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-match-${match.id}`}>
+    <Card 
+      className={`group cursor-pointer transition-all hover-elevate active-elevate-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isLive ? "border-l-4 border-l-red-500" : ""}`}
+      tabIndex={0}
+      data-testid={`card-match-${match.id}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-3 gap-2">
           <Badge variant="outline" className="text-xs gap-1 flex-shrink-0">
@@ -83,14 +88,14 @@ export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
           <div className="flex-shrink-0 text-center w-16">
             {showScore ? (
               <div className="text-xl font-bold tabular-nums">
-                {match.homeScore} - {match.awayScore}
+                {match.homeScore} – {match.awayScore}
               </div>
             ) : match.status === "postponed" ? (
               <div className="text-sm text-muted-foreground font-medium">
                 TBC
               </div>
             ) : (
-              <div className="text-lg font-semibold text-muted-foreground">
+              <div className="text-lg font-bold tabular-nums">
                 {format(kickoffTime, "HH:mm")}
               </div>
             )}
@@ -104,7 +109,7 @@ export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground/70">
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
             {format(kickoffTime, "EEE d MMM")}

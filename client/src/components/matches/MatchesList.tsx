@@ -1,11 +1,13 @@
 import { useMemo } from "react";
-import { format, isToday, isTomorrow } from "date-fns";
+import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from "date-fns";
+import { enGB } from "date-fns/locale";
 import { MockMatch } from "./mockMatches";
 import { EnhancedMatchCard } from "./EnhancedMatchCard";
 import { Calendar } from "lucide-react";
 
 interface MatchesListProps {
   matches: MockMatch[];
+  activeTab?: string;
 }
 
 interface DateGroup {
@@ -21,12 +23,33 @@ interface CompetitionGroup {
 
 function formatDateLabel(dateStr: string): string {
   const date = new Date(dateStr);
-  if (isToday(date)) return "Today";
-  if (isTomorrow(date)) return "Tomorrow";
-  return format(date, "EEEE, d MMMM");
+  const dateContext = format(date, "EEE d MMM", { locale: enGB });
+  
+  if (isToday(date)) return `Today — ${dateContext}`;
+  if (isTomorrow(date)) return `Tomorrow — ${dateContext}`;
+  return format(date, "EEEE, d MMMM", { locale: enGB });
 }
 
-export function MatchesList({ matches }: MatchesListProps) {
+function formatWeekRange(): string {
+  const now = new Date();
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+  const startStr = format(weekStart, "EEE d MMM", { locale: enGB });
+  const endStr = format(weekEnd, "EEE d MMM", { locale: enGB });
+  return `This Week — ${startStr} – ${endStr}`;
+}
+
+function MatchesEmptyState() {
+  return (
+    <div className="text-center py-16" data-testid="empty-matches">
+      <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+      <h3 className="text-lg font-medium mb-2">No matches scheduled</h3>
+      <p className="text-sm text-muted-foreground">Try Tomorrow or Results.</p>
+    </div>
+  );
+}
+
+export function MatchesList({ matches, activeTab }: MatchesListProps) {
   const groupedMatches = useMemo(() => {
     const byDate: Record<string, MockMatch[]> = {};
     
@@ -66,17 +89,18 @@ export function MatchesList({ matches }: MatchesListProps) {
   }, [matches]);
 
   if (matches.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-medium mb-2">No matches found</h3>
-        <p className="text-muted-foreground">Try adjusting your filters or check back later.</p>
-      </div>
-    );
+    return <MatchesEmptyState />;
   }
+
+  const sectionTitle = activeTab === "thisWeek" ? formatWeekRange() : null;
 
   return (
     <div className="space-y-8" data-testid="matches-list">
+      {sectionTitle && (
+        <h2 className="text-lg font-semibold text-muted-foreground" data-testid="week-header">
+          {sectionTitle}
+        </h2>
+      )}
       {groupedMatches.map((dateGroup) => (
         <div key={dateGroup.date} className="space-y-4">
           <h2 className="text-lg font-semibold sticky top-0 bg-background py-2 z-10" data-testid={`date-header-${dateGroup.date}`}>

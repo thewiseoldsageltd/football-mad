@@ -134,7 +134,7 @@ export default function MatchesPage() {
           />
         </div>
 
-        <MatchesList matches={currentMatches} />
+        <MatchesList matches={currentMatches} activeTab={activeTab} />
       </div>
     </MainLayout>
   );
