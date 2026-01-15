@@ -553,8 +553,8 @@ export default function ArticlePage() {
 
     const sorted = scored.sort((a, b) => b.score - a.score);
     
-    if (sorted.length >= 6) {
-      return sorted.slice(0, 6).map(s => s.article);
+    if (sorted.length >= 3) {
+      return sorted.slice(0, 3).map(s => s.article);
     }
     
     const result = sorted.map(s => s.article);
@@ -562,11 +562,11 @@ export default function ArticlePage() {
       .filter(a => !result.some(r => r.id === a.id))
       .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
     
-    while (result.length < 6 && trendingFallback.length > 0) {
+    while (result.length < 3 && trendingFallback.length > 0) {
       result.push(trendingFallback.shift()!);
     }
     
-    return result.slice(0, 6);
+    return result.slice(0, 3);
   }, [article, allArticles, teams]);
 
   const popularArticles = useMemo(() => {
