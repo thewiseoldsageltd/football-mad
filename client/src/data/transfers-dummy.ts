@@ -4,6 +4,7 @@ export type TransferRumour = {
   position?: string;
   fromClub: string;
   toClub: string;
+  moveType?: "Permanent" | "Loan" | "Free";
   feeText?: string;
   confidence?: number;
   tier?: "Tier A" | "Tier B" | "Tier C";
@@ -35,6 +36,7 @@ export const dummyRumours: TransferRumour[] = [
     position: "FWD",
     fromClub: "Manchester United",
     toClub: "Barcelona",
+    moveType: "Permanent",
     feeText: "£52m",
     confidence: 75,
     tier: "Tier A",
@@ -48,6 +50,7 @@ export const dummyRumours: TransferRumour[] = [
     position: "FWD",
     fromClub: "Juventus",
     toClub: "Arsenal",
+    moveType: "Permanent",
     feeText: "£65m",
     confidence: 60,
     tier: "Tier B",
@@ -61,6 +64,7 @@ export const dummyRumours: TransferRumour[] = [
     position: "MID",
     fromClub: "Bayer Leverkusen",
     toClub: "Liverpool",
+    moveType: "Permanent",
     feeText: "£100m+",
     confidence: 40,
     tier: "Tier B",
@@ -74,6 +78,7 @@ export const dummyRumours: TransferRumour[] = [
     position: "FWD",
     fromClub: "Napoli",
     toClub: "Chelsea",
+    moveType: "Permanent",
     feeText: "£85m",
     confidence: 55,
     tier: "Tier A",
@@ -87,6 +92,7 @@ export const dummyRumours: TransferRumour[] = [
     position: "MID",
     fromClub: "Sporting CP",
     toClub: "Manchester City",
+    moveType: "Permanent",
     feeText: "£60m",
     confidence: 30,
     tier: "Tier C",
@@ -100,7 +106,7 @@ export const dummyRumours: TransferRumour[] = [
     position: "FWD",
     fromClub: "Bayern Munich",
     toClub: "Tottenham",
-    feeText: "Loan",
+    moveType: "Loan",
     confidence: 85,
     tier: "Tier A",
     statusLabel: "Rumour",

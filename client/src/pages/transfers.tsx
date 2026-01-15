@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
-import { ConfirmedTransferCard } from "@/components/cards/confirmed-transfer-card";
-import { RumourTransferCard } from "@/components/cards/rumour-transfer-card";
+import { TransferCard } from "@/components/cards/transfer-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,24 +11,34 @@ import type { Team } from "@shared/schema";
 import {
   dummyRumours,
   dummyConfirmedTransfers,
-  type TransferRumour,
-  type ConfirmedTransfer,
   type BlendedTransferItem,
 } from "@/data/transfers-dummy";
 
 function TransferCardSkeleton() {
   return (
     <Card>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex-1">
-            <Skeleton className="h-6 w-40 mb-2" />
-            <Skeleton className="h-4 w-48" />
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-5 w-10" />
           </div>
-          <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-5 w-20" />
         </div>
-        <Skeleton className="h-5 w-20 mb-2" />
-        <Skeleton className="h-4 w-full" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-5 w-5 rounded-full" />
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-5 w-5 rounded-full" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-16" />
+            <Skeleton className="h-4 w-12" />
+          </div>
+          <Skeleton className="h-4 w-20" />
+        </div>
       </CardContent>
     </Card>
   );
@@ -123,6 +132,16 @@ export default function TransfersPage() {
     return [...confirmedItems, ...rumourItems];
   }, [filteredConfirmed, filteredRumours]);
 
+  const rumourBlendedItems: BlendedTransferItem[] = useMemo(() => 
+    filteredRumours.map(r => ({ ...r, kind: "rumour" as const })),
+    [filteredRumours]
+  );
+
+  const confirmedBlendedItems: BlendedTransferItem[] = useMemo(() =>
+    filteredConfirmed.map(c => ({ ...c, kind: "confirmed" as const })),
+    [filteredConfirmed]
+  );
+
   const counts = {
     all: filteredRumours.length + filteredConfirmed.length,
     rumours: filteredRumours.length,
@@ -137,7 +156,7 @@ export default function TransfersPage() {
           <div>
             <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">Transfers</h1>
             <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
-              Latest transfer news and rumours
+              Rumours and confirmed moves — updated daily
             </p>
           </div>
         </div>
@@ -232,13 +251,9 @@ export default function TransfersPage() {
               </div>
             ) : blendedFeed.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {blendedFeed.map((item) =>
-                  item.kind === "confirmed" ? (
-                    <ConfirmedTransferCard key={item.id} transfer={item} />
-                  ) : (
-                    <RumourTransferCard key={item.id} rumour={item} />
-                  )
-                )}
+                {blendedFeed.map((item) => (
+                  <TransferCard key={item.id} transfer={item} />
+                ))}
               </div>
             ) : (
               <div className="text-center py-12">
@@ -255,10 +270,10 @@ export default function TransfersPage() {
                   <TransferCardSkeleton key={i} />
                 ))}
               </div>
-            ) : filteredRumours.length > 0 ? (
+            ) : rumourBlendedItems.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {filteredRumours.map((rumour) => (
-                  <RumourTransferCard key={rumour.id} rumour={rumour} />
+                {rumourBlendedItems.map((item) => (
+                  <TransferCard key={item.id} transfer={item} />
                 ))}
               </div>
             ) : (
@@ -275,10 +290,10 @@ export default function TransfersPage() {
                   <TransferCardSkeleton key={i} />
                 ))}
               </div>
-            ) : filteredConfirmed.length > 0 ? (
+            ) : confirmedBlendedItems.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {filteredConfirmed.map((transfer) => (
-                  <ConfirmedTransferCard key={transfer.id} transfer={transfer} />
+                {confirmedBlendedItems.map((item) => (
+                  <TransferCard key={item.id} transfer={item} />
                 ))}
               </div>
             ) : (

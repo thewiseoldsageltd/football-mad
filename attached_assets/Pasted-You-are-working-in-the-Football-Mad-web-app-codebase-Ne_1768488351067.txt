@@ -1,0 +1,103 @@
+You are working in the Football Mad web app codebase (Next.js/React + Tailwind). Update the GLOBAL “Transfers” page UI to “level up” UX using TEAM CRESTS (YES) and COLOUR (minimal/controlled), and also clean up the information hierarchy so the page is instantly scannable.
+
+GOAL
+- Make transfers easy to scan: WHO, FROM→TO, WHAT (loan/permanent), STATUS (confirmed/rumour), VALUE/DATE, SOURCE, CONFIDENCE (rumours only).
+- Add team crests beside club names (small, consistent sizing).
+- Keep cards neutral; no full club-colour cards. Colour only for status + small accent (optional) and confidence bar.
+- Remove the current “random” placement of ticks/check-marks, pills, source tags, etc. Make everything consistent.
+
+SCOPE
+- Only the GLOBAL Transfers page and its TransferCard component(s) used on that page.
+- Do not change the Team Hub transfers section in this pass (unless it shares the same TransferCard, then make changes in a way that doesn’t break Team Hub — use a prop or variant if needed).
+
+DATA ASSUMPTIONS
+- The current dummy transfer objects include: playerName, position, fromTeam, toTeam, type (loan/permanent), status (rumour/confirmed), fee (number/string, optional), date (string), confidence (0–100 optional), tier (A/B/C optional), source (string optional), isOfficial (boolean optional), isFPL (boolean optional).
+- If a field is missing, handle gracefully (no empty placeholders).
+
+IMPLEMENTATION DETAILS
+
+1) TRANSFER CARD: STANDARD LAYOUT (desktop + mobile responsive)
+Create a single consistent layout for all cards:
+
+HEADER ROW
+- Left: Player name (bold) + Position chip (small neutral chip)
+- Right: ONE status badge:
+  - Confirmed: green badge “Confirmed”
+  - Rumour: grey badge “Rumour”
+  - Optional: if status confirmed and you have an “Official” source, show badge text “Confirmed • Official” (still one badge)
+- REMOVE the floating green tick/checkmark icon entirely (it adds noise and duplicates status).
+
+CLUB MOVEMENT ROW (most important scan row)
+- Use: [fromCrest] From Team  →  [toCrest] To Team
+- Crest sizing: 20–24px desktop, 18–20px mobile; circular or rounded-square container consistent with site style.
+- Crests must be aligned vertically with team names.
+- If crest not found, fall back to existing team initial avatar.
+
+DEAL ROW
+- Left: Deal type pill (Loan / Permanent) using subtle style:
+  - Loan: blue-tinted pill
+  - Permanent: green-tinted pill
+- Next to it (same row): Fee/value if present (e.g. “£25m”, “Undisclosed”, “Free”, “Loan”) in a strong but not headline style.
+- Right: Date (muted)
+
+RUMOUR-ONLY META (only show for rumours)
+- Confidence label + % and a single progress bar beneath (keep bar colour consistent across site; do not make it club-colour).
+- If tier exists, show Tier chip near the confidence label (e.g. “Tier A”) with neutral/tinted style.
+- If confidence missing, hide the entire confidence block.
+
+FOOTER ROW
+- Left: Source chip (e.g. “The Athletic”, “Fabrizio Romano”). If missing, hide.
+- Right: Optional small tag chips like “FPL” only if relevant (keep subtle).
+
+CARD STYLE
+- Neutral background (white), soft border, subtle shadow, rounded corners consistent with other pages.
+- No club-colour backgrounds.
+- Optional: VERY subtle 2–3px left accent line that uses ONLY destination club colour, but keep low saturation/opacity (10–15%). Make this optional behind a boolean constant `USE_DEST_ACCENT = false` so we can flip it later without refactor.
+
+2) TEAM CREST SUPPORT
+Implement a simple `TeamCrest` component:
+- Input: teamName (string)
+- Output:
+  - If crest asset exists in `/public/crests/` or similar folder: render next/image with that path.
+  - Else fallback to existing “team initial” avatar component.
+- Create a minimal mapping function:
+  - Normalise names (lowercase, trim, replace spaces with hyphens).
+  - Example: “Manchester City” -> “manchester-city.png”
+- Do NOT import external assets; rely on local assets if they exist. If none exist, fallback should look good.
+- Ensure the layout still looks great even with all fallbacks.
+
+3) FILTERS / PAGE HEADER (do not break existing nav consistency)
+- Keep existing sub-navigation tabs (All, Rumours, Confirmed) as-is.
+- Keep “All Teams” dropdown filter.
+- Do NOT introduce new filters in this pass.
+
+4) RESPONSIVE RULES
+- On mobile:
+  - Keep the club movement row on one line if possible; otherwise allow wrap but keep crests attached to names.
+  - Keep spacing tight but readable.
+  - Ensure chips/badges don’t overflow.
+
+5) COPY / MESSAGING
+- Make the page subtitle more explicit:
+  - Change to: “Rumours and confirmed moves — updated daily”
+- Ensure “Loan” and “Permanent” are the only deal-type labels (no duplicates elsewhere).
+
+6) CLEANUP CONSISTENCY
+- There must be ONE place for:
+  - Status (Confirmed/Rumour)
+  - Deal type (Loan/Permanent)
+  - Value/fee
+  - Date
+  - Confidence (rumours only)
+  - Source
+- Remove any duplicated pills like “Official” floating elsewhere (fold into the status badge text as described).
+
+DELIVERABLE
+- Implement the redesign in code.
+- Update/replace the existing TransferCard component accordingly.
+- Ensure no lint/type errors.
+- Confirm the page looks correct with both rumour and confirmed dummy data.
+
+After implementing, briefly describe:
+- What changed (bullet list)
+- Any assumptions about crest file paths and how to add crests later.
