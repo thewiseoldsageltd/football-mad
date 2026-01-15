@@ -1,0 +1,53 @@
+TASK: News polish – remove redundant chips, fix mobile filter drawer keyboard behaviour, and switch to live filtering
+
+ISSUES TO FIX:
+1) On News list page, a “Breaking” chip/lozenge still renders under the sub-navigation. Remove this UI element for now.
+2) On News cards, internal chips like “Pick”, “Trending”, “analysis”, “news”, “transfers” still appear. For News cards, only show pills derived from PA tag matching:
+   - Competition pill
+   - Team pill
+   - Player pill
+   Max 3 pills per card (priority: Competition → Team → Player)
+   Hide all other internal category chips on News cards.
+3) Mobile filter drawer UX issue: opening the drawer triggers keyboard automatically, collapsing the teams list and making scrolling difficult.
+4) Filter application UX: remove the “Show X articles” confirmation button and apply filters live as the user selects options.
+
+CHANGES – NEWS LIST PAGE:
+- Remove the “Breaking” filter chip/lozenge that appears under the sub-navigation.
+- Ensure the News list UI relies on: sub-navigation (competition) + filter drawer (team/player).
+
+CHANGES – NEWS CARD PILLS:
+- Only show up to 3 pills on News cards.
+- Pills must come from matched entities/tags:
+  1) competition
+  2) team
+  3) player
+- Hide any other chips/labels on cards (Pick, Trending, analysis, news, transfers, etc.)
+- Keep full pills list visible on the article page only.
+
+CHANGES – MOBILE FILTER DRAWER (KEYBOARD FIX):
+- Remove any autoFocus behaviour for the team search input (do not focus on drawer open).
+- Do not programmatically focus any input when the drawer opens.
+- Keyboard should only appear when the user taps the search field.
+- Keep drawer as ONE single scroll container (no nested scroll areas).
+- The teams list should remain scrollable via the drawer’s main scroll even when keyboard is open.
+
+CHANGES – LIVE FILTERING:
+- Remove the “Show X articles” button from the drawer.
+- Apply filtering immediately when:
+  - competition changes (from drawer competition selector or sub-nav)
+  - team checkbox selection changes
+  - player search selection changes (if implemented)
+- Keep a “Clear filters” action (simple text button) to reset team/player filters.
+- Close (X) closes drawer; no confirmation needed.
+
+CONSTRAINTS:
+- Do not redesign styling; change behaviour and visibility only.
+- Maintain null-safe rendering.
+- Keep the competition selector in the drawer footer (or lower section), but update teams list based on the selected competition.
+- Ensure no regressions to Injuries filter drawer behaviour.
+
+ACCEPTANCE:
+- No “Breaking” chip below sub-nav on News.
+- News cards only show Competition/Team/Player pills (max 3).
+- Opening mobile filter drawer does NOT open the keyboard automatically.
+- No “Show X articles” button; filters apply live and results update immediately.

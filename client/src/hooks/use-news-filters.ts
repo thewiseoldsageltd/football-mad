@@ -224,8 +224,7 @@ export function useNewsFilters(): UseNewsFiltersReturn {
       filters.teams.length > 0 ||
       filters.myTeams ||
       filters.sort !== "latest" ||
-      filters.range !== "all" ||
-      filters.breaking
+      filters.range !== "all"
     );
   }, [filters]);
   
@@ -235,8 +234,7 @@ export function useNewsFilters(): UseNewsFiltersReturn {
       filters.teams.length > 0 ||
       filters.myTeams ||
       filters.sort !== "latest" ||
-      filters.range !== "all" ||
-      filters.breaking
+      filters.range !== "all"
     );
   }, [filters]);
   

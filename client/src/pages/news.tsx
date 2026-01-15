@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { SlidersHorizontal, Search, X, Zap, Users, Newspaper } from "lucide-react";
+import { SlidersHorizontal, Search, X, Users, Newspaper } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNewsFilters, type CompetitionSlug } from "@/hooks/use-news-filters";
 import { NEWS_COMPETITIONS, type Team, type NewsFiltersResponse } from "@shared/schema";
@@ -184,7 +184,6 @@ export default function NewsPage() {
 
   const activeFilterCount = [
     filters.teams.length > 0 || filters.myTeams,
-    filters.breaking,
   ].filter(Boolean).length;
 
   const currentCompetition = competitionsList.find(c => c.value === filters.comp);
@@ -214,15 +213,10 @@ export default function NewsPage() {
   };
 
   const handleDrawerCompChange = (value: string) => {
-    setDrawerComp(value as CompetitionSlug);
+    const newComp = value as CompetitionSlug;
+    setDrawerComp(newComp);
     setTeamSearch("");
-  };
-
-  const handleApplyFilters = () => {
-    if (drawerComp !== filters.comp) {
-      setFilter("comp", drawerComp);
-    }
-    setIsFiltersOpen(false);
+    setFilter("comp", newComp);
   };
 
   return (
@@ -322,7 +316,10 @@ export default function NewsPage() {
 
           {/* Simplified Filter Drawer - Single scroll, Team + Player only */}
           <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-            <SheetContent className="w-full sm:max-w-md flex flex-col">
+            <SheetContent 
+              className="w-full sm:max-w-md flex flex-col"
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
               <SheetHeader className="shrink-0">
                 <div className="flex items-center justify-between gap-2">
                   <SheetTitle>Filters</SheetTitle>
@@ -369,7 +366,7 @@ export default function NewsPage() {
                         data-testid="input-team-search"
                       />
                     </div>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                    <div className="space-y-2">
                       {filteredTeams.length > 0 ? (
                         filteredTeams.map((team) => (
                           <div key={team.id} className="flex items-center space-x-2">
@@ -417,7 +414,7 @@ export default function NewsPage() {
                       />
                     </div>
                     {filteredPlayers.length > 0 && (
-                      <div className="mt-2 space-y-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                      <div className="mt-2 space-y-1 border rounded-md p-2">
                         {filteredPlayers.map((player) => (
                           <div 
                             key={player.id} 
@@ -450,56 +447,41 @@ export default function NewsPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button 
-                  className="w-full" 
-                  onClick={handleApplyFilters}
-                  data-testid="button-apply-filters"
-                >
-                  Show {articles.length} articles
-                </Button>
               </SheetFooter>
             </SheetContent>
           </Sheet>
 
-          <div className="flex flex-wrap gap-2 mb-6">
-            {isAuthenticated && followedTeamIds.length > 0 && (
-              <Badge 
-                variant={filters.myTeams ? "default" : "outline"}
-                className="cursor-pointer gap-1"
-                onClick={handleMyTeamsToggle}
-                data-testid="chip-my-teams"
-              >
-                <Users className="h-3 w-3" />
-                My Teams
-                {filters.myTeams && <X className="h-3 w-3 ml-1" />}
-              </Badge>
-            )}
-            <Badge 
-              variant={filters.breaking ? "destructive" : "outline"}
-              className="cursor-pointer gap-1"
-              onClick={() => setFilter("breaking", !filters.breaking)}
-              data-testid="chip-breaking"
-            >
-              <Zap className="h-3 w-3" />
-              Breaking
-              {filters.breaking && <X className="h-3 w-3 ml-1" />}
-            </Badge>
-            {!filters.myTeams && filters.teams.map(teamSlug => {
-              const team = teams?.find(t => t.slug === teamSlug);
-              return team ? (
+          {(filters.myTeams || filters.teams.length > 0) && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {isAuthenticated && followedTeamIds.length > 0 && filters.myTeams && (
                 <Badge 
-                  key={teamSlug}
-                  variant="outline"
-                  className="cursor-pointer gap-1 text-muted-foreground"
-                  onClick={() => removeFilter("teams", teamSlug)}
-                  data-testid={`chip-team-${team.slug}`}
+                  variant="default"
+                  className="cursor-pointer gap-1"
+                  onClick={handleMyTeamsToggle}
+                  data-testid="chip-my-teams"
                 >
-                  Team: {team.name}
+                  <Users className="h-3 w-3" />
+                  My Teams
                   <X className="h-3 w-3 ml-1" />
                 </Badge>
-              ) : null;
-            })}
-          </div>
+              )}
+              {!filters.myTeams && filters.teams.map(teamSlug => {
+                const team = teams?.find(t => t.slug === teamSlug);
+                return team ? (
+                  <Badge 
+                    key={teamSlug}
+                    variant="outline"
+                    className="cursor-pointer gap-1 text-muted-foreground"
+                    onClick={() => removeFilter("teams", teamSlug)}
+                    data-testid={`chip-team-${team.slug}`}
+                  >
+                    Team: {team.name}
+                    <X className="h-3 w-3 ml-1" />
+                  </Badge>
+                ) : null;
+              })}
+            </div>
+          )}
 
           {competitionsList.map((comp) => (
             <TabsContent key={comp.value} value={comp.value}>

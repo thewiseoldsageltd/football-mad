@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Clock, Eye, Zap, Star, Trophy } from "lucide-react";
+import { Clock, Eye, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { newsArticle } from "@/lib/urls";
@@ -94,18 +94,6 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-6">
               <div className="flex items-center gap-2 mb-3 flex-wrap">
-                {article.isBreaking && (
-                  <Badge variant="destructive" className="gap-1">
-                    <Zap className="h-3 w-3" />
-                    Breaking
-                  </Badge>
-                )}
-                {article.isEditorPick && (
-                  <Badge variant="secondary" className="bg-amber-500/90 text-white border-0 gap-1">
-                    <Star className="h-3 w-3" />
-                    Editor's Pick
-                  </Badge>
-                )}
                 {displayPills.map((pill, idx) => (
                   <Badge 
                     key={`${pill.type}-${pill.slug || idx}`}
@@ -122,11 +110,6 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                     {pill.label}
                   </Badge>
                 ))}
-                {article.isTrending && (
-                  <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                    Trending
-                  </Badge>
-                )}
               </div>
               <h3 className="text-2xl md:text-3xl font-bold text-white mb-2 line-clamp-2">
                 {article.title}
@@ -185,18 +168,6 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
         </div>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
-            {article.isBreaking && (
-              <Badge variant="destructive" className="text-xs gap-1">
-                <Zap className="h-3 w-3" />
-                Breaking
-              </Badge>
-            )}
-            {article.isEditorPick && (
-              <Badge variant="secondary" className="text-xs bg-amber-500/90 text-white border-0 gap-1">
-                <Star className="h-3 w-3" />
-                Pick
-              </Badge>
-            )}
             {displayPills.map((pill, idx) => (
               <Badge 
                 key={`${pill.type}-${pill.slug || idx}`}
@@ -211,16 +182,6 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                 {pill.label}
               </Badge>
             ))}
-            {displayPills.length === 0 && (
-              <Badge variant="secondary" className="text-xs">
-                {article.category || "News"}
-              </Badge>
-            )}
-            {article.isTrending && (
-              <Badge variant="outline" className="text-xs">
-                Trending
-              </Badge>
-            )}
           </div>
           <h3 className="font-semibold text-lg line-clamp-2 mb-2 group-hover:text-primary transition-colors">
             {article.title}
