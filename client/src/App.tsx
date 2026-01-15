@@ -22,6 +22,7 @@ import CartPage from "@/pages/cart";
 import AccountPage from "@/pages/account";
 import PlayerProfilePage from "@/pages/player-profile";
 import ManagerProfilePage from "@/pages/manager-profile";
+import TablesPage from "@/pages/tables";
 
 function Router() {
   return (
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/managers/:slug" component={ManagerProfilePage} />
       <Route path="/transfers" component={TransfersPage} />
       <Route path="/injuries" component={InjuriesPage} />
+      <Route path="/tables" component={TablesPage} />
       <Route path="/fpl" component={FPLPage} />
       <Route path="/community" component={CommunityPage} />
       <Route path="/shop" component={ShopPage} />

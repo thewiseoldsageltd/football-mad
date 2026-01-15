@@ -1,0 +1,121 @@
+You are working in the Football Mad codebase (Next.js/React + Tailwind). Create a new main nav tab/page: TABLES. This is UI scaffolding only (no Goalserve integration yet) using mock data, but must be Goalserve-ready.
+
+GOAL
+Build a “Tables” section with the same navigation + filter conventions as the rest of the site:
+- Desktop: sub-nav left aligned, filters right aligned, grey sub-nav bar with lozenge active tab
+- Mobile: sub-nav scrollable left→right, centre-aligned filter stack, right-side fade only (no left fade at initial state)
+
+ROUTE / FILES
+- Create: `app/tables/page.tsx`
+- Add components under: `components/tables/*`
+- Ensure main navigation includes “Tables” as a top-level tab linking to `/tables`
+
+INFORMATION ARCHITECTURE (TABLES)
+Top-level sub-navigation within Tables (type-first):
+- Leagues
+- Cups
+- Europe
+
+When “Leagues” is active:
+- Show a second-level competition sub-navigation (same style) with these items:
+  All | Premier League | Championship | League One | La Liga | Serie A | Bundesliga | Ligue 1
+- Default selection: “All”
+- “All” can just show Premier League table for now (placeholder) but keep the structure for later.
+
+When “Europe” is active:
+- Second-level sub-navigation:
+  Champions League | Europa League | Conference League
+- Default: Champions League
+
+When “Cups” is active:
+- Second-level sub-navigation:
+  FA Cup | EFL Cup | Copa del Rey | DFB-Pokal | Coppa Italia
+- Default: FA Cup
+- For Cups v1, show a simple “Round list” placeholder component (no bracket yet).
+
+DESKTOP LAYOUT RULES
+1) Page header:
+- Title: “Tables”
+- Subtitle: “League standings and tournament progress”
+
+2) Sub-navigation row:
+- Left: Tables top-level tabs (Leagues/Cups/Europe) + second-level competition tabs (where applicable)
+- Right: Filters aligned right (see below)
+- Use the same grey background container + lozenge active styling used on Injuries/Matches/News
+
+3) Filters (right aligned, desktop):
+- Season dropdown (default “2025/26”)
+- Optional “View” dropdown for tables: “Overall” | “Home” | “Away” (can be UI-only for now)
+- These do not need to function fully yet, but UI must exist and match other filter styling.
+
+MOBILE LAYOUT RULES
+- Top-level + second-level sub-nav must be horizontally scrollable.
+- Show only right-side fade at initial state (no left fade until user scrolls).
+- Filters on mobile are full-width stacked and center-aligned text (consistent with Matches/Injuries):
+  Season dropdown (full width)
+  View dropdown (full width)
+- No autofocus on any inputs.
+
+TABLE UI (LEAGUES)
+Create a reusable `LeagueTable` component that renders a clean standings table.
+Columns (desktop):
+- Pos
+- Team (crest/initial avatar + team name)
+- P
+- GD
+- Pts
+
+Columns (mobile):
+- Pos
+- Team
+- Pts
+(with a compact secondary line or hidden columns; keep it readable)
+
+Row styling:
+- Subtle separators, compact but readable.
+- Optional restrained highlights:
+  - Top 4 (Champions League) = subtle left border highlight
+  - Bottom 3 (relegation) = subtle left border highlight
+(keep subtle; no loud colors)
+
+Use mock data:
+- Provide a small mock table for Premier League and La Liga (10 teams each is enough).
+Data fields per row:
+`pos, teamName, played, gd, pts`
+
+TEAM CRESTS (OPTIONAL FALLBACK)
+- If you already have crest assets mapping, use them.
+- Otherwise use a simple team initials circle/avatar.
+Do not fetch external images.
+
+EUROPE UI (GROUPS + KNOCKOUT PLACEHOLDER)
+- For Champions League/Europa/Conference:
+  - Show a “Group Stage” toggle and “Knockout” toggle (UI only).
+  - For “Group Stage” display a group selector (Group A, Group B) and reuse the `LeagueTable` component.
+  - For “Knockout” display a placeholder “Rounds list” (R16, QF, SF, Final) with dummy fixtures/results text.
+
+CUPS UI (ROUND LIST PLACEHOLDER)
+- Show a simple vertical list of rounds (Third Round, Fourth Round, etc.) with dummy text.
+- Keep it clean and consistent with site cards.
+
+BEHAVIOUR (CLIENT-SIDE STATE OK)
+- Tabs switch content instantly (no page reload).
+- Default state on /tables:
+  - Top-level: Leagues
+  - Second-level: All
+  - Season: 2025/26
+  - View: Overall
+- Keep null-safe rendering everywhere.
+
+DELIVERABLES
+- New Tables page that looks production-ready with mock data.
+- Components:
+  - `TablesTopTabs`
+  - `TablesCompetitionTabs` (second-level)
+  - `TablesFilters`
+  - `LeagueTable`
+  - `RoundsList` (for Cups/Knockout placeholders)
+  - `GroupSelector` (for Europe group stage)
+- No console errors, no TypeScript errors.
+
+After implementation, briefly list the files created/updated and where mock data lives.
