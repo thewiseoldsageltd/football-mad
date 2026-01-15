@@ -1,0 +1,80 @@
+You are working on the Football Mad web app (Next.js + React + Tailwind). 
+Update the NEWS ARTICLE PAGE template to match the new “clean article stack” design and rules below.
+
+GOAL
+Implement a clean article page where editorial/state pills (Breaking, Editor’s Pick, Trending, Analysis) never appear. 
+Instead, show PA Media entity tags (Competition, Team(s), Player(s)) as pills in the header area above the hero image.
+
+PAGES AFFECTED
+- Article detail page (e.g. /news/[slug] or equivalent route)
+- Reusable components used by the article page (TagPills, ArticleHeader, etc.)
+
+DESIGN RULES (MUST FOLLOW)
+1) REMOVE editorial/state pills from article page entirely:
+   - Do NOT render: Breaking, Editor’s Pick, Trending, Analysis (or any editorial badges).
+   - These can remain on card/feed views if they exist there, but never on the article page.
+
+2) ARTICLE HEADER STACK (top to bottom):
+   A) Back link row: “← Back to News”
+   B) Entity pills row (PA Media tags):
+      - Competition pill (e.g., Premier League)
+      - Team pill(s) (e.g., Chelsea, Arsenal)
+      - Player pill(s) (e.g., Cole Palmer)
+      - Show ALL entity pills on the article page (no 3-pill limit here)
+   C) H1 headline
+   D) Standfirst/summary
+   E) Meta row: author/source name, published time (relative), read time, views
+   F) Bookmark/save icon aligned right of the meta row (keep if already implemented)
+   G) Hero image block
+   H) Article body content
+
+3) Entity pills styling:
+   - Use the site’s existing pill/chip style (rounded, subtle border, light background).
+   - Make Competition pill visually distinct but still subtle (e.g., trophy icon + grey chip).
+   - Team pills should use team accent color if available, otherwise a neutral outline.
+   - Player pills neutral outline.
+   - Pills must wrap nicely on mobile.
+   - Pills should be clickable (if routes exist):
+       * Competition -> /news?competition=<id or slug>
+       * Team -> /teams/<teamSlug> or /news?team=<id>
+       * Player -> /players/<playerSlug> or /news?player=<id>
+     If those routes don’t exist yet, keep them as buttons/anchors with href="#" and TODO comment.
+
+4) Data mapping (PA Media hierarchy):
+   - Article data includes tags or metadata representing:
+     * competition
+     * teams (array)
+     * players (array)
+   - Normalize them into a single list for rendering in this order:
+     competition first, then teams, then players.
+   - Never include editorial labels in this list.
+
+5) Card view vs Article view pill logic:
+   - Card/feed components may still cap pills at 3.
+   - Article page must NOT cap; show all entity pills.
+
+6) Remove any “Breaking” lozenge that appears below the sub-navigation on News pages if that is still present in the shared News layout component.
+   - The News listing page should not have an extra standalone “Breaking” pill row under the sub-nav.
+   - Only render sub-nav + inline filters per the Injuries pattern.
+
+RESPONSIVE REQUIREMENTS
+- Desktop: entity pills appear under “Back to News” and above headline OR directly above headline (choose the cleanest).
+- Mobile: pills wrap and remain readable; keep spacing tight but not cramped.
+
+IMPLEMENTATION NOTES
+- If the article page currently receives an array like `article.tags`, filter out any tags with types like:
+   ["breaking","editors_pick","trending","analysis","pick"]
+  (case-insensitive) on the ARTICLE PAGE only.
+- Create/Update a component: <EntityPills competition teams players />
+- Ensure no other part of the article page reintroduces editorial pills.
+
+DELIVERABLES
+- Updated article page component matching the stack above.
+- EntityPills component (new or updated).
+- Ensure the screenshot outcome matches: entity pills appear near the top (where editorial pills used to be), and the old editorial pills do not appear anywhere on article pages.
+
+After implementation, run the app and verify:
+- Article page shows competition/team/player pills near the top
+- No analysis/breaking/editors pick/trending pills are shown on the article page
+- Pills wrap on mobile
+- News listing page doesn’t show a stray “Breaking” lozenge under the sub-nav

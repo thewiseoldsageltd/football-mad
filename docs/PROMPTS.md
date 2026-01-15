@@ -330,3 +330,266 @@ If a feature reaches ~90–95% quality but the remaining issues are visual preci
 
 ---
 
+# Day 5 – Prompt Log (All)
+
+## Navigation Consistency Prompt
+
+- Standardise sub-navigation styling and behaviour across all primary sections.
+- Align filter placement with Injuries page.
+
+## News Mobile Refinement Prompt
+
+- Expand abbreviated competition labels.
+- Remove left-side fade from scrollable sub-nav.
+- Simplify filter categories to match real data capabilities.
+
+## Entity Pill Refactor Prompt
+
+- Restrict News card pills to:
+- - Competition
+- - Team
+- - Player
+- Remove all legacy category pills.
+- Preserve full pill set on article pages.
+
+## Mobile Filter UX Prompt
+
+- Prevent keyboard auto-focus on filter open.
+- Remove confirmation CTA (“Show X articles”).
+- Ensure smooth single-scroll experience.
+
+## Final Cleanup Prompt
+
+- Identify and remove remaining legacy “Trending” pill.
+- Verify mobile stability post-fix.
+
+
+# Day 5 - Prompts in Full 
+
+## Global Navigation & Sub-Navigation Consistency (Desktop)
+
+- Prompt
+
+You are designing a football media website called Football Mad.
+
+Standardise the sub-navigation system across all main sections:
+News, Matches, Teams, Transfers, Injuries, FPL, Community, Shop.
+
+Desktop rules:
+- Sub-navigation uses a grey background bar
+- Tabs are horizontally aligned
+- The active tab is highlighted using a rounded lozenge
+- Typography, spacing, and height must be identical across all sections
+- The Injuries page is the reference implementation
+
+Remove any section-specific variations and ensure the pattern is reusable as a shared component.
+
+--- 
+
+## Count Indicator Standardisation
+
+- Prompt
+
+Standardise how counts are displayed in sub-navigation tabs across the site.
+
+Currently, some sections use:
+
+- Bracketed counts (e.g. Overview (108))
+- Green notification bubbles
+
+Choose one consistent approach and apply it everywhere:
+
+- News
+- Matches
+- Transfers
+- Injuries
+- FPL
+
+The count must feel informational, not like a notification alert.
+
+--- 
+
+## Filters – Desktop Alignment & Placement
+
+- Prompt
+
+Refactor all filter controls so they sit on the same horizontal row as the sub-navigation, aligned to the right-hand side.
+
+Rules:
+
+- No floating or detached filter buttons
+- Filters must visually belong to the sub-navigation system
+- Spacing and alignment must match the Injuries page exactly
+
+Apply this pattern consistently across:
+
+- News
+- Matches
+- Transfers
+- Injuries
+- FPL
+
+---
+
+## Mobile Sub-Navigation Behaviour
+
+- Prompt
+
+Update mobile sub-navigation behaviour site-wide.
+
+Rules:
+
+- Sub-navigation must scroll horizontally (left → right)
+- Use the same lozenge active state as desktop
+- Do NOT abbreviate labels (e.g. use “Premier League”, not “PL”)
+- Tabs should size naturally based on content
+
+Visual affordance:
+
+- Keep fade-out on the right side only
+- Remove fade-out on the left side, as the default position cannot scroll left
+- Use the Injuries page mobile implementation as the reference.
+
+---
+
+## News – Category Model Refactor (Core Day 5 Decision)
+
+- Prompt
+
+Refactor the News section to be driven by real football entities, not editorial categories.
+
+Navigation model:
+
+- Competition = sub-navigation (Premier League, Championship, etc.)
+- Team = filter drawer
+- Player = filter search input
+
+Remove / hide the following filters for now:
+
+- Content Type
+- Time Range
+- Sort By
+
+Reasoning:
+
+- These filters are not yet functionally supported
+- News discovery should mirror the existing Football Mad tag system powered by PA Media
+
+The UI should not expose non-functional options.
+
+---
+
+## News – Mobile Filter Flyout UX Fix
+
+- Prompt
+
+Fix the mobile News filter flyout UX.
+
+Current issues:
+
+- Keyboard auto-opens when filter opens
+- This collapses the team list and creates a scroll-within-scroll experience
+
+Required behaviour:
+
+- Filter drawer opens without triggering the keyboard
+- Team list is scrollable and usable before typing
+- Search input only focuses when explicitly tapped
+
+Ensure a single, smooth vertical scroll experience.
+
+---
+
+## News – Filter Confirmation Logic
+
+- Prompt
+
+Remove the “Show X articles” confirmation button from the News filter drawer.
+
+New behaviour:
+
+- Filters apply immediately on selection
+- Content updates reactively as Competition / Team / Player filters change
+
+This should feel like sorting, not a form submission.
+
+---
+
+## News – Pills (Card View vs Article View)
+
+- Prompt
+
+Implement strict rules for category pills in the News section.
+
+Card view:
+
+- Display a maximum of 3 pills
+
+Pills must only represent:
+
+- Competition
+- Team
+- Player
+
+Article view:
+
+- Display all pills associated with the article
+- Pills are sourced from PA Media tag matching
+
+Pills must be clickable and consistent across views.
+
+---
+
+## Remove Legacy Editorial Pills
+
+- Prompt
+
+Remove all legacy editorial pills from News cards and headers, including:
+
+- Trending
+- Pick
+- Breaking
+- Analysis
+- Transfers (as a category)
+
+These should not appear as navigational pills.
+
+Editorial status may still exist internally, but must not surface as UI categories.
+
+---
+
+## News – Breaking Badge Cleanup
+
+- Prompt
+
+Remove the standalone “Breaking” lozenge that appears below the sub-navigation on the News page.
+
+Breaking status should be expressed only within article cards, not as a persistent UI element.
+
+---
+
+## Final News Cleanup Pass
+
+- Prompt
+
+Perform a final audit of the News section and remove any remaining legacy UI elements, including:
+
+- Residual “Trending” pills
+- Mixed pill styles
+- Inconsistent tag ordering
+
+Ensure all News cards strictly follow the new entity-driven model.
+
+---
+
+## Forward-Looking Data Note (Non-Blocking)
+
+- Prompt
+
+Note for future iteration:
+
+- League and team lists will later be driven by the Goalserve Soccer Data Feed
+- Current static lists are acceptable placeholders
+- UI should be flexible enough to support deeper competition hierarchies
+
+---

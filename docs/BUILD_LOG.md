@@ -229,3 +229,99 @@ Team Hub (Injuries & Availability), FPL ingestion, Team metadata, Teams index po
 - Performance checks once data volume increases
 
 ---
+
+# Day 5 – Build Log (All)
+
+## Global Navigation & Sub-Navigation
+
+### Standardised sub-navigation pattern site-wide:
+- Grey background
+- Tab-style items
+- Active tab highlighted with a lozenge
+
+### Confirmed Injuries as the gold-standard reference for:
+- Layout
+- Alignment
+- Behaviour (desktop + mobile)
+
+### Fixed News sub-navigation active lozenge bug (active state now renders correctly).
+
+## Count Indicators
+
+### Aligned count logic across sections:
+- Moved away from mixed styles (green bubbles vs brackets).
+- Counts now follow a single consistent convention across tabs.
+
+## Filters (Desktop)
+
+### Moved filters inline with sub-navigation across all applicable pages.
+
+### Right-aligned filters to match Injuries pattern.
+
+### Removed floating / detached filter UI.
+
+### Ensured visual and behavioural consistency across:
+- News
+- Matches
+- Transfers
+- Injuries
+- FPL
+
+## Filters (Mobile)
+
+### Sub-navigation now:
+- Scrolls horizontally
+- Uses full competition names (no abbreviations)
+- Matches desktop lozenge styling
+
+### Removed left-side fade from scrollable sub-nav (right fade retained).
+
+### Filters and search now:
+- Span full mobile width
+- Match Injuries page behaviour
+
+## News – Category & Tag System
+
+### Refactored News cards to support entity-driven pills only:
+- Competition
+- Team
+- Player
+
+### Enforced max 3 pills on card view.
+
+### Full article view now shows all matched pills.
+
+### Removed legacy pills from News cards:
+- Trending
+- Transfers
+- Pick
+- Breaking
+- Analysis
+
+### Ensured PA Media tag matching flows cleanly into UI.
+
+## Mobile Filter Flyout (News)
+
+### Fixed keyboard auto-focus bug on open.
+
+### Prevented scroll-collapse when keyboard appears.
+
+### Simplified filter model:
+- Removed Content Type, Time Range, Sort By (for now).
+- Focused on:
+- - Competition (via sub-nav)
+- - Teams (filter drawer)
+- - Player (future search input)
+
+### Removed “Show X articles” confirmation pattern in favour of instant filtering.
+
+## Cleanup & Polish
+
+### Removed remaining legacy “Trending” pill from News cards.
+
+### Confirmed mobile behaviour is stable and usable.
+
+### Deferred league/team list refinement to Goalserve data feed integration.
+
+--- 
+

@@ -3,8 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { 
-  Clock, Eye, ArrowLeft, Bookmark, Newspaper, ArrowUpRight, 
-  BarChart3, AlertCircle, Heart, Copy, Check, Share2, ChevronRight
+  Clock, Eye, ArrowLeft, Bookmark, Heart, Copy, Check, Share2, ChevronRight
 } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -22,12 +21,15 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 
-const CATEGORY_ICONS: Record<string, typeof Newspaper> = {
-  news: Newspaper,
-  transfers: ArrowUpRight,
-  injuries: AlertCircle,
-  analysis: BarChart3,
-};
+const CATEGORY_TAGS = new Set([
+  "transfers", "trending", "analysis", "news", "breaking", "editors-pick",
+  "match-report", "preview", "review", "opinion", "feature", "interview",
+  "rumour", "rumor", "injury", "injuries", "suspension", "discipline",
+  "fpl", "fantasy", "tactics", "stats", "statistics", "highlights",
+  "goal", "goals", "assist", "assists", "clean-sheet", "results",
+  "fixtures", "table", "standings", "awards", "signing", "signings",
+  "loan", "loans", "contract", "debut", "retirement", "sacked", "appointed",
+]);
 
 function calculateReadingTime(content: string): number {
   const text = content.replace(/<[^>]*>/g, "");
@@ -583,13 +585,13 @@ export default function ArticlePage() {
 
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const readingTime = calculateReadingTime(article.content);
-  const CategoryIcon = CATEGORY_ICONS[article.category || "news"] || Newspaper;
   const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
   
   const teamSlugs = teams.map(t => t.slug);
   const playerTags = (article.tags || []).filter(tag => 
     !teamSlugs.includes(tag) && 
-    tag !== slugifyCompetition(article.competition || "")
+    tag !== slugifyCompetition(article.competition || "") &&
+    !CATEGORY_TAGS.has(tag.toLowerCase())
   );
   const playerPills = playerTags.map(tag => ({
     label: tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
@@ -609,34 +611,42 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <Badge variant="default" className="bg-primary gap-1">
-                  <CategoryIcon className="h-3 w-3" />
-                  {article.category?.charAt(0).toUpperCase() + (article.category?.slice(1) || "")}
-                </Badge>
-                
-                {article.isBreaking && (
-                  <TaxonomyPill 
-                    label="Breaking" 
-                    variant="breaking" 
-                    data-testid="pill-breaking"
-                  />
-                )}
-                {article.isEditorPick && (
-                  <TaxonomyPill 
-                    label="Editor's Pick" 
-                    variant="editor-pick"
-                    data-testid="pill-editor-pick"
-                  />
-                )}
-                {article.isTrending && (
-                  <TaxonomyPill 
-                    label="Trending" 
-                    variant="trending"
-                    data-testid="pill-trending"
-                  />
-                )}
-              </div>
+              {(articleTeams.length > 0 || article.competition || playerPills.length > 0) && (
+                <div className="flex items-center gap-2 flex-wrap mb-4">
+                  {article.competition && (
+                    <TaxonomyPill
+                      label={article.competition}
+                      variant="competition"
+                      href={`/news?competition=${slugifyCompetition(article.competition)}`}
+                      crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
+                      data-testid="pill-competition"
+                    />
+                  )}
+                  {articleTeams.map((team) => (
+                    <TaxonomyPill
+                      key={team.id}
+                      label={team.name}
+                      variant="team"
+                      href={`/teams/${team.slug}`}
+                      teamColor={team.primaryColor}
+                      crestUrl={`/crests/teams/${team.slug}.svg`}
+                      data-testid={`pill-team-${team.slug}`}
+                    />
+                  ))}
+                  {playerPills.map((player) => (
+                    <Link key={player.slug} href={`/news?player=${player.slug}`}>
+                      <Badge
+                        variant="secondary"
+                        className="gap-1 cursor-pointer hover-elevate"
+                        data-testid={`pill-player-${player.slug}`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-current opacity-50" />
+                        {player.label}
+                      </Badge>
+                    </Link>
+                  ))}
+                </div>
+              )}
 
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4">
                 {article.title}
@@ -676,42 +686,6 @@ export default function ArticlePage() {
                   <Bookmark className="h-5 w-5" />
                 </Button>
               </div>
-
-              {(articleTeams.length > 0 || article.competition || playerPills.length > 0) && (
-                <div className="flex items-center gap-2 flex-wrap mt-4">
-                  {article.competition && (
-                    <TaxonomyPill
-                      label={article.competition}
-                      variant="competition"
-                      href={`/news?competition=${slugifyCompetition(article.competition)}`}
-                      crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
-                      data-testid="pill-competition"
-                    />
-                  )}
-                  {articleTeams.map((team) => (
-                    <TaxonomyPill
-                      key={team.id}
-                      label={team.name}
-                      variant="team"
-                      href={`/teams/${team.slug}`}
-                      teamColor={team.primaryColor}
-                      crestUrl={`/crests/teams/${team.slug}.svg`}
-                      data-testid={`pill-team-${team.slug}`}
-                    />
-                  ))}
-                  {playerPills.map((player) => (
-                    <Badge
-                      key={player.slug}
-                      variant="secondary"
-                      className="gap-1"
-                      data-testid={`pill-player-${player.slug}`}
-                    >
-                      <span className="w-2 h-2 rounded-full bg-current opacity-50" />
-                      {player.label}
-                    </Badge>
-                  ))}
-                </div>
-              )}
             </header>
 
             {article.coverImage ? (

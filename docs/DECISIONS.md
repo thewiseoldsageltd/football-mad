@@ -262,3 +262,35 @@ Rationale:
 - Avoids sunk-cost iteration during a productive data win
 
 ---
+
+# Day 5 – Decision Log (All)
+
+## Navigation & UX Decisions
+- Single sub-navigation pattern across the entire site.
+- Injuries page locked in as the canonical reference.
+- No mixed UI metaphors (bubbles vs brackets vs pills).
+
+## Filtering Strategy
+- Filters should sort immediately, not require confirmation.
+- Mobile filters must avoid:
+- - Scroll-within-scroll
+- - Auto keyboard pop
+- Hide unimplemented filter types rather than expose dead UI.
+
+## Content Taxonomy
+- News navigation is driven by real editorial entities, not arbitrary categories.
+- Competition = primary navigation layer.
+- Team + Player = secondary discovery layer.
+- Category-style labels (Trending, Pick, Breaking) are editorial flags, not navigation primitives.
+
+## Card vs Article Rules
+- Card view = discovery → max 3 pills.
+- Article view = depth → show all matched entities.
+- Pills must always be meaningful and clickable.
+
+## Technical Philosophy
+- Prefer whitelisting allowed UI elements over blacklisting legacy ones.
+- Remove legacy concepts fully rather than “hide most of the time”.
+
+---
+
