@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 
 const COMPETITIONS = [
-  { value: "all", label: "All Competitions" },
+  { value: "all", label: "All" },
   { value: "Premier League", label: "Premier League" },
   { value: "Championship", label: "Championship" },
   { value: "La Liga", label: "La Liga" },
@@ -23,7 +23,7 @@ const COMPETITIONS = [
 
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
-  const [competition, setCompetition] = useState("Premier League");
+  const [competition, setCompetition] = useState("all");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   
