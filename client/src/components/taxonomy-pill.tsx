@@ -82,7 +82,7 @@ export function TaxonomyPill({
       case "team":
         return "bg-background border";
       case "competition":
-        return "bg-muted text-muted-foreground border-muted";
+        return "bg-transparent text-foreground border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50";
       default:
         return "";
     }
@@ -123,13 +123,13 @@ export function TaxonomyPill({
         <CrestWithFallback 
           src={crestUrl} 
           alt={label}
-          fallbackIcon={<Trophy className="h-3 w-3 text-muted-foreground" />}
+          fallbackIcon={<Trophy className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />}
         />
       );
     }
     
     if (variant === "competition") {
-      return <Trophy className="h-3 w-3 text-muted-foreground" />;
+      return <Trophy className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />;
     }
 
     return null;
@@ -140,7 +140,7 @@ export function TaxonomyPill({
 
   const content = (
     <Badge
-      variant={variant === "team" ? "outline" : "default"}
+      variant={(variant === "team" || variant === "competition") ? "outline" : "default"}
       className={cn(
         "gap-1.5 cursor-pointer transition-colors",
         variant === "team" && href && "hover-elevate",
