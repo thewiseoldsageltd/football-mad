@@ -42,13 +42,13 @@ export function MatchesTabs({ activeTab, onTabChange, counts, variant = "desktop
             msOverflowStyle: 'none'
           }}
         >
-          <div className="inline-flex gap-1 bg-muted p-1 rounded-lg w-max">
+          <div className="inline-flex gap-2 bg-muted p-1 rounded-lg min-w-max pr-8">
             {tabs.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => onTabChange(tab.value)}
                 className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                  "px-4 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                   activeTab === tab.value
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
