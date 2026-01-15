@@ -63,65 +63,71 @@ export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
   const isLive = match.status === "live";
 
   return (
-    <Card 
-      className={`group cursor-pointer transition-all hover-elevate active-elevate-2 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${isLive ? "border-l-4 border-l-red-500" : ""}`}
+    <div
       tabIndex={0}
+      role="button"
+      className="relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
       data-testid={`card-match-${match.id}`}
     >
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-3 gap-2">
-          <Badge variant="outline" className="text-xs gap-1 flex-shrink-0">
-            <Trophy className="h-3 w-3" />
-            {match.competition}
-          </Badge>
-          <StatusBadge status={match.status} minute={match.minute} />
-        </div>
+      {isLive && (
+        <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
+      )}
+      <Card className="hover-elevate active-elevate-2">
+        <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <Badge variant="outline" className="text-xs gap-1 flex-shrink-0">
+              <Trophy className="h-3 w-3" />
+              {match.competition}
+            </Badge>
+            <StatusBadge status={match.status} minute={match.minute} />
+          </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <TeamLogo team={match.homeTeam} size="sm" />
-              <span className="font-medium text-sm truncate">{match.homeTeam.name}</span>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <TeamLogo team={match.homeTeam} size="sm" />
+                <span className="font-medium text-sm truncate">{match.homeTeam.name}</span>
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 text-center w-16">
+              {showScore ? (
+                <div className="text-xl font-bold tabular-nums">
+                  {match.homeScore} – {match.awayScore}
+                </div>
+              ) : match.status === "postponed" ? (
+                <div className="text-sm text-muted-foreground font-medium">
+                  TBC
+                </div>
+              ) : (
+                <div className="text-lg font-bold tabular-nums">
+                  {format(kickoffTime, "HH:mm")}
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 justify-end">
+                <span className="font-medium text-sm truncate">{match.awayTeam.name}</span>
+                <TeamLogo team={match.awayTeam} size="sm" />
+              </div>
             </div>
           </div>
 
-          <div className="flex-shrink-0 text-center w-16">
-            {showScore ? (
-              <div className="text-xl font-bold tabular-nums">
-                {match.homeScore} – {match.awayScore}
-              </div>
-            ) : match.status === "postponed" ? (
-              <div className="text-sm text-muted-foreground font-medium">
-                TBC
-              </div>
-            ) : (
-              <div className="text-lg font-bold tabular-nums">
-                {format(kickoffTime, "HH:mm")}
-              </div>
+          <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground/70">
+            <span className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {format(kickoffTime, "EEE d MMM")}
+            </span>
+            {match.venue && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {match.venue}
+              </span>
             )}
           </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 justify-end">
-              <span className="font-medium text-sm truncate">{match.awayTeam.name}</span>
-              <TeamLogo team={match.awayTeam} size="sm" />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground/70">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {format(kickoffTime, "EEE d MMM")}
-          </span>
-          {match.venue && (
-            <span className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {match.venue}
-            </span>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
