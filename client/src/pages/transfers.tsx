@@ -1,15 +1,43 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
-import { TransferCard } from "@/components/cards/transfer-card";
-import { TransferCardSkeleton } from "@/components/skeletons";
+import { ConfirmedTransferCard } from "@/components/cards/confirmed-transfer-card";
+import { RumourTransferCard } from "@/components/cards/rumour-transfer-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp } from "lucide-react";
-import type { Transfer, Team } from "@shared/schema";
+import type { Team } from "@shared/schema";
+import {
+  dummyRumours,
+  dummyConfirmedTransfers,
+  type TransferRumour,
+  type ConfirmedTransfer,
+  type BlendedTransferItem,
+} from "@/data/transfers-dummy";
+
+function TransferCardSkeleton() {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <div className="flex-1">
+            <Skeleton className="h-6 w-40 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
+          <Skeleton className="h-6 w-16" />
+        </div>
+        <Skeleton className="h-5 w-20 mb-2" />
+        <Skeleton className="h-4 w-full" />
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function TransfersPage() {
   const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
@@ -41,21 +69,65 @@ export default function TransfersPage() {
     };
   }, [handleScroll]);
 
-  const { data: transfers, isLoading } = useQuery<Transfer[]>({
-    queryKey: ["/api/transfers"],
-  });
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoad(false), 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const { data: teams } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
   });
 
-  const filteredTransfers = transfers?.filter((t) => {
-    if (teamFilter === "all") return true;
-    return t.fromTeamId === teamFilter || t.toTeamId === teamFilter;
-  });
+  const filteredRumours = useMemo(() => {
+    let filtered = [...dummyRumours];
+    if (teamFilter !== "all") {
+      const teamName = teams?.find(t => t.id === teamFilter)?.name;
+      if (teamName) {
+        filtered = filtered.filter(
+          r => r.fromClub === teamName || r.toClub === teamName
+        );
+      }
+    }
+    return filtered.sort((a, b) => {
+      const confA = a.confidence ?? 0;
+      const confB = b.confidence ?? 0;
+      if (confB !== confA) return confB - confA;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [teamFilter, teams]);
 
-  const rumours = filteredTransfers?.filter((t) => t.status === "rumour") || [];
-  const confirmed = filteredTransfers?.filter((t) => t.status === "confirmed") || [];
+  const filteredConfirmed = useMemo(() => {
+    let filtered = [...dummyConfirmedTransfers];
+    if (teamFilter !== "all") {
+      const teamName = teams?.find(t => t.id === teamFilter)?.name;
+      if (teamName) {
+        filtered = filtered.filter(
+          c => c.fromClub === teamName || c.toClub === teamName
+        );
+      }
+    }
+    return filtered.sort(
+      (a, b) => new Date(b.confirmedAt).getTime() - new Date(a.confirmedAt).getTime()
+    );
+  }, [teamFilter, teams]);
+
+  const blendedFeed = useMemo((): BlendedTransferItem[] => {
+    const confirmedItems: BlendedTransferItem[] = filteredConfirmed.map(c => ({
+      ...c,
+      kind: "confirmed" as const,
+    }));
+    const rumourItems: BlendedTransferItem[] = filteredRumours.map(r => ({
+      ...r,
+      kind: "rumour" as const,
+    }));
+    return [...confirmedItems, ...rumourItems];
+  }, [filteredConfirmed, filteredRumours]);
+
+  const counts = {
+    all: filteredRumours.length + filteredConfirmed.length,
+    rumours: filteredRumours.length,
+    confirmed: filteredConfirmed.length,
+  };
 
   return (
     <MainLayout>
@@ -75,13 +147,13 @@ export default function TransfersPage() {
           <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
             <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-transfers">
               <TabsTrigger value="all" data-testid="tab-all">
-                All ({filteredTransfers?.length || 0})
+                All ({counts.all})
               </TabsTrigger>
               <TabsTrigger value="rumours" data-testid="tab-rumours">
-                Rumours ({rumours.length})
+                Rumours ({counts.rumours})
               </TabsTrigger>
               <TabsTrigger value="confirmed" data-testid="tab-confirmed">
-                Confirmed ({confirmed.length})
+                Confirmed ({counts.confirmed})
               </TabsTrigger>
             </TabsList>
 
@@ -116,13 +188,13 @@ export default function TransfersPage() {
               >
                 <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-transfers-mobile">
                   <TabsTrigger value="all" className="whitespace-nowrap" data-testid="tab-all-mobile">
-                    All ({filteredTransfers?.length || 0})
+                    All ({counts.all})
                   </TabsTrigger>
                   <TabsTrigger value="rumours" className="whitespace-nowrap" data-testid="tab-rumours-mobile">
-                    Rumours ({rumours.length})
+                    Rumours ({counts.rumours})
                   </TabsTrigger>
                   <TabsTrigger value="confirmed" className="whitespace-nowrap" data-testid="tab-confirmed-mobile">
-                    Confirmed ({confirmed.length})
+                    Confirmed ({counts.confirmed})
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -152,17 +224,21 @@ export default function TransfersPage() {
           </div>
 
           <TabsContent value="all">
-            {isLoading ? (
+            {isInitialLoad ? (
               <div className="grid md:grid-cols-2 gap-4">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <TransferCardSkeleton key={i} />
                 ))}
               </div>
-            ) : filteredTransfers && filteredTransfers.length > 0 ? (
+            ) : blendedFeed.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {filteredTransfers.map((transfer) => (
-                  <TransferCard key={transfer.id} transfer={transfer} />
-                ))}
+                {blendedFeed.map((item) =>
+                  item.kind === "confirmed" ? (
+                    <ConfirmedTransferCard key={item.id} transfer={item} />
+                  ) : (
+                    <RumourTransferCard key={item.id} rumour={item} />
+                  )
+                )}
               </div>
             ) : (
               <div className="text-center py-12">
@@ -173,16 +249,16 @@ export default function TransfersPage() {
           </TabsContent>
 
           <TabsContent value="rumours">
-            {isLoading ? (
+            {isInitialLoad ? (
               <div className="grid md:grid-cols-2 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <TransferCardSkeleton key={i} />
                 ))}
               </div>
-            ) : rumours.length > 0 ? (
+            ) : filteredRumours.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {rumours.map((transfer) => (
-                  <TransferCard key={transfer.id} transfer={transfer} />
+                {filteredRumours.map((rumour) => (
+                  <RumourTransferCard key={rumour.id} rumour={rumour} />
                 ))}
               </div>
             ) : (
@@ -193,16 +269,16 @@ export default function TransfersPage() {
           </TabsContent>
 
           <TabsContent value="confirmed">
-            {isLoading ? (
+            {isInitialLoad ? (
               <div className="grid md:grid-cols-2 gap-4">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <TransferCardSkeleton key={i} />
                 ))}
               </div>
-            ) : confirmed.length > 0 ? (
+            ) : filteredConfirmed.length > 0 ? (
               <div className="grid md:grid-cols-2 gap-4">
-                {confirmed.map((transfer) => (
-                  <TransferCard key={transfer.id} transfer={transfer} />
+                {filteredConfirmed.map((transfer) => (
+                  <ConfirmedTransferCard key={transfer.id} transfer={transfer} />
                 ))}
               </div>
             ) : (

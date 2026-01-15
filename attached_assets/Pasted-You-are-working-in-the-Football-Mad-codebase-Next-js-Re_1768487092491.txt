@@ -1,0 +1,113 @@
+You are working in the Football Mad codebase (Next.js/React + Tailwind). Update the GLOBAL Transfers page to follow this structure:
+
+GOAL
+Create a gold-standard Transfers experience with three sub-tabs:
+- All (blended feed)
+- Rumours
+- Confirmed
+
+Rules:
+1) Keep the existing sub-navigation UI style (left aligned tabs with totals in brackets).
+2) Add a new “Confirmed” tab (if not already present).
+3) Implement data model + rendering so that:
+   - Rumours are shown as “rumour cards” (existing UI can stay)
+   - Confirmed transfers are shown as a clean “ledger” list/card style
+4) “All” tab should be a blended feed with this ordering:
+   a) Confirmed transfers first (newest first)
+   b) Then rumours sorted by confidence (highest first), with newest as secondary
+5) “Rumours” tab: only rumours (existing cards)
+6) “Confirmed” tab: only confirmed transfers (ledger format)
+
+DATA
+For now, use dummy data in-page (or in a small local module) with two arrays:
+- rumours[]
+- confirmedTransfers[]
+Ensure the data shape is future-proof so we can later replace confirmedTransfers with FPL feed results.
+
+Recommended TypeScript shapes:
+
+type TransferRumour = {
+  id: string;
+  playerName: string;
+  position?: string; // e.g. "MID"
+  fromClub: string;
+  toClub: string;
+  feeText?: string; // e.g. "£52m" or "Loan"
+  confidence?: number; // 0-100
+  tier?: "Tier A" | "Tier B" | "Tier C";
+  statusLabel?: "Rumour"; // default
+  sourceLabel?: string; // e.g. "The Athletic"
+  updatedAt: string; // ISO date
+};
+
+type ConfirmedTransfer = {
+  id: string;
+  playerName: string;
+  position?: string;
+  fromClub: string;
+  toClub: string;
+  moveType: "Permanent" | "Loan" | "Free";
+  feeText?: string; // if known
+  confirmedAt: string; // ISO date
+  sourceType: "FPL" | "Official";
+};
+
+UI REQUIREMENTS
+A) Confirmed transfer “ledger” item/card should show:
+   - Player name (+ optional position chip)
+   - From → To row
+   - MoveType chip (Permanent/Loan/Free)
+   - Fee text if present
+   - Confirmed date (e.g. “15 Jan 2026”)
+   - SourceType chip (“FPL” or “Official”)
+
+B) Rumour cards can remain as-is BUT ensure:
+   - confidence shown if available (bar or %)
+   - tier chip kept
+   - source label shown
+
+COUNTS (TAB TOTALS)
+- All (X) where X = rumours.length + confirmedTransfers.length
+- Rumours (X) = rumours.length
+- Confirmed (X) = confirmedTransfers.length
+
+FILTER DROPDOWN (DESKTOP)
+Keep the right-aligned “All Teams” dropdown filter on the global Transfers page.
+For now it can be a UI-only dropdown with options:
+- All Teams
+- Arsenal
+- Chelsea
+- Liverpool
+…but structure the code so it can later filter both rumours and confirmed lists by toClub or fromClub.
+If filtering is implemented now, do it for both arrays consistently.
+
+SORTING
+- Confirmed: sort by confirmedAt desc
+- Rumours: sort by confidence desc (missing confidence treated as 0), then updatedAt desc
+
+IMPLEMENTATION DETAILS
+1) Locate the global Transfers page component (e.g. /app/transfers/page.tsx or /pages/transfers.tsx).
+2) Refactor so there is a shared dataset computed for each tab:
+   - visibleRumours
+   - visibleConfirmed
+   - visibleAllFeed (merged array with a discriminant field like kind: "confirmed" | "rumour")
+3) Create small components if helpful:
+   - <ConfirmedTransferCard />
+   - <RumourTransferCard /> (use existing if already present)
+4) Match existing Football Mad styling:
+   - rounded cards, soft borders, subtle shadows, spacing consistent with other pages
+   - keep typography consistent (headings, muted descriptions, etc.)
+5) Ensure it works on mobile:
+   - tabs scroll horizontally if needed
+   - filter dropdown becomes full-width and centered text (as per our site convention)
+   - no layout breaks
+
+ACCEPTANCE CHECKLIST
+- Tabs: All / Rumours / Confirmed render with correct counts
+- All tab shows confirmed first, then rumours sorted properly
+- Confirmed tab shows ledger cards with required fields + chips
+- Rumours tab unchanged in styling but filtered
+- Filter dropdown present and does not break layout on mobile
+- No TypeScript errors, no lint errors
+
+After implementing, briefly list what files you changed and where the dummy data lives.
