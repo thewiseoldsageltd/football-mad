@@ -7,7 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, AlertTriangle, CheckCircle, Clock, Activity, ArrowUpDown } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle, Clock, Activity } from "lucide-react";
 import type { Team, FplPlayerAvailability } from "@shared/schema";
 
 type MedicalBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT";
@@ -495,8 +495,7 @@ export default function InjuriesPage() {
 
               <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
                 <SelectTrigger className="w-[180px]" data-testid="select-sort">
-                  <span className="flex items-center gap-2 truncate">
-                    <ArrowUpDown className="h-4 w-4 shrink-0" />
+                  <span className="truncate">
                     {sortOption === "closest_return" ? "Closest return" : 
                      sortOption === "updated" ? "Last updated" :
                      sortOption === "highest" ? "Highest confidence" : "Lowest confidence"}

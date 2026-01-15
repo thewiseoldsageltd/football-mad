@@ -58,7 +58,7 @@ export function MatchesFilters({
             placeholder="Search team..."
             value={teamSearch}
             onChange={(e) => onTeamSearchChange(e.target.value)}
-            className="text-center pr-9 placeholder:text-center"
+            className="h-9 text-sm font-normal text-center pr-9 placeholder:text-center placeholder:text-muted-foreground"
             data-testid="input-team-search-mobile"
           />
           <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />

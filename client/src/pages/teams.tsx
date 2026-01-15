@@ -194,7 +194,7 @@ export default function TeamsPage() {
                 placeholder="Search teams..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="text-center pr-9 placeholder:text-center"
+                className="h-9 text-sm font-normal text-center pr-9 placeholder:text-center placeholder:text-muted-foreground"
                 data-testid="input-search-teams-mobile"
               />
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
