@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { Badge } from "@/components/ui/badge";
-import { Zap, Star, TrendingUp, Trophy } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type TaxonomyPillVariant = "breaking" | "editor-pick" | "trending" | "team" | "competition" | "default";
+export type TaxonomyPillVariant = "team" | "competition" | "default";
 
 interface TaxonomyPillProps {
   label: string;
@@ -34,7 +33,7 @@ function CrestWithFallback({
     if (fallbackColor) {
       return (
         <div 
-          className="w-3 h-3 rounded-sm flex-shrink-0"
+          className="w-4 h-4 rounded-sm flex-shrink-0"
           style={{ backgroundColor: fallbackColor }}
         />
       );
@@ -52,10 +51,10 @@ function CrestWithFallback({
   );
 }
 
-function ColorDot({ color }: { color: string }) {
+function AccentBar({ color }: { color: string }) {
   return (
     <div 
-      className="w-3 h-3 rounded-sm flex-shrink-0"
+      className="w-1 h-4 rounded-full flex-shrink-0 -ml-0.5"
       style={{ backgroundColor: color }}
     />
   );
@@ -71,39 +70,17 @@ export function TaxonomyPill({
   className,
   "data-testid": testId,
 }: TaxonomyPillProps) {
-  const getVariantStyles = () => {
-    switch (variant) {
-      case "breaking":
-        return "bg-destructive text-destructive-foreground border-destructive";
-      case "editor-pick":
-        return "bg-amber-500 text-white border-amber-500";
-      case "trending":
-        return "bg-secondary text-secondary-foreground border-secondary";
-      case "team":
-        return "bg-background border";
-      case "competition":
-        return "bg-transparent text-foreground border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50";
-      default:
-        return "";
-    }
-  };
+  const isEntityPill = variant === "team" || variant === "competition";
+  
+  const accentColor = variant === "team" 
+    ? (teamColor || "#334155")
+    : variant === "competition" 
+      ? "#64748b"
+      : null;
 
-  const getIcon = () => {
+  const renderIcon = () => {
     if (icon) return icon;
     
-    switch (variant) {
-      case "breaking":
-        return <Zap className="h-3 w-3" />;
-      case "editor-pick":
-        return <Star className="h-3 w-3" />;
-      case "trending":
-        return <TrendingUp className="h-3 w-3" />;
-      default:
-        return null;
-    }
-  };
-
-  const renderCrestOrFallback = () => {
     if (variant === "team" && crestUrl) {
       return (
         <CrestWithFallback 
@@ -113,49 +90,43 @@ export function TaxonomyPill({
         />
       );
     }
-    
-    if (variant === "team" && teamColor) {
-      return <ColorDot color={teamColor} />;
-    }
 
     if (variant === "competition" && crestUrl) {
       return (
         <CrestWithFallback 
           src={crestUrl} 
           alt={label}
-          fallbackIcon={<Trophy className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />}
+          fallbackIcon={<Trophy className="h-4 w-4 text-slate-500 dark:text-slate-400" />}
         />
       );
     }
     
     if (variant === "competition") {
-      return <Trophy className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />;
+      return <Trophy className="h-4 w-4 text-slate-500 dark:text-slate-400" />;
     }
 
     return null;
   };
 
-  const pillIcon = getIcon();
-  const crestOrFallback = renderCrestOrFallback();
+  const pillIcon = renderIcon();
 
   const content = (
-    <Badge
-      variant={(variant === "team" || variant === "competition") ? "outline" : "default"}
+    <div
       className={cn(
-        "gap-1.5 cursor-pointer transition-colors",
-        variant === "team" && href && "hover-elevate",
-        variant === "competition" && href && "hover-elevate",
-        getVariantStyles(),
-        variant === "team" && teamColor && "hover:opacity-90",
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md",
+        "text-sm font-medium",
+        "bg-white dark:bg-gray-900",
+        "border border-gray-200 dark:border-gray-700",
+        "cursor-pointer transition-all",
+        href && "hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm",
         className
       )}
-      style={variant === "team" && teamColor ? { borderColor: teamColor } : undefined}
       data-testid={testId}
     >
-      {crestOrFallback}
+      {accentColor && <AccentBar color={accentColor} />}
       {pillIcon}
-      {label}
-    </Badge>
+      <span className="text-foreground">{label}</span>
+    </div>
   );
 
   if (href) {
