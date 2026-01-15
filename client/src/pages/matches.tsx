@@ -1,28 +1,89 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/main-layout";
-import { MatchCard } from "@/components/cards/match-card";
-import { MatchCardSkeleton } from "@/components/skeletons";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "lucide-react";
-import { format, isToday, isTomorrow, addDays, startOfDay } from "date-fns";
-import type { Match, Team } from "@shared/schema";
+import { isToday, isTomorrow, addDays, startOfDay, isBefore, isAfter } from "date-fns";
+import { MatchesTabs, type MatchTab } from "@/components/matches/MatchesTabs";
+import { MatchesFilters } from "@/components/matches/MatchesFilters";
+import { MatchesList } from "@/components/matches/MatchesList";
+import { mockMatches, type MockMatch } from "@/components/matches/mockMatches";
 
 export default function MatchesPage() {
-  const { data: matches, isLoading } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
-    queryKey: ["/api/matches"],
-  });
+  const [activeTab, setActiveTab] = useState<MatchTab>("today");
+  const [competition, setCompetition] = useState("all");
+  const [sortBy, setSortBy] = useState("kickoff");
+  const [teamSearch, setTeamSearch] = useState("");
 
   const today = startOfDay(new Date());
   const tomorrow = addDays(today, 1);
-  const thisWeek = addDays(today, 7);
+  const endOfWeek = addDays(today, 7);
 
-  const todaysMatches = matches?.filter((m) => isToday(new Date(m.kickoffTime))) || [];
-  const tomorrowsMatches = matches?.filter((m) => isTomorrow(new Date(m.kickoffTime))) || [];
-  const upcomingMatches = matches?.filter((m) => {
-    const kickoff = new Date(m.kickoffTime);
-    return kickoff > tomorrow && kickoff <= thisWeek;
-  }) || [];
-  const pastMatches = matches?.filter((m) => new Date(m.kickoffTime) < today).reverse() || [];
+  const filterByTab = (matches: MockMatch[], tab: MatchTab): MockMatch[] => {
+    return matches.filter((match) => {
+      const kickoff = new Date(match.kickOffTime);
+      const kickoffDay = startOfDay(kickoff);
+      
+      switch (tab) {
+        case "today":
+          return isToday(kickoff);
+        case "tomorrow":
+          return isTomorrow(kickoff);
+        case "thisWeek":
+          return isAfter(kickoffDay, tomorrow) && isBefore(kickoff, endOfWeek);
+        case "results":
+          return match.status === "finished" || match.status === "postponed";
+        default:
+          return true;
+      }
+    });
+  };
+
+  const applyFilters = (matches: MockMatch[]): MockMatch[] => {
+    let filtered = [...matches];
+
+    if (competition !== "all") {
+      const compName = competition
+        .split("-")
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      filtered = filtered.filter(m => m.competition === compName);
+    }
+
+    if (teamSearch.trim()) {
+      const search = teamSearch.toLowerCase().trim();
+      filtered = filtered.filter(
+        m =>
+          m.homeTeam.name.toLowerCase().includes(search) ||
+          m.awayTeam.name.toLowerCase().includes(search) ||
+          m.homeTeam.shortName.toLowerCase().includes(search) ||
+          m.awayTeam.shortName.toLowerCase().includes(search)
+      );
+    }
+
+    if (sortBy === "kickoff") {
+      filtered.sort((a, b) => new Date(a.kickOffTime).getTime() - new Date(b.kickOffTime).getTime());
+    } else if (sortBy === "competition") {
+      filtered.sort((a, b) => a.competition.localeCompare(b.competition));
+    }
+
+    return filtered;
+  };
+
+  const todaysMatches = useMemo(() => filterByTab(mockMatches, "today"), []);
+  const tomorrowsMatches = useMemo(() => filterByTab(mockMatches, "tomorrow"), []);
+  const thisWeekMatches = useMemo(() => filterByTab(mockMatches, "thisWeek"), []);
+  const resultsMatches = useMemo(() => filterByTab(mockMatches, "results"), []);
+
+  const counts = {
+    today: todaysMatches.length,
+    tomorrow: tomorrowsMatches.length,
+    thisWeek: thisWeekMatches.length,
+    results: resultsMatches.length,
+  };
+
+  const currentMatches = useMemo(() => {
+    const tabMatches = filterByTab(mockMatches, activeTab);
+    return applyFilters(tabMatches);
+  }, [activeTab, competition, sortBy, teamSearch]);
 
   return (
     <MainLayout>
@@ -30,145 +91,50 @@ export default function MatchesPage() {
         <div className="flex items-center gap-3 mb-8">
           <Calendar className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-4xl md:text-5xl font-bold">Matches</h1>
+            <h1 className="text-4xl md:text-5xl font-bold" data-testid="heading-matches">Matches</h1>
             <p className="text-muted-foreground text-lg">
               Premier League fixtures and results
             </p>
           </div>
         </div>
 
-        <Tabs defaultValue="today" className="w-full">
-          {/* Desktop: Tabs on single row */}
-          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
-            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-matches">
-              <TabsTrigger value="today" data-testid="tab-today">
-                Today ({todaysMatches.length})
-              </TabsTrigger>
-              <TabsTrigger value="tomorrow" data-testid="tab-tomorrow">
-                Tomorrow ({tomorrowsMatches.length})
-              </TabsTrigger>
-              <TabsTrigger value="upcoming" data-testid="tab-upcoming">
-                This Week ({upcomingMatches.length})
-              </TabsTrigger>
-              <TabsTrigger value="results" data-testid="tab-results">
-                Results ({pastMatches.length})
-              </TabsTrigger>
-            </TabsList>
-          </div>
+        <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
+          <MatchesTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            counts={counts}
+            variant="desktop"
+          />
+          <MatchesFilters
+            competition={competition}
+            onCompetitionChange={setCompetition}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            teamSearch={teamSearch}
+            onTeamSearchChange={setTeamSearch}
+            variant="inline"
+          />
+        </div>
 
-          {/* Mobile: Horizontally scrollable tabs */}
-          <div className="md:hidden mb-6">
-            <div className="relative">
-              <div 
-                className="overflow-x-auto scrollbar-hide"
-                style={{ 
-                  WebkitOverflowScrolling: 'touch',
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none'
-                }}
-              >
-                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-matches-mobile">
-                  <TabsTrigger value="today" className="whitespace-nowrap" data-testid="tab-today-mobile">
-                    Today ({todaysMatches.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="tomorrow" className="whitespace-nowrap" data-testid="tab-tomorrow-mobile">
-                    Tomorrow ({tomorrowsMatches.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="upcoming" className="whitespace-nowrap" data-testid="tab-upcoming-mobile">
-                    This Week ({upcomingMatches.length})
-                  </TabsTrigger>
-                  <TabsTrigger value="results" className="whitespace-nowrap" data-testid="tab-results-mobile">
-                    Results ({pastMatches.length})
-                  </TabsTrigger>
-                </TabsList>
-              </div>
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
-            </div>
-          </div>
+        <div className="md:hidden">
+          <MatchesTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            counts={counts}
+            variant="mobile"
+          />
+          <MatchesFilters
+            competition={competition}
+            onCompetitionChange={setCompetition}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            teamSearch={teamSearch}
+            onTeamSearchChange={setTeamSearch}
+            variant="stacked"
+          />
+        </div>
 
-          <TabsContent value="today">
-            {isLoading ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <MatchCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : todaysMatches.length > 0 ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {todaysMatches.map((match) => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-medium mb-2">No matches today</h3>
-                <p className="text-muted-foreground">Check back tomorrow for more action.</p>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="tomorrow">
-            {isLoading ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <MatchCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : tomorrowsMatches.length > 0 ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {tomorrowsMatches.map((match) => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No matches scheduled for tomorrow.</p>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="upcoming">
-            {isLoading ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <MatchCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : upcomingMatches.length > 0 ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {upcomingMatches.map((match) => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No matches scheduled for this week.</p>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="results">
-            {isLoading ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <MatchCardSkeleton key={i} />
-                ))}
-              </div>
-            ) : pastMatches.length > 0 ? (
-              <div className="grid md:grid-cols-2 gap-4">
-                {pastMatches.slice(0, 20).map((match) => (
-                  <MatchCard key={match.id} match={match} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground">No results available yet.</p>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+        <MatchesList matches={currentMatches} />
       </div>
     </MainLayout>
   );
