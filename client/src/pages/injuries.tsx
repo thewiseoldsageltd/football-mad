@@ -448,8 +448,8 @@ export default function InjuriesPage() {
 
             <div className="flex items-center gap-3 shrink-0">
               <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger className="w-[200px] grid grid-cols-[1fr_auto] items-center" data-testid="select-team-filter">
-                  <span className="text-center truncate">
+                <SelectTrigger className="w-[200px]" data-testid="select-team-filter">
+                  <span className="truncate">
                     {teamFilter === "all" ? "All Teams" : plTeams.find(t => t.slug === teamFilter)?.name || teamFilter}
                   </span>
                 </SelectTrigger>
@@ -464,9 +464,9 @@ export default function InjuriesPage() {
               </Select>
 
               <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
-                <SelectTrigger className="w-[180px] grid grid-cols-[auto_1fr_auto] items-center" data-testid="select-sort">
-                  <ArrowUpDown className="h-4 w-4" />
-                  <span className="text-center truncate">
+                <SelectTrigger className="w-[180px]" data-testid="select-sort">
+                  <span className="flex items-center gap-2 truncate">
+                    <ArrowUpDown className="h-4 w-4 shrink-0" />
                     {sortOption === "closest_return" ? "Closest return" : 
                      sortOption === "updated" ? "Last updated" :
                      sortOption === "highest" ? "Highest confidence" : "Lowest confidence"}
@@ -519,8 +519,8 @@ export default function InjuriesPage() {
 
             <div className="flex flex-col gap-3">
               <Select value={teamFilter} onValueChange={setTeamFilter}>
-                <SelectTrigger className="w-full grid grid-cols-[1fr_auto] items-center" data-testid="select-team-filter-mobile">
-                  <span className="text-center truncate">
+                <SelectTrigger className="w-full" data-testid="select-team-filter-mobile">
+                  <span className="truncate">
                     {teamFilter === "all" ? "All Teams" : plTeams.find(t => t.slug === teamFilter)?.name || teamFilter}
                   </span>
                 </SelectTrigger>
@@ -535,9 +535,9 @@ export default function InjuriesPage() {
               </Select>
 
               <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
-                <SelectTrigger className="w-full grid grid-cols-[auto_1fr_auto] items-center" data-testid="select-sort-mobile">
-                  <ArrowUpDown className="h-4 w-4" />
-                  <span className="text-center truncate">
+                <SelectTrigger className="w-full" data-testid="select-sort-mobile">
+                  <span className="flex items-center gap-2 truncate">
+                    <ArrowUpDown className="h-4 w-4 shrink-0" />
                     {sortOption === "closest_return" ? "Closest return" : 
                      sortOption === "updated" ? "Last updated" :
                      sortOption === "highest" ? "Highest confidence" : "Lowest confidence"}
