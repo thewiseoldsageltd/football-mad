@@ -22,7 +22,7 @@ export function TablesFilters({
 }: TablesFiltersProps) {
   if (mobile) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 items-center">
         <Select value={season} onValueChange={onSeasonChange}>
           <SelectTrigger className="w-full" data-testid="select-season-mobile">
             <span className="flex-1 text-center truncate">{season}</span>

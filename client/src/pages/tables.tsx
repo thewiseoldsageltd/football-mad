@@ -21,7 +21,7 @@ type EuropeView = "groups" | "knockout";
 
 export default function TablesPage() {
   const [topTab, setTopTab] = useState<TopTab>("leagues");
-  const [leagueCompetition, setLeagueCompetition] = useState("all");
+  const [leagueCompetition, setLeagueCompetition] = useState("premier-league");
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
   const [europeView, setEuropeView] = useState<EuropeView>("groups");

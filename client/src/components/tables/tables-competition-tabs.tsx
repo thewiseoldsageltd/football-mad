@@ -26,9 +26,6 @@ export function TablesCompetitionTabs({
     return (
       <Tabs value={leagueCompetition} onValueChange={onLeagueChange}>
         <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-leagues-competition">
-          <TabsTrigger value="all" className="whitespace-nowrap" data-testid="tab-league-all">
-            All
-          </TabsTrigger>
           {leagueCompetitions.map((comp) => (
             <TabsTrigger
               key={comp.id}

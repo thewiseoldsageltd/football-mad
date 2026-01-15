@@ -1,0 +1,93 @@
+You are updating the existing Football Mad web app.
+
+TASK: Refine the Tables tab structure and behaviour to align with agreed UX and navigation standards across the site.
+
+GOALS:
+- Remove redundant options
+- Improve desktop vs mobile data density
+- Lock consistency with other tabs (Matches, Teams, Transfers)
+
+IMPLEMENT THE FOLLOWING:
+
+1) TABLES TAB — PRIMARY STRUCTURE
+- Keep main nav item: “Tables”
+- Page title: “Tables”
+- Subtitle: “League standings and tournament progress”
+- Icon: Trophy (consistent with current design)
+
+2) SUB-NAVIGATION (TOP LEVEL)
+- Tabs (left-aligned on desktop, scrollable on mobile):
+  - Leagues (default)
+  - Cups
+  - Europe
+- Behaviour mirrors Matches / Transfers sub-nav rules exactly
+
+3) LEAGUES VIEW (DEFAULT STATE)
+- REMOVE “All” competition option entirely
+- Default competition on first load:
+  - Premier League
+- Competition selector includes:
+  - Premier League
+  - Championship
+  - League One
+  - League Two
+  - La Liga
+  - Serie A
+  - Bundesliga
+  - Ligue 1
+
+4) FILTERS (RIGHT-ALIGNED DESKTOP / CENTRED MOBILE)
+- Season dropdown (default: current season, e.g. 2025/26)
+- View dropdown:
+  - Overall (default)
+  - Home
+  - Away
+- No additional filters for now
+
+5) TABLE — DESKTOP PRESENTATION
+Show a rich table with the following columns:
+- Pos
+- Team (with crest/avatar)
+- P (Played)
+- W
+- D
+- L
+- GF
+- GA
+- GD (colour-coded: green for +, red for -)
+- Pts (bold)
+
+- Highlight:
+  - Top positions (e.g. title / Europe) with subtle left border
+  - Relegation zone with subtle red indicator
+
+6) TABLE — MOBILE PRESENTATION
+Show a simplified table:
+- Pos
+- Team
+- Pts (bold)
+
+Secondary row or muted columns:
+- P
+- GD
+
+RULES:
+- Do NOT show full stats by default on mobile
+- Keep layout scannable and vertical
+- No “expand all” or advanced toggles yet
+
+7) CONSISTENCY RULES
+- Typography, spacing, pills, dropdowns must reuse existing shared components
+- Alignment rules:
+  - Desktop filters right-aligned
+  - Mobile filters centre-aligned
+- No “All” option anywhere in Tables unless stacking multiple tables vertically (not implemented now)
+
+8) DATA
+- Use existing dummy data placeholders
+- Structure components so Goalserve data can be injected later without refactor
+
+OUTPUT:
+- Update the Tables page UI only
+- Do NOT modify other tabs
+- Ensure no regressions to navigation, spacing, or alignment

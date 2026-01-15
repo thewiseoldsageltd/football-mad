@@ -27,9 +27,14 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
           <TableRow>
             <TableHead className="w-12 text-center">Pos</TableHead>
             <TableHead>Team</TableHead>
-            <TableHead className="w-12 text-center hidden sm:table-cell">P</TableHead>
-            <TableHead className="w-14 text-center hidden sm:table-cell">GD</TableHead>
-            <TableHead className="w-14 text-center font-semibold">Pts</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">P</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">W</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">D</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">L</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">GF</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">GA</TableHead>
+            <TableHead className="w-10 text-center hidden md:table-cell">GD</TableHead>
+            <TableHead className="w-12 text-center font-semibold">Pts</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -48,10 +53,25 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
                   <span className="font-medium text-sm truncate">{row.teamName}</span>
                 </div>
               </TableCell>
-              <TableCell className="text-center hidden sm:table-cell">
+              <TableCell className="text-center hidden md:table-cell">
                 <span className="text-sm text-muted-foreground">{row.played}</span>
               </TableCell>
-              <TableCell className="text-center hidden sm:table-cell">
+              <TableCell className="text-center hidden md:table-cell">
+                <span className="text-sm text-muted-foreground">{row.won}</span>
+              </TableCell>
+              <TableCell className="text-center hidden md:table-cell">
+                <span className="text-sm text-muted-foreground">{row.drawn}</span>
+              </TableCell>
+              <TableCell className="text-center hidden md:table-cell">
+                <span className="text-sm text-muted-foreground">{row.lost}</span>
+              </TableCell>
+              <TableCell className="text-center hidden md:table-cell">
+                <span className="text-sm text-muted-foreground">{row.goalsFor}</span>
+              </TableCell>
+              <TableCell className="text-center hidden md:table-cell">
+                <span className="text-sm text-muted-foreground">{row.goalsAgainst}</span>
+              </TableCell>
+              <TableCell className="text-center hidden md:table-cell">
                 <span className={`text-sm ${row.gd > 0 ? "text-emerald-600 dark:text-emerald-400" : row.gd < 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
                   {row.gd > 0 ? `+${row.gd}` : row.gd}
                 </span>
@@ -63,6 +83,25 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
           ))}
         </TableBody>
       </Table>
+
+      {/* Mobile secondary info - show P and GD for all teams */}
+      <div className="md:hidden mt-4 space-y-2">
+        {data.map((row) => (
+          <div 
+            key={row.pos} 
+            className="flex items-center justify-between text-xs text-muted-foreground px-2 py-1 bg-muted/30 rounded"
+            data-testid={`row-mobile-detail-${row.pos}`}
+          >
+            <span className="font-medium">{row.pos}. {row.teamName}</span>
+            <div className="flex items-center gap-3">
+              <span>P: {row.played}</span>
+              <span className={row.gd > 0 ? "text-emerald-600 dark:text-emerald-400" : row.gd < 0 ? "text-red-600 dark:text-red-400" : ""}>
+                GD: {row.gd > 0 ? `+${row.gd}` : row.gd}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {showZones && (
         <div className="flex items-center gap-6 mt-4 text-xs text-muted-foreground">
