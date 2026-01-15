@@ -26,7 +26,9 @@ export function MatchesFilters({
       <div className="space-y-3 mb-6" data-testid="filters-matches-mobile">
         <Select value={competition} onValueChange={onCompetitionChange}>
           <SelectTrigger className="w-full" data-testid="select-competition-mobile">
-            <SelectValue placeholder="Competition" />
+            <span className="flex-1 text-center">
+              <SelectValue placeholder="Competition" />
+            </span>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Competitions</SelectItem>
@@ -38,20 +40,22 @@ export function MatchesFilters({
         </Select>
 
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search team..."
             value={teamSearch}
             onChange={(e) => onTeamSearchChange(e.target.value)}
-            className="pl-9"
+            className="text-center pr-9 placeholder:text-center"
             data-testid="input-team-search-mobile"
           />
+          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
 
         <Select value={sortBy} onValueChange={onSortChange}>
           <SelectTrigger className="w-full" data-testid="select-sort-mobile">
-            <SelectValue placeholder="Sort by" />
+            <span className="flex-1 text-center">
+              <SelectValue placeholder="Sort by" />
+            </span>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="kickoff">Kick-off time</SelectItem>
