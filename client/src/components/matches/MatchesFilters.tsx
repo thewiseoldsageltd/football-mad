@@ -26,9 +26,7 @@ export function MatchesFilters({
       <div className="space-y-3 mb-6" data-testid="filters-matches-mobile">
         <Select value={competition} onValueChange={onCompetitionChange}>
           <SelectTrigger className="w-full" data-testid="select-competition-mobile">
-            <span className="flex-1 text-center">
-              <SelectValue placeholder="Competition" />
-            </span>
+            <SelectValue placeholder="Competition" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Competitions</SelectItem>
@@ -53,9 +51,7 @@ export function MatchesFilters({
 
         <Select value={sortBy} onValueChange={onSortChange}>
           <SelectTrigger className="w-full" data-testid="select-sort-mobile">
-            <span className="flex-1 text-center">
-              <SelectValue placeholder="Sort by" />
-            </span>
+            <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="kickoff">Kick-off time</SelectItem>
@@ -70,9 +66,7 @@ export function MatchesFilters({
     <div className="flex items-center gap-3" data-testid="filters-matches-desktop">
       <Select value={competition} onValueChange={onCompetitionChange}>
         <SelectTrigger className="w-[180px]" data-testid="select-competition">
-          <span className="flex-1 text-center">
-            <SelectValue placeholder="Competition" />
-          </span>
+          <SelectValue placeholder="Competition" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Competitions</SelectItem>
@@ -97,9 +91,7 @@ export function MatchesFilters({
 
       <Select value={sortBy} onValueChange={onSortChange}>
         <SelectTrigger className="w-[150px]" data-testid="select-sort">
-          <span className="flex-1 text-center">
-            <SelectValue placeholder="Sort by" />
-          </span>
+          <SelectValue placeholder="Sort by" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="kickoff">Kick-off time</SelectItem>
