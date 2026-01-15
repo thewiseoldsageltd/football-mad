@@ -42,7 +42,18 @@ export default function ShopPage() {
       cart.push({ ...product, quantity: 1 });
     }
     localStorage.setItem("cart", JSON.stringify(cart));
-    toast({ title: `${product.name} added to cart` });
+    toast({ 
+      title: `${product.name} added to cart`,
+      action: (
+        <a 
+          href="/shop/cart" 
+          className="text-xs font-medium underline underline-offset-2"
+          data-testid="link-toast-view-cart"
+        >
+          View cart
+        </a>
+      ),
+    });
     window.dispatchEvent(new Event("cartUpdated"));
   };
 

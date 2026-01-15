@@ -28,6 +28,7 @@ const navItems = [
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const [location] = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
 
@@ -37,6 +38,25 @@ export function Header() {
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const loadCartCount = () => {
+      try {
+        const cart = JSON.parse(localStorage.getItem("cart") || "[]");
+        const totalQuantity = cart.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0);
+        setCartCount(totalQuantity);
+      } catch {
+        setCartCount(0);
+      }
+    };
+    loadCartCount();
+    window.addEventListener("cartUpdated", loadCartCount);
+    window.addEventListener("storage", loadCartCount);
+    return () => {
+      window.removeEventListener("cartUpdated", loadCartCount);
+      window.removeEventListener("storage", loadCartCount);
+    };
   }, []);
 
   return (
@@ -80,10 +100,18 @@ export function Header() {
               <Search className="h-5 w-5" />
             </Button>
 
-            <Link href="/shop/cart">
+            <Link href="/shop/cart" className="relative">
               <Button variant="ghost" size="icon" data-testid="button-cart">
                 <ShoppingCart className="h-5 w-5" />
               </Button>
+              {cartCount > 0 && (
+                <span 
+                  className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
+                  data-testid="badge-cart-count"
+                >
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
 
             <ThemeToggle />
