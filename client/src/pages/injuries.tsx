@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -367,6 +367,36 @@ export default function InjuriesPage() {
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [sortOption, setSortOption] = useState<SortOption>("closest_return");
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    const isScrollable = scrollWidth > clientWidth;
+    setShowLeftFade(isScrollable && scrollLeft > 0);
+    setShowRightFade(isScrollable && scrollLeft + clientWidth < scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    
+    handleScroll();
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    
+    const resizeObserver = new ResizeObserver(handleScroll);
+    resizeObserver.observe(el);
+    
+    return () => {
+      el.removeEventListener("scroll", handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [handleScroll]);
 
   const { data: availability, isLoading } = useQuery<EnrichedAvailability[]>({
     queryKey: ["/api/availability"],
@@ -482,11 +512,12 @@ export default function InjuriesPage() {
             </div>
           </div>
 
-          {/* Mobile: Tabs first (horizontally scrollable), then filters stacked below */}
+          {/* Mobile: Tabs first (horizontally scrollable with dynamic fades), then filters stacked below */}
           <div className="md:hidden space-y-4 mb-6">
-            {/* Scrollable tabs container with fade hints */}
+            {/* Scrollable tabs container with dynamic fade hints */}
             <div className="relative">
               <div 
+                ref={scrollContainerRef}
                 className="overflow-x-auto scrollbar-hide"
                 style={{ 
                   WebkitOverflowScrolling: 'touch',
@@ -512,9 +543,12 @@ export default function InjuriesPage() {
                   </TabsTrigger>
                 </TabsList>
               </div>
-              {/* Fade gradient hints */}
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+              {showLeftFade && (
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
+              )}
+              {showRightFade && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+              )}
             </div>
 
             <div className="flex flex-col gap-3">

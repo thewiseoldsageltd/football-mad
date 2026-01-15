@@ -21,6 +21,7 @@ export function MatchesFilters({
   onTeamSearchChange,
   variant = "inline",
 }: MatchesFiltersProps) {
+  // Order: Competition → Kick-off time (Sort) → Search team
   if (variant === "stacked") {
     return (
       <div className="space-y-3 mb-6" data-testid="filters-matches-mobile">
@@ -39,18 +40,6 @@ export function MatchesFilters({
           </SelectContent>
         </Select>
 
-        <div className="relative">
-          <Input
-            type="text"
-            placeholder="Search team..."
-            value={teamSearch}
-            onChange={(e) => onTeamSearchChange(e.target.value)}
-            className="text-center pr-9 placeholder:text-center"
-            data-testid="input-team-search-mobile"
-          />
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        </div>
-
         <Select value={sortBy} onValueChange={onSortChange}>
           <SelectTrigger className="w-full" data-testid="select-sort-mobile">
             <span className="flex-1 text-center">
@@ -62,6 +51,18 @@ export function MatchesFilters({
             <SelectItem value="competition">Competition</SelectItem>
           </SelectContent>
         </Select>
+
+        <div className="relative">
+          <Input
+            type="text"
+            placeholder="Search team..."
+            value={teamSearch}
+            onChange={(e) => onTeamSearchChange(e.target.value)}
+            className="text-center pr-9 placeholder:text-center"
+            data-testid="input-team-search-mobile"
+          />
+          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        </div>
       </div>
     );
   }
@@ -81,6 +82,16 @@ export function MatchesFilters({
         </SelectContent>
       </Select>
 
+      <Select value={sortBy} onValueChange={onSortChange}>
+        <SelectTrigger className="w-[150px]" data-testid="select-sort">
+          <SelectValue placeholder="Sort by" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="kickoff">Kick-off time</SelectItem>
+          <SelectItem value="competition">Competition</SelectItem>
+        </SelectContent>
+      </Select>
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -92,16 +103,6 @@ export function MatchesFilters({
           data-testid="input-team-search"
         />
       </div>
-
-      <Select value={sortBy} onValueChange={onSortChange}>
-        <SelectTrigger className="w-[150px]" data-testid="select-sort">
-          <SelectValue placeholder="Sort by" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="kickoff">Kick-off time</SelectItem>
-          <SelectItem value="competition">Competition</SelectItem>
-        </SelectContent>
-      </Select>
     </div>
   );
 }
