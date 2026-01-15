@@ -21,6 +21,16 @@ interface TagPill {
   color?: string | null;
 }
 
+const CATEGORY_TAGS = new Set([
+  "transfers", "trending", "analysis", "news", "breaking", "editors-pick",
+  "match-report", "preview", "review", "opinion", "feature", "interview",
+  "rumour", "rumor", "injury", "injuries", "suspension", "discipline",
+  "fpl", "fantasy", "tactics", "stats", "statistics", "highlights",
+  "goal", "goals", "assist", "assists", "clean-sheet", "results",
+  "fixtures", "table", "standings", "awards", "signing", "signings",
+  "loan", "loans", "contract", "debut", "retirement", "sacked", "appointed",
+]);
+
 function extractPills(article: Article, teams?: Team[]): TagPill[] {
   const pills: TagPill[] = [];
   const teamSlugs = teams?.map(t => t.slug) || [];
@@ -48,7 +58,8 @@ function extractPills(article: Article, teams?: Team[]): TagPill[] {
   if (article.tags) {
     const playerTags = article.tags.filter(tag => 
       !teamSlugs.includes(tag) && 
-      tag !== article.competition?.toLowerCase().replace(/\s+/g, "-")
+      tag !== article.competition?.toLowerCase().replace(/\s+/g, "-") &&
+      !CATEGORY_TAGS.has(tag.toLowerCase())
     );
     for (const playerTag of playerTags) {
       const formattedName = playerTag
