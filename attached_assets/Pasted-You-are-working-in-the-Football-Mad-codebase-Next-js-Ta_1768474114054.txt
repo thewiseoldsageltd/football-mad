@@ -1,0 +1,98 @@
+You are working in the Football Mad codebase (Next.js + Tailwind). We’re starting Day 6: prepare the Matches tab UI so it’s Goalserve-ready later, but for now use mock data.
+
+GOAL
+Build a new Matches page that matches the existing site styling and navigation conventions (same header layout, spacing, typography, container widths). This is UI scaffolding only — no Goalserve integration yet.
+
+ROUTES / FILES
+- Create/Update: `app/matches/page.tsx`
+- Create reusable components in: `components/matches/*`
+- If there is already a Matches page, refactor it to match the spec below.
+- Do not break existing navigation.
+
+DESKTOP LAYOUT (must match site look)
+1) Page header
+- Title: “Matches”
+- Subtitle: “Premier League fixtures and results”
+- Use the existing icon/heading style seen on other tabs (e.g. News/Injuries).
+
+2) Sub-navigation row (same grey bar + lozenge active state pattern used across the site)
+Tabs:
+- Today (count optional for now)
+- Tomorrow
+- This Week
+- Results
+
+Rules:
+- Use the same “lozenge highlight” for active tab.
+- Keep the grey bar style consistent with Injuries tab.
+- If you show counts, use ONE consistent format across all tabs. For Matches, use bracket style e.g. `Today (3)` for now.
+- On desktop, show Filters on the SAME horizontal line as the sub-nav and aligned right.
+
+3) Filters (desktop inline, right aligned)
+- Competition dropdown (default: Premier League)
+- Sort dropdown (default: Kick-off time)
+- A “Team” search input (optional, can be simple and inactive)
+These filters do not need to function fully yet, but the UI should exist.
+
+CONTENT (desktop)
+- Group matches by date.
+- Within each date group, group by competition (for now just Premier League in mock data).
+- Use a clean match card component that supports 3 states:
+  A) Scheduled: shows time + teams + venue (if available)
+  B) Live: shows score + live minute + subtle live indicator
+  C) Finished: shows final score + FT badge
+
+Match card structure:
+- Competition pill at top-left (small)
+- Center row with:
+  Home team (left), score/time (middle), away team (right)
+- Secondary row:
+  Date/time/venue line (small, muted)
+- Optional status badge on the right (e.g. LIVE, FT, P-P for postponed)
+
+VISUAL STYLE
+- Reuse existing card styles: rounded corners, soft shadow, light border.
+- Typography should match the rest of Football Mad (don’t introduce new font systems).
+- Maintain spacing consistency with other pages.
+- Keep it clean/minimal; no heavy colours except the site green for accents and a subtle red for LIVE.
+
+MOBILE RULES
+- Sub-navigation must be horizontally scrollable (like Injuries).
+- Keep the “fade” scroll hint ONLY on the RIGHT side (no left fade).
+- Filters must be full width and stacked:
+  - Competition dropdown
+  - Team search
+  - Sort dropdown
+- Match list is single-column, grouped by date.
+- Date headers can be sticky (nice to have, not required).
+
+MOCK DATA
+Create a small mock dataset in `components/matches/mockMatches.ts` (or similar) with:
+- 1–2 date groups for Today
+- 1 date group for Tomorrow
+- 1 week group for This Week
+Include at least:
+- 2 scheduled matches
+- 1 live match
+- 2 finished matches
+Each match object should include:
+`id, competition, dateISO, kickOffTime, status (scheduled|live|finished|postponed), minute (optional), homeTeam, awayTeam, homeScore, awayScore, venue (optional)`
+
+BEHAVIOUR
+- Tabs change the displayed list (client-side state is fine).
+- Results tab can just show finished matches.
+- Sorting can be stubbed (UI only), but implement simple sort by time if easy.
+- Clicking a match card can be non-functional for now (cursor pointer optional).
+
+DELIVERABLE
+- A polished Matches page that looks like a finished product even with mock data.
+- Clean component structure:
+  - `MatchesTabs`
+  - `MatchesFilters`
+  - `MatchCard`
+  - `MatchesList` (grouping by date)
+- No console errors. No broken imports.
+
+After implementation:
+- Briefly list which files you changed/created.
+- Confirm mobile + desktop behaviour matches the rules above.
