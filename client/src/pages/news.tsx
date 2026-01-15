@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
@@ -6,34 +6,37 @@ import { ArticleCardSkeleton } from "@/components/skeletons";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { SlidersHorizontal, Search, X, Zap, Users, Newspaper } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useNewsFilters, type ContentTypeSlug, type CompetitionSlug } from "@/hooks/use-news-filters";
-import { NEWS_COMPETITIONS, NEWS_CONTENT_TYPES, NEWS_SORT_OPTIONS, NEWS_TIME_RANGES, type Team, type NewsFiltersResponse } from "@shared/schema";
-import { useState } from "react";
+import { useNewsFilters, type CompetitionSlug } from "@/hooks/use-news-filters";
+import { NEWS_COMPETITIONS, type Team, type NewsFiltersResponse } from "@shared/schema";
 
 const competitionsList = Object.values(NEWS_COMPETITIONS).map(comp => ({
   ...comp,
-  shortLabel: comp.value === "all" ? "All" : 
-              comp.value === "premier-league" ? "PL" :
-              comp.value === "championship" ? "Champ" :
-              comp.value === "league-one" ? "L1" : "L2",
   subheading: comp.value === "all" 
     ? "The latest football news, analysis, and insights"
     : `The latest ${comp.label} news and analysis`
 }));
 
-const contentTypesList = Object.values(NEWS_CONTENT_TYPES);
-const sortOptionsList = Object.values(NEWS_SORT_OPTIONS);
-const timeRangesList = Object.values(NEWS_TIME_RANGES);
+const MOCK_PLAYERS = [
+  { id: "1", name: "Mohamed Salah", teamSlug: "liverpool" },
+  { id: "2", name: "Erling Haaland", teamSlug: "manchester-city" },
+  { id: "3", name: "Bukayo Saka", teamSlug: "arsenal" },
+  { id: "4", name: "Cole Palmer", teamSlug: "chelsea" },
+  { id: "5", name: "Bruno Fernandes", teamSlug: "manchester-united" },
+  { id: "6", name: "Son Heung-min", teamSlug: "tottenham" },
+  { id: "7", name: "Alexander Isak", teamSlug: "newcastle" },
+  { id: "8", name: "Ollie Watkins", teamSlug: "aston-villa" },
+  { id: "9", name: "Jean-Philippe Mateta", teamSlug: "crystal-palace" },
+  { id: "10", name: "Dominic Solanke", teamSlug: "tottenham" },
+];
 
 export default function NewsPage() {
   const { user, isAuthenticated } = useAuth();
@@ -41,7 +44,6 @@ export default function NewsPage() {
     filters, 
     setFilter, 
     setFilters,
-    toggleType, 
     toggleTeam, 
     removeFilter, 
     clearFilters,
@@ -52,7 +54,42 @@ export default function NewsPage() {
   } = useNewsFilters();
   
   const [teamSearch, setTeamSearch] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [drawerComp, setDrawerComp] = useState<CompetitionSlug>(filters.comp);
+  
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(true);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setShowLeftFade(scrollLeft > 0);
+    setShowRightFade(scrollLeft + clientWidth < scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    
+    handleScroll();
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    
+    const resizeObserver = new ResizeObserver(handleScroll);
+    resizeObserver.observe(el);
+    
+    return () => {
+      el.removeEventListener("scroll", handleScroll);
+      resizeObserver.disconnect();
+    };
+  }, [handleScroll]);
+
+  useEffect(() => {
+    setDrawerComp(filters.comp);
+  }, [filters.comp]);
 
   const apiQueryString = buildApiQueryString();
   
@@ -109,12 +146,32 @@ export default function NewsPage() {
 
   const filteredTeams = useMemo(() => {
     if (!teams) return [];
-    if (!teamSearch) return teams;
-    return teams.filter(t => 
-      t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
-      t.shortName?.toLowerCase().includes(teamSearch.toLowerCase())
+    let filtered = teams;
+    
+    if (drawerComp !== "all") {
+      const compData = NEWS_COMPETITIONS[drawerComp as keyof typeof NEWS_COMPETITIONS];
+      const compLabel = compData && "dbValue" in compData ? compData.dbValue : compData?.label;
+      if (compLabel) {
+        filtered = filtered.filter(t => t.league === compLabel);
+      }
+    }
+    
+    if (teamSearch) {
+      filtered = filtered.filter(t => 
+        t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
+        t.shortName?.toLowerCase().includes(teamSearch.toLowerCase())
+      );
+    }
+    
+    return filtered;
+  }, [teams, teamSearch, drawerComp]);
+
+  const filteredPlayers = useMemo(() => {
+    if (!playerSearch) return [];
+    return MOCK_PLAYERS.filter(p => 
+      p.name.toLowerCase().includes(playerSearch.toLowerCase())
     );
-  }, [teams, teamSearch]);
+  }, [playerSearch]);
 
   const followedTeams = useMemo(() => {
     if (!teams) return [];
@@ -126,10 +183,7 @@ export default function NewsPage() {
   const regularArticles = articles.filter(a => a.id !== featuredArticle?.id);
 
   const activeFilterCount = [
-    filters.type.length > 0,
     filters.teams.length > 0 || filters.myTeams,
-    filters.sort !== "latest",
-    filters.range !== "all",
     filters.breaking,
   ].filter(Boolean).length;
 
@@ -157,6 +211,18 @@ export default function NewsPage() {
     } else {
       toggleTeam(teamSlug);
     }
+  };
+
+  const handleDrawerCompChange = (value: string) => {
+    setDrawerComp(value as CompetitionSlug);
+    setTeamSearch("");
+  };
+
+  const handleApplyFilters = () => {
+    if (drawerComp !== filters.comp) {
+      setFilter("comp", drawerComp);
+    }
+    setIsFiltersOpen(false);
   };
 
   return (
@@ -204,10 +270,11 @@ export default function NewsPage() {
             </Button>
           </div>
 
-          {/* Mobile: Tabs first (horizontally scrollable), then filters stacked below */}
+          {/* Mobile: Full-width scrollable tabs with full labels */}
           <div className="md:hidden space-y-4 mb-6">
             <div className="relative">
               <div 
+                ref={scrollContainerRef}
                 className="overflow-x-auto scrollbar-hide"
                 style={{ 
                   WebkitOverflowScrolling: 'touch',
@@ -223,13 +290,17 @@ export default function NewsPage() {
                       className="whitespace-nowrap"
                       data-testid={`tab-competition-${comp.value}-mobile`}
                     >
-                      {comp.shortLabel}
+                      {comp.label}
                     </TabsTrigger>
                   ))}
                 </TabsList>
               </div>
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+              {showLeftFade && (
+                <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
+              )}
+              {showRightFade && (
+                <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
+              )}
             </div>
 
             <Button 
@@ -249,168 +320,144 @@ export default function NewsPage() {
             </Button>
           </div>
 
-          {/* Shared Sheet for filters */}
+          {/* Simplified Filter Drawer - Single scroll, Team + Player only */}
           <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-            <SheetContent className="w-full sm:max-w-md">
-                <SheetHeader>
-                  <div className="flex items-center justify-between gap-2">
-                    <SheetTitle>Filters</SheetTitle>
-                    {hasActiveFilters && (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={clearFilters}
-                        data-testid="button-clear-filters"
-                      >
-                        Clear all
-                      </Button>
+            <SheetContent className="w-full sm:max-w-md flex flex-col">
+              <SheetHeader className="shrink-0">
+                <div className="flex items-center justify-between gap-2">
+                  <SheetTitle>Filters</SheetTitle>
+                  {hasActiveFilters && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={clearFilters}
+                      data-testid="button-clear-filters"
+                    >
+                      Clear all
+                    </Button>
+                  )}
+                </div>
+              </SheetHeader>
+
+              <div className="flex-1 overflow-y-auto mt-6 pr-1 -mr-1">
+                <div className="space-y-6 pb-4">
+                  {/* Team Filter */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <Label className="text-sm font-semibold">Teams</Label>
+                      {isAuthenticated && followedTeamIds.length > 0 && (
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor="my-teams-toggle" className="text-xs text-muted-foreground cursor-pointer">
+                            My Teams
+                          </Label>
+                          <Switch 
+                            id="my-teams-toggle"
+                            checked={filters.myTeams}
+                            onCheckedChange={handleMyTeamsToggle}
+                            data-testid="switch-my-teams"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="relative mb-3">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search teams..."
+                        value={teamSearch}
+                        onChange={(e) => setTeamSearch(e.target.value)}
+                        className="pl-9"
+                        data-testid="input-team-search"
+                      />
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {filteredTeams.length > 0 ? (
+                        filteredTeams.map((team) => (
+                          <div key={team.id} className="flex items-center space-x-2">
+                            <Checkbox 
+                              id={`team-${team.id}`}
+                              checked={filters.myTeams 
+                                ? followedTeamIds.includes(team.id)
+                                : filters.teams.includes(team.slug)
+                              }
+                              onCheckedChange={() => handleTeamCheckboxChange(team.slug)}
+                              data-testid={`checkbox-team-${team.slug}`}
+                            />
+                            <label 
+                              htmlFor={`team-${team.id}`}
+                              className="text-sm cursor-pointer flex items-center gap-2"
+                            >
+                              {team.name}
+                              {followedTeamIds.includes(team.id) && (
+                                <Badge variant="outline" className="text-xs py-0">Following</Badge>
+                              )}
+                            </label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No teams found for this competition
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Player Filter */}
+                  <div>
+                    <Label className="text-sm font-semibold mb-3 block">Player</Label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Search players..."
+                        value={playerSearch}
+                        onChange={(e) => setPlayerSearch(e.target.value)}
+                        className="pl-9"
+                        data-testid="input-player-search"
+                      />
+                    </div>
+                    {filteredPlayers.length > 0 && (
+                      <div className="mt-2 space-y-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                        {filteredPlayers.map((player) => (
+                          <div 
+                            key={player.id} 
+                            className="text-sm py-1 px-2 hover:bg-muted rounded cursor-pointer"
+                            onClick={() => setPlayerSearch(player.name)}
+                            data-testid={`player-option-${player.id}`}
+                          >
+                            {player.name}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                </SheetHeader>
-
-                <ScrollArea className="h-[calc(100vh-120px)] mt-6 pr-4">
-                  <div className="space-y-6">
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <Label className="text-sm font-semibold">Teams</Label>
-                        {isAuthenticated && followedTeamIds.length > 0 && (
-                          <div className="flex items-center gap-2">
-                            <Label htmlFor="my-teams-toggle" className="text-xs text-muted-foreground cursor-pointer">
-                              My Teams
-                            </Label>
-                            <Switch 
-                              id="my-teams-toggle"
-                              checked={filters.myTeams}
-                              onCheckedChange={handleMyTeamsToggle}
-                              data-testid="switch-my-teams"
-                            />
-                          </div>
-                        )}
-                      </div>
-                      <div className="relative mb-3">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input 
-                          placeholder="Search teams..."
-                          value={teamSearch}
-                          onChange={(e) => setTeamSearch(e.target.value)}
-                          className="pl-9"
-                          data-testid="input-team-search"
-                        />
-                      </div>
-                      <ScrollArea className="h-48">
-                        <div className="space-y-2">
-                          {filteredTeams.map((team) => (
-                            <div key={team.id} className="flex items-center space-x-2">
-                              <Checkbox 
-                                id={`team-${team.id}`}
-                                checked={filters.myTeams 
-                                  ? followedTeamIds.includes(team.id)
-                                  : filters.teams.includes(team.slug)
-                                }
-                                onCheckedChange={() => handleTeamCheckboxChange(team.slug)}
-                                data-testid={`checkbox-team-${team.slug}`}
-                              />
-                              <label 
-                                htmlFor={`team-${team.id}`}
-                                className="text-sm cursor-pointer flex items-center gap-2"
-                              >
-                                {team.name}
-                                {followedTeamIds.includes(team.id) && (
-                                  <Badge variant="outline" className="text-xs py-0">Following</Badge>
-                                )}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </ScrollArea>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                      <Label className="text-sm font-semibold mb-3 block">Content Type</Label>
-                      <div className="space-y-2">
-                        {contentTypesList.map((type) => (
-                          <div key={type.value} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`content-${type.value}`}
-                              checked={filters.type.includes(type.value as ContentTypeSlug)}
-                              onCheckedChange={() => toggleType(type.value as ContentTypeSlug)}
-                              data-testid={`checkbox-content-${type.value}`}
-                            />
-                            <label 
-                              htmlFor={`content-${type.value}`}
-                              className="text-sm cursor-pointer"
-                            >
-                              {type.label}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                      <Label className="text-sm font-semibold mb-3 block">Time Range</Label>
-                      <RadioGroup value={filters.range} onValueChange={(val) => setFilter("range", val as any)}>
-                        {timeRangesList.map((range) => (
-                          <div key={range.value} className="flex items-center space-x-2">
-                            <RadioGroupItem 
-                              value={range.value} 
-                              id={`time-${range.value}`}
-                              data-testid={`radio-time-${range.value}`}
-                            />
-                            <label 
-                              htmlFor={`time-${range.value}`}
-                              className="text-sm cursor-pointer"
-                            >
-                              {range.label}
-                            </label>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    </div>
-
-                    <Separator />
-
-                    <div>
-                      <Label className="text-sm font-semibold mb-3 block">Sort By</Label>
-                      <RadioGroup value={filters.sort} onValueChange={(val) => setFilter("sort", val as any)}>
-                        {sortOptionsList.map((option) => {
-                          if ("requiresAuth" in option && option.requiresAuth && !isAuthenticated) {
-                            return null;
-                          }
-                          return (
-                            <div key={option.value} className="flex items-center space-x-2">
-                              <RadioGroupItem 
-                                value={option.value} 
-                                id={`sort-${option.value}`}
-                                data-testid={`radio-sort-${option.value}`}
-                              />
-                              <label 
-                                htmlFor={`sort-${option.value}`}
-                                className="text-sm cursor-pointer"
-                              >
-                                {option.label}
-                              </label>
-                            </div>
-                          );
-                        })}
-                      </RadioGroup>
-                    </div>
-                  </div>
-                </ScrollArea>
-
-                <div className="mt-4 pt-4 border-t">
-                  <Button 
-                    className="w-full" 
-                    onClick={() => setIsFiltersOpen(false)}
-                    data-testid="button-apply-filters"
-                  >
-                    Show {articles.length} articles
-                  </Button>
                 </div>
+              </div>
+
+              <SheetFooter className="shrink-0 border-t pt-4 mt-4 flex-col gap-3 sm:flex-col">
+                <div className="w-full">
+                  <Label className="text-xs text-muted-foreground mb-1 block">Competition</Label>
+                  <Select value={drawerComp} onValueChange={handleDrawerCompChange}>
+                    <SelectTrigger className="w-full" data-testid="select-drawer-competition">
+                      <SelectValue placeholder="Select competition" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {competitionsList.map((comp) => (
+                        <SelectItem key={comp.value} value={comp.value}>
+                          {comp.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button 
+                  className="w-full" 
+                  onClick={handleApplyFilters}
+                  data-testid="button-apply-filters"
+                >
+                  Show {articles.length} articles
+                </Button>
+              </SheetFooter>
             </SheetContent>
           </Sheet>
 
@@ -437,40 +484,6 @@ export default function NewsPage() {
               Breaking
               {filters.breaking && <X className="h-3 w-3 ml-1" />}
             </Badge>
-            {filters.sort !== "latest" && (
-              <Badge 
-                variant="outline"
-                className="cursor-pointer gap-1 text-muted-foreground"
-                onClick={() => removeFilter("sort")}
-                data-testid={`chip-sort-${filters.sort}`}
-              >
-                Sort: {NEWS_SORT_OPTIONS[filters.sort]?.label || filters.sort}
-                <X className="h-3 w-3 ml-1" />
-              </Badge>
-            )}
-            {filters.range !== "all" && (
-              <Badge 
-                variant="outline"
-                className="cursor-pointer gap-1 text-muted-foreground"
-                onClick={() => removeFilter("range")}
-                data-testid={`chip-time-${filters.range}`}
-              >
-                Time: {NEWS_TIME_RANGES[filters.range]?.label || filters.range}
-                <X className="h-3 w-3 ml-1" />
-              </Badge>
-            )}
-            {filters.type.map(type => (
-              <Badge 
-                key={type}
-                variant="outline"
-                className="cursor-pointer gap-1 text-muted-foreground"
-                onClick={() => removeFilter("type", type)}
-                data-testid={`chip-content-${type}`}
-              >
-                Type: {NEWS_CONTENT_TYPES[type]?.label || type}
-                <X className="h-3 w-3 ml-1" />
-              </Badge>
-            ))}
             {!filters.myTeams && filters.teams.map(teamSlug => {
               const team = teams?.find(t => t.slug === teamSlug);
               return team ? (
@@ -492,7 +505,7 @@ export default function NewsPage() {
             <TabsContent key={comp.value} value={comp.value}>
               {featuredArticle && !isLoading && comp.value === filters.comp && (
                 <section className="mb-8">
-                  <ArticleCard article={featuredArticle} featured />
+                  <ArticleCard article={featuredArticle} featured teams={teams} />
                 </section>
               )}
 
@@ -505,7 +518,7 @@ export default function NewsPage() {
               ) : regularArticles.length > 0 ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {regularArticles.map((article) => (
-                    <ArticleCard key={article.id} article={article} />
+                    <ArticleCard key={article.id} article={article} teams={teams} />
                   ))}
                 </div>
               ) : (

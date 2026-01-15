@@ -1,0 +1,68 @@
+TASK: News page navigation + filter UX alignment (mobile + desktop consistency)
+
+CONTEXT:
+We are standardising navigation patterns across the site using the Injuries page as reference. The News page needs specific improvements:
+- Mobile sub-nav should be full-width, scrollable, and NOT abbreviated
+- The sub-nav fade mask should not show a left fade at initial state (scrollLeft = 0)
+- News filtering should match PA Media tagging navigation: Competition (sub-nav) → Team + Player (filter drawer)
+- Remove/hide filters that are not implemented yet (Content Types, Time Range, Sort By)
+- Fix mobile filter drawer UX: remove nested scrolling (no scroll-within-scroll)
+
+SCOPE:
+- News section only (list page + article page for pills behaviour)
+- Reuse existing shared SubNav patterns and styling (grey background, lozenge active tab)
+- Keep desktop layout consistent with new nav system
+
+CHANGES — MOBILE NEWS SUB-NAV:
+1) Replace abbreviated labels (PL / Champ / L1 / L2) with full labels:
+   - Premier League, Championship, League One, League Two (etc.)
+2) Ensure sub-nav spans full width on mobile and is horizontally scrollable (same as Injuries)
+3) Fade mask behaviour:
+   - When sub-nav scrollLeft === 0, DO NOT render left fade
+   - Render right fade if content overflows and not at end
+   - If user scrolls right (scrollLeft > 0), enable left fade
+   - Hide right fade when scrolled to end
+   (Do not change styling; only adjust conditional rendering)
+
+CHANGES — NEWS FILTER DRAWER (MOBILE-FIRST):
+1) Hide/remove the following filter sections for now (not shown in UI):
+   - Content Types
+   - Time Range
+   - Sort By
+2) Keep Team filtering as the primary filter section.
+3) Add Player filtering as a search input inside the drawer:
+   - label: “Player”
+   - placeholder: “Search players…”
+   - Typeahead behaviour can be mock/simple for now (filter list client-side from mock player list)
+4) Drawer scrolling:
+   - Ensure the drawer uses ONE single vertical scroll container
+   - Remove nested scroll areas inside the drawer
+   - Header stays visible (title + close)
+   - Footer stays visible (Apply / Clear)
+5) Drawer footer: add a “Competition” selector (dropdown) to let users switch competitions and update team list.
+   - This selector should mirror sub-nav competitions.
+   - Switching competition should update the Team list options in the drawer.
+
+CHANGES — TAG PILLS (NEWS CARD + ARTICLE):
+1) Article card pills:
+   - Show maximum 3 pills per card
+   - Prioritise pills in this order: Competition → Team → Player
+   - Reuse existing pill component styling (no redesign)
+2) Article page pills:
+   - Show ALL matched pills near the article header (wrap to new lines)
+   - Keep the same ordering priority (Competition → Team → Player → others)
+
+CONSTRAINTS:
+- Do not introduce filters that do not work
+- Do not change global nav styling; align behaviour only
+- Keep everything null-safe
+- Maintain existing Ghost/PA Media tagging integration assumptions (tags already exist)
+
+ACCEPTANCE:
+- Mobile News sub-nav matches Injuries pattern and uses full names
+- Left fade is not visible at initial state; right fade indicates scroll
+- Filter drawer has single scrolling area and only shows Team + Player filters
+- Drawer includes competition switcher that changes team list
+- Cards show max 3 pills; article view shows all pills
+
+Implement now.

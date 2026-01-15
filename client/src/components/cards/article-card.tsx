@@ -1,9 +1,9 @@
 import { Link } from "wouter";
-import { Clock, Eye, Zap, Star } from "lucide-react";
+import { Clock, Eye, Zap, Star, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { newsArticle } from "@/lib/urls";
-import type { Article } from "@shared/schema";
+import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
 
 interface ArticleCardProps {
@@ -11,13 +11,69 @@ interface ArticleCardProps {
   featured?: boolean;
   teamBadge?: string;
   teamColor?: string;
+  teams?: Team[];
 }
 
-export function ArticleCard({ article, featured = false, teamBadge, teamColor }: ArticleCardProps) {
+interface TagPill {
+  type: "competition" | "team" | "player";
+  label: string;
+  slug?: string;
+  color?: string | null;
+}
+
+function extractPills(article: Article, teams?: Team[]): TagPill[] {
+  const pills: TagPill[] = [];
+  const teamSlugs = teams?.map(t => t.slug) || [];
+  
+  if (article.competition) {
+    pills.push({
+      type: "competition",
+      label: article.competition,
+      slug: article.competition.toLowerCase().replace(/\s+/g, "-"),
+    });
+  }
+  
+  if (teams && article.tags) {
+    const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
+    for (const team of articleTeams) {
+      pills.push({
+        type: "team",
+        label: team.shortName || team.name,
+        slug: team.slug,
+        color: team.primaryColor,
+      });
+    }
+  }
+  
+  if (article.tags) {
+    const playerTags = article.tags.filter(tag => 
+      !teamSlugs.includes(tag) && 
+      tag !== article.competition?.toLowerCase().replace(/\s+/g, "-")
+    );
+    for (const playerTag of playerTags) {
+      const formattedName = playerTag
+        .split("-")
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+      pills.push({
+        type: "player",
+        label: formattedName,
+        slug: playerTag,
+      });
+    }
+  }
+  
+  return pills;
+}
+
+export function ArticleCard({ article, featured = false, teamBadge, teamColor, teams }: ArticleCardProps) {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
   
   const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;
+  
+  const allPills = extractPills(article, teams);
+  const displayPills = allPills.slice(0, 3);
   
   if (featured) {
     return (
@@ -37,7 +93,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor }:
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-6">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {article.isBreaking && (
                   <Badge variant="destructive" className="gap-1">
                     <Zap className="h-3 w-3" />
@@ -50,9 +106,22 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor }:
                     Editor's Pick
                   </Badge>
                 )}
-                <Badge variant="default" className="bg-primary text-primary-foreground">
-                  {article.category || "News"}
-                </Badge>
+                {displayPills.map((pill, idx) => (
+                  <Badge 
+                    key={`${pill.type}-${pill.slug || idx}`}
+                    variant="secondary" 
+                    className={`gap-1 ${pill.type === "competition" || pill.type === "player" ? "bg-white/20 text-white border-0" : ""}`}
+                    style={pill.type === "team" && pill.color ? { 
+                      backgroundColor: pill.color,
+                      color: "white",
+                      borderColor: pill.color 
+                    } : undefined}
+                  >
+                    {pill.type === "competition" && <Trophy className="h-3 w-3" />}
+                    {pill.type === "player" && <span className="w-2 h-2 rounded-full bg-current opacity-50" />}
+                    {pill.label}
+                  </Badge>
+                ))}
                 {article.isTrending && (
                   <Badge variant="secondary" className="bg-white/20 text-white border-0">
                     Trending
@@ -128,9 +197,25 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor }:
                 Pick
               </Badge>
             )}
-            <Badge variant="secondary" className="text-xs">
-              {article.category || "News"}
-            </Badge>
+            {displayPills.map((pill, idx) => (
+              <Badge 
+                key={`${pill.type}-${pill.slug || idx}`}
+                variant={pill.type === "team" ? "outline" : "secondary"}
+                className="text-xs gap-1"
+                style={pill.type === "team" && pill.color ? { 
+                  borderColor: pill.color,
+                } : undefined}
+              >
+                {pill.type === "competition" && <Trophy className="h-3 w-3" />}
+                {pill.type === "player" && <span className="w-2 h-2 rounded-full bg-current opacity-50" />}
+                {pill.label}
+              </Badge>
+            ))}
+            {displayPills.length === 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {article.category || "News"}
+              </Badge>
+            )}
             {article.isTrending && (
               <Badge variant="outline" className="text-xs">
                 Trending

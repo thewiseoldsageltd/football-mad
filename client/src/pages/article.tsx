@@ -585,6 +585,16 @@ export default function ArticlePage() {
   const readingTime = calculateReadingTime(article.content);
   const CategoryIcon = CATEGORY_ICONS[article.category || "news"] || Newspaper;
   const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
+  
+  const teamSlugs = teams.map(t => t.slug);
+  const playerTags = (article.tags || []).filter(tag => 
+    !teamSlugs.includes(tag) && 
+    tag !== slugifyCompetition(article.competition || "")
+  );
+  const playerPills = playerTags.map(tag => ({
+    label: tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
+    slug: tag,
+  }));
 
   return (
     <MainLayout>
@@ -667,9 +677,18 @@ export default function ArticlePage() {
                 </Button>
               </div>
 
-              {(articleTeams.length > 0 || article.competition) && (
+              {(articleTeams.length > 0 || article.competition || playerPills.length > 0) && (
                 <div className="flex items-center gap-2 flex-wrap mt-4">
-                  {articleTeams.slice(0, 4).map((team) => (
+                  {article.competition && (
+                    <TaxonomyPill
+                      label={article.competition}
+                      variant="competition"
+                      href={`/news?competition=${slugifyCompetition(article.competition)}`}
+                      crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
+                      data-testid="pill-competition"
+                    />
+                  )}
+                  {articleTeams.map((team) => (
                     <TaxonomyPill
                       key={team.id}
                       label={team.name}
@@ -680,18 +699,17 @@ export default function ArticlePage() {
                       data-testid={`pill-team-${team.slug}`}
                     />
                   ))}
-                  {articleTeams.length > 4 && (
-                    <Badge variant="secondary">+{articleTeams.length - 4}</Badge>
-                  )}
-                  {article.competition && (
-                    <TaxonomyPill
-                      label={article.competition}
-                      variant="competition"
-                      href={`/news?competition=${slugifyCompetition(article.competition)}`}
-                      crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
-                      data-testid="pill-competition"
-                    />
-                  )}
+                  {playerPills.map((player) => (
+                    <Badge
+                      key={player.slug}
+                      variant="secondary"
+                      className="gap-1"
+                      data-testid={`pill-player-${player.slug}`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-current opacity-50" />
+                      {player.label}
+                    </Badge>
+                  ))}
                 </div>
               )}
             </header>
