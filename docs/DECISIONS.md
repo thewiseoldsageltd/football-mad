@@ -294,3 +294,79 @@ Rationale:
 
 ---
 
+# DAY 6 – DECISION LOG
+
+## Navigation Rules
+DECISION:
+Lock navigation behaviour across the site:
+- Desktop: sub-nav left-aligned, filters right-aligned.
+- Mobile: sub-nav scrollable where relevant, filters centre-aligned.
+RATIONALE:
+Predictability, scanning efficiency, and reduced cognitive load.
+
+## Mobile Alignment Preference
+DECISION:
+Central alignment preferred for mobile filters and inputs.
+RATIONALE:
+Improves vertical scanning and step-by-step consumption on mobile.
+
+## Matches Filter Order
+DECISION:
+Competition → Kick-off time → Search team.
+RATIONALE:
+Progressive narrowing: broad context first, precision last.
+
+## Teams Page Default State
+DECISION:
+Default to “All” competitions (not Premier League).
+RATIONALE:
+Avoid implicit bias toward one league and reduce friction for global users.
+
+## Terminology Simplification
+DECISION:
+Use “All” instead of “All Competitions”.
+RATIONALE:
+Cleaner mobile UI and faster comprehension.
+
+## Transfers & Injuries Scope
+DECISION:
+Treat Transfers & Injuries as:
+- Global features at top level.
+- Premier League–only views inside FPL.
+RATIONALE:
+Conceptual clarity, avoids duplication, supports future scale.
+
+## Tables as Main Navigation
+DECISION:
+Add “Tables” as a first-class main nav item.
+RATIONALE:
+Standings are a core football use case and essential alongside Matches & Teams.
+
+## Tables Structure
+DECISION:
+Use sub-nav split:
+- Leagues
+- Cups
+- Europe
+RATIONALE:
+Supports domestic + European competitions without clutter.
+
+## Desktop vs Mobile Data Density
+DECISION:
+Show more columns on desktop, fewer on mobile.
+RATIONALE:
+Optimise for device capabilities and readability.
+
+## Shop Cart Feedback
+DECISION:
+Add global cart badge indicator with real-time updates.
+RATIONALE:
+Essential UX feedback and conversion best practice.
+
+Status:
+- All navigation and structure decisions locked.
+- Transfers/FPL final placement deferred pending data integration.
+
+---
+
+

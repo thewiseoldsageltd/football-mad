@@ -593,3 +593,319 @@ Note for future iteration:
 - UI should be flexible enough to support deeper competition hierarchies
 
 ---
+
+# DAY 6 – PROMPT LOG
+
+## Matches UX Refinement
+Prompt used to:
+- Reorder filters (Competition → Kick-off time → Search team).
+- Align desktop vs mobile behaviour consistently.
+- Preserve Goalserve-ready structure.
+
+## Navigation Consistency Audit
+Prompt used to:
+- Standardise sub-navigation alignment rules.
+- Fix mobile vs desktop inconsistencies.
+- Remove conflicting icons and font discrepancies.
+
+## Teams Page Structure Update
+Prompt used to:
+- Add competition sub-navigation.
+- Default to “All”.
+- Simplify labels for mobile UX.
+
+## Transfers Strategy Exploration
+Prompt used to:
+- Analyse user priorities on the Transfers page.
+- Identify information hierarchy issues.
+- Evaluate global vs FPL separation.
+
+## Tables Tab Scaffold
+Prompt used to:
+- Add Tables to main navigation.
+- Create Leagues / Cups / Europe sub-nav.
+- Build responsive table layout with placeholders.
+- Match existing navigation and filter patterns.
+
+# Cart Indicator (Shop)
+Prompt used to:
+- Add global cart badge indicator.
+- Sync with cart state.
+- Update in real time across desktop and mobile.
+- Optional toast feedback on add-to-cart.
+
+Status:
+- All prompts executed cleanly.
+- Reusable prompt patterns established for future tabs (FPL, Community, Shop).
+
+---
+
+# DAY 6 — FULL PROMPT LOG
+
+## Navigation Consistency (Site-wide Audit & Fix)
+
+You are updating the Football Mad web app.
+
+TASK:
+Standardise navigation, sub-navigation, and filter behaviour across all tabs:
+News, Matches, Teams, Transfers, Injuries.
+
+GLOBAL RULES:
+- Desktop:
+  - Sub-navigation left-aligned
+  - Filters right-aligned
+  - No filter stacking
+- Mobile:
+  - Sub-navigation scrollable left → right where overflow exists
+  - Remove left fade on initial state (only show right fade)
+  - Filters stacked full-width and centre-aligned
+  - No autofocus on inputs
+
+FIXES TO APPLY:
+- Ensure filter text, font size, and spacing are consistent across pages
+- Remove icons where they cause layout breakage (e.g. Injuries “Closest return”)
+- Ensure search inputs visually match dropdown filters
+- Ensure icon + text filters never stack on desktop
+
+DO NOT:
+- Change navigation structure
+- Redesign components
+- Alter data logic
+
+GOAL:
+Achieve visual and behavioural consistency across all tabs.
+
+---
+
+## Matches Page — Filter Order & UX Polish
+
+You are refining the Matches page UI.
+
+TASK:
+Reorder filters and lock consistent behaviour across desktop and mobile.
+
+FILTER ORDER (ALL BREAKPOINTS):
+1. Competition
+2. Kick-off time
+3. Search team
+
+REQUIREMENTS:
+- Desktop:
+  - Filters right-aligned
+  - No vertical stacking
+- Mobile:
+  - Filters stacked
+  - Centre-aligned text
+  - Search icon aligned right
+
+DO NOT:
+- Change existing card layout
+- Change match ordering logic
+- Add new filters
+
+GOAL:
+Align filter order with user mental model:
+Context → Time → Precision.
+
+---
+
+## Teams Page — Competition Structure & Defaults
+
+You are updating the Teams page.
+
+TASK:
+Align Teams navigation with News-style competition structure.
+
+IMPLEMENT:
+- Add competition sub-navigation (same style as News)
+- Remove competition dropdown filter
+- Default state: “All”
+- Change label from “All Competitions” → “All”
+
+DESKTOP:
+- Sub-navigation left-aligned
+- Search teams filter right-aligned
+
+MOBILE:
+- Sub-navigation scrollable
+- Search teams input centre-aligned
+- Search icon aligned right
+
+DO NOT:
+- Change team cards
+- Add new filters
+
+GOAL:
+Make Teams navigation consistent with the rest of the site and mobile-friendly.
+
+---
+
+## Transfers Strategy — Global vs FPL Separation (Structural)
+
+You are reviewing Transfers and Injuries placement.
+
+TASK:
+Do NOT move Transfers or Injuries under FPL.
+
+DEFINE:
+- Transfers & Injuries are GLOBAL features
+- FPL consumes filtered views (Premier League only)
+
+RULES:
+- Same data structures
+- Same card components
+- Only filters and emphasis change inside FPL
+
+DO NOT:
+- Duplicate logic
+- Fork components
+- Hide global content
+
+GOAL:
+Football-first architecture with FPL as an interpretation layer.
+
+---
+
+## Transfers Page — UX Simplification & Crest Introduction
+
+You are redesigning the GLOBAL Transfers page.
+
+GOAL:
+Simplify information hierarchy and improve scanability.
+
+PRIMARY SIGNALS (IN ORDER):
+1. Status (Confirmed / Rumour)
+2. Player name
+3. From → To
+4. Move type (Loan / Permanent)
+5. Confidence (rumours only)
+6. Source
+7. Fee / Date (secondary)
+
+IMPLEMENT:
+- Remove green tick/check icons entirely
+- Use ONE status pill only
+- Show confidence bars ONLY for rumours
+- Group move type + fee together
+- Move source to footer in muted style
+
+ADD:
+- Team crests next to club names
+- Neutral card backgrounds
+- No club-colour cards
+
+OPTIONAL:
+- Subtle destination club accent (2–3px left border, low opacity)
+
+DO NOT:
+- Add rumour logic to Goalserve data
+- Overuse colour
+
+GOAL:
+Reduce noise, increase trust, and improve scanning speed.
+
+---
+
+## Tables Tab — Initial Scaffold (Main Nav Addition)
+
+You are adding a new main navigation tab: TABLES.
+
+ROUTE:
+- /tables
+
+TOP-LEVEL SUB-NAV:
+- Leagues
+- Cups
+- Europe
+
+DEFAULT:
+- Leagues → Premier League
+
+FILTERS:
+- Season (default current)
+- View (Overall / Home / Away)
+
+DESKTOP:
+- Sub-nav left-aligned
+- Filters right-aligned
+
+MOBILE:
+- Sub-nav scrollable
+- Filters stacked and centre-aligned
+
+TABLE UI:
+- Desktop: Pos, Team, P, W, D, L, GF, GA, GD, Pts
+- Mobile: Pos, Team, Pts (secondary: P, GD)
+
+REMOVE:
+- “All” competition option
+
+USE:
+- Mock data only
+- Goalserve-ready structures
+
+GOAL:
+Create a production-ready scaffold without live data.
+
+---
+
+## Tables Refinement — Desktop vs Mobile Density
+
+You are refining the Tables tab.
+
+TASK:
+Differentiate desktop and mobile data density.
+
+DESKTOP:
+- Show full statistical columns
+- Highlight Europe qualification and relegation subtly
+
+MOBILE:
+- Show minimal essential columns
+- Keep layout scannable and vertical
+
+REMOVE:
+- “All” competition option entirely
+
+DEFAULT:
+- Premier League
+
+DO NOT:
+- Change navigation structure
+- Add advanced toggles
+
+GOAL:
+Optimise readability per device.
+
+---
+
+## Shop — Cart Indicator UX
+
+You are updating the Shop experience.
+
+PROBLEM:
+No visual feedback when items are added to cart.
+
+TASK:
+Add global cart indicator in header.
+
+IMPLEMENT:
+- Badge on cart icon showing item count
+- Hide badge when count = 0
+- Show “99+” when count > 99
+- Update in real time
+- Persist across refresh
+
+OPTIONAL:
+- Toast: “Added to cart” with “View cart” link
+- Auto-dismiss after 2 seconds
+
+DO NOT:
+- Redesign header
+- Change navigation
+
+GOAL:
+Provide immediate feedback and improve conversion UX.
+
+---
+

@@ -325,3 +325,66 @@ Team Hub (Injuries & Availability), FPL ingestion, Team metadata, Teams index po
 
 --- 
 
+# DAY 6 – BUILD LOG
+
+Focus:
+Navigation consistency, Matches UX polish, Transfers strategy, and introduction of the Tables section.
+
+Completed Work:
+
+## Navigation & UI Consistency (Site-wide)
+- Audited News, Matches, Teams, Transfers, Injuries across desktop and mobile.
+- Standardised:
+  - Sub-navigation alignment rules (left-aligned on desktop, scrollable on mobile where applicable).
+  - Filter positioning (right-aligned on desktop, centre-aligned on mobile).
+  - Filter text alignment, font size, and icon usage.
+- Removed inconsistent icons where they caused layout breakage (e.g. Injuries “Closest return” filter on desktop).
+- Confirmed central alignment as preferred mobile scanning pattern.
+
+## Matches Page
+- Finalised filter order:
+  - Competition → Kick-off time → Search team.
+- Locked desktop vs mobile behaviour.
+- Confirmed UX logic for live, upcoming, and completed fixtures.
+- Placeholder data validated as structurally correct for Goalserve integration.
+
+## Teams Page
+- Added competition sub-navigation (mirroring News structure).
+- Default state changed to “All” instead of “Premier League”.
+- Simplified label from “All Competitions” → “All” for mobile clarity.
+- Standardised search field styling across mobile and desktop.
+
+## Transfers Strategy (Global vs FPL)
+- Defined conceptual separation:
+  - Global Transfers & Injuries = worldwide football data.
+  - FPL Transfers & Injuries = Premier League–only, FPL-optimised view.
+- Decided to park final placement until Goalserve + FPL data can be reviewed side by side.
+- Identified UX issues on Transfers page:
+  - Too many competing indicators (ticks, pills, confidence bars, sources).
+  - Need to clarify hierarchy of information for users.
+
+## Tables (New Main Navigation Tab)
+- Added “Tables” as a main nav item.
+- Built initial structure with:
+  - Sub-nav: Leagues | Cups | Europe
+  - Competition selector
+  - Season selector
+  - View selector (Overall / Home / Away etc.)
+- Designed responsive table:
+  - Desktop shows full columns (P, GD, Pts).
+  - Mobile shows reduced essential columns.
+- Removed redundant “All” stacking concept for leagues.
+- Validated structure ahead of Goalserve standings data.
+
+## Shop UX
+- Identified missing cart feedback.
+- Defined solution for global cart indicator badge + real-time updates.
+
+Status:
+- Navigation structure locked.
+- Matches, Teams, Injuries UX locked.
+- Transfers and FPL integration parked pending data review.
+- Tables tab successfully scaffolded and ready for data.
+
+---
+
