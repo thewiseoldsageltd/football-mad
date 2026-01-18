@@ -1,0 +1,87 @@
+Update shared/schema.ts to support Mode A entities + automation, using Drizzle ORM and matching the existing style.
+
+IMPORTANT CONSTRAINTS:
+- Do NOT remove or rename any existing tables/columns.
+- Keep UUID string primary keys as they are now.
+- Make all new external/provider ID columns nullable and unique.
+- Use pgTable + text/varchar/timestamp/index consistent with existing patterns.
+- After editing, show me the final diff for shared/schema.ts only.
+
+A) Modify existing tables:
+
+1) teams: add
+  goalserveTeamId: text("goalserve_team_id").unique(),
+
+2) players: add
+  goalservePlayerId: text("goalserve_player_id").unique(),
+
+3) articles: add
+  source: text("source").default("editorial"),
+  sourceId: text("source_id"),
+  sourceVersion: text("source_version"),
+  sourcePublishedAt: timestamp("source_published_at"),
+  sourceUpdatedAt: timestamp("source_updated_at"),
+
+B) Add new tables:
+
+1) competitions
+- id (uuid string)
+- name unique
+- slug unique
+- goalserveCompetitionId text unique
+- type text default "league"
+- country text optional
+- createdAt timestamp defaultNow
+
+2) articleCompetitions junction
+- articleId FK -> articles.id (notNull)
+- competitionId FK -> competitions.id (notNull)
+- add indexes on articleId and competitionId
+
+3) articlePlayers junction
+- articleId FK -> articles.id (notNull)
+- playerId FK -> players.id (notNull)
+- add indexes on articleId and playerId
+
+4) playerTeamMemberships
+- playerId FK -> players.id (notNull)
+- teamId FK -> teams.id (notNull)
+- startDate timestamp nullable
+- endDate timestamp nullable
+- isLoan boolean default false
+- source text default "goalserve"
+- createdAt timestamp defaultNow
+- indexes on playerId, teamId, endDate
+
+5) providerTagMap
+- provider text notNull
+- providerTagId text notNull
+- entityType text notNull
+- entityId varchar notNull
+- createdAt timestamp defaultNow
+- indexes on provider, providerTagId, (entityType, entityId)
+
+6) articleEntityOverrides
+- articleId FK -> articles.id (notNull)
+- entityType text notNull
+- entityId varchar notNull
+- action text notNull
+- note text nullable
+- createdBy varchar nullable
+- createdAt timestamp defaultNow
+- indexes on articleId, (entityType, entityId)
+
+C) Update relations minimally:
+
+- articlesRelations: add
+  competitions: many(articleCompetitions),
+  players: many(articlePlayers),
+
+- Add competitionsRelations (minimal, optional):
+  articles: many(articleCompetitions)
+
+Do NOT change teamsRelations or playersRelations yet.
+
+After making changes, provide:
+- The diff for shared/schema.ts
+- A quick note of where you inserted the new blocks.

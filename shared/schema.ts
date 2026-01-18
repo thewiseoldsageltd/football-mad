@@ -19,6 +19,7 @@ export const teams = pgTable("teams", {
   founded: integer("founded"),
   manager: text("manager"),
   league: text("league").default("Premier League"),
+  goalserveTeamId: text("goalserve_team_id").unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -50,6 +51,7 @@ export const players = pgTable("players", {
   age: integer("age"),
   imageUrl: text("image_url"),
   marketValue: text("market_value"),
+  goalservePlayerId: text("goalserve_player_id").unique(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -86,6 +88,11 @@ export const articles = pgTable("articles", {
   publishedAt: timestamp("published_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  source: text("source").default("editorial"),
+  sourceId: text("source_id"),
+  sourceVersion: text("source_version"),
+  sourcePublishedAt: timestamp("source_published_at"),
+  sourceUpdatedAt: timestamp("source_updated_at"),
 }, (table) => [
   index("articles_published_at_idx").on(table.publishedAt),
   index("articles_category_idx").on(table.category),
@@ -96,6 +103,8 @@ export const articles = pgTable("articles", {
 export const articlesRelations = relations(articles, ({ many }) => ({
   teams: many(articleTeams),
   comments: many(comments),
+  competitions: many(articleCompetitions),
+  players: many(articlePlayers),
 }));
 
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
@@ -113,6 +122,119 @@ export const articleTeamsRelations = relations(articleTeams, ({ one }) => ({
   article: one(articles, { fields: [articleTeams.articleId], references: [articles.id] }),
   team: one(teams, { fields: [articleTeams.teamId], references: [teams.id] }),
 }));
+
+// ============ COMPETITIONS ============
+export const competitions = pgTable("competitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  goalserveCompetitionId: text("goalserve_competition_id").unique(),
+  type: text("type").default("league"),
+  country: text("country"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const competitionsRelations = relations(competitions, ({ many }) => ({
+  articles: many(articleCompetitions),
+}));
+
+export const insertCompetitionSchema = createInsertSchema(competitions).omit({ id: true, createdAt: true });
+export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
+export type Competition = typeof competitions.$inferSelect;
+
+// ============ ARTICLE-COMPETITIONS JUNCTION ============
+export const articleCompetitions = pgTable("article_competitions", {
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  competitionId: varchar("competition_id").references(() => competitions.id).notNull(),
+}, (table) => [
+  index("article_competitions_article_idx").on(table.articleId),
+  index("article_competitions_competition_idx").on(table.competitionId),
+]);
+
+export const articleCompetitionsRelations = relations(articleCompetitions, ({ one }) => ({
+  article: one(articles, { fields: [articleCompetitions.articleId], references: [articles.id] }),
+  competition: one(competitions, { fields: [articleCompetitions.competitionId], references: [competitions.id] }),
+}));
+
+// ============ ARTICLE-PLAYERS JUNCTION ============
+export const articlePlayers = pgTable("article_players", {
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  playerId: varchar("player_id").references(() => players.id).notNull(),
+}, (table) => [
+  index("article_players_article_idx").on(table.articleId),
+  index("article_players_player_idx").on(table.playerId),
+]);
+
+export const articlePlayersRelations = relations(articlePlayers, ({ one }) => ({
+  article: one(articles, { fields: [articlePlayers.articleId], references: [articles.id] }),
+  player: one(players, { fields: [articlePlayers.playerId], references: [players.id] }),
+}));
+
+// ============ PLAYER-TEAM MEMBERSHIPS ============
+export const playerTeamMemberships = pgTable("player_team_memberships", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id).notNull(),
+  teamId: varchar("team_id").references(() => teams.id).notNull(),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  isLoan: boolean("is_loan").default(false),
+  source: text("source").default("goalserve"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("player_memberships_player_idx").on(table.playerId),
+  index("player_memberships_team_idx").on(table.teamId),
+  index("player_memberships_end_date_idx").on(table.endDate),
+]);
+
+export const playerTeamMembershipsRelations = relations(playerTeamMemberships, ({ one }) => ({
+  player: one(players, { fields: [playerTeamMemberships.playerId], references: [players.id] }),
+  team: one(teams, { fields: [playerTeamMemberships.teamId], references: [teams.id] }),
+}));
+
+export const insertPlayerTeamMembershipSchema = createInsertSchema(playerTeamMemberships).omit({ id: true, createdAt: true });
+export type InsertPlayerTeamMembership = z.infer<typeof insertPlayerTeamMembershipSchema>;
+export type PlayerTeamMembership = typeof playerTeamMemberships.$inferSelect;
+
+// ============ PROVIDER TAG MAP ============
+export const providerTagMap = pgTable("provider_tag_map", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: text("provider").notNull(),
+  providerTagId: text("provider_tag_id").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("provider_tag_provider_idx").on(table.provider),
+  index("provider_tag_provider_tag_idx").on(table.providerTagId),
+  index("provider_tag_entity_idx").on(table.entityType, table.entityId),
+]);
+
+export const insertProviderTagMapSchema = createInsertSchema(providerTagMap).omit({ id: true, createdAt: true });
+export type InsertProviderTagMap = z.infer<typeof insertProviderTagMapSchema>;
+export type ProviderTagMap = typeof providerTagMap.$inferSelect;
+
+// ============ ARTICLE ENTITY OVERRIDES ============
+export const articleEntityOverrides = pgTable("article_entity_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: varchar("entity_id").notNull(),
+  action: text("action").notNull(),
+  note: text("note"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("article_overrides_article_idx").on(table.articleId),
+  index("article_overrides_entity_idx").on(table.entityType, table.entityId),
+]);
+
+export const articleEntityOverridesRelations = relations(articleEntityOverrides, ({ one }) => ({
+  article: one(articles, { fields: [articleEntityOverrides.articleId], references: [articles.id] }),
+}));
+
+export const insertArticleEntityOverrideSchema = createInsertSchema(articleEntityOverrides).omit({ id: true, createdAt: true });
+export type InsertArticleEntityOverride = z.infer<typeof insertArticleEntityOverrideSchema>;
+export type ArticleEntityOverride = typeof articleEntityOverrides.$inferSelect;
 
 // ============ MATCHES ============
 export const matches = pgTable("matches", {
