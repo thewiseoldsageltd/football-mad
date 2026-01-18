@@ -6,6 +6,7 @@ import { newsFiltersSchema } from "@shared/schema";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
+import { requireJobSecret } from "./jobs/requireJobSecret";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -612,6 +613,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("[Team Metadata Sync] Error:", error);
       res.status(500).json({ error: "Sync failed" });
     }
+  });
+
+  // ========== GOALSERVE SYNC (Server Jobs) ==========
+  app.post("/api/jobs/sync-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    res.json({ ok: true, message: "Goalserve sync stub" });
+  });
+
+  // ========== PA MEDIA INGEST (Server Jobs) ==========
+  app.post("/api/jobs/ingest-pamedia", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
+    res.json({ ok: true, message: "PA Media ingest stub" });
   });
 
   // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
