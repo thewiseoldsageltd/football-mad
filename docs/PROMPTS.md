@@ -1035,3 +1035,27 @@ After creating, show me the full contents of server/jobs/sync-goalserve-competit
 
 ---
 
+Modify server/routes.ts.
+
+Add a new job endpoint near the existing Goalserve jobs section:
+
+POST /api/jobs/sync-goalserve-competitions
+
+Middleware:
+- requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+Handler behavior:
+- Import syncGoalserveCompetitions from server/jobs/sync-goalserve-competitions
+- Call the function
+- Return the result as JSON
+
+Rules:
+- Do NOT remove or reorder existing routes
+- Keep file organization consistent
+- Only add what is necessary
+
+After editing:
+- Show me a diff of server/routes.ts
+- Start the server briefly to confirm it boots without runtime errors
+
+---
