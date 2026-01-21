@@ -8,11 +8,11 @@ export async function testGoalserveConnection(): Promise<{
   error?: string;
 }> {
   try {
-    const response = await goalserveFetch("scores");
+    const response = await goalserveFetch("soccernew/home");
     
     return {
       ok: true,
-      feed: "soccer/scores",
+      feed: "soccernew/home",
       receivedAt: new Date().toISOString(),
       topLevelKeys: Object.keys(response),
     };

@@ -1004,3 +1004,15 @@ After updating, show the full contents of client.ts.
 
 ---
 
+Update server/jobs/test-goalserve.ts:
+
+- Change the fetch call from goalserveFetch("scores") to:
+  goalserveFetch("soccernew/home")
+
+- Update the returned feed string to "soccernew/home"
+
+Do not modify anything else.
+After updating, show the full contents of server/jobs/test-goalserve.ts
+
+---
+
