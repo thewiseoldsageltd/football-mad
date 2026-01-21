@@ -909,3 +909,28 @@ Provide immediate feedback and improve conversion UX.
 
 ---
 
+# DAY 7 — FULL PROMPT LOG
+
+Create a new file at server/integrations/goalserve/client.ts
+
+Requirements:
+- Read GOALSERVE_FEED_KEY from process.env
+- Base URL must be: https://www.goalserve.com/getfeed/
+- Export:
+  async function goalserveFetch(feedPath: string): Promise<any>
+
+Behavior:
+- Construct URL as:
+  https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/soccer/${feedPath}?json=1
+- Log the final URL with the key REDACTED (replace the key portion with "***")
+- Fetch the URL
+- If response status is not 200, throw an Error including status code
+- Parse JSON and return it
+- Do NOT write to database
+- Do NOT modify any other files
+
+After creating the file:
+- Show the full contents of client.ts
+
+---
+

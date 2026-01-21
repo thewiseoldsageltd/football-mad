@@ -388,3 +388,19 @@ Status:
 
 ---
 
+# DAY 7 – BUILD LOG
+
+## Goalserve API Foundation Layer
+
+Goalserve (API)
+   ↓
+goalserveFetch()        ← ✅ DONE (pure fetch client)
+   ↓
+Normalisers / Parsers   ← NEXT
+   ↓
+Upserts into DB         ← AFTER
+   ↓
+Article/entity linking  ← LATER
+
+---
+
