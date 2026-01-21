@@ -7,6 +7,7 @@ import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
 import { requireJobSecret } from "./jobs/requireJobSecret";
+import { testGoalserveConnection } from "./jobs/test-goalserve";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -623,6 +624,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== PA MEDIA INGEST (Server Jobs) ==========
   app.post("/api/jobs/ingest-pamedia", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
     res.json({ ok: true, message: "PA Media ingest stub" });
+  });
+
+  // ========== GOALSERVE CONNECTION TEST ==========
+  app.post("/api/jobs/test-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    const result = await testGoalserveConnection();
+    res.json(result);
   });
 
   // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
