@@ -1016,3 +1016,22 @@ After updating, show the full contents of server/jobs/test-goalserve.ts
 
 ---
 
+Create a new job file at server/jobs/sync-goalserve-competitions.ts.
+
+It must export:
+export async function syncGoalserveCompetitions(): Promise<{ ok: boolean; upserted: number; error?: string; sample?: any }>
+
+Behavior:
+- Use goalserveFetch from server/integrations/goalserve/client
+- Fetch the Goalserve soccer competitions list feed (use the same “family” as the working test feed you confirmed)
+- Parse out competitions into a normalized array of:
+  { goalserveCompetitionId: string, name: string, country?: string, type?: string }
+- Upsert into the competitions table (Drizzle) matching on goalserveCompetitionId
+- Return { ok: true, upserted } on success
+- On failure return { ok: false, upserted: 0, error, sample } where sample is the first 300 chars or first object seen (no secrets)
+
+Do not modify any existing files yet. Only create this new file.
+After creating, show me the full contents of server/jobs/sync-goalserve-competitions.ts.
+
+---
+
