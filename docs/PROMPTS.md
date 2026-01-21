@@ -1124,4 +1124,31 @@ Then re-run the curl to POST /api/jobs/sync-goalserve-competitions (using localh
 
 ---
 
+Update server/jobs/sync-goalserve-competitions.ts to avoid the unique constraint error on competitions.name.
+
+Rules:
+
+When inserting/updating, compute:
+
+displayName = comp.name
+
+If comp.country exists, set displayName = \${comp.name} (${comp.country})``
+
+Else set displayName = \${comp.name} [${comp.goalserveCompetitionId}]``
+
+Use displayName for:
+
+competitions.name
+
+slugify(displayName) for competitions.slug
+
+Keep goalserveCompetitionId as the true identity key (matching logic stays the same).
+
+Do not change any other files.
+
+After editing, show the full updated file contents.
+Then re-run the curl test and show the JSON response.
+
+---
+
 

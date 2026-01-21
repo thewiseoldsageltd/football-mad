@@ -10,6 +10,13 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function computeDisplayName(name: string, country?: string, goalserveCompetitionId?: string): string {
+  if (country) {
+    return `${name} (${country}) [${goalserveCompetitionId}]`;
+  }
+  return `${name} [${goalserveCompetitionId}]`;
+}
+
 interface NormalizedCompetition {
   goalserveCompetitionId: string;
   name: string;
@@ -86,6 +93,8 @@ export async function syncGoalserveCompetitions(): Promise<{
 
     let upserted = 0;
     for (const comp of deduped) {
+      const displayName = computeDisplayName(comp.name, comp.country, comp.goalserveCompetitionId);
+      
       const existing = await db
         .select()
         .from(competitions)
@@ -96,15 +105,16 @@ export async function syncGoalserveCompetitions(): Promise<{
         await db
           .update(competitions)
           .set({
-            name: comp.name,
+            name: displayName,
+            slug: slugify(displayName),
             country: comp.country,
             type: comp.type,
           })
           .where(eq(competitions.goalserveCompetitionId, comp.goalserveCompetitionId));
       } else {
         await db.insert(competitions).values({
-          name: comp.name,
-          slug: slugify(comp.name),
+          name: displayName,
+          slug: slugify(displayName),
           goalserveCompetitionId: comp.goalserveCompetitionId,
           country: comp.country,
           type: comp.type,
