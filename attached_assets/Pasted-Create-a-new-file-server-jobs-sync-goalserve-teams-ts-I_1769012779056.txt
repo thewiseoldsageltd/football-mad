@@ -1,0 +1,57 @@
+Create a new file: server/jobs/sync-goalserve-teams.ts
+
+It must export:
+export async function syncGoalserveTeams(leagueId: string): Promise<{
+  ok: boolean;
+  leagueId: string;
+  goalserveTeams: number;
+  matched: number;
+  updated: number;
+  unmatchedSample: { id: string; name: string }[];
+  error?: string;
+}>
+
+Behavior:
+- Fetch Goalserve: goalserveFetch(`soccerleague/${leagueId}`)
+- Extract Goalserve teams from response.league.team (handle array OR single object)
+- For each Goalserve team, read:
+  - goalserveTeamId = String(team["@id"] ?? team.id)
+  - name = String(team["@name"] ?? team.name ?? "")
+- Load DB teams: select id, name, slug, shortName, goalserveTeamId from teams
+- Build matching strategy in this order:
+  1) If a DB team already has goalserveTeamId equal to the Goalserve id => match it
+  2) Else match by slug using slugify(goalserveName) == db.slug
+  3) Else match by case-insensitive name equality (db.name == goalserveName)
+  4) Else match by case-insensitive shortName against known abbreviations derived from goalserveName:
+     - Take first 3 letters of each word joined, e.g. "Manchester City" => "MCI"
+     - Also take first 3 letters of the whole name with spaces removed
+- When matched:
+  - If db.goalserveTeamId is missing or different, update teams.goalserveTeamId to the Goalserve id
+  - Count updated only when an UPDATE happens
+- Collect unmatched goalserve teams (id+name) and return the first 15 as unmatchedSample
+- Do NOT log or return any secrets
+
+Also update server/routes.ts:
+
+1) Add an import near the other job imports:
+import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
+
+2) Add a new endpoint near the existing Goalserve job routes (keep organization consistent):
+
+// ========== GOALSERVE TEAMS SYNC ==========
+app.post(
+  "/api/jobs/sync-goalserve-teams",
+  requireJobSecret("GOALSERVE_SYNC_SECRET"),
+  async (req, res) => {
+    const leagueId = String(req.query.leagueId || "1204");
+    const result = await syncGoalserveTeams(leagueId);
+    res.json(result);
+  }
+);
+
+Do NOT remove or reorder existing routes.
+
+After edits:
+- show full contents of server/jobs/sync-goalserve-teams.ts
+- show a diff of server/routes.ts
+- run npm run dev briefly to ensure server boots (stop after it starts)
