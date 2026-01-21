@@ -10,6 +10,42 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+interface NormalizedCompetition {
+  goalserveCompetitionId: string;
+  name: string;
+  country?: string;
+  type?: string;
+}
+
+function extractLeagues(obj: any, results: NormalizedCompetition[], visited = new WeakSet()): void {
+  if (!obj || typeof obj !== "object") return;
+  if (visited.has(obj)) return;
+  visited.add(obj);
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      extractLeagues(item, results, visited);
+    }
+    return;
+  }
+
+  const id = obj.id ?? obj.league_id ?? obj.competition_id;
+  const name = obj.name ?? obj.league_name ?? obj.competition_name;
+
+  if (id && name && typeof name === "string") {
+    results.push({
+      goalserveCompetitionId: String(id),
+      name: name,
+      country: obj.country ?? obj.country_name ?? undefined,
+      type: obj.type ?? "league",
+    });
+  }
+
+  for (const key of Object.keys(obj)) {
+    extractLeagues(obj[key], results, visited);
+  }
+}
+
 export async function syncGoalserveCompetitions(): Promise<{
   ok: boolean;
   upserted: number;
@@ -17,40 +53,29 @@ export async function syncGoalserveCompetitions(): Promise<{
   sample?: any;
 }> {
   try {
-    const response = await goalserveFetch("soccernew/league_list");
+    const response = await goalserveFetch("soccerfixtures/data/mapping");
     
-    const normalized: {
-      goalserveCompetitionId: string;
-      name: string;
-      country?: string;
-      type?: string;
-    }[] = [];
+    const normalized: NormalizedCompetition[] = [];
+    extractLeagues(response, normalized);
 
-    const leagues = response?.leagues?.league;
-    if (!leagues) {
+    const seen = new Set<string>();
+    const deduped = normalized.filter((c) => {
+      if (seen.has(c.goalserveCompetitionId)) return false;
+      seen.add(c.goalserveCompetitionId);
+      return true;
+    });
+
+    if (deduped.length === 0) {
       return {
         ok: false,
         upserted: 0,
         error: "No leagues found in response",
-        sample: JSON.stringify(response).slice(0, 300),
+        sample: JSON.stringify(Object.keys(response || {})).slice(0, 300),
       };
     }
 
-    const leagueArray = Array.isArray(leagues) ? leagues : [leagues];
-    
-    for (const league of leagueArray) {
-      if (league?.id && league?.name) {
-        normalized.push({
-          goalserveCompetitionId: String(league.id),
-          name: league.name,
-          country: league.country || undefined,
-          type: league.type || "league",
-        });
-      }
-    }
-
     let upserted = 0;
-    for (const comp of normalized) {
+    for (const comp of deduped) {
       const existing = await db
         .select()
         .from(competitions)

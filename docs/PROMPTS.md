@@ -1081,3 +1081,25 @@ After editing:
 
 ---
 
+Update server/jobs/sync-goalserve-competitions.ts to fetch competitions from Goalserve using the endpoint:
+
+soccerfixtures/data/mapping
+
+(replace the old soccernew/league_list call)
+
+Then update the parsing logic to be robust to different JSON shapes:
+- Traverse the response and collect any objects that look like leagues (have an id and a name, or league_id and league_name)
+- Normalize into { goalserveCompetitionId, name, country?, type? }
+- Upsert into competitions by competitions.goalserveCompetitionId (same as before)
+- Keep slugify behavior for inserts
+
+Make sure NO secrets are logged.
+
+After changes:
+1) show the full contents of server/jobs/sync-goalserve-competitions.ts
+2) run npm run dev briefly to ensure server boots
+Do not change any other files.
+
+---
+
+
