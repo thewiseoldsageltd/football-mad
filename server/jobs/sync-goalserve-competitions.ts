@@ -29,14 +29,24 @@ function extractLeagues(obj: any, results: NormalizedCompetition[], visited = ne
     return;
   }
 
-  const id = obj.id ?? obj.league_id ?? obj.competition_id;
-  const name = obj.name ?? obj.league_name ?? obj.competition_name;
+  const attrs = obj.$ || {};
+  
+  const id = obj.id ?? obj.league_id ?? obj.competition_id ??
+             obj["@id"] ?? obj["@league_id"] ?? obj["@competition_id"] ??
+             attrs.id ?? attrs.league_id ?? attrs.competition_id;
+             
+  const name = obj.name ?? obj.league_name ?? obj.competition_name ??
+               obj["@name"] ?? obj["@league_name"] ?? obj["@competition_name"] ??
+               attrs.name ?? attrs.league_name ?? attrs.competition_name;
+               
+  const country = obj.country ?? obj.country_name ??
+                  obj["@country"] ?? attrs.country;
 
   if (id && name && typeof name === "string") {
     results.push({
       goalserveCompetitionId: String(id),
       name: name,
-      country: obj.country ?? obj.country_name ?? undefined,
+      country: country ?? undefined,
       type: obj.type ?? "league",
     });
   }
@@ -70,7 +80,7 @@ export async function syncGoalserveCompetitions(): Promise<{
         ok: false,
         upserted: 0,
         error: "No leagues found in response",
-        sample: JSON.stringify(Object.keys(response || {})).slice(0, 300),
+        sample: JSON.stringify(response?.fixtures).slice(0, 500),
       };
     }
 

@@ -1102,4 +1102,26 @@ Do not change any other files.
 
 ---
 
+Update server/jobs/sync-goalserve-competitions.ts so extractLeagues() can read XML-to-JSON attribute shapes.
+
+Specifically:
+
+When looking for an id, also accept: obj["@id"], obj["@league_id"], obj["@competition_id"], and obj.$?.id, obj.$?.league_id, obj.$?.competition_id
+
+When looking for a name, also accept: obj["@name"], obj["@league_name"], obj["@competition_name"], and obj.$?.name, obj.$?.league_name, obj.$?.competition_name
+
+For country, also accept obj["@country"] and obj.$?.country
+
+Keep the recursive traversal and dedupe logic exactly as-is.
+
+Also improve the “No leagues found” return so sample includes a preview of the fixtures structure:
+
+sample: JSON.stringify(response?.fixtures).slice(0, 500)
+
+Do not modify any other files.
+After editing, show the full updated contents of server/jobs/sync-goalserve-competitions.ts.
+Then re-run the curl to POST /api/jobs/sync-goalserve-competitions (using localhost:5000) and show the JSON response.
+
+---
+
 
