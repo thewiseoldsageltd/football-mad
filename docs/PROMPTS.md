@@ -1211,4 +1211,79 @@ After edits:
 
 ---
 
+psql "$DATABASE_URL" -c "
+update teams set goalserve_team_id = '9260'
+where slug = 'manchester-united';
+"
+
+---
+
+psql "$DATABASE_URL" -c "
+update teams set goalserve_team_id = '9297'
+where slug = 'nottingham-forest';
+"
+
+---
+
+PROMPT 3 — Sync Goalserve Players (Premier League)
+
+Create a new file at: server/jobs/sync-goalserve-players.ts
+
+It must:
+
+Fetch soccerleague/<leagueId> from Goalserve using goalserveFetch
+
+Extract each team’s squad players
+
+For each player, attempt to match to an existing DB player by:
+
+player.teamId (must match the correct club in DB via the team’s goalserve_team_id)
+
+and either:
+
+exact case-insensitive name match, OR
+
+slug match (use the same slugify rules used elsewhere)
+
+If matched and players.goalservePlayerId is empty or different, update it.
+
+Return JSON summary:
+
+{
+  ok: boolean,
+  leagueId: string,
+  goalservePlayers: number,
+  matched: number,
+  updated: number,
+  unmatchedSample: { teamName: string; goalserveTeamId: string; playerId: string; playerName: string }[],
+  error?: string
+}
+
+
+Do not log secrets. Do not dump full payloads.
+
+Modify server/routes.ts:
+
+Add import:
+import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
+
+Add endpoint near the other Goalserve jobs:
+POST /api/jobs/sync-goalserve-players
+
+middleware: requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+reads leagueId from query string default "1204"
+
+returns await syncGoalservePlayers(leagueId)
+
+After changes:
+
+show full contents of server/jobs/sync-goalserve-players.ts
+
+show diff of server/routes.ts
+
+confirm server boots (npm run dev starts)
+
+---
+
 

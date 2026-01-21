@@ -10,6 +10,7 @@ import { requireJobSecret } from "./jobs/requireJobSecret";
 import { testGoalserveConnection } from "./jobs/test-goalserve";
 import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
+import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -647,6 +648,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const leagueId = String(req.query.leagueId || "1204");
       const result = await syncGoalserveTeams(leagueId);
+      res.json(result);
+    }
+  );
+
+  // ========== GOALSERVE PLAYERS SYNC ==========
+  app.post(
+    "/api/jobs/sync-goalserve-players",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = String(req.query.leagueId || "1204");
+      const result = await syncGoalservePlayers(leagueId);
       res.json(result);
     }
   );
