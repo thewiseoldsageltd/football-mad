@@ -1059,3 +1059,25 @@ After editing:
 - Start the server briefly to confirm it boots without runtime errors
 
 ---
+
+Modify server/integrations/goalserve/client.ts to correctly handle gzipped responses.
+
+Requirements:
+- Add request headers:
+  - "Accept-Encoding": "identity"
+  - "User-Agent": "FootballMad/1.0"
+- Read the response body as raw bytes (arrayBuffer), not response.text()
+- If the first two bytes are gzip (0x1f, 0x8b), gunzip it using node:zlib
+- Convert the resulting bytes to a UTF-8 string
+- For non-200 responses:
+  - throw Error including status and the first 300 chars of the decoded body (trimmed)
+- For 200 responses:
+  - attempt JSON.parse(decodedText)
+  - on parse error, throw Error showing first 300 chars of decodedText
+- Do not log the feed key, keep the redacted URL logging
+
+After editing:
+- show full updated contents of server/integrations/goalserve/client.ts
+
+---
+
