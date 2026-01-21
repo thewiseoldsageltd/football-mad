@@ -934,3 +934,26 @@ After creating the file:
 
 ---
 
+Modify server/routes.ts ONLY.
+
+1) Add an import at the top:
+import { testGoalserveConnection } from "./jobs/test-goalserve";
+
+2) Inside registerRoutes(), near the existing "Server Jobs" section,
+add a new route:
+
+POST /api/jobs/test-goalserve
+
+- Middleware: requireJobSecret("GOALSERVE_SYNC_SECRET")
+- Handler:
+  - Call await testGoalserveConnection()
+  - Return the result as JSON
+
+3) Do NOT remove, reorder, or change any existing routes.
+
+After making the change:
+- Show ONLY the diff for server/routes.ts
+- Run npm run dev briefly and confirm the server starts
+
+---
+
