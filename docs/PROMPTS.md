@@ -957,3 +957,50 @@ After making the change:
 
 ---
 
+Update server/integrations/goalserve/client.ts to handle non-JSON responses safely.
+
+Changes required:
+1) After fetching, read the body as text first:
+   const text = await response.text();
+
+2) If response.status is not 200:
+   - throw an Error that includes:
+     - status code
+     - first 300 chars of text (trimmed)
+   - Do NOT include the full URL with key
+
+3) Attempt to parse JSON:
+   - try { return JSON.parse(text); }
+   - catch:
+       throw new Error(
+         "Goalserve returned non-JSON or invalid JSON. First 300 chars: " + text.slice(0,300)
+       )
+
+4) Keep the existing redacted URL log.
+5) Do not modify other files.
+
+After update:
+- show the full contents of client.ts
+
+---
+
+Update server/integrations/goalserve/client.ts to stop hardcoding "/soccer/".
+
+New required behavior:
+- goalserveFetch(feedPath: string) should build:
+  https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/${feedPath}
+- feedPath might include query params already.
+- Always ensure json=1 is present:
+  - If feedPath already contains "?", append "&json=1"
+  - Otherwise append "?json=1"
+
+Also:
+- Keep redacted logging (replace the key with "***")
+- Keep the existing "read as text then JSON.parse()" logic and helpful error snippet
+- Throw clear error if GOALSERVE_FEED_KEY missing
+- Do not modify other files
+
+After updating, show the full contents of client.ts.
+
+---
+

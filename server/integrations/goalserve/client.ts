@@ -7,7 +7,8 @@ export async function goalserveFetch(feedPath: string): Promise<any> {
     throw new Error("GOALSERVE_FEED_KEY is not configured");
   }
   
-  const url = `${GOALSERVE_BASE_URL}${feedKey}/soccer/${feedPath}?json=1`;
+  const jsonParam = feedPath.includes("?") ? "&json=1" : "?json=1";
+  const url = `${GOALSERVE_BASE_URL}${feedKey}/${feedPath}${jsonParam}`;
   const redactedUrl = url.replace(feedKey, "***");
   
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
