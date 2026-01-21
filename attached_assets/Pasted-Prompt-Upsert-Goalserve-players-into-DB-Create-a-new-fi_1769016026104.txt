@@ -1,0 +1,72 @@
+Prompt: Upsert Goalserve players into DB
+
+Create a new file at: server/jobs/upsert-goalserve-players.ts
+
+Requirements:
+
+Use goalserveFetch from server/integrations/goalserve/client
+
+Use db from server/db
+
+Use players and teams from @shared/schema
+
+Use drizzle eq from drizzle-orm
+
+Function to export:
+export async function upsertGoalservePlayers(leagueId: string): Promise<{ ok: boolean; leagueId: string; totalFromGoalserve: number; inserted: number; updated: number; skippedNoTeamMapping: number; error?: string; sample?: any }>
+
+Behavior:
+
+Fetch Goalserve feed: soccerleague/${leagueId}
+
+Parse response.league.team (array or single)
+
+For each team, read team["@id"] as goalserveTeamId, and team.squad.player (array or single)
+
+For each player, read:
+
+player id from player["@id"]
+
+player name from player["@name"]
+
+Find the DB team by teams.goalserveTeamId == goalserveTeamId.
+
+If not found, increment skippedNoTeamMapping and continue.
+
+Upsert into players:
+
+First look up by players.goalservePlayerId == goalservePlayerId
+
+If found: update name, slug, teamId, goalservePlayerId
+
+If not found: insert new row with at least name, slug, teamId, goalservePlayerId
+
+Slugify should be simple: lowercase, replace non-alphanumerics with -, trim -
+
+Do NOT log secrets or full responses.
+
+Return totals. On error return { ok:false, ... } and include a small sample string with first ~300 chars of the error.
+
+Then modify server/routes.ts:
+
+Add import near existing Goalserve jobs:
+import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
+
+Add a new endpoint near the other Goalserve job endpoints (keep organization):
+POST /api/jobs/upsert-goalserve-players
+
+middleware: requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+reads leagueId from req.query.leagueId default "1204"
+
+calls upsertGoalservePlayers(leagueId) and returns JSON result
+
+Do NOT remove or reorder existing routes.
+
+After edits:
+
+show full contents of server/jobs/upsert-goalserve-players.ts
+
+show a diff of server/routes.ts
+
+run npm run dev briefly to ensure server boots (stop after it starts)

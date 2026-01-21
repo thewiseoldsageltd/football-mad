@@ -11,6 +11,7 @@ import { testGoalserveConnection } from "./jobs/test-goalserve";
 import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
+import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -659,6 +660,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const leagueId = String(req.query.leagueId || "1204");
       const result = await syncGoalservePlayers(leagueId);
+      res.json(result);
+    }
+  );
+
+  // ========== GOALSERVE PLAYERS UPSERT ==========
+  app.post(
+    "/api/jobs/upsert-goalserve-players",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = String(req.query.leagueId || "1204");
+      const result = await upsertGoalservePlayers(leagueId);
       res.json(result);
     }
   );
