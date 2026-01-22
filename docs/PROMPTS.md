@@ -1836,3 +1836,31 @@ Fixtures that are not Premier League games should no longer display a “Premier
 
 ---
 
+Fix Goalserve match ingestion so `matches.competition` is set using our `competitions` table rather than the soccernew feed label.
+
+Context:
+- Competitions are already synced into the DB (991 rows).
+- In `server/jobs/upsert-goalserve-matches.ts`, we currently set `competition` from `cat["@name"]`, but it’s incorrectly coming through as "Premier League" for many non-PL matches.
+- The soccernew feed categories include a competition id in `cat["@id"]`.
+
+Task:
+1) In `server/jobs/upsert-goalserve-matches.ts`, load a lookup map before looping:
+   - Query the competitions table and build `Map<string, string>` from `goalserveCompetitionId -> name`.
+2) When building the match payload:
+   - Extract `competitionId = String(cat?.["@id"] ?? cat?.id ?? "")`
+   - Set `competitionName = competitionsMap.get(competitionId) || String(cat?.["@name"] ?? cat?.name ?? "Unknown")`
+   - Use `competition: competitionName`
+   - Keep also storing `goalserveCompetitionId: competitionId || null` (already present)
+3) Do not change any routes or frontend code.
+
+After applying, run:
+curl -sS -X POST "http://localhost:5000/api/jobs/upsert-goalserve-matches?feed=soccernew/home" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET"
+
+Then verify:
+curl -sS "http://localhost:5000/api/matches/fixtures?days=7" | head -c 1200
+
+Expected:
+Non-Prem matches should show their real competition name (not "Premier League").
+
+---
+

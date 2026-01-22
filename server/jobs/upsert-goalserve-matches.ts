@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { matches, teams } from "@shared/schema";
+import { matches, teams, competitions } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
 
@@ -99,6 +99,20 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       }
     }
 
+    const dbCompetitions = await db
+      .select({
+        goalserveCompetitionId: competitions.goalserveCompetitionId,
+        name: competitions.name,
+      })
+      .from(competitions);
+
+    const competitionsMap = new Map<string, string>();
+    for (const comp of dbCompetitions) {
+      if (comp.goalserveCompetitionId) {
+        competitionsMap.set(comp.goalserveCompetitionId, comp.name);
+      }
+    }
+
     const categoryData = response.scores.category;
     const categories = Array.isArray(categoryData) ? categoryData : [categoryData];
 
@@ -114,6 +128,9 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       if (!category?.matches?.match) continue;
 
       const categoryFormattedDate = category.matches["@formatted_date"] ?? category.matches.formatted_date ?? "";
+      
+      const competitionId = String(category?.["@id"] ?? category?.id ?? "");
+      const competitionName = competitionsMap.get(competitionId) || String(category?.["@name"] ?? category?.name ?? "Unknown");
 
       const matchData = category.matches.match;
       const matchList = Array.isArray(matchData) ? matchData : [matchData];
@@ -188,6 +205,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               awayTeamId,
               homeScore: homeScore != null && homeScore !== "" ? parseInt(String(homeScore), 10) : null,
               awayScore: awayScore != null && awayScore !== "" ? parseInt(String(awayScore), 10) : null,
+              competition: competitionName,
               status,
               kickoffTime,
               venue: venue || null,
@@ -206,6 +224,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             awayTeamId,
             homeScore: homeScore != null && homeScore !== "" ? parseInt(String(homeScore), 10) : null,
             awayScore: awayScore != null && awayScore !== "" ? parseInt(String(awayScore), 10) : null,
+            competition: competitionName,
             status,
             kickoffTime,
             venue: venue || null,
