@@ -1686,6 +1686,59 @@ Job behavior:
 - curl command to run the upsert job
 - psql verification query to show top 10 ordered by position.
 
+---
+
+We now have:
+- matches table ingesting global matches
+- standings table for PL
+
+Next: implement read endpoints to power the UI tabs using the matches table only (no Goalserve calls).
+
+Add these endpoints in server/routes.ts:
+
+1) GET /api/matches/fixtures?days=7&competitionId=&teamId=
+- Default days=7
+- Return matches with status='scheduled' AND kickoff_time between now and now + days
+- If competitionId is provided, filter matches.goalserveCompetitionId = competitionId (or the correct column name)
+- If teamId is provided, include matches where homeTeamId=teamId OR awayTeamId=teamId
+- Order by kickoff_time asc
+- Limit 200 (configurable)
+
+2) GET /api/matches/results?days=7&competitionId=&teamId=
+- Default days=7
+- Return matches with status='finished' OR (homeScore not null AND awayScore not null AND kickoff_time < now)
+- Filter by competitionId/teamId same as above
+- kickoff_time between now - days and now
+- Order by kickoff_time desc
+- Limit 200
+
+3) GET /api/matches/live?competitionId=&teamId=
+- Return matches with status='live'
+- Filter by competitionId/teamId same as above
+- Order by kickoff_time asc
+
+Response shape:
+Return an array of objects containing:
+{
+  id,
+  slug,
+  kickoffTime,
+  status,
+  homeScore,
+  awayScore,
+  venue,
+  goalserveMatchId,
+  homeTeam: { id, name, slug } OR if homeTeamId is null include { goalserveTeamId, nameFromRaw }
+  awayTeam: { id, name, slug } OR if awayTeamId is null include { goalserveTeamId, nameFromRaw }
+}
+
+Implementation:
+- Use Drizzle ORM and db from server/db
+- Join teams table when homeTeamId/awayTeamId exist
+- If not mapped, read names from matches.timeline/raw (whatever field stores the compact raw match)
+- Keep endpoints public (no job secret)
+
+After implementing, provide curl commands to test each endpoint.
 
 ---
 

@@ -2,7 +2,9 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema } from "@shared/schema";
+import { newsFiltersSchema, matches, teams } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
@@ -212,11 +214,180 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/matches/team/:slug", async (req, res) => {
     try {
-      const matches = await storage.getMatchesByTeam(req.params.slug);
-      res.json(matches);
+      const matchesList = await storage.getMatchesByTeam(req.params.slug);
+      res.json(matchesList);
     } catch (error) {
       console.error("Error fetching matches:", error);
       res.status(500).json({ error: "Failed to fetch matches" });
+    }
+  });
+
+  // ========== MATCHES API (Fixtures, Results, Live) ==========
+  // These must be defined BEFORE /api/matches/:slug to avoid slug matching "fixtures", "results", "live"
+  
+  function formatMatchResponse(match: any, homeTeamData: any, awayTeamData: any) {
+    const timeline = match.timeline as any;
+    return {
+      id: match.id,
+      slug: match.slug,
+      kickoffTime: match.kickoffTime,
+      status: match.status,
+      homeScore: match.homeScore,
+      awayScore: match.awayScore,
+      venue: match.venue,
+      goalserveMatchId: match.goalserveMatchId,
+      homeTeam: match.homeTeamId && homeTeamData
+        ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
+        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: timeline?.home?.name || "Unknown" },
+      awayTeam: match.awayTeamId && awayTeamData
+        ? { id: awayTeamData.id, name: awayTeamData.name, slug: awayTeamData.slug }
+        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: timeline?.away?.name || "Unknown" },
+    };
+  }
+
+  async function fetchTeamMap(teamIds: Set<string>) {
+    if (teamIds.size === 0) return new Map();
+    const teamsData = await db.select({ id: teams.id, name: teams.name, slug: teams.slug })
+      .from(teams)
+      .where(drizzleSql`${teams.id} IN (${drizzleSql.join(Array.from(teamIds).map(id => drizzleSql`${id}`), drizzleSql`, `)})`);
+    return new Map(teamsData.map(t => [t.id, t]));
+  }
+
+  // GET /api/matches/fixtures - scheduled matches in next N days
+  app.get("/api/matches/fixtures", async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 7;
+      const competitionId = req.query.competitionId as string;
+      const teamId = req.query.teamId as string;
+      const limit = Math.min(parseInt(req.query.limit as string) || 200, 200);
+
+      const now = new Date();
+      const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+      const conditions: any[] = [
+        eq(matches.status, "scheduled"),
+        gte(matches.kickoffTime, now),
+        lte(matches.kickoffTime, endDate),
+      ];
+
+      if (competitionId) {
+        conditions.push(eq(matches.competition, competitionId));
+      }
+
+      if (teamId) {
+        conditions.push(or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)));
+      }
+
+      const results = await db.select()
+        .from(matches)
+        .where(and(...conditions))
+        .orderBy(asc(matches.kickoffTime))
+        .limit(limit);
+
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+
+      res.json(formatted);
+    } catch (error) {
+      console.error("Error fetching fixtures:", error);
+      res.status(500).json({ error: "Failed to fetch fixtures" });
+    }
+  });
+
+  // GET /api/matches/results - finished matches in past N days
+  app.get("/api/matches/results", async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 7;
+      const competitionId = req.query.competitionId as string;
+      const teamId = req.query.teamId as string;
+      const limit = Math.min(parseInt(req.query.limit as string) || 200, 200);
+
+      const now = new Date();
+      const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+      const conditions: any[] = [
+        or(
+          eq(matches.status, "finished"),
+          and(
+            drizzleSql`${matches.homeScore} IS NOT NULL`,
+            drizzleSql`${matches.awayScore} IS NOT NULL`,
+            lt(matches.kickoffTime, now)
+          )
+        ),
+        gte(matches.kickoffTime, startDate),
+        lte(matches.kickoffTime, now),
+      ];
+
+      if (competitionId) {
+        conditions.push(eq(matches.competition, competitionId));
+      }
+
+      if (teamId) {
+        conditions.push(or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)));
+      }
+
+      const results = await db.select()
+        .from(matches)
+        .where(and(...conditions))
+        .orderBy(desc(matches.kickoffTime))
+        .limit(limit);
+
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+
+      res.json(formatted);
+    } catch (error) {
+      console.error("Error fetching results:", error);
+      res.status(500).json({ error: "Failed to fetch results" });
+    }
+  });
+
+  // GET /api/matches/live - currently live matches
+  app.get("/api/matches/live", async (req, res) => {
+    try {
+      const competitionId = req.query.competitionId as string;
+      const teamId = req.query.teamId as string;
+
+      const conditions: any[] = [eq(matches.status, "live")];
+
+      if (competitionId) {
+        conditions.push(eq(matches.competition, competitionId));
+      }
+
+      if (teamId) {
+        conditions.push(or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)));
+      }
+
+      const results = await db.select()
+        .from(matches)
+        .where(and(...conditions))
+        .orderBy(asc(matches.kickoffTime));
+
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+
+      res.json(formatted);
+    } catch (error) {
+      console.error("Error fetching live matches:", error);
+      res.status(500).json({ error: "Failed to fetch live matches" });
     }
   });
 
