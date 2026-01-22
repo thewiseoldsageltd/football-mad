@@ -1788,3 +1788,33 @@ After implementing:
 
 ---
 
+Small improvement to client/src/pages/matches.tsx (Fixtures only).
+
+Task:
+Harden the React Query usage for fixtures.
+
+Make these changes ONLY in the fixtures query logic:
+
+1) Ensure the React Query key includes the days value:
+   Use:
+   queryKey: ["fixtures", fixtureDays]
+
+2) Ensure the fetch throws on non-OK responses:
+   Example pattern:
+   const res = await fetch(`/api/matches/fixtures?days=${fixtureDays}`);
+   if (!res.ok) {
+     throw new Error("Failed to load fixtures");
+   }
+   return res.json();
+
+3) Do NOT change:
+   - UI layout
+   - Results tab logic
+   - Match transformation logic
+   - Any backend code
+
+After implementing:
+- Confirm the file change
+
+---
+

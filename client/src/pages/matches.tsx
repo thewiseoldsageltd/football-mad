@@ -62,10 +62,12 @@ export default function MatchesPage() {
   const endOfWeek = addDays(today, 7);
 
   const { data: fixturesData, isLoading: fixturesLoading } = useQuery<ApiMatch[]>({
-    queryKey: ["/api/matches/fixtures", fixtureDays],
+    queryKey: ["fixtures", fixtureDays],
     queryFn: async () => {
       const res = await fetch(`/api/matches/fixtures?days=${fixtureDays}`);
-      if (!res.ok) throw new Error("Failed to fetch fixtures");
+      if (!res.ok) {
+        throw new Error("Failed to load fixtures");
+      }
       return res.json();
     },
   });
