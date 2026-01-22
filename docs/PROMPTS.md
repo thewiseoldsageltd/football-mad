@@ -1537,3 +1537,30 @@ After implementing, provide the curl command to test (one-line).
 
 ---
 
+We have server/jobs/preview-goalserve-table.ts but it is currently returning squads because it uses soccerleague/{leagueId}.
+
+Stop guessing feeds. Use the endpoint list from our feed docs:
+- League standings endpoint is: standings/<leagueId>.xml (example: standings/1204.xml)
+
+TASK:
+Update server/jobs/preview-goalserve-table.ts so it tries standings FIRST.
+
+Implementation requirements:
+1) The feed candidates list must start with:
+   - `standings/${leagueId}.xml`
+   - then optionally `standings/${leagueId}` as a fallback
+2) Keep soccerleague/{leagueId} only as a LAST fallback (it’s squads, not standings)
+3) Update the parsing logic to look for standings rows under nodes typically returned by standings feeds:
+   - response.standings
+   - response.standings.team
+   - response.standings.league.team
+   - response.league?.standings?.team
+   - Any array of rows where each row has team name/id and points/position/played
+4) If the response contains league.team[].squad.player[] and does not contain points/position/played, treat it as squads and do NOT return success.
+5) Keep the existing route:
+   POST /api/jobs/preview-goalserve-table?leagueId=1204
+   protected by requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+After implementing, provide the exact one-line curl command to test.
+
+---

@@ -34,28 +34,42 @@ function looksLikeSquadsData(data: any): boolean {
   if (!teams) return false;
   const teamArr = toArray(teams);
   if (teamArr.length === 0) return false;
-  // If first team has squad.player, it's squads data
   const firstTeam = teamArr[0];
-  if (firstTeam?.squad?.player) return true;
+  // If first team has squad.player and does NOT have points/position/played, it's squads
+  if (firstTeam?.squad?.player) {
+    const hasStandingsFields = 
+      ("pos" in firstTeam || "position" in firstTeam || "@pos" in firstTeam) ||
+      ("points" in firstTeam || "pts" in firstTeam || "@points" in firstTeam) ||
+      ("played" in firstTeam || "pld" in firstTeam || "@played" in firstTeam);
+    if (!hasStandingsFields) return true;
+  }
   return false;
 }
 
 function extractStandingsRows(data: any): StandingsRow[] | null {
-  // Try various possible node paths for standings data
+  // Try various possible node paths for standings data from standings feed
   const pathsToTry = [
-    // Explicit standings/table paths
-    () => data?.standings?.table?.team,
+    // Primary standings feed structure
     () => data?.standings?.team,
-    () => data?.table?.team,
-    () => data?.standings?.league?.table?.team,
+    () => data?.standings?.league?.team,
+    () => data?.standings?.table?.team,
+    () => data?.league?.standings?.team,
     () => data?.league?.table?.team,
-    // Direct team array (only if it looks like standings, not squads)
+    () => data?.table?.team,
+    // Direct team array (only if it has standings fields)
     () => {
       const teams = data?.standings?.league?.team || data?.league?.team || data?.team;
       if (!teams) return null;
       const arr = toArray(teams);
       // Make sure it's not squads data
-      if (arr.length > 0 && arr[0]?.squad?.player) return null;
+      if (arr.length > 0 && arr[0]?.squad?.player) {
+        // Check if it also has standings fields
+        const first = arr[0];
+        const hasStandingsFields = 
+          ("pos" in first || "position" in first || "@pos" in first) ||
+          ("points" in first || "pts" in first || "@points" in first);
+        if (!hasStandingsFields) return null;
+      }
       return arr;
     },
     // Alternative structures
@@ -87,9 +101,9 @@ function isLikelyStandingsRow(obj: any): boolean {
   const hasPosition = "pos" in obj || "position" in obj || "@pos" in obj || "@position" in obj;
   const hasPoints = "points" in obj || "@points" in obj || "pts" in obj || "@pts" in obj;
   const hasPlayed = "played" in obj || "@played" in obj || "pld" in obj || "@pld" in obj || "p" in obj || "@p" in obj;
-  // Must NOT have squad data (squads indicator)
+  // Must NOT have squad data without standings fields
   const hasSquad = "squad" in obj;
-  if (hasSquad) return false;
+  if (hasSquad && !hasPosition && !hasPoints && !hasPlayed) return false;
   return hasPosition || (hasPoints && hasPlayed);
 }
 
@@ -137,14 +151,11 @@ export async function previewGoalserveTable(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: "leagueId query param required" });
   }
 
-  // Feed paths to try in order (explicit standings/table paths first, generic last)
+  // Feed paths per Goalserve docs - standings first, squads last
   const feedPaths = [
-    `soccerleague/${leagueId}/standings`,
-    `soccerleague/${leagueId}/table`,
-    `soccerstandings/${leagueId}`,
-    `soccer/${leagueId}/standings`,
-    `soccer/${leagueId}/table`,
-    `soccerleague/${leagueId}`, // LAST fallback - often returns squads
+    `standings/${leagueId}.xml`,       // Primary standings endpoint (from docs)
+    `standings/${leagueId}`,           // Fallback without .xml
+    `soccerleague/${leagueId}`,        // LAST - this returns squads, not standings
   ];
 
   const attemptedFeeds: FeedAttempt[] = [];
@@ -165,7 +176,7 @@ export async function previewGoalserveTable(req: Request, res: Response) {
       lastResponse = data;
       lastFeedUsed = feedPath;
 
-      // Check if this looks like squads data - skip if so
+      // Check if this looks like squads data without standings fields - skip if so
       if (looksLikeSquadsData(data)) {
         console.log(`[preview-goalserve-table] Feed ${feedPath} returned squads data, skipping`);
         continue;
