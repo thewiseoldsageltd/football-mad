@@ -3,8 +3,6 @@ import { Input } from "@/components/ui/input";
 import { Search } from "lucide-react";
 
 interface MatchesFiltersProps {
-  competition: string;
-  onCompetitionChange: (value: string) => void;
   sortBy: string;
   onSortChange: (value: string) => void;
   teamSearch: string;
@@ -13,33 +11,15 @@ interface MatchesFiltersProps {
 }
 
 export function MatchesFilters({
-  competition,
-  onCompetitionChange,
   sortBy,
   onSortChange,
   teamSearch,
   onTeamSearchChange,
   variant = "inline",
 }: MatchesFiltersProps) {
-  // Order: Competition → Kick-off time (Sort) → Search team
   if (variant === "stacked") {
     return (
       <div className="space-y-3 mb-6" data-testid="filters-matches-mobile">
-        <Select value={competition} onValueChange={onCompetitionChange}>
-          <SelectTrigger className="w-full" data-testid="select-competition-mobile">
-            <span className="flex-1 text-center">
-              <SelectValue placeholder="Competition" />
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Competitions</SelectItem>
-            <SelectItem value="premier-league">Premier League</SelectItem>
-            <SelectItem value="champions-league">Champions League</SelectItem>
-            <SelectItem value="fa-cup">FA Cup</SelectItem>
-            <SelectItem value="carabao-cup">Carabao Cup</SelectItem>
-          </SelectContent>
-        </Select>
-
         <Select value={sortBy} onValueChange={onSortChange}>
           <SelectTrigger className="w-full" data-testid="select-sort-mobile">
             <span className="flex-1 text-center">
@@ -69,19 +49,6 @@ export function MatchesFilters({
 
   return (
     <div className="flex items-center gap-3" data-testid="filters-matches-desktop">
-      <Select value={competition} onValueChange={onCompetitionChange}>
-        <SelectTrigger className="w-[180px]" data-testid="select-competition">
-          <SelectValue placeholder="Competition" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All Competitions</SelectItem>
-          <SelectItem value="premier-league">Premier League</SelectItem>
-          <SelectItem value="champions-league">Champions League</SelectItem>
-          <SelectItem value="fa-cup">FA Cup</SelectItem>
-          <SelectItem value="carabao-cup">Carabao Cup</SelectItem>
-        </SelectContent>
-      </Select>
-
       <Select value={sortBy} onValueChange={onSortChange}>
         <SelectTrigger className="w-[150px]" data-testid="select-sort">
           <SelectValue placeholder="Sort by" />

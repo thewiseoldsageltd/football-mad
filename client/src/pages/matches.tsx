@@ -21,18 +21,70 @@ interface ApiMatch {
   competition: string | null;
   goalserveCompetitionId: string | null;
   goalserveMatchId: string | null;
-  homeTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string };
-  awayTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string };
+  homeTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string; logoUrl?: string };
+  awayTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string; logoUrl?: string };
 }
 
+// Country flag emoji mapping
+const countryFlags: Record<string, string> = {
+  "Brazil": "🇧🇷", "Argentina": "🇦🇷", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
+  "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "Ireland": "🇮🇪", "Northern Ireland": "🇬🇧", "France": "🇫🇷",
+  "Germany": "🇩🇪", "Spain": "🇪🇸", "Italy": "🇮🇹", "Portugal": "🇵🇹",
+  "Netherlands": "🇳🇱", "Belgium": "🇧🇪", "USA": "🇺🇸", "Mexico": "🇲🇽",
+  "Uruguay": "🇺🇾", "Colombia": "🇨🇴", "Chile": "🇨🇱", "Peru": "🇵🇪",
+  "Ecuador": "🇪🇨", "Paraguay": "🇵🇾", "Bolivia": "🇧🇴", "Venezuela": "🇻🇪",
+  "Jamaica": "🇯🇲", "Egypt": "🇪🇬", "Iraq": "🇮🇶", "Qatar": "🇶🇦",
+  "Saudi Arabia": "🇸🇦", "UAE": "🇦🇪", "Morocco": "🇲🇦", "Algeria": "🇩🇿",
+  "Tunisia": "🇹🇳", "Libya": "🇱🇾", "South Africa": "🇿🇦", "Guatemala": "🇬🇹",
+  "El Salvador": "🇸🇻", "intl": "🌍",
+};
+
+function getFlagEmoji(countryName: string | undefined): string | null {
+  if (!countryName) return null;
+  return countryFlags[countryName] || "🌍";
+}
+
+interface ParsedCompetition {
+  name: string;
+  country?: string;
+  id?: string;
+}
+
+function parseCompetitionLabel(competition: string | null | undefined): ParsedCompetition {
+  if (!competition) return { name: "Unknown" };
+  
+  // Pattern: "Name (Country) [ID]"
+  const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
+  if (fullMatch) {
+    return { name: fullMatch[1].trim(), country: fullMatch[2].trim(), id: fullMatch[3] };
+  }
+  
+  // Pattern: "Country: Name"
+  const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
+  if (colonMatch) {
+    return { name: colonMatch[2].trim(), country: colonMatch[1].trim() };
+  }
+  
+  return { name: competition };
+}
+
+function displayCompetitionWithFlag(competition: string | null | undefined): string {
+  const parsed = parseCompetitionLabel(competition);
+  const flag = getFlagEmoji(parsed.country);
+  return flag ? `${flag} ${parsed.name}` : parsed.name;
+}
+
+// NOTE: Goalserve match feed provides team IDs/names but does NOT reliably provide crest image URLs.
+// TODO: If mapped Team objects have logoUrl/crestUrl/badgeUrl from our database, pass it through.
+// For now, we use letter avatars as fallback.
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   const homeName = match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown";
   const awayName = match.awayTeam.name || match.awayTeam.nameFromRaw || "Unknown";
-  const competitionName = match.competition || "Other Competition";
+  const competitionDisplay = displayCompetitionWithFlag(match.competition);
   
   return {
     id: match.id,
-    competition: competitionName,
+    competition: competitionDisplay,
     dateISO: match.kickoffTime,
     kickOffTime: match.kickoffTime,
     status: match.status as MockMatch["status"],
@@ -41,12 +93,14 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
       name: homeName,
       shortName: homeName.substring(0, 3).toUpperCase(),
       primaryColor: "#1a1a2e",
+      logoUrl: match.homeTeam.logoUrl,
     },
     awayTeam: {
       id: match.awayTeam.id || match.awayTeam.goalserveTeamId || match.id,
       name: awayName,
       shortName: awayName.substring(0, 3).toUpperCase(),
       primaryColor: "#1a1a2e",
+      logoUrl: match.awayTeam.logoUrl,
     },
     homeScore: match.homeScore,
     awayScore: match.awayScore,
@@ -56,7 +110,6 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
 
 export default function MatchesPage() {
   const [activeTab, setActiveTab] = useState<MatchTab>("today");
-  const [competition, setCompetition] = useState("all");
   const [sortBy, setSortBy] = useState("kickoff");
   const [teamSearch, setTeamSearch] = useState("");
   const [fixtureDays, setFixtureDays] = useState(7);
@@ -90,8 +143,11 @@ export default function MatchesPage() {
       }
     });
     return Array.from(seen.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .map(([id, rawName]) => ({ 
+        id, 
+        displayName: displayCompetitionWithFlag(rawName) 
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [fixturesData]);
 
   const liveFixtures = useMemo(() => {
@@ -121,14 +177,6 @@ export default function MatchesPage() {
 
   const applyFilters = (matches: MockMatch[]): MockMatch[] => {
     let filtered = [...matches];
-
-    if (competition !== "all") {
-      const compName = competition
-        .split("-")
-        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ");
-      filtered = filtered.filter(m => m.competition === compName);
-    }
 
     if (teamSearch.trim()) {
       const search = teamSearch.toLowerCase().trim();
@@ -168,7 +216,7 @@ export default function MatchesPage() {
     }
     const tabMatches = filterByTab(liveFixtures, activeTab);
     return applyFilters(tabMatches);
-  }, [activeTab, competition, sortBy, teamSearch, liveFixtures]);
+  }, [activeTab, sortBy, teamSearch, liveFixtures]);
 
   const isFixturesTab = activeTab !== "results";
 
@@ -213,14 +261,14 @@ export default function MatchesPage() {
                   value={selectedCompetitionId}
                   onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
                 >
-                  <SelectTrigger className="w-[200px]" data-testid="select-competition">
+                  <SelectTrigger className="w-[220px]" data-testid="select-competition">
                     <SelectValue placeholder="All competitions" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All competitions</SelectItem>
                     {competitionOptions.map((opt) => (
                       <SelectItem key={opt.id} value={opt.id}>
-                        {opt.name}
+                        {opt.displayName}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -228,8 +276,6 @@ export default function MatchesPage() {
               </>
             )}
             <MatchesFilters
-              competition={competition}
-              onCompetitionChange={setCompetition}
               sortBy={sortBy}
               onSortChange={setSortBy}
               teamSearch={teamSearch}
@@ -273,7 +319,7 @@ export default function MatchesPage() {
                   <SelectItem value="all">All competitions</SelectItem>
                   {competitionOptions.map((opt) => (
                     <SelectItem key={opt.id} value={opt.id}>
-                      {opt.name}
+                      {opt.displayName}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -281,8 +327,6 @@ export default function MatchesPage() {
             </div>
           )}
           <MatchesFilters
-            competition={competition}
-            onCompetitionChange={setCompetition}
             sortBy={sortBy}
             onSortChange={setSortBy}
             teamSearch={teamSearch}

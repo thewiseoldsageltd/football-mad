@@ -1959,3 +1959,90 @@ After implementing:
 
 ---
 
+You are working in Football Mad (Replit). We need to fix the Matches page UI + polish competition display.
+
+GOAL
+1) Remove the duplicate “competitions” dropdown (we should only have ONE).
+2) Stop showing the competitionId in the dropdown labels and in the match “competition pill”.
+3) Replace “(Country)” text with a small country flag icon (or a simple fallback icon if unknown).
+4) Answer: do club crests exist in Goalserve feeds? If not, implement a clean path forward without breaking UI.
+
+CONTEXT (what I’m seeing)
+- There are TWO dropdowns next to each other:
+  - One says “All competitions” (lowercase) and is the one with the populated list (this is the NEW one we just added).
+  - Another says “All Competitions” (title case) (this is the OLD existing one).
+- Competition is currently displayed like: “Catarinense (Brazil) [1140]” both in the dropdown and on the match pill.
+
+TASK A — REMOVE THE DUPLICATE DROPDOWN
+- Open: client/src/pages/matches.tsx
+- Find the existing/old competition dropdown (the one that renders “All Competitions”) and REMOVE it from the layout.
+- Keep ONLY the new Select-based competition dropdown we added (the one that is populated from API data).
+- Do not remove the “Kick-off time” dropdown or the search input.
+
+TASK B — CLEAN COMPETITION DISPLAY (NO ID IN UI)
+In client/src/pages/matches.tsx:
+1) Add helper functions near the top:
+   - parseCompetitionLabel(competition: string | null | undefined) -> { name: string; country?: string; id?: string }
+     Rules:
+     - If it matches: "<NAME> (<COUNTRY>) [<ID>]" extract all three.
+       Example: "Catarinense (Brazil) [1140]" => name="Catarinense", country="Brazil", id="1140"
+     - If it matches: "<COUNTRY>: <NAME>" extract country + name
+       Example: "Libya: Premier League" => country="Libya", name="Premier League"
+     - Else: name = original string
+2) Add displayCompetitionName(competition: string | null | undefined) that returns ONLY the readable name (no country, no [id]).
+   Examples:
+   - "Catarinense (Brazil) [1140]" => "Catarinense"
+   - "Premier League (Jamaica) [1270]" => "Premier League"
+   - "Libya: Premier League" => "Premier League"
+3) Update:
+   - competitionOptions labels in the dropdown to use displayCompetitionName(...)
+   - Match “competition pill” to use displayCompetitionName(match.competition)
+
+TASK C — COUNTRY FLAG ICON (REPLACE “(Brazil)” TEXT)
+Still in client/src/pages/matches.tsx:
+1) Add getFlagEmoji(countryName: string) -> string | null
+   - Implement a small mapping for common countries we’ll see (at least):
+     Brazil, Argentina, England, Scotland, Wales, Ireland, Northern Ireland, France, Germany, Spain, Italy, Portugal, Netherlands, Belgium,
+     USA, Mexico, Uruguay, Colombia, Chile, Peru, Ecuador, Paraguay, Bolivia, Venezuela,
+     Jamaica, Egypt, Iraq, Qatar, Saudi Arabia, UAE, Morocco, Algeria, Tunisia, Libya, South Africa
+   - Return an emoji flag (e.g. Brazil -> 🇧🇷). If unknown return null.
+2) In both:
+   - the dropdown item render
+   - and the match competition pill render
+   Show:
+   - a tiny flag (emoji is fine) BEFORE the competition name when we have a country
+   - fallback icon (e.g. 🌍) if country exists but not mapped
+   - if no country, show nothing extra
+3) IMPORTANT: The UI should NOT show country as text anymore (no “(Brazil)”).
+
+TASK D — TEAM CRESTS (WHAT’S POSSIBLE NOW)
+Implement the safest incremental solution:
+1) Confirm in code comments and a short console note:
+   - Goalserve match feed provides team ids/names but DOES NOT reliably provide crest image URLs.
+2) Add a TODO path forward (no breaking changes):
+   - If the Team object from mapped teams already has a crest/logo field (check existing Team type usage), then render it.
+   - Otherwise keep the letter avatar.
+3) In Matches list rendering:
+   - If homeTeam has a usable crest/logo URL field (common names to check: crestUrl, logoUrl, badgeUrl, imageUrl), render <img> in the avatar slot.
+   - Else render current letter badge.
+
+DELIVERABLES
+- Only edit client/src/pages/matches.tsx for UI changes.
+- Keep the API contract as-is.
+- After changes, the top filter row should show:
+  [days buttons] [ONE competitions dropdown] [Kick-off time dropdown] [Search]
+- Dropdown options should be clean like “🇧🇷 Catarinense” (no id, no (Brazil))
+- Match pills should be clean like “🇧🇷 Catarinense” as well.
+
+TEST STEPS (run mentally + quick manual check)
+- Load Matches page.
+- Confirm only one competitions dropdown exists and it’s populated.
+- Selecting a competition filters fixtures.
+- No “[1140]” visible anywhere in UI.
+- No “(Brazil)” text visible; we see a flag emoji instead.
+- Team avatars still render letters, but will render images if a logo/crest URL exists on mapped teams.
+
+Go implement now and report back exactly what you removed/changed (brief bullet list) plus a screenshot if possible.
+
+---
+
