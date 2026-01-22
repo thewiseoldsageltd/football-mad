@@ -1361,4 +1361,52 @@ run npm run dev briefly to ensure server boots (stop after it starts)
 
 ---
 
+We have Goalserve working in this Replit project.
+
+Context:
+- Node + Express backend
+- goalserveFetch helper exists at: server/integrations/goalserve/client.ts
+- Competitions, teams and players jobs already work.
+- Goalserve test job POST /api/jobs/test-goalserve returns scores successfully.
+
+Request:
+Create a NEW job endpoint:
+POST /api/jobs/preview-goalserve-matches?feed=soccernew/home
+
+Rules:
+- This is a DRY RUN: do NOT write to the database.
+- It should call goalserveFetch(feed) exactly as given (no adding soccernew/ inside the job).
+- Parse Goalserve response at response.scores.category[].matches.match[]
+- Return JSON:
+  {
+    ok: true,
+    feed,
+    categoriesCount,
+    matchesCount,
+    sample: [
+      { id, staticId, formattedDate, timeOrStatus, home: { id, name, score }, away: { id, name, score } }
+    ]
+  }
+- Handle Goalserve returning a single object vs array for category and match.
+- If scores/category/matches is missing, return ok:false with top-level keys and sample of response.
+
+Implementation notes:
+- Put code in server/jobs/preview-goalserve-matches.ts
+- Wire the route in server/routes.ts using requireJobSecret("GOALSERVE_SYNC_SECRET")
+- Keep this job isolated (do not reuse players job).
+- After implementation, tell me the exact curl command to test it.
+
+---
+
+We want to ingest global matches from Goalserve (soccernew/home) and map teams later.
+
+We already have:
+- goalserveFetch(feedPath) working
+- preview endpoint POST /api/jobs/preview-goalserve-matches?feed=soccernew/home working
+- DB tables for competitions, teams, players exist and working.
+
+Now implement global matches ingestion:
+
+1) Schema updates (only if needed):
+- In @shared/schema.ts, ensure matches table has these nullable
 
