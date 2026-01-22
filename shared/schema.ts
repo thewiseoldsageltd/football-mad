@@ -250,6 +250,11 @@ export const matches = pgTable("matches", {
   kickoffTime: timestamp("kickoff_time").notNull(),
   predictedLineup: jsonb("predicted_lineup"),
   timeline: jsonb("timeline"),
+  goalserveMatchId: text("goalserve_match_id").unique(),
+  goalserveCompetitionId: text("goalserve_competition_id"),
+  goalserveStaticId: text("goalserve_static_id"),
+  season: text("season"),
+  raw: jsonb("raw"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("matches_kickoff_time_idx").on(table.kickoffTime),
