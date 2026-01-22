@@ -235,6 +235,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       homeScore: match.homeScore,
       awayScore: match.awayScore,
       venue: match.venue,
+      competition: match.competition,
       goalserveMatchId: match.goalserveMatchId,
       homeTeam: match.homeTeamId && homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }

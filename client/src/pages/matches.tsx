@@ -17,6 +17,7 @@ interface ApiMatch {
   homeScore: number | null;
   awayScore: number | null;
   venue: string | null;
+  competition: string | null;
   goalserveMatchId: string | null;
   homeTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string };
   awayTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string };
@@ -25,10 +26,11 @@ interface ApiMatch {
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   const homeName = match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown";
   const awayName = match.awayTeam.name || match.awayTeam.nameFromRaw || "Unknown";
+  const competitionName = match.competition || "Other Competition";
   
   return {
     id: match.id,
-    competition: "Premier League",
+    competition: competitionName,
     dateISO: match.kickoffTime,
     kickOffTime: match.kickoffTime,
     status: match.status as MockMatch["status"],

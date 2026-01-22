@@ -1818,3 +1818,21 @@ After implementing:
 
 ---
 
+Please update `client/src/pages/matches.tsx` so the competition badge shown on each fixture card is data-driven instead of hardcoded to “Premier League”.
+
+Requirements:
+1. Replace the hardcoded "Premier League" badge text wherever it appears on a match card.
+2. Use this fallback order for the badge label:
+   - match.competition (string), if present
+   - match.competitionName, if present
+   - "Other Competition" as a final fallback
+3. Do NOT change any layout, styling, spacing, or component structure — only change where the text comes from.
+4. If TypeScript types in this file need updating to support the new field(s), update them locally in the same file.
+5. Ensure there are no TypeScript or runtime errors.
+6. Everything else on the Matches page must continue to behave exactly as it does now.
+
+Sanity check:
+Fixtures that are not Premier League games should no longer display a “Premier League” badge. They should display the correct competition name when available, or “Other Competition” otherwise.
+
+---
+
