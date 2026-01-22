@@ -1626,3 +1626,66 @@ After updating, provide the curl command to test normal mode (no debug).
 
 ---
 
+We have a working standings preview:
+POST /api/jobs/preview-goalserve-table?leagueId=1204
+It uses goalserveFetch("standings/1204.xml") and parses response.standings.tournament.team.
+It returns season "2025/2026" and 20 rows.
+
+Now implement DB persistence for standings.
+
+1) Add a new Drizzle table in @shared/schema.ts:
+Table name: standings
+
+Columns:
+- id: uuid primary key
+- leagueId: text NOT NULL
+- season: text NOT NULL
+- teamGoalserveId: text NOT NULL
+- teamId: uuid nullable (FK to teams.id; map via teams.goalserveTeamId if available)
+- teamName: text NOT NULL
+- position: int NOT NULL
+- played: int NOT NULL
+- wins: int NOT NULL
+- draws: int NOT NULL
+- losses: int NOT NULL
+- goalsFor: int NOT NULL
+- goalsAgainst: int NOT NULL
+- goalDiff: int NOT NULL
+- points: int NOT NULL
+- updatedAt: timestamp default now NOT NULL
+- raw: jsonb nullable (store original team node)
+
+Constraints/indexes:
+- unique(leagueId, season, teamGoalserveId)
+- index on (leagueId, season)
+- index on teamGoalserveId
+
+2) Create job:
+POST /api/jobs/upsert-goalserve-table?leagueId=1204
+Protected by requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+Job behavior:
+- Fetch via goalserveFetch(`standings/${leagueId}.xml`)
+- Parse tournament + team rows exactly as preview does
+- Upsert rows by (leagueId, season, teamGoalserveId)
+- Attempt to map teamId by joining teams.goalserveTeamId to teamGoalserveId
+- Return JSON:
+{
+  ok:true,
+  leagueId,
+  season,
+  rowsFromGoalserve,
+  inserted,
+  updated,
+  mappedTeams,
+  unmappedTeams
+}
+
+3) Provide:
+- command to push schema changes (npm run db:push)
+- curl command to run the upsert job
+- psql verification query to show top 10 ordered by position.
+
+
+---
+

@@ -575,3 +575,35 @@ export type NewsFiltersResponse = {
     total: number;
   };
 };
+
+// ============ STANDINGS ============
+export const standings = pgTable("standings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  teamGoalserveId: text("team_goalserve_id").notNull(),
+  teamId: varchar("team_id").references(() => teams.id),
+  teamName: text("team_name").notNull(),
+  position: integer("position").notNull(),
+  played: integer("played").notNull(),
+  wins: integer("wins").notNull(),
+  draws: integer("draws").notNull(),
+  losses: integer("losses").notNull(),
+  goalsFor: integer("goals_for").notNull(),
+  goalsAgainst: integer("goals_against").notNull(),
+  goalDiff: integer("goal_diff").notNull(),
+  points: integer("points").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  raw: jsonb("raw"),
+}, (table) => [
+  index("standings_league_season_idx").on(table.leagueId, table.season),
+  index("standings_team_goalserve_id_idx").on(table.teamGoalserveId),
+]);
+
+export const standingsRelations = relations(standings, ({ one }) => ({
+  team: one(teams, { fields: [standings.teamId], references: [teams.id] }),
+}));
+
+export const insertStandingsSchema = createInsertSchema(standings).omit({ id: true, updatedAt: true });
+export type InsertStandings = z.infer<typeof insertStandingsSchema>;
+export type Standings = typeof standings.$inferSelect;

@@ -15,6 +15,7 @@ import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
+import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -705,6 +706,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/jobs/preview-goalserve-table",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     previewGoalserveTable
+  );
+
+  // ========== GOALSERVE TABLE UPSERT ==========
+  app.post(
+    "/api/jobs/upsert-goalserve-table",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
+      }
+      const result = await upsertGoalserveTable(leagueId);
+      res.json(result);
+    }
   );
 
   // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
