@@ -1587,3 +1587,42 @@ POST /api/jobs/preview-goalserve-table?leagueId=1204&debug=1
 
 ---
 
+Update server/jobs/preview-goalserve-table.ts parsing using the confirmed structure from debug mode.
+
+Confirmed structure for standings/1204.xml:
+- response.standings.tournament.team is the standings rows array
+- season is response.standings.tournament["@season"]
+- league name is response.standings.tournament["@league"] or standings.tournament["@league"]
+
+Implement parsing like:
+const tournament = response.standings?.tournament
+const teamRows = tournament?.team (array or object)
+Rows fields:
+- position: team["@position"]
+- teamGoalserveId: team["@id"]
+- teamName: team["@name"]
+- played: team.overall["@gp"]
+- wins: team.overall["@w"]
+- draws: team.overall["@d"]
+- losses: team.overall["@l"]
+- goalsFor: team.overall["@gs"]
+- goalsAgainst: team.overall["@ga"]
+- goalDiff: team.total["@gd"]
+- points: team.total["@p"]
+
+Return normal success response (non-debug):
+{
+  ok:true,
+  leagueId,
+  feedUsed:"standings/{leagueId}.xml",
+  season,
+  rowsCount,
+  sampleRows:[...]
+}
+
+Keep debug=1 behaviour as-is.
+
+After updating, provide the curl command to test normal mode (no debug).
+
+---
+
