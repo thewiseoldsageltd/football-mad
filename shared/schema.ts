@@ -240,8 +240,12 @@ export type ArticleEntityOverride = typeof articleEntityOverrides.$inferSelect;
 export const matches = pgTable("matches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   slug: text("slug").notNull().unique(),
-  homeTeamId: varchar("home_team_id").references(() => teams.id).notNull(),
-  awayTeamId: varchar("away_team_id").references(() => teams.id).notNull(),
+  goalserveMatchId: text("goalserve_match_id").unique(),
+  goalserveStaticId: text("goalserve_static_id"),
+  homeGoalserveTeamId: text("home_goalserve_team_id"),
+  awayGoalserveTeamId: text("away_goalserve_team_id"),
+  homeTeamId: varchar("home_team_id").references(() => teams.id),
+  awayTeamId: varchar("away_team_id").references(() => teams.id),
   homeScore: integer("home_score"),
   awayScore: integer("away_score"),
   competition: text("competition").default("Premier League"),
@@ -253,6 +257,7 @@ export const matches = pgTable("matches", {
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
   index("matches_kickoff_time_idx").on(table.kickoffTime),
+  index("matches_goalserve_match_id_idx").on(table.goalserveMatchId),
 ]);
 
 export const matchesRelations = relations(matches, ({ one, many }) => ({
