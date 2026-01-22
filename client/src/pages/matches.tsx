@@ -8,6 +8,7 @@ import { MatchesFilters } from "@/components/matches/MatchesFilters";
 import { MatchesList } from "@/components/matches/MatchesList";
 import { mockMatches, type MockMatch } from "@/components/matches/mockMatches";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface ApiMatch {
   id: string;
@@ -18,6 +19,7 @@ interface ApiMatch {
   awayScore: number | null;
   venue: string | null;
   competition: string | null;
+  goalserveCompetitionId: string | null;
   goalserveMatchId: string | null;
   homeTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string };
   awayTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string };
@@ -58,21 +60,39 @@ export default function MatchesPage() {
   const [sortBy, setSortBy] = useState("kickoff");
   const [teamSearch, setTeamSearch] = useState("");
   const [fixtureDays, setFixtureDays] = useState(7);
+  const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
 
   const today = startOfDay(new Date());
   const tomorrow = addDays(today, 1);
   const endOfWeek = addDays(today, 7);
 
+  const fixturesUrl = selectedCompetitionId
+    ? `/api/matches/fixtures?days=${fixtureDays}&competitionId=${selectedCompetitionId}`
+    : `/api/matches/fixtures?days=${fixtureDays}`;
+
   const { data: fixturesData, isLoading: fixturesLoading } = useQuery<ApiMatch[]>({
-    queryKey: ["fixtures", fixtureDays],
+    queryKey: ["fixtures", fixtureDays, selectedCompetitionId],
     queryFn: async () => {
-      const res = await fetch(`/api/matches/fixtures?days=${fixtureDays}`);
+      const res = await fetch(fixturesUrl);
       if (!res.ok) {
         throw new Error("Failed to load fixtures");
       }
       return res.json();
     },
   });
+
+  const competitionOptions = useMemo(() => {
+    if (!fixturesData) return [];
+    const seen = new Map<string, string>();
+    fixturesData.forEach((m) => {
+      if (m.goalserveCompetitionId && m.competition) {
+        seen.set(m.goalserveCompetitionId, m.competition);
+      }
+    });
+    return Array.from(seen.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [fixturesData]);
 
   const liveFixtures = useMemo(() => {
     if (!fixturesData) return [];
@@ -174,20 +194,38 @@ export default function MatchesPage() {
           />
           <div className="flex items-center gap-4">
             {isFixturesTab && (
-              <div className="flex items-center gap-2" data-testid="days-selector">
-                <span className="text-sm text-muted-foreground">Show:</span>
-                {[7, 14, 30].map((days) => (
-                  <Button
-                    key={days}
-                    size="sm"
-                    variant={fixtureDays === days ? "default" : "outline"}
-                    onClick={() => setFixtureDays(days)}
-                    data-testid={`days-${days}`}
-                  >
-                    {days} days
-                  </Button>
-                ))}
-              </div>
+              <>
+                <div className="flex items-center gap-2" data-testid="days-selector">
+                  <span className="text-sm text-muted-foreground">Show:</span>
+                  {[7, 14, 30].map((days) => (
+                    <Button
+                      key={days}
+                      size="sm"
+                      variant={fixtureDays === days ? "default" : "outline"}
+                      onClick={() => setFixtureDays(days)}
+                      data-testid={`days-${days}`}
+                    >
+                      {days} days
+                    </Button>
+                  ))}
+                </div>
+                <Select
+                  value={selectedCompetitionId}
+                  onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+                >
+                  <SelectTrigger className="w-[200px]" data-testid="select-competition">
+                    <SelectValue placeholder="All competitions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All competitions</SelectItem>
+                    {competitionOptions.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </>
             )}
             <MatchesFilters
               competition={competition}
@@ -209,19 +247,37 @@ export default function MatchesPage() {
             variant="mobile"
           />
           {isFixturesTab && (
-            <div className="flex items-center gap-2 mb-4" data-testid="days-selector-mobile">
-              <span className="text-sm text-muted-foreground">Show:</span>
-              {[7, 14, 30].map((days) => (
-                <Button
-                  key={days}
-                  size="sm"
-                  variant={fixtureDays === days ? "default" : "outline"}
-                  onClick={() => setFixtureDays(days)}
-                  data-testid={`days-mobile-${days}`}
-                >
-                  {days}d
-                </Button>
-              ))}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center gap-2" data-testid="days-selector-mobile">
+                <span className="text-sm text-muted-foreground">Show:</span>
+                {[7, 14, 30].map((days) => (
+                  <Button
+                    key={days}
+                    size="sm"
+                    variant={fixtureDays === days ? "default" : "outline"}
+                    onClick={() => setFixtureDays(days)}
+                    data-testid={`days-mobile-${days}`}
+                  >
+                    {days}d
+                  </Button>
+                ))}
+              </div>
+              <Select
+                value={selectedCompetitionId}
+                onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+              >
+                <SelectTrigger className="w-full" data-testid="select-competition-mobile">
+                  <SelectValue placeholder="All competitions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All competitions</SelectItem>
+                  {competitionOptions.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
           <MatchesFilters

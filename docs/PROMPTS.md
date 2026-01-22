@@ -1924,3 +1924,38 @@ OUTPUT REQUIRED:
 
 ---
 
+Add a competition filter dropdown to the Fixtures tab in:
+client/src/pages/matches.tsx
+
+Context:
+- Fixtures are fetched via React Query from /api/matches/fixtures?days=${fixtureDays}
+- API response now includes:
+  - competition (string | null)
+  - goalserveCompetitionId (string | null)
+
+Task:
+1) Add local state: selectedCompetitionId (string), default "" meaning "All competitions".
+2) Update the fixtures fetch URL:
+   - If selectedCompetitionId is "", use:
+     /api/matches/fixtures?days=${fixtureDays}
+   - Else use:
+     /api/matches/fixtures?days=${fixtureDays}&competitionId=${selectedCompetitionId}
+3) Build dropdown options from the currently fetched fixtures data (when available):
+   - Derive unique competitions using goalserveCompetitionId + competition name
+   - Exclude items where goalserveCompetitionId is null
+   - Sort options alphabetically by competition name
+4) UI:
+   - Show a <select> or existing Select component above the fixtures list (Fixtures tab only)
+   - First option: "All competitions"
+   - Then the derived competition options
+5) Keep existing 7/14/30 day buttons working.
+   - Changing days should refetch and also refresh the available dropdown options.
+6) Keep styling consistent with existing UI.
+7) Do NOT change Results tab logic.
+
+After implementing:
+- Tell me exactly what changed in matches.tsx
+- Confirm how to test: pick a competition and verify fixtures list changes.
+
+---
+
