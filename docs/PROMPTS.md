@@ -1742,3 +1742,49 @@ After implementing, provide curl commands to test each endpoint.
 
 ---
 
+We want to wire real fixtures data into the Matches page.
+
+Target file:
+client/src/pages/matches.tsx
+
+Context:
+- There is already a Matches page showing “Premier League fixtures and results”
+- Backend endpoint exists:
+  GET /api/matches/fixtures?days=7
+
+Task:
+Update client/src/pages/matches.tsx so the Fixtures section uses live data from the backend instead of any mock/static data.
+
+Implementation requirements:
+
+1) On page load, fetch:
+   /api/matches/fixtures?days=7
+
+2) Add a simple days selector for fixtures:
+   - 7 / 14 / 30
+   - When changed, refetch with ?days=X
+
+3) Render fixtures list with:
+   - kickoffTime formatted to local date + time
+   - Home team vs Away team
+   - Team name logic:
+     - If mapped: homeTeam.name / awayTeam.name
+     - Else: homeTeam.nameFromRaw / awayTeam.nameFromRaw
+   - Status badge/text (scheduled / live)
+
+4) Loading + empty states:
+   - “Loading fixtures…”
+   - “No upcoming fixtures in the next X days.”
+
+5) Do NOT break existing Results logic in matches.tsx.
+   - Only replace the Fixtures data source.
+   - Keep styling consistent with existing markup/components.
+
+6) No backend changes.
+
+After implementing:
+- Tell me exactly what changed in matches.tsx
+- Confirm how to test it in the browser.
+
+---
+
