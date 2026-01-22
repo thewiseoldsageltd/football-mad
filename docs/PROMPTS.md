@@ -1564,3 +1564,26 @@ Implementation requirements:
 After implementing, provide the exact one-line curl command to test.
 
 ---
+
+The preview job confirms standings/1204.xml returns topLevelKeys ["?xml","standings"], but our parser can't locate rows.
+
+Add a diagnostic mode to preview-goalserve-table:
+
+If query param debug=1 is present:
+- fetch ONLY standings/{leagueId}.xml
+- return:
+  {
+    ok:true,
+    leagueId,
+    feedUsed,
+    standingsTopKeys: Object.keys(response.standings),
+    nestedKeysUnderStandings: a flattened list of keys under response.standings (max 200 keys),
+    responseSample: JSON.stringify(response.standings).slice(0, 2000)
+  }
+
+Do not change any DB or other routes.
+Keep existing endpoint:
+POST /api/jobs/preview-goalserve-table?leagueId=1204&debug=1
+
+---
+

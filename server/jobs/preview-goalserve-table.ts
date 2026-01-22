@@ -144,11 +144,56 @@ function getNestedKeys(obj: any, prefix = ""): string[] {
   return keys.slice(0, 50);
 }
 
+function getDeepNestedKeys(obj: any, prefix = "", maxKeys = 200): string[] {
+  if (!obj || typeof obj !== "object") return [];
+  const keys: string[] = [];
+  for (const key of Object.keys(obj)) {
+    if (keys.length >= maxKeys) break;
+    const fullKey = prefix ? `${prefix}.${key}` : key;
+    keys.push(fullKey);
+    if (typeof obj[key] === "object" && !Array.isArray(obj[key])) {
+      const nested = getDeepNestedKeys(obj[key], fullKey, maxKeys - keys.length);
+      keys.push(...nested);
+    } else if (Array.isArray(obj[key]) && obj[key].length > 0 && typeof obj[key][0] === "object") {
+      // Show first array element's keys
+      const nested = getDeepNestedKeys(obj[key][0], `${fullKey}[0]`, maxKeys - keys.length);
+      keys.push(...nested);
+    }
+  }
+  return keys.slice(0, maxKeys);
+}
+
 export async function previewGoalserveTable(req: Request, res: Response) {
   const leagueId = req.query.leagueId as string;
+  const debug = req.query.debug === "1";
 
   if (!leagueId) {
     return res.status(400).json({ ok: false, error: "leagueId query param required" });
+  }
+
+  // Debug mode: fetch only standings feed and return detailed diagnostics
+  if (debug) {
+    const feedPath = `standings/${leagueId}.xml`;
+    try {
+      const data = await goalserveFetch(feedPath);
+      const standings = data?.standings;
+      
+      return res.json({
+        ok: true,
+        leagueId,
+        feedUsed: feedPath,
+        standingsTopKeys: standings ? Object.keys(standings) : [],
+        nestedKeysUnderStandings: standings ? getDeepNestedKeys(standings, "", 200) : [],
+        responseSample: JSON.stringify(standings || {}).slice(0, 2000),
+      });
+    } catch (err: any) {
+      return res.json({
+        ok: false,
+        leagueId,
+        feedUsed: feedPath,
+        error: err.message?.slice(0, 500) || "Unknown error",
+      });
+    }
   }
 
   // Feed paths per Goalserve docs - standings first, squads last
