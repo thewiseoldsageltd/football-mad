@@ -15,32 +15,53 @@ interface StandingsRow {
   points: string | number;
 }
 
+interface FeedAttempt {
+  feed: string;
+  ok: boolean;
+  status?: number;
+  error?: string;
+  topLevelKeys?: string[];
+}
+
 function toArray<T>(val: T | T[] | undefined): T[] {
   if (!val) return [];
   return Array.isArray(val) ? val : [val];
 }
 
+function looksLikeSquadsData(data: any): boolean {
+  // Check if this looks like squads data: league.team[].squad.player[]
+  const teams = data?.league?.team || data?.standings?.league?.team;
+  if (!teams) return false;
+  const teamArr = toArray(teams);
+  if (teamArr.length === 0) return false;
+  // If first team has squad.player, it's squads data
+  const firstTeam = teamArr[0];
+  if (firstTeam?.squad?.player) return true;
+  return false;
+}
+
 function extractStandingsRows(data: any): StandingsRow[] | null {
   // Try various possible node paths for standings data
-  // Common patterns: response.standings.table.team[], response.league.table.team[], etc.
-  
   const pathsToTry = [
-    // soccerleague feed patterns
-    () => data?.standings?.league?.team,
-    () => data?.standings?.team,
-    () => data?.league?.standings?.team,
-    () => data?.league?.team,
-    () => data?.table?.team,
-    () => data?.team,
-    // Alternative structures
-    () => data?.standings?.league?.table?.team,
+    // Explicit standings/table paths
     () => data?.standings?.table?.team,
+    () => data?.standings?.team,
+    () => data?.table?.team,
+    () => data?.standings?.league?.table?.team,
     () => data?.league?.table?.team,
+    // Direct team array (only if it looks like standings, not squads)
+    () => {
+      const teams = data?.standings?.league?.team || data?.league?.team || data?.team;
+      if (!teams) return null;
+      const arr = toArray(teams);
+      // Make sure it's not squads data
+      if (arr.length > 0 && arr[0]?.squad?.player) return null;
+      return arr;
+    },
+    // Alternative structures
     () => data?.table?.row,
     () => data?.standings?.row,
-    // Direct team array
     () => data?.standings,
-    () => data?.league?.standings,
   ];
 
   for (const pathFn of pathsToTry) {
@@ -66,11 +87,13 @@ function isLikelyStandingsRow(obj: any): boolean {
   const hasPosition = "pos" in obj || "position" in obj || "@pos" in obj || "@position" in obj;
   const hasPoints = "points" in obj || "@points" in obj || "pts" in obj || "@pts" in obj;
   const hasPlayed = "played" in obj || "@played" in obj || "pld" in obj || "@pld" in obj || "p" in obj || "@p" in obj;
+  // Must NOT have squad data (squads indicator)
+  const hasSquad = "squad" in obj;
+  if (hasSquad) return false;
   return hasPosition || (hasPoints && hasPlayed);
 }
 
 function parseStandingsRow(row: any): StandingsRow {
-  // Handle both direct fields and @-prefixed attributes
   const get = (keys: string[]): string => {
     for (const k of keys) {
       if (row[k] !== undefined) return String(row[k]);
@@ -114,33 +137,50 @@ export async function previewGoalserveTable(req: Request, res: Response) {
     return res.status(400).json({ ok: false, error: "leagueId query param required" });
   }
 
-  // Try different feed paths for standings
+  // Feed paths to try in order (explicit standings/table paths first, generic last)
   const feedPaths = [
-    `soccerleague/${leagueId}`,
-    `soccer/${leagueId}`,
+    `soccerleague/${leagueId}/standings`,
+    `soccerleague/${leagueId}/table`,
     `soccerstandings/${leagueId}`,
+    `soccer/${leagueId}/standings`,
+    `soccer/${leagueId}/table`,
+    `soccerleague/${leagueId}`, // LAST fallback - often returns squads
   ];
 
+  const attemptedFeeds: FeedAttempt[] = [];
   let lastResponse: any = null;
-  let feedUsed: string = "";
+  let lastFeedUsed: string = "";
 
   for (const feedPath of feedPaths) {
     try {
       const data = await goalserveFetch(feedPath);
+      const topLevelKeys = Object.keys(data || {});
+      
+      attemptedFeeds.push({
+        feed: feedPath,
+        ok: true,
+        topLevelKeys,
+      });
+
       lastResponse = data;
-      feedUsed = feedPath;
+      lastFeedUsed = feedPath;
+
+      // Check if this looks like squads data - skip if so
+      if (looksLikeSquadsData(data)) {
+        console.log(`[preview-goalserve-table] Feed ${feedPath} returned squads data, skipping`);
+        continue;
+      }
 
       const standingsRows = extractStandingsRows(data);
 
       if (standingsRows && standingsRows.length > 0) {
-        // Find the key path that contains standings data
-        const topLevelKeys = Object.keys(data || {});
         const standingsKeys = getNestedKeys(data);
 
         return res.json({
           ok: true,
           leagueId,
-          feedUsed,
+          feedUsed: feedPath,
+          attemptedFeeds,
           topLevelKeys,
           standingsKeys: standingsKeys.slice(0, 30),
           rowsCount: standingsRows.length,
@@ -148,7 +188,13 @@ export async function previewGoalserveTable(req: Request, res: Response) {
         });
       }
     } catch (err: any) {
-      console.error(`[preview-goalserve-table] Feed ${feedPath} failed:`, err.message);
+      const errorMsg = err.message?.slice(0, 200) || "Unknown error";
+      console.error(`[preview-goalserve-table] Feed ${feedPath} failed:`, errorMsg);
+      attemptedFeeds.push({
+        feed: feedPath,
+        ok: false,
+        error: errorMsg,
+      });
       // Continue to next feed path
     }
   }
@@ -160,10 +206,11 @@ export async function previewGoalserveTable(req: Request, res: Response) {
   return res.json({
     ok: false,
     leagueId,
-    feedUsed,
+    feedUsed: lastFeedUsed,
+    attemptedFeeds,
     topLevelKeys,
     nestedKeys: getNestedKeys(lastResponse).slice(0, 30),
     responseSample,
-    message: "Could not locate standings rows in response. Check nestedKeys and responseSample to identify correct path.",
+    message: "Could not locate standings rows in any attempted feed. Check attemptedFeeds and responseSample to identify correct path.",
   });
 }

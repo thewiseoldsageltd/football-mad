@@ -1496,3 +1496,44 @@ Implementation:
 
 ---
 
+Update server/jobs/preview-goalserve-table.ts so we stop guessing.
+
+Right now it returns feedUsed=soccerleague/1204 with squads data. We need full diagnostics for every attempted feed.
+
+Make these changes:
+
+1) Maintain an array attemptedFeeds: { feed: string, ok: boolean, status?: number, error?: string, topLevelKeys?: string[] }[].
+
+2) Try feeds in this exact order:
+- soccerleague/{leagueId}/standings
+- soccerleague/{leagueId}/table
+- soccerstandings/{leagueId}
+- soccer/{leagueId}/standings
+- soccer/{leagueId}/table
+- soccerleague/{leagueId}  (LAST fallback)
+
+3) For each feed attempt:
+- call goalserveFetch(feed)
+- on success, push {feed, ok:true, topLevelKeys:Object.keys(response)}
+- if standings rows found, return ok:true with feedUsed + sampleRows.
+- if response looks like squads (league.team[].squad.player[]), DO NOT accept it; continue to next feed.
+- If goalserveFetch throws (e.g. 500 HTML), catch it and push {feed, ok:false, error: err.message.slice(0,200)} and continue.
+
+4) If no standings rows found after all attempts, return:
+{
+  ok:false,
+  leagueId,
+  feedUsed:lastTriedFeed,
+  attemptedFeeds,
+  topLevelKeys,
+  nestedKeys (limited),
+  responseSample (first 800 chars),
+  message
+}
+
+5) Ensure the route POST /api/jobs/preview-goalserve-table still calls this updated function.
+
+After implementing, provide the curl command to test (one-line).
+
+---
+
