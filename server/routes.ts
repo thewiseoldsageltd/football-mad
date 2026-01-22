@@ -236,6 +236,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       awayScore: match.awayScore,
       venue: match.venue,
       competition: match.competition,
+      goalserveCompetitionId: match.goalserveCompetitionId,
       goalserveMatchId: match.goalserveMatchId,
       homeTeam: match.homeTeamId && homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
@@ -272,7 +273,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ];
 
       if (competitionId) {
-        conditions.push(eq(matches.competition, competitionId));
+        conditions.push(eq(matches.goalserveCompetitionId, competitionId));
       }
 
       if (teamId) {
@@ -326,7 +327,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ];
 
       if (competitionId) {
-        conditions.push(eq(matches.competition, competitionId));
+        conditions.push(eq(matches.goalserveCompetitionId, competitionId));
       }
 
       if (teamId) {
@@ -364,7 +365,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const conditions: any[] = [eq(matches.status, "live")];
 
       if (competitionId) {
-        conditions.push(eq(matches.competition, competitionId));
+        conditions.push(eq(matches.goalserveCompetitionId, competitionId));
       }
 
       if (teamId) {

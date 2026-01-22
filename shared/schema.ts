@@ -242,13 +242,14 @@ export const matches = pgTable("matches", {
   slug: text("slug").notNull().unique(),
   goalserveMatchId: text("goalserve_match_id").unique(),
   goalserveStaticId: text("goalserve_static_id"),
+  goalserveCompetitionId: text("goalserve_competition_id"),
   homeGoalserveTeamId: text("home_goalserve_team_id"),
   awayGoalserveTeamId: text("away_goalserve_team_id"),
   homeTeamId: varchar("home_team_id").references(() => teams.id),
   awayTeamId: varchar("away_team_id").references(() => teams.id),
   homeScore: integer("home_score"),
   awayScore: integer("away_score"),
-  competition: text("competition").default("Premier League"),
+  competition: text("competition"),
   venue: text("venue"),
   status: text("status").default("scheduled"),
   kickoffTime: timestamp("kickoff_time").notNull(),
@@ -258,6 +259,7 @@ export const matches = pgTable("matches", {
 }, (table) => [
   index("matches_kickoff_time_idx").on(table.kickoffTime),
   index("matches_goalserve_match_id_idx").on(table.goalserveMatchId),
+  index("matches_goalserve_competition_id_idx").on(table.goalserveCompetitionId),
 ]);
 
 export const matchesRelations = relations(matches, ({ one, many }) => ({

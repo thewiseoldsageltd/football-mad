@@ -1,0 +1,57 @@
+We found a critical schema issue in Postgres:
+
+- `matches.competition` currently has a DEFAULT of 'Premier League' (verified via `\d matches`).
+- `matches` does NOT currently have a `goalserve_competition_id` column (so filtering/mapping is fragile).
+- We already fixed UI to show `match.competition` and fixed ingestion to compute `competitionName`, but we must harden the schema + ingestion so we never silently stamp “Premier League” again.
+
+TASK: Implement ALL fixes end-to-end (DB + backend) with no manual file editing.
+
+A) DATABASE FIXES (run via SQL / psql from Replit)
+1) Remove the bad default:
+   ALTER TABLE matches ALTER COLUMN competition DROP DEFAULT;
+
+2) Add a new column for competition id:
+   ALTER TABLE matches ADD COLUMN IF NOT EXISTS goalserve_competition_id text;
+
+3) Add an index for filtering:
+   CREATE INDEX IF NOT EXISTS matches_goalserve_competition_id_idx ON matches(goalserve_competition_id);
+
+B) BACKEND FIXES (server/jobs/upsert-goalserve-matches.ts)
+1) Ensure we IMPORT competitions from schema if needed.
+2) Build a competitions lookup map once:
+   Map<string, string> from competitions.goalserveCompetitionId -> competitions.name
+3) For each match category:
+   - Extract competitionId = String(cat?.["@id"] ?? cat?.id ?? "")
+   - Resolve competitionName:
+       competitionsMap.get(competitionId) || String(cat?.["@name"] ?? cat?.name ?? "Unknown")
+4) Write BOTH fields on insert AND update:
+   - competition: competitionName
+   - goalserveCompetitionId (existing camelCase field, if present in schema) OR goalserve_competition_id (new DB column)
+   IMPORTANT: Our DB column is snake_case: goalserve_competition_id.
+   So update Drizzle/schema mapping accordingly:
+   - If schema uses camelCase property, map it to the snake_case DB column using drizzle `text("goalserve_competition_id")`.
+   - Then set that field in insert/update payload.
+
+C) BACKEND ROUTE FIXES (server/routes.ts)
+1) In the fixtures/results/live endpoints, update competition filtering to use the ID column:
+   - Accept query param `competitionId`
+   - Filter by matches.goalserveCompetitionId / matches.goalserveCompetitionId field mapped to `goalserve_competition_id`
+   - Do NOT filter by match.competition name anymore.
+2) Keep returning `competition: match.competition` in API response (already done).
+3) Also include `goalserveCompetitionId` in the API response so frontend can filter later if needed.
+
+D) MIGRATION / RE-INGEST
+1) After schema + code changes, run:
+   curl -sS -X POST "http://localhost:5000/api/jobs/upsert-goalserve-matches?feed=soccernew/home" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET"
+2) Verify competitions are diverse and default is gone:
+   - psql query:
+     SELECT competition, COUNT(*) FROM matches GROUP BY competition ORDER BY COUNT(*) DESC LIMIT 20;
+   - psql query:
+     SELECT COUNT(*) FROM matches WHERE competition='Premier League' AND goalserve_competition_id IS DISTINCT FROM '1204';
+3) Verify fixtures endpoint filter works by ID:
+   curl -sS "http://localhost:5000/api/matches/fixtures?days=7&competitionId=1204" | head -c 1200
+
+OUTPUT REQUIRED:
+- Tell me exactly which files were changed.
+- Tell me exactly which SQL statements were executed.
+- Provide the exact curl + psql verification commands again.

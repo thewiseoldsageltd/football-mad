@@ -199,6 +199,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             .update(matches)
             .set({
               goalserveStaticId: goalserveStaticId || null,
+              goalserveCompetitionId: competitionId || null,
               homeGoalserveTeamId: homeGsId || null,
               awayGoalserveTeamId: awayGsId || null,
               homeTeamId,
@@ -218,6 +219,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             slug,
             goalserveMatchId,
             goalserveStaticId: goalserveStaticId || null,
+            goalserveCompetitionId: competitionId || null,
             homeGoalserveTeamId: homeGsId || null,
             awayGoalserveTeamId: awayGsId || null,
             homeTeamId,
