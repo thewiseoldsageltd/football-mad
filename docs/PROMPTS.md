@@ -1408,5 +1408,91 @@ We already have:
 Now implement global matches ingestion:
 
 1) Schema updates (only if needed):
-- In @shared/schema.ts, ensure matches table has these nullable
+- In @shared/schema.ts, ensure matches table has these nullable columns:
+  - homeGoalserveTeamId (text)
+  - awayGoalserveTeamId (text)
+- Ensure homeTeamId and awayTeamId are nullable (so we can store matches before teams are mapped).
+- If matches.raw exists use it; otherwise use matches.timeline for raw JSON storage.
+- Provide the exact command to push schema changes (drizzle).
+
+2) Job:
+Create server/jobs/upsert-goalserve-matches.ts and wire route:
+POST /api/jobs/upsert-goalserve-matches?feed=soccernew/home
+Protected by requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+Rules:
+- Call goalserveFetch(feed) exactly. Do NOT prefix soccernew/ inside the job.
+- Parse response.scores.category[].matches.match[] (handle array/object).
+- For each match:
+  - goalserveMatchId = match["@id"] required; if missing -> skippedNoMatchId++
+  - goalserveStaticId optional
+  - homeGsId/awayGsId from match.localteam["@id"] and match.visitorteam["@id"] (fallback home/away)
+  - Always store homeGoalserveTeamId/awayGoalserveTeamId
+  - Attempt to map to teams.id via teams.goalserveTeamId; if found set homeTeamId/awayTeamId else leave null
+  - kickoffTime: parse dd.mm.yyyy from match["@formatted_date"] or category.matches["@formatted_date"]
+    time from match["@time"] or if match["@status"] is HH:MM use that
+    if date parse fails -> skippedNoKickoff++ and skip record (kickoffTime required)
+  - status normalization (scheduled/live/finished/postponed) similar to earlier approach
+  - scores nullable
+  - venue optional
+  - slug = `gs-${goalserveMatchId}`
+  - store compact raw payload in raw/timeline
+
+- Upsert idempotently by matches.goalserveMatchId (unique).
+
+Return JSON:
+{
+  ok: true,
+  feed,
+  totalFromGoalserve,
+  inserted,
+  updated,
+  skippedNoMatchId,
+  skippedNoKickoff,
+  mappedTeams,
+  unmappedTeams
+}
+
+3) After implementing:
+- Provide the exact curl command to run the job.
+- Provide one verification command to confirm rows exist (either SQL via psql if available, or a small debug endpoint).
+
+---
+
+We now have global matches ingest working and verified.
+
+Next: implement a DRY-RUN preview endpoint for Premier League standings.
+
+Create:
+POST /api/jobs/preview-goalserve-table?leagueId=1204
+
+Requirements:
+- Do NOT write to DB.
+- Use goalserveFetch with the correct Goalserve feed path for league standings for the given leagueId.
+  (Try likely feed families like soccerleague/<leagueId> or a standings/table feed if needed.)
+- Return JSON:
+{
+  ok: true,
+  leagueId,
+  feedUsed,
+  topLevelKeys: string[],
+  standingsKeys: string[],
+  rowsCount: number,
+  sampleRows: [
+    { position, teamGoalserveId, teamName, played, wins, draws, losses, goalsFor, goalsAgainst, goalDiff, points }
+  ]
+}
+
+Robustness:
+- Handle object vs array.
+- If the expected standings nodes are missing, return:
+  { ok:false, leagueId, feedUsed, topLevelKeys, responseSample: first 800 chars }
+- The key goal is to identify the correct node path for the standings rows reliably.
+
+Implementation:
+- server/jobs/preview-goalserve-table.ts
+- Wire route in server/routes.ts protected by requireJobSecret("GOALSERVE_SYNC_SECRET")
+- After implementing, provide the exact curl command to test it.
+
+---
 
