@@ -1,0 +1,44 @@
+You are editing server/jobs/upsert-goalserve-matches.ts.
+
+Problem:
+Finished matches are appearing in the UI, but homeScore/awayScore are often null even when the match is FT. This leads to cards showing "-" instead of the actual score.
+
+Goal:
+Improve score extraction from Goalserve so that for FT/finished matches we reliably capture scores. Goalserve can represent scores in different fields depending on competition/feed.
+
+Requirements:
+1) Add a small helper function near the top of the file:
+
+   function extractScore(match: any, teamObj: any, side: "home" | "away"): number | null
+
+   It should try multiple possible fields (in order), returning the first valid integer:
+   - teamObj?.["@score"], teamObj?.score
+   - teamObj?.["@goals"], teamObj?.goals
+   - match?.[`@${side}score`], match?.[`${side}score`]
+   - match?.[`@${side}_score`], match?.[`${side}_score`]
+   - match?.[`@${side}TeamScore`], match?.[`${side}TeamScore`]
+   - match?.result / match?.["@result"] patterns like "2-1" (split and pick correct side)
+   - match?.score / match?.["@score"] patterns like "2-1"
+   Return null if nothing parseable.
+
+2) Replace the current score reads:
+   const homeScore = localTeam["@score"] ?? localTeam.score;
+   const awayScore = visitorTeam["@score"] ?? visitorTeam.score;
+
+   With:
+   const homeScore = extractScore(match, localTeam, "home");
+   const awayScore = extractScore(match, visitorTeam, "away");
+
+3) Ensure newHomeScore/newAwayScore are derived from those numbers:
+   const newHomeScore = homeScore;
+   const newAwayScore = awayScore;
+
+4) Preserve the existing “never overwrite final scores with null” behaviour:
+   finalHomeScore = newHomeScore !== null ? newHomeScore : existingMatch.homeScore
+   finalAwayScore = newAwayScore !== null ? newAwayScore : existingMatch.awayScore
+
+5) Make sure INSERTS write homeScore/awayScore correctly and UPDATES apply the finalHomeScore/finalAwayScore fields.
+
+6) Do not change anything about kickoff parsing, round extraction, or the mapping logic beyond this score extraction improvement.
+
+Apply the changes directly.

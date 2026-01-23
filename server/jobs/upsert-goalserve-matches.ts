@@ -76,6 +76,62 @@ function extractRound(match: any, category: any): string | null {
   return null;
 }
 
+// Extract score from various possible Goalserve field locations
+function extractScore(match: any, teamObj: any, side: "home" | "away"): number | null {
+  // Helper to parse a value as integer
+  const tryParse = (val: any): number | null => {
+    if (val == null || val === "") return null;
+    const n = parseInt(String(val), 10);
+    return isNaN(n) ? null : n;
+  };
+
+  // Try team object fields first
+  const teamFields = [
+    teamObj?.["@score"],
+    teamObj?.score,
+    teamObj?.["@goals"],
+    teamObj?.goals,
+  ];
+  for (const val of teamFields) {
+    const parsed = tryParse(val);
+    if (parsed !== null) return parsed;
+  }
+
+  // Try match-level score fields
+  const matchFields = [
+    match?.[`@${side}score`],
+    match?.[`${side}score`],
+    match?.[`@${side}_score`],
+    match?.[`${side}_score`],
+    match?.[`@${side}TeamScore`],
+    match?.[`${side}TeamScore`],
+  ];
+  for (const val of matchFields) {
+    const parsed = tryParse(val);
+    if (parsed !== null) return parsed;
+  }
+
+  // Try result/score patterns like "2-1"
+  const resultFields = [
+    match?.result,
+    match?.["@result"],
+    match?.score,
+    match?.["@score"],
+  ];
+  for (const val of resultFields) {
+    if (typeof val === "string" && val.includes("-")) {
+      const parts = val.split("-").map(p => p.trim());
+      if (parts.length === 2) {
+        const idx = side === "home" ? 0 : 1;
+        const parsed = tryParse(parts[idx]);
+        if (parsed !== null) return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
 interface DbTeam {
   id: string;
   goalserveTeamId: string | null;
@@ -198,8 +254,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
 
         const homeGsId = String(localTeam["@id"] ?? localTeam.id ?? "");
         const awayGsId = String(visitorTeam["@id"] ?? visitorTeam.id ?? "");
-        const homeScore = localTeam["@score"] ?? localTeam.score;
-        const awayScore = visitorTeam["@score"] ?? visitorTeam.score;
+        const homeScore = extractScore(match, localTeam, "home");
+        const awayScore = extractScore(match, visitorTeam, "away");
 
         const homeTeamId = teamByGoalserveId.get(homeGsId) || null;
         const awayTeamId = teamByGoalserveId.get(awayGsId) || null;
@@ -239,9 +295,9 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           .where(eq(matches.goalserveMatchId, goalserveMatchId))
           .limit(1);
 
-        // Parse new scores from feed
-        const newHomeScore = homeScore != null && homeScore !== "" ? parseInt(String(homeScore), 10) : null;
-        const newAwayScore = awayScore != null && awayScore !== "" ? parseInt(String(awayScore), 10) : null;
+        // extractScore already returns number | null
+        const newHomeScore = homeScore;
+        const newAwayScore = awayScore;
 
         // Track FT matches with/without scores
         if (status === "finished") {
