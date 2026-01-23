@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin, Globe } from "lucide-react";
+import { Calendar, Globe } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
@@ -75,14 +75,6 @@ function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "
   );
 }
 
-// Decode HTML entities (fixes &amp;apos; etc in venue names)
-function decodeHtml(html: string | null | undefined): string {
-  if (!html) return "";
-  const textarea = document.createElement("textarea");
-  textarea.innerHTML = html;
-  return textarea.value;
-}
-
 function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?: number }) {
   switch (status) {
     case "live":
@@ -117,7 +109,9 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
   const showScore = match.status === "live" || match.status === "finished";
   const isLive = match.status === "live";
   // Use provided competitionLabel (may be disambiguated), fallback to match.competition
-  const displayLabel = competitionLabel || match.competition;
+  // Strip any country suffix like "(England)" or "• England" - flag is enough
+  const rawLabel = competitionLabel || match.competition;
+  const displayLabel = rawLabel.replace(/\s*\([^)]+\)\s*$/, "").replace(/\s*•\s*\w+\s*$/, "");
 
   return (
     <div
@@ -131,27 +125,31 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
       )}
       <Card className="hover-elevate active-elevate-2 overflow-hidden">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""} overflow-hidden`}>
-          {/* 5-column grid: [crest][name][center][name][crest] */}
-          <div className="grid grid-cols-[44px_minmax(0,1fr)_96px_minmax(0,1fr)_44px] md:grid-cols-[44px_minmax(0,1fr)_140px_minmax(0,1fr)_44px] gap-x-2 items-center">
+          {/* LINE 1: Competition pill (centered) */}
+          <div className="flex justify-center mb-2">
+            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
+          </div>
+
+          {/* LINE 2: 5-column grid [crest][name-right][kickoff][name-left][crest] */}
+          <div className="grid grid-cols-[40px_minmax(0,1fr)_64px_minmax(0,1fr)_40px] md:grid-cols-[40px_minmax(0,1fr)_80px_minmax(0,1fr)_40px] gap-x-2 items-center">
             {/* Home crest */}
-            <div className="flex items-center justify-center">
+            <div className="w-10 h-10 flex-shrink-0">
               <TeamLogo team={match.homeTeam} size="sm" />
             </div>
 
             {/* Home name - right aligned toward center */}
-            <div className="min-w-0 justify-self-end">
+            <div className="min-w-0 overflow-hidden">
               <span className="font-medium text-sm truncate block text-right">{match.homeTeam.name}</span>
             </div>
 
-            {/* Center: pill above kickoff time */}
-            <div className="flex flex-col items-center justify-center gap-1">
-              <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
+            {/* Center: kickoff time / score */}
+            <div className="min-w-[64px] flex flex-col items-center justify-center">
               {showScore ? (
-                <div className="text-xl font-bold tabular-nums whitespace-nowrap">
+                <div className="text-lg font-bold tabular-nums whitespace-nowrap">
                   {match.homeScore} – {match.awayScore}
                 </div>
               ) : match.status === "postponed" ? (
-                <div className="text-sm text-muted-foreground font-medium">TBC</div>
+                <div className="text-sm text-muted-foreground font-medium whitespace-nowrap">TBC</div>
               ) : (
                 <div className="text-lg font-bold tabular-nums whitespace-nowrap">
                   {format(kickoffTime, "HH:mm")}
@@ -161,27 +159,22 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
             </div>
 
             {/* Away name - left aligned toward center */}
-            <div className="min-w-0 justify-self-start">
+            <div className="min-w-0 overflow-hidden">
               <span className="font-medium text-sm truncate block text-left">{match.awayTeam.name}</span>
             </div>
 
             {/* Away crest */}
-            <div className="flex items-center justify-center">
+            <div className="w-10 h-10 flex-shrink-0">
               <TeamLogo team={match.awayTeam} size="sm" />
             </div>
           </div>
 
-          <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground/70">
+          {/* LINE 3: Date only (no venue) */}
+          <div className="flex items-center justify-center mt-2 text-xs text-muted-foreground/70">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               {format(kickoffTime, "EEE d MMM")}
             </span>
-            {match.venue && (
-              <span className="flex items-center gap-1">
-                <MapPin className="h-3 w-3" />
-                {decodeHtml(match.venue)}
-              </span>
-            )}
           </div>
         </CardContent>
       </Card>

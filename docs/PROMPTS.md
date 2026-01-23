@@ -3717,3 +3717,41 @@ Deliverables:
 
 ---
 
+Goal: Fix match card layout so crests + team names + kickoff time are ALWAYS aligned on one horizontal row, with competition pill on its own centered line above, and date on its own line below. Remove stadium name from match cards.
+
+Implement this exact 3-line structure in the MatchCard / EnhancedMatchCard component:
+
+Line 1 (centered): [Country flag + Competition name pill]  (NO country text like "(England)" or "• England" — flag is enough)
+Line 2 (single horizontal row, always): [Crest A] [Team A] [Kickoff Time] [Team B] [Crest B]
+Line 3 (centered, muted): [Date]
+
+Layout requirements:
+- Use a 5-column CSS grid for Line 2 so nothing shifts:
+  - col1 fixed crest (e.g. w-10)
+  - col2 team A name (flex), RIGHT aligned, truncate
+  - col3 kickoff time fixed (e.g. min-w-[64px]), centered, no wrap
+  - col4 team B name (flex), LEFT aligned, truncate
+  - col5 fixed crest (w-10)
+- Ensure crests never overlap text on mobile. Add min-widths and overflow hidden on the name columns.
+- On desktop keep the same grid but allow more width (so truncation happens less).
+- Remove stadium/venue line entirely from match cards (do not render it).
+- Keep server ordering unchanged.
+
+Also:
+- If any code currently appends country in brackets/dot to the competition label for disambiguation, remove that in the pill label. Disambiguation should rely on the country flag in the pill only.
+
+Do NOT run long test loops. Make the changes, run only:
+1) Typecheck/build once
+2) A quick UI check by starting dev server (no repeated retesting)
+
+Files likely involved:
+- client/src/components/matches/EnhancedMatchCard.tsx (or MatchCard)
+- any helper that builds competition labels used by the pill
+
+Acceptance:
+- Mobile screenshot should show full “Derby” and “West Brom” when pill is “Championship” (flag only) and never reduce to single letters.
+- No crest overlaps team names.
+- Kickoff time remains perfectly aligned horizontally between the team names.
+
+---
+
