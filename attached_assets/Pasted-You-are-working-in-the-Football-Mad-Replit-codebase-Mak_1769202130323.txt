@@ -1,0 +1,93 @@
+You are working in the Football Mad Replit codebase. Make **targeted UI-only changes** (no refactors, no long test loops). Do **NOT** run lengthy E2E suites or “test/retest” loops — only do: `pnpm lint` (or equivalent) + a quick manual smoke check in the browser.
+
+GOAL: Fix the Matches page layout regressions and mobile truncation issues.
+
+--------------------------------------------
+A) Revert the “hug the centre” layout on desktop
+--------------------------------------------
+Desktop looked better previously with natural spacing. Undo any recent changes that centered/hugged team names + crests toward the middle on desktop.
+
+Acceptance:
+- On desktop: home team/crest stays left, away team/crest stays right, kickoff time is centered between them (classic layout).
+- No “compressed” center-hugging look.
+
+--------------------------------------------
+B) Make the competition pill SHORT again (remove country text everywhere)
+--------------------------------------------
+The pill should NOT include country in brackets or in any “• England” / “(England)” style.
+
+Rules:
+- The pill should display the competition/league name ONLY (e.g. “Championship”, “Serie A”, “Bundesliga 2”).
+- The flag in the pill already conveys the country — no country name text appended in any format.
+- This applies BOTH in match cards and in dropdown options.
+
+Implementation hint:
+- Find where `competitionLabel` (or any “disambiguated label”) is being built and remove the country suffix logic.
+- Keep the country flag icon logic as-is.
+
+Acceptance:
+- No pills show “(England)” or “• England” or any country text.
+- “Championship” remains “Championship” (flag still shows).
+
+--------------------------------------------
+C) Mobile: Stop team-name truncation + overflow (Derby/West Brom showing as “D…” / “W..”)
+--------------------------------------------
+Problem: a long pill is starving horizontal space, causing extreme truncation and even overflow off-screen.
+
+Fix strategy (mobile-first):
+1) On mobile, place the competition pill on its **own row at the top** of the card (full-width, centered).
+2) The teams + kickoff row underneath should be a **3-column grid**:
+   - Left column: home crest + home name (allow more width)
+   - Middle: kickoff time (fixed width / does not wrap)
+   - Right column: away name + away crest (allow more width)
+3) Ensure text truncation is sensible (e.g. `truncate`), but names should generally show much more than 1 character.
+4) Ensure NOTHING bleeds outside the card:
+   - Add `min-w-0` to grid children where needed
+   - Use `overflow-hidden` on the card content container if required
+
+Desktop should remain the classic single-row layout (pill should NOT push kickoff time down on desktop):
+- On desktop, pill should sit above the teams/time row OR be positioned so the kickoff time stays aligned with team names/crests (no vertical push that breaks alignment).
+
+Acceptance:
+- On mobile: “Derby” and “West Brom” show materially more characters (not just “D…” / “W..”).
+- No horizontal overflow off the right edge.
+- Kickoff time stays centered and readable.
+
+--------------------------------------------
+D) Desktop: “one fixture per line” (no 2-column grid) + faint divider between competition groups
+--------------------------------------------
+Change desktop layout so matches render as a single column list (one match card per row).
+Add a subtle divider line between competition groups (when the competition changes) — faint, consistent with existing UI.
+
+Acceptance:
+- Desktop: never shows 2 matches side-by-side on Matches list.
+- A faint divider appears between competition sections.
+
+--------------------------------------------
+E) Filters UX (mobile)
+--------------------------------------------
+You already have “Filter by…” and “Sort by…” placeholders — keep that.
+On mobile:
+- Center the placeholder text
+- Keep the dropdown chevron aligned right (consistent with the rest of the site)
+
+Acceptance:
+- On mobile: “Filter by…” is visually centered; chevron is right-aligned within the select.
+
+--------------------------------------------
+FILES (likely)
+- `client/src/components/MatchesList.tsx` (grouping + divider insertion)
+- `client/src/components/EnhancedMatchCard.tsx` (layout/pill rendering)
+- `client/src/pages/matches.tsx` (filter selects styling/props)
+
+--------------------------------------------
+CONSTRAINTS
+- Do not rework backend or sorting logic — UI only.
+- Do not introduce new libraries.
+- Minimal code changes; no massive refactors.
+- Avoid long-running tests. Only quick lint + manual check.
+
+DELIVERABLE
+1) Implement the changes.
+2) Provide a concise summary of what changed and where (file + key edits).
+3) Confirm acceptance criteria items A–E.

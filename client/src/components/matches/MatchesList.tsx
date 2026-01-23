@@ -92,23 +92,10 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           displayLabelCounts.get(displayLabel)!.push(groupKey);
         });
 
-        // Build competition groups with disambiguated labels
+        // Build competition groups - no country disambiguation needed (flag conveys country)
         const competitions: CompetitionGroup[] = [];
         byCompetition.forEach((compMatches, groupKey) => {
-          const baseDisplayLabel = compMatches[0].competition;
-          const rawCompetition = compMatches[0].rawCompetition;
-          
-          // Check if this display label has collisions
-          const collisions = displayLabelCounts.get(baseDisplayLabel) || [];
-          let displayLabel = baseDisplayLabel;
-          
-          if (collisions.length > 1) {
-            // Disambiguate with country using bullet separator (no brackets)
-            const country = extractCountryFromRaw(rawCompetition);
-            if (country) {
-              displayLabel = `${baseDisplayLabel} • ${country}`;
-            }
-          }
+          const displayLabel = compMatches[0].competition;
           
           competitions.push({
             groupKey,

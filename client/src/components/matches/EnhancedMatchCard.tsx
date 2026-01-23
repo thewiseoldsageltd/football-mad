@@ -122,30 +122,32 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
         <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
       )}
       <Card className="hover-elevate active-elevate-2 overflow-hidden">
-        <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
-          <div className="grid grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto] gap-x-2 gap-y-1">
-            {/* Row 1: Competition pill centered */}
+        <CardContent className={`p-4 ${isLive ? "pl-5" : ""} overflow-hidden`}>
+          {/* Mobile: pill on its own row */}
+          <div className="flex justify-center mb-2 sm:hidden">
+            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
+          </div>
+
+          {/* Desktop: 2-row grid with pill above teams */}
+          <div className="hidden sm:grid grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto] gap-x-3 gap-y-1">
             <div className="col-start-2 row-start-1 flex justify-center">
               <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
             </div>
 
-            {/* Row 2: Home team | Score/Time + Status | Away team */}
-            <div className="col-start-1 row-start-2 min-w-0 flex items-center gap-2 justify-end">
+            <div className="col-start-1 row-start-2 min-w-0 flex items-center gap-2">
               <div className="shrink-0">
                 <TeamLogo team={match.homeTeam} size="sm" />
               </div>
-              <span className="font-medium text-sm min-w-0 truncate overflow-hidden whitespace-nowrap">{match.homeTeam.name}</span>
+              <span className="font-medium text-sm min-w-0 truncate">{match.homeTeam.name}</span>
             </div>
 
-            <div className="col-start-2 row-start-2 flex flex-col items-center justify-center gap-0.5 px-1">
+            <div className="col-start-2 row-start-2 flex flex-col items-center justify-center gap-0.5 px-2">
               {showScore ? (
                 <div className="text-xl font-bold tabular-nums whitespace-nowrap">
                   {match.homeScore} – {match.awayScore}
                 </div>
               ) : match.status === "postponed" ? (
-                <div className="text-sm text-muted-foreground font-medium">
-                  TBC
-                </div>
+                <div className="text-sm text-muted-foreground font-medium">TBC</div>
               ) : (
                 <div className="text-lg font-bold tabular-nums whitespace-nowrap">
                   {format(kickoffTime, "HH:mm")}
@@ -154,8 +156,40 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
               <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
-            <div className="col-start-3 row-start-2 min-w-0 flex items-center gap-2 justify-start">
-              <span className="font-medium text-sm min-w-0 truncate overflow-hidden whitespace-nowrap">{match.awayTeam.name}</span>
+            <div className="col-start-3 row-start-2 min-w-0 flex items-center gap-2 justify-end">
+              <span className="font-medium text-sm min-w-0 truncate text-right">{match.awayTeam.name}</span>
+              <div className="shrink-0">
+                <TeamLogo team={match.awayTeam} size="sm" />
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile: 3-column teams row (no pill here, already above) */}
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 items-center sm:hidden">
+            <div className="min-w-0 flex items-center gap-2 justify-end">
+              <div className="shrink-0">
+                <TeamLogo team={match.homeTeam} size="sm" />
+              </div>
+              <span className="font-medium text-sm min-w-0 truncate">{match.homeTeam.name}</span>
+            </div>
+
+            <div className="flex flex-col items-center justify-center gap-0.5 px-1">
+              {showScore ? (
+                <div className="text-xl font-bold tabular-nums whitespace-nowrap">
+                  {match.homeScore} – {match.awayScore}
+                </div>
+              ) : match.status === "postponed" ? (
+                <div className="text-sm text-muted-foreground font-medium">TBC</div>
+              ) : (
+                <div className="text-lg font-bold tabular-nums whitespace-nowrap">
+                  {format(kickoffTime, "HH:mm")}
+                </div>
+              )}
+              <StatusBadge status={match.status} minute={match.minute} />
+            </div>
+
+            <div className="min-w-0 flex items-center gap-2 justify-start">
+              <span className="font-medium text-sm min-w-0 truncate">{match.awayTeam.name}</span>
               <div className="shrink-0">
                 <TeamLogo team={match.awayTeam} size="sm" />
               </div>
