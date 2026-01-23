@@ -243,6 +243,7 @@ export const matches = pgTable("matches", {
   goalserveMatchId: text("goalserve_match_id").unique(),
   goalserveStaticId: text("goalserve_static_id"),
   goalserveCompetitionId: text("goalserve_competition_id"),
+  goalserveRound: text("goalserve_round"),
   homeGoalserveTeamId: text("home_goalserve_team_id"),
   awayGoalserveTeamId: text("away_goalserve_team_id"),
   homeTeamId: varchar("home_team_id").references(() => teams.id),
@@ -260,6 +261,7 @@ export const matches = pgTable("matches", {
   index("matches_kickoff_time_idx").on(table.kickoffTime),
   index("matches_goalserve_match_id_idx").on(table.goalserveMatchId),
   index("matches_goalserve_competition_id_idx").on(table.goalserveCompetitionId),
+  index("matches_goalserve_round_idx").on(table.goalserveRound),
 ]);
 
 export const matchesRelations = relations(matches, ({ one, many }) => ({

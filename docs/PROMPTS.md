@@ -2139,3 +2139,183 @@ Deliverables:
 
 ---
 
+You are Replit AI working inside the Football Mad codebase. Make the following changes end-to-end (backend + frontend) and keep it safe/idempotent. Prefer small, focused diffs.
+
+GOAL
+Update the Matches page “Results” UX:
+1) Replace the Results time controls to be user-friendly:
+   - Yesterday
+   - This Week
+   - Last 30 Days
+2) Add a “Browse” mode stub for FPL-style browsing:
+   - Toggle: Quick | Browse
+   - Browse UI: Competition dropdown + Round/Matchday dropdown (UI can be stubbed until round data exists)
+3) Add round/matchday ingestion + API support so Browse can work:
+   - Store a round identifier on matches from Goalserve feed
+   - Expose it in the API
+   - Allow filtering results by competitionId + round
+
+IMPORTANT CONSTRAINTS
+- Do NOT break existing fixtures UI.
+- Do NOT duplicate competition dropdowns (there is currently a duplicate — remove the old one).
+- Keep the existing endpoints working.
+- Implement with minimal UI disruption and clear defaults.
+- Add debug/diagnostic helpers where useful.
+
+========================================================
+BACKEND CHANGES
+========================================================
+
+A) Schema: add a round field to matches
+- In shared/schema.ts (matches table), add:
+  - goalserveRound: text("goalserve_round")
+- Add an index on it:
+  - matches_goalserve_round_idx on (goalserve_round)
+- Do NOT add defaults.
+- Apply DB migration via SQL (since drizzle-kit prompts):
+  - ALTER TABLE matches ADD COLUMN IF NOT EXISTS goalserve_round text;
+  - CREATE INDEX IF NOT EXISTS matches_goalserve_round_idx ON matches(goalserve_round);
+
+B) Ingest: upsert-goalserve-matches should populate goalserve_round
+File: server/jobs/upsert-goalserve-matches.ts
+
+We already parse response.scores.category[].matches.match[] and store timeline/raw.
+
+1) Determine where “round / matchday” exists in the Goalserve soccernew feed.
+   Implement a robust extractor that checks common places:
+   - match["@round"], match["@matchday"], match["@week"], match["@round_id"], match["round"], match["matchday"]
+   - category["@round"], category["@name"] patterns if round is embedded, category["round"] fields
+   - response.scores["@round"] etc (if present)
+2) Add helper:
+   - function extractRound(match: any, category: any): string | null
+   - return string values only, trimmed, or null
+3) Include goalserveRound in both INSERT and UPDATE statements:
+   - goalserveRound: extractedRound
+4) Keep upsert idempotent (still keyed by goalserve_match_id).
+5) Add to job response a small diagnostic count:
+   - withRound / withoutRound
+
+C) API: include round in match responses and allow filtering
+File: server/routes.ts
+
+We already have:
+- GET /api/matches/fixtures
+- GET /api/matches/results
+- GET /api/matches/live
+
+1) Update the common formatter (formatMatchResponse or equivalent) to include:
+   - goalserveRound: match.goalserveRound (or null)
+2) Results endpoint:
+   - Add optional query param: round (string)
+   - If provided, filter matches.goalserveRound == round
+   - Keep existing “days” behavior but ensure it plays well with Yesterday/This Week/Last 30 Days:
+     - Accept days as before, but frontend will set days to 1/7/30
+3) Add a new helper endpoint (lightweight) for Browse dropdown options:
+   - GET /api/matches/rounds?competitionId=<id>&days=30
+   - Returns a sorted array of distinct non-null rounds available in that window
+   - Shape:
+     { ok: true, competitionId, days, rounds: string[] }
+   - Sorting: try numeric sort if rounds are numeric; fallback lexicographic.
+
+========================================================
+FRONTEND CHANGES
+========================================================
+
+Target file: client/src/pages/matches.tsx
+
+D) Remove duplicate competition dropdown
+There are currently two competition dropdowns in the UI.
+- Keep ONLY the one that is populated from fetched fixtures data and drives API filtering.
+- Remove the old/hardcoded competition dropdown from MatchesFilters if it still exists.
+- MatchesFilters should only handle:
+  - Sort dropdown
+  - Search input (if still needed)
+(If you believe Search by team is low-value, do not remove it yet—just leave it for now unless it’s clearly redundant.)
+
+E) Results UX: Quick vs Browse
+On the Matches page, on the “Results” view:
+
+1) Add a small toggle at the top of Results controls:
+   - Quick | Browse
+   Default: Quick
+
+2) Quick mode:
+   Replace 7/14/30 style with:
+   - Yesterday (days=1)
+   - This Week (days=7)
+   - Last 30 Days (days=30)
+   These buttons should only show on Results tab (not on fixtures).
+
+3) Browse mode (FPL-style):
+   - Show Competition dropdown (use the same Select component pattern)
+   - Show Round dropdown (Select)
+   - Round dropdown options should be fetched from backend:
+     - /api/matches/rounds?competitionId=<selected>&days=30
+   - When a round is selected:
+     - Results query should include round=<round>
+   - If no competition selected, disable the Round dropdown with a hint “Select a competition first”.
+
+4) Results data source:
+   - Stop using mock results.
+   - Use API: /api/matches/results?days=<1|7|30>&competitionId=<optional>&round=<optional>
+   - Query keys must include all inputs:
+     - ["results", days, competitionId, round]
+
+F) Fixtures UX alignment (do not break)
+For fixtures:
+- Keep Today / Tomorrow / This Week navigation if it exists.
+- Ensure Today and Tomorrow are computed client-side from the fetched fixtures list:
+  - Today: kickoff in local day (00:00–23:59 today)
+  - Tomorrow: kickoff in local day tomorrow
+  - This Week: kickoff within next 7 days (or Mon–Sun if that’s already used)
+If Tomorrow count is showing 0 due to server-time issues, fix grouping on client using kickoffTime values.
+
+G) Competition badge label cleanup
+Currently competition strings may include “(Brazil) [1140]” etc.
+- Implement a display helper:
+  - parse “Name (Country) [ID]” => { name, country, id }
+  - display as: flag icon + name
+- Use a proper flag presentation:
+  - Use emoji flags for now (small but acceptable) OR a simple CSS “flag pill” with emoji inside a rounded square.
+  - Remove the trophy icon from the competition badge.
+- Do NOT show “[ID]” in the pill or dropdown labels.
+- Still keep the ID internally for filtering.
+
+H) Team crests question (do not overreach)
+Goalserve soccernew feed likely does NOT provide reliable crest URLs.
+- Do NOT fake crests.
+- Add a clear TODO comment + a graceful extension point:
+  - If API later returns homeTeam.logoUrl / awayTeam.logoUrl, use it.
+- Keep letter avatars for now.
+
+========================================================
+TESTING / ACCEPTANCE
+========================================================
+
+1) Re-ingest matches and verify rounds populate:
+- Run:
+  curl -sS -X POST "http://localhost:5000/api/jobs/upsert-goalserve-matches?feed=soccernew/home" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET"
+- Verify:
+  psql "$DATABASE_URL" -c "SELECT COUNT(*) total, COUNT(goalserve_round) with_round FROM matches WHERE goalserve_match_id IS NOT NULL;"
+
+2) API checks:
+- Results quick:
+  curl -sS "http://localhost:5000/api/matches/results?days=7" | head -c 400
+- Rounds list:
+  curl -sS "http://localhost:5000/api/matches/rounds?competitionId=1204&days=30"
+  (Use any valid competitionId that exists in matches.)
+
+3) UI checks:
+- Results tab shows Quick/Browse toggle.
+- Quick shows Yesterday/This Week/Last 30 Days and returns results from API.
+- Browse shows Competition dropdown and Round dropdown (rounds fetched).
+- No duplicate competition dropdowns on Fixtures.
+- Competition pills show “🇧🇷 Cearense” style without “[1146]” and without trophy icon.
+- Today/Tomorrow counts reflect client-side grouping of kickoffTime.
+
+DELIVERABLES
+- Provide the exact files changed with brief summaries.
+- If any uncertainty about where round is in the feed, add logging in the upsert job to sample one match’s keys (redacting secrets) and implement the extractor defensively so it works across variants.
+
+---
+
