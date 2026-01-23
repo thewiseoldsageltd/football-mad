@@ -3985,3 +3985,18 @@ Apply the code changes directly.
 
 ---
 
+Update client/src/pages/matches.tsx so the Matches page automatically refreshes while viewing Today's date.
+
+Requirements:
+- Only enable polling when selectedDate is today (isToday === true).
+- Use react-query refetchInterval on BOTH queries:
+  1) the main matches query (matchesData)
+  2) the allMatchesData query (counts)
+- Set refetchInterval to 30000 (30 seconds).
+- Also set refetchOnWindowFocus: true for these queries.
+- Do not change query keys, URLs, or any sorting/filter logic.
+
+Apply minimal changes directly.
+
+---
+

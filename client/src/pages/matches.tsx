@@ -164,6 +164,8 @@ export default function MatchesPage() {
       if (!res.ok) throw new Error("Failed to load matches");
       return res.json();
     },
+    refetchInterval: isToday ? 30000 : false,
+    refetchOnWindowFocus: true,
   });
 
   const allMatchesUrl = `/api/matches/day?date=${dateStr}&status=all${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
@@ -175,6 +177,8 @@ export default function MatchesPage() {
       return res.json();
     },
     staleTime: 30000,
+    refetchInterval: isToday ? 30000 : false,
+    refetchOnWindowFocus: true,
   });
 
   const allMatches = useMemo(() => {
