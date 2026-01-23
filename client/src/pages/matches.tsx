@@ -201,9 +201,27 @@ export default function MatchesPage() {
     return matchesData.map(apiMatchToMockMatch);
   }, [matchesData]);
 
+  // Fetch all matches for the selected date (no competition filter) to populate the filter dropdown
+  const allMatchesForDateUrl = `/api/matches/day?date=${dateStr}&status=${statusParam}`;
+  const { data: allMatchesForDate } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-day-filter-options", dateStr, statusParam],
+    queryFn: async () => {
+      const res = await fetch(allMatchesForDateUrl);
+      if (!res.ok) throw new Error("Failed to load matches for filter");
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+
+  const filterableMatches = useMemo(() => {
+    if (!allMatchesForDate) return [];
+    return allMatchesForDate.map(apiMatchToMockMatch);
+  }, [allMatchesForDate]);
+
   const competitionOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    allMatches.forEach((m) => {
+    // Use filterableMatches (all matches for this date/status) to populate the filter dropdown
+    filterableMatches.forEach((m) => {
       // Use goalserveCompetitionId as unique key, fallback to competition display name as key
       const compId = m.goalserveCompetitionId || m.rawCompetition || m.competition;
       // Use rawCompetition if present, else use competition (display name)
@@ -294,7 +312,7 @@ export default function MatchesPage() {
         if (a.priority !== b.priority) return a.priority - b.priority;
         return a.displayName.localeCompare(b.displayName);
       });
-  }, [allMatches]);
+  }, [filterableMatches]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
@@ -373,35 +391,41 @@ export default function MatchesPage() {
             </Button>
           </div>
 
-          <Select
-            value={selectedCompetitionId || "all"}
-            onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
-          >
-            <SelectTrigger className="w-[200px]" data-testid="select-competition">
-              <SelectValue placeholder="All competitions" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All competitions</SelectItem>
-              {competitionOptions.map((opt) => (
-                <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Filter by:</span>
+            <Select
+              value={selectedCompetitionId || "all"}
+              onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+            >
+              <SelectTrigger className="w-[200px]" data-testid="select-competition">
+                <SelectValue placeholder="All competitions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All competitions</SelectItem>
+                {competitionOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-          <Select
-            value={sortMode}
-            onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
-          >
-            <SelectTrigger className="w-[180px]" data-testid="select-sort">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="competition">Sort by: Competition</SelectItem>
-              <SelectItem value="kickoff">Sort by: Kick-off time</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Sort by:</span>
+            <Select
+              value={sortMode}
+              onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
+            >
+              <SelectTrigger className="w-[160px]" data-testid="select-sort">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="competition">Competition</SelectItem>
+                <SelectItem value="kickoff">Kick-off time</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="md:hidden space-y-3 mb-4">
@@ -453,7 +477,8 @@ export default function MatchesPage() {
             </Button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Filter:</span>
             <Select
               value={selectedCompetitionId || "all"}
               onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
@@ -470,17 +495,20 @@ export default function MatchesPage() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
 
+          <div className="flex gap-2 items-center">
+            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Sort:</span>
             <Select
               value={sortMode}
               onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
             >
-              <SelectTrigger className="w-[150px]" data-testid="select-sort-mobile">
+              <SelectTrigger className="flex-1" data-testid="select-sort-mobile">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="competition">Sort: Competition</SelectItem>
-                <SelectItem value="kickoff">Sort: Kick-off</SelectItem>
+                <SelectItem value="competition">Competition</SelectItem>
+                <SelectItem value="kickoff">Kick-off time</SelectItem>
               </SelectContent>
             </Select>
           </div>

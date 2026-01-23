@@ -3130,3 +3130,35 @@ Notes
 
 ---
 
+Update the Matches page UI labels and dropdown behavior:
+
+1) Rename the dropdown labels to be explicit:
+- Change the competition dropdown label/placeholder from "All competitions" (and any ambiguous label like "Competition") to:
+  - Label: "Filter by:"
+  - Placeholder/default option text: "All competitions"
+- Change the ordering dropdown label/placeholder from "Competition" to:
+  - Label: "Sort by:"
+  - Default option text: "Competition"
+
+2) Filter dropdown contents:
+- The "Filter by" dropdown should list ONLY competitions that have at least 1 match on the selected day (i.e. from the currently fetched matches payload for that date/status).
+- Keep the options ordered using the same priority logic as the matches list (Tier 0 first, then Tier 1, Tier 2, then the rest).
+- Continue showing the country flag + competition label in the dropdown items.
+
+3) Sort dropdown contents:
+- The "Sort by" dropdown should have ONLY two options:
+  - "Competition" (default) -> uses server ordering /api/matches/day?sort=competition
+  - "Kick-off time" -> uses /api/matches/day?sort=kickoff
+- Ensure changing Sort does NOT reset the selected Filter (and vice versa).
+
+4) Keep everything else unchanged:
+- Do not reintroduce the removed “Today” button.
+- Do not add client-side sorting of matches; render in server order.
+- Ensure the two dropdowns remain aligned on desktop and stack neatly on mobile.
+
+Implement the changes in the Matches page components (and any dropdown components they use), then run the app and sanity-check:
+- Default view shows Filter by: All competitions, Sort by: Competition
+- Filter options reflect only today’s competitions
+- Sort toggles between competition grouping and kickoff ordering correctly.
+
+---
