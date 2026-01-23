@@ -2975,3 +2975,47 @@ DO NOT:
 
 ---
 
+We have confirmed backend priority sorting is correct via debug.topSamples:
+
+- england|championship priority=5 appears FIRST
+- indonesia|championship priority=1000 is far lower
+
+So if the UI still shows Polish/Indonesia above English Championship, the issue is FRONTEND: either it isn't calling /api/matches/day, it is re-sorting client-side, or React Query caching is mixing results.
+
+Please do ALL of the following, minimally and safely:
+
+1) In client/src/pages/matches.tsx, locate the React Query call(s) that fetch matches for the "Today" view.
+   - Ensure Today view uses ONLY /api/matches/day with parameters:
+     date=YYYY-MM-DD (selected date)
+     status=<tab status> (all/live/scheduled/fulltime)
+     sort=<selected sort> (competition|kickoff)
+     competitionId=<selected competitionId or omitted>
+   - Remove any remaining usage of:
+     /api/matches/fixtures
+     /api/matches/results
+     /api/matches/live
+     OR any mock matches for the main Matches page.
+
+2) Ensure React Query key includes EVERY parameter that affects results:
+   ["matches-day", dateISO, status, sort, competitionId]
+   (no generic keys like ["matches"] or ["fixtures"]).
+
+3) Remove any client-side sorting that reorders the list after fetch.
+   - Search for .sort( or orderBy or applyFilters() in matches.tsx and delete or disable it.
+   - The UI should render matches in the exact order returned by the API.
+
+4) Add a temporary DEV debug banner at the top of the Matches page (only in development):
+   - Show the exact URL being fetched
+   - Show first 3 returned competitions in order
+   Example:
+     Fetching: /api/matches/day?date=...&status=...&sort=...
+     First: Championship (England) [1205]
+     Second: Serie A (Italy) [1269]
+     Third: Bundesliga (Germany) [1229]
+
+This will prove the UI is using the correct endpoint and not overriding ordering.
+
+Return the exact file diffs and confirm the Matches page compiles.
+
+---
+

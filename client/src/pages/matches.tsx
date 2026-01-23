@@ -166,6 +166,14 @@ export default function MatchesPage() {
     },
   });
 
+  // DEV DEBUG: Show fetched URL and first 3 competitions (only in development)
+  const isDev = import.meta.env.DEV;
+  const debugInfo = useMemo(() => {
+    if (!isDev || !matchesData) return null;
+    const first3 = matchesData.slice(0, 3).map(m => m.competition || "Unknown");
+    return { url: matchesUrl, first3 };
+  }, [isDev, matchesData, matchesUrl]);
+
   const allMatchesUrl = `/api/matches/day?date=${dateStr}&status=all${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
   const { data: allMatchesData } = useQuery<ApiMatch[]>({
     queryKey: ["matches-day", dateStr, "all", selectedCompetitionId],
@@ -242,6 +250,19 @@ export default function MatchesPage() {
             </p>
           </div>
         </div>
+
+        {/* DEV DEBUG BANNER - only shows in development */}
+        {debugInfo && (
+          <div className="mb-4 p-3 rounded-md bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-xs font-mono" data-testid="debug-banner">
+            <div className="font-bold text-yellow-800 dark:text-yellow-200 mb-1">DEV DEBUG - API Ordering Check</div>
+            <div className="text-yellow-700 dark:text-yellow-300">
+              <div><strong>Fetching:</strong> {debugInfo.url}</div>
+              <div><strong>First:</strong> {debugInfo.first3[0] || "N/A"}</div>
+              <div><strong>Second:</strong> {debugInfo.first3[1] || "N/A"}</div>
+              <div><strong>Third:</strong> {debugInfo.first3[2] || "N/A"}</div>
+            </div>
+          </div>
+        )}
 
         <div className="hidden md:flex items-center gap-3 flex-wrap mb-6">
           <MatchesTabs
