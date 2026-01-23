@@ -1,0 +1,31 @@
+We have a Matches page ordering bug that is actually caused by FRONTEND grouping, not backend sorting.
+
+Evidence:
+- Backend /api/matches/day?date=2026-01-23&status=all&sort=competition returns correct ordering (debug banner shows first = "Championship (England) [1205]").
+- UI shows 2 Indonesian "Championship" fixtures above the England Championship fixture because the UI groups competitions by a stripped display label ("Championship"), merging different leagues with the same name.
+
+Task: Fix frontend grouping + display so different competitions are never merged.
+
+Requirements:
+1) Use a UNIQUE grouping key for competitions:
+   - Prefer goalserveCompetitionId (string) as group key.
+   - If missing, fallback to the raw competition string (including country + [id]) or a derived leagueKey.
+   - Do NOT use competitionDisplayName as group key.
+
+2) Keep a display label, but ensure it does not cause collisions:
+   - Build competitionDisplayName for the pill (e.g. strip "[id]" suffix).
+   - Detect collisions on the current page: if more than one competition shares the same display label, show disambiguated labels including country (e.g. "Championship (England)" vs "Championship (Indonesia)").
+
+3) Ensure rendering order stays exactly the server order:
+   - Do NOT sort matches client-side (unless explicitly in "sort=kickoff" mode, but even then rely on server).
+   - When grouping for display, preserve the FIRST OCCURRENCE order of competition groups based on the match array order.
+
+Files likely involved:
+- client/src/pages/matches.tsx (grouping logic)
+- apiMatchToMockMatch mapper (ensure goalserveCompetitionId is available on the object used to render)
+- EnhancedMatchCard / competition pill rendering (label disambiguation)
+
+Acceptance criteria:
+- On 2026-01-23, the England Championship fixture (Derby vs West Brom) appears before the Indonesian Championship fixtures in Competition sort mode.
+- If multiple "Championship" leagues exist, the pill shows "Championship (England)" and "Championship (Indonesia)" (or equivalent), not both as just "Championship".
+- The debug banner first/second/third competitions match what appears at the top of the list visually.
