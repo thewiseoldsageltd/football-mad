@@ -36,6 +36,8 @@ Preferred communication style: Simple, everyday language.
 - **Players**: Linked to teams with position, nationality, stats
 - **Articles**: News content with categories, tags, featured/trending flags
 - **Matches**: Fixtures with home/away teams, scores, status, goalserveRound for round/matchday tracking
+  - API: `/api/matches/day?date=YYYY-MM-DD&status=all|live|scheduled|fulltime&competitionId=xxx`
+  - Priority ordering: UK leagues first, then Big 5 Europe, then UEFA, then others
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
