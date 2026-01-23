@@ -35,7 +35,7 @@ Preferred communication style: Simple, everyday language.
 - **Teams**: Premier League clubs with colors, stadium, manager info
 - **Players**: Linked to teams with position, nationality, stats
 - **Articles**: News content with categories, tags, featured/trending flags
-- **Matches**: Fixtures with home/away teams, scores, status
+- **Matches**: Fixtures with home/away teams, scores, status, goalserveRound for round/matchday tracking
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
