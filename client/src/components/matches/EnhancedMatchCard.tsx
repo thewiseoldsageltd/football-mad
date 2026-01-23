@@ -7,6 +7,7 @@ import { getCountryFlagUrl } from "@/lib/flags";
 
 interface EnhancedMatchCardProps {
   match: MockMatch;
+  competitionLabel?: string; // Optional disambiguated label from parent grouping
 }
 
 interface ParsedCompetition {
@@ -103,10 +104,12 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
   }
 }
 
-export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
+export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCardProps) {
   const kickoffTime = new Date(match.kickOffTime);
   const showScore = match.status === "live" || match.status === "finished";
   const isLive = match.status === "live";
+  // Use provided competitionLabel (may be disambiguated), fallback to match.competition
+  const displayLabel = competitionLabel || match.competition;
 
   return (
     <div
@@ -121,7 +124,7 @@ export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
       <Card className="hover-elevate active-elevate-2">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
           <div className="flex items-center justify-between mb-3 gap-2">
-            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={match.competition} />
+            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
             <StatusBadge status={match.status} minute={match.minute} />
           </div>
 

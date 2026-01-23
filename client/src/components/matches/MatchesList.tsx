@@ -17,7 +17,8 @@ interface DateGroup {
 }
 
 interface CompetitionGroup {
-  competition: string;
+  groupKey: string;           // Unique key (goalserveCompetitionId or rawCompetition fallback)
+  displayLabel: string;       // Display name (may be disambiguated with country)
   matches: MockMatch[];
 }
 
@@ -49,6 +50,13 @@ function MatchesEmptyState() {
   );
 }
 
+// Extract country from raw competition string like "Championship (England) [1205]"
+function extractCountryFromRaw(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const match = raw.match(/\(([^)]+)\)\s*\[/);
+  return match ? match[1] : null;
+}
+
 export function MatchesList({ matches, activeTab }: MatchesListProps) {
   const groupedMatches = useMemo(() => {
     const byDate: Record<string, MockMatch[]> = {};
@@ -62,21 +70,54 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
     const dateGroups: DateGroup[] = Object.entries(byDate)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([dateKey, dateMatches]) => {
-        const byCompetition: Record<string, MockMatch[]> = {};
+        // Use Map to preserve insertion order (first-occurrence order from server)
+        const byCompetition = new Map<string, MockMatch[]>();
         
         dateMatches.forEach((match) => {
-          if (!byCompetition[match.competition]) byCompetition[match.competition] = [];
-          byCompetition[match.competition].push(match);
+          // Use goalserveCompetitionId as unique key, fallback to rawCompetition or competition
+          const groupKey = match.goalserveCompetitionId || match.rawCompetition || match.competition;
+          if (!byCompetition.has(groupKey)) {
+            byCompetition.set(groupKey, []);
+          }
+          byCompetition.get(groupKey)!.push(match);
         });
 
-        const competitions: CompetitionGroup[] = Object.entries(byCompetition).map(
-          ([competition, compMatches]) => ({
-            competition,
+        // Detect display label collisions for disambiguation
+        const displayLabelCounts = new Map<string, string[]>(); // displayLabel -> [groupKeys]
+        byCompetition.forEach((compMatches, groupKey) => {
+          const displayLabel = compMatches[0].competition;
+          if (!displayLabelCounts.has(displayLabel)) {
+            displayLabelCounts.set(displayLabel, []);
+          }
+          displayLabelCounts.get(displayLabel)!.push(groupKey);
+        });
+
+        // Build competition groups with disambiguated labels
+        const competitions: CompetitionGroup[] = [];
+        byCompetition.forEach((compMatches, groupKey) => {
+          const baseDisplayLabel = compMatches[0].competition;
+          const rawCompetition = compMatches[0].rawCompetition;
+          
+          // Check if this display label has collisions
+          const collisions = displayLabelCounts.get(baseDisplayLabel) || [];
+          let displayLabel = baseDisplayLabel;
+          
+          if (collisions.length > 1) {
+            // Disambiguate with country from raw competition
+            const country = extractCountryFromRaw(rawCompetition);
+            if (country) {
+              displayLabel = `${baseDisplayLabel} (${country})`;
+            }
+          }
+          
+          competitions.push({
+            groupKey,
+            displayLabel,
             matches: compMatches.sort(
               (a, b) => new Date(a.kickOffTime).getTime() - new Date(b.kickOffTime).getTime()
             ),
-          })
-        );
+          });
+        });
 
         return {
           date: dateKey,
@@ -108,10 +149,10 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           </h2>
           
           {dateGroup.competitions.map((compGroup) => (
-            <div key={compGroup.competition} className="space-y-3">
+            <div key={compGroup.groupKey} className="space-y-3">
               <div className="grid md:grid-cols-2 gap-4">
                 {compGroup.matches.map((match) => (
-                  <EnhancedMatchCard key={match.id} match={match} />
+                  <EnhancedMatchCard key={match.id} match={match} competitionLabel={compGroup.displayLabel} />
                 ))}
               </div>
             </div>
