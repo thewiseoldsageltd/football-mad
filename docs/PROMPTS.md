@@ -3916,3 +3916,46 @@ Apply changes directly.
 
 ---
 
+Refine vertical alignment on Match Card Line 2 so all elements are visually centred on the same horizontal midline.
+
+Context:
+- This is the locked Line 2 of the Matches card.
+- Structure: 5-column grid [crest][team][kickoff/score][team][crest]
+- Everything should be visually centre-aligned: the midpoint of text aligns with the midpoint of the crests.
+
+Requirements:
+1) In the component rendering Line 2 (EnhancedMatchCard.tsx):
+   - Ensure the grid container has `items-center`.
+
+2) For EACH of the 5 grid columns:
+   - Wrap contents in a `flex items-center` container.
+   - Do not rely on baseline alignment.
+
+3) Crests:
+   - Must have a fixed height (e.g. h-10).
+   - Their container should be `flex items-center justify-center`.
+
+4) Team names:
+   - Wrap text in `flex items-center`.
+   - Apply `leading-none` to the text element.
+   - Do NOT change font size or weight.
+
+5) Kickoff time / score cell:
+   - Must be `flex items-center justify-center`.
+   - Apply `leading-none` to the text.
+   - Remove any margin-top / margin-bottom / line-height utilities that affect vertical position.
+
+6) Result:
+   - The visual midpoint of crest, team name, and score/kickoff must align.
+   - Mobile and desktop must behave identically.
+
+7) Do NOT change:
+   - The 3-line structure
+   - The 5-column grid
+   - Any spacing, truncation, or typography choices
+
+Make the smallest changes necessary to achieve perfect visual centring.
+Apply changes directly.
+
+---
+

@@ -132,17 +132,17 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
           {/* LINE 2: 5-column grid [crest][name-right][kickoff][name-left][crest] */}
           <div className="grid grid-cols-[40px_minmax(0,1fr)_64px_minmax(0,1fr)_40px] md:grid-cols-[40px_minmax(0,1fr)_80px_minmax(0,1fr)_40px] gap-x-2 items-center">
             {/* Home crest */}
-            <div className="w-10 h-10 flex-shrink-0">
+            <div className="h-10 flex items-center justify-center">
               <TeamLogo team={match.homeTeam} size="sm" />
             </div>
 
             {/* Home name - right aligned toward center */}
-            <div className="min-w-0 overflow-hidden">
-              <span className="font-medium text-sm truncate block text-right">{match.homeTeam.name}</span>
+            <div className="min-w-0 overflow-hidden flex items-center justify-end">
+              <span className="font-medium text-sm truncate leading-none">{match.homeTeam.name}</span>
             </div>
 
             {/* Center: kickoff time / score */}
-            <div className="min-w-[64px] flex items-center justify-center">
+            <div className="flex items-center justify-center">
               {(() => {
                 const hasScores = match.homeScore !== null && match.homeScore !== undefined &&
                                   match.awayScore !== null && match.awayScore !== undefined;
@@ -150,33 +150,33 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
                 if (match.status === "finished" || match.status === "live") {
                   if (hasScores) {
                     return (
-                      <div className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
+                      <span className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
                         {match.homeScore}–{match.awayScore}
-                      </div>
+                      </span>
                     );
                   }
                   // Finished/live but no scores - show FT badge only
                   return <StatusBadge status={match.status} minute={match.minute} />;
                 }
                 if (match.status === "postponed") {
-                  return <div className="text-sm text-muted-foreground font-medium whitespace-nowrap leading-none">TBC</div>;
+                  return <span className="text-sm text-muted-foreground font-medium whitespace-nowrap leading-none">TBC</span>;
                 }
                 // Scheduled - show kickoff time
                 return (
-                  <div className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
+                  <span className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
                     {format(kickoffTime, "HH:mm")}
-                  </div>
+                  </span>
                 );
               })()}
             </div>
 
             {/* Away name - left aligned toward center */}
-            <div className="min-w-0 overflow-hidden">
-              <span className="font-medium text-sm truncate block text-left">{match.awayTeam.name}</span>
+            <div className="min-w-0 overflow-hidden flex items-center justify-start">
+              <span className="font-medium text-sm truncate leading-none">{match.awayTeam.name}</span>
             </div>
 
             {/* Away crest */}
-            <div className="w-10 h-10 flex-shrink-0">
+            <div className="h-10 flex items-center justify-center">
               <TeamLogo team={match.awayTeam} size="sm" />
             </div>
           </div>
