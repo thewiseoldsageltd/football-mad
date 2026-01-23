@@ -150,11 +150,17 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           
           {dateGroup.competitions.map((compGroup) => (
             <div key={compGroup.groupKey} className="space-y-3">
-              <div className="grid md:grid-cols-2 gap-4">
-                {compGroup.matches.map((match) => (
-                  <EnhancedMatchCard key={match.id} match={match} competitionLabel={compGroup.displayLabel} />
-                ))}
-              </div>
+              {compGroup.matches.length === 1 ? (
+                <div className="w-full">
+                  <EnhancedMatchCard match={compGroup.matches[0]} competitionLabel={compGroup.displayLabel} />
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {compGroup.matches.map((match) => (
+                    <EnhancedMatchCard key={match.id} match={match} competitionLabel={compGroup.displayLabel} />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -1,0 +1,74 @@
+PROMPT — Matches page finishing polish (remove debug, clarify sort label, prioritise competition dropdown, fix 1-game desktop layout)
+
+Context
+- Football Mad Matches page
+- Debug banner was added to verify backend order; grouping bug fixed by grouping with goalserveCompetitionId and preserving server order via Map.
+- Now we want UI polish:
+  1) Remove debug banner
+  2) Rename the sort dropdown label so it doesn’t clash with “All competitions”
+  3) Apply the same priority logic to the “All competitions” dropdown ordering (Tier 0/Tier 1/Tier 2 then alphabetical)
+  4) Handle desktop 2-column layout when there’s only one match (avoid awkward empty column)
+
+Tasks
+
+A) Remove the debug banner (DEV DEBUG)
+- In client/src/pages/matches.tsx remove the “DEV DEBUG – API Ordering Check” banner entirely.
+- Remove any related useMemo/consts used only for that banner (e.g., debugInfo, isDev).
+- Ensure no debug UI renders in any environment.
+
+B) Rename “Competition” sort dropdown label to avoid clash with “All competitions”
+- Keep the sort dropdown functionality (competition vs kickoff).
+- Change the displayed placeholder/label from “Competition” to “Sort by” (preferred) or “Order by”.
+- Options should read:
+  - “Sort by: Competition”
+  - “Sort by: Kick-off time”
+  (Or equivalent, but make it obvious this is sorting, not filtering.)
+- Ensure the filter dropdown remains “All competitions” and is clearly a filter.
+
+C) Prioritise the “All competitions” dropdown using the same tier logic as match ordering
+Goal
+- The competition filter list should not be purely alphabetical; it should surface Tier 0 leagues first, then Tier 1, Tier 2, then everything else alphabetical.
+- Keep “All competitions” at the top.
+
+Implementation detail
+- Build the competition list from matchesData (unique competitions), using goalserveCompetitionId as the unique key.
+- For each competition option, compute a sortKey using the SAME parsing + priority logic as the backend:
+  - Use rawCompetition if present; else use competition string.
+  - Parse “League (Country)” and “UEFA …” correctly.
+  - Produce a leagueKey like `england|championship`, `uefa|europa league`, etc.
+  - Assign a numeric priority (Tier 0 first, Tier 1, Tier 2, then default 1000, youth/reserve 9000).
+- Then sort competition options by:
+  1) priority asc
+  2) display name asc (within same priority)
+- IMPORTANT: disambiguate duplicate display names in the dropdown the same way we do in the match badges:
+  - If two competitions share the same display name, show “Name (Country)” for both.
+  - But if already “Name (Country)” don’t double-wrap.
+
+Where to implement
+- Whatever file currently builds the competition dropdown options (likely matches.tsx or MatchesFilters component).
+- Keep it local to the Matches page for now (no premature abstraction), but avoid duplicating logic if there’s already a client helper.
+
+D) Desktop layout when only one match is playing
+Goal
+- If a competition group has only 1 match, it should render as a single full-width card (not a 2-column grid with an empty gap).
+- If there are 2+ matches, keep the 2-column grid on desktop.
+- On mobile remain single column always.
+
+Implementation suggestion
+- In the component that renders match cards for a group:
+  - If groupMatches.length === 1:
+    - render a single card inside a full-width container
+  - else:
+    - render grid with md:grid-cols-2 (or equivalent)
+- Ensure spacing stays consistent between groups.
+
+Acceptance checks
+- No debug banner visible.
+- Sort dropdown label reads “Sort by” (or “Order by”) and doesn’t look like a competition filter.
+- Competition filter dropdown shows Tier 0 (UEFA + England) first, then Big 5, then Scotland, then rest.
+- Duplicate competition names are disambiguated in dropdown list.
+- A competition day with only one match shows a single centred/full-width card on desktop with no empty column effect.
+
+Notes
+- Do NOT change backend endpoints or data ingest in this task; purely UI polish.
+- Keep existing functionality working: tabs, date nav, competition filter, sort mode.

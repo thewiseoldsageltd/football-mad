@@ -166,14 +166,6 @@ export default function MatchesPage() {
     },
   });
 
-  // DEV DEBUG: Show fetched URL and first 3 competitions (only in development)
-  const isDev = import.meta.env.DEV;
-  const debugInfo = useMemo(() => {
-    if (!isDev || !matchesData) return null;
-    const first3 = matchesData.slice(0, 3).map(m => m.competition || "Unknown");
-    return { url: matchesUrl, first3 };
-  }, [isDev, matchesData, matchesUrl]);
-
   const allMatchesUrl = `/api/matches/day?date=${dateStr}&status=all${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
   const { data: allMatchesData } = useQuery<ApiMatch[]>({
     queryKey: ["matches-day", dateStr, "all", selectedCompetitionId],
@@ -212,15 +204,96 @@ export default function MatchesPage() {
   const competitionOptions = useMemo(() => {
     const seen = new Map<string, string>();
     allMatches.forEach((m) => {
-      const compId = m.goalserveCompetitionId;
-      if (compId && m.rawCompetition) {
-        seen.set(compId, m.rawCompetition);
+      // Use goalserveCompetitionId as unique key, fallback to competition display name as key
+      const compId = m.goalserveCompetitionId || m.rawCompetition || m.competition;
+      // Use rawCompetition if present, else use competition (display name)
+      const rawName = m.rawCompetition || m.competition;
+      if (compId && rawName) {
+        seen.set(compId, rawName);
       }
     });
-    // Sort alphabetically - server handles priority ordering for matches
-    return Array.from(seen.entries())
-      .map(([id, rawName]) => ({ id, displayName: getDisplayCompetitionName(rawName), rawName }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+    // Priority tier map matching backend logic
+    const LEAGUE_PRIORITY: Record<string, number> = {
+      // Tier 0: UEFA competitions (1-3)
+      "uefa|champions league": 1, "uefa|europa league": 2, "uefa|conference league": 3,
+      // Tier 0: England (4-10)
+      "england|premier league": 4, "england|championship": 5, "england|league one": 6,
+      "england|league two": 7, "england|fa cup": 8, "england|efl cup": 9, "england|league cup": 9,
+      "england|community shield": 10,
+      // Tier 1: Big 5 Europe (200-299)
+      "spain|la liga": 200, "spain|primera": 200, "germany|bundesliga": 210,
+      "italy|serie a": 220, "france|ligue 1": 230,
+      // Tier 1: Second divisions
+      "spain|segunda": 240, "germany|2. bundesliga": 250, "italy|serie b": 260, "france|ligue 2": 270,
+      // Tier 2: Scotland (300-399)
+      "scotland|premiership": 300, "scotland|championship": 310, "scotland|league one": 320, "scotland|league two": 330,
+    };
+
+    const YOUTH_PATTERNS = /\b(u21|u23|u19|u18|u17|u16|youth|reserve|academy|friendly|premier league 2|premier league cup)\b/i;
+
+    function getCompetitionPriority(rawName: string): number {
+      const raw = rawName.toLowerCase();
+      
+      // Youth/reserve demoted
+      if (YOUTH_PATTERNS.test(raw)) return 9000;
+      
+      // Parse country and league
+      const match = raw.match(/^(.+?)\s*\(([^)]+)\)\s*\[/);
+      if (match) {
+        const leagueName = match[1].trim().toLowerCase();
+        const country = match[2].trim().toLowerCase();
+        
+        // Handle UEFA first
+        if (leagueName.startsWith("uefa ")) {
+          const leagueKey = `uefa|${leagueName.replace("uefa ", "")}`;
+          if (LEAGUE_PRIORITY[leagueKey]) return LEAGUE_PRIORITY[leagueKey];
+          return 50; // Other UEFA
+        }
+        
+        const leagueKey = `${country}|${leagueName}`;
+        if (LEAGUE_PRIORITY[leagueKey]) return LEAGUE_PRIORITY[leagueKey];
+        
+        // Ambiguous leagues with unknown country
+        if (country === "unknown") {
+          const ambiguous = ["championship", "premiership", "serie a", "ligue 1"];
+          if (ambiguous.includes(leagueName)) return 9000;
+        }
+      }
+      
+      return 1000; // Default priority
+    }
+
+    // Build options with priority
+    const options = Array.from(seen.entries()).map(([id, rawName]) => ({
+      id,
+      displayName: getDisplayCompetitionName(rawName),
+      rawName,
+      priority: getCompetitionPriority(rawName),
+    }));
+
+    // Detect display name collisions for disambiguation
+    const displayCounts = new Map<string, number>();
+    options.forEach(opt => {
+      displayCounts.set(opt.displayName, (displayCounts.get(opt.displayName) || 0) + 1);
+    });
+
+    // Disambiguate and sort
+    return options
+      .map(opt => {
+        let finalDisplay = opt.displayName;
+        if ((displayCounts.get(opt.displayName) || 0) > 1) {
+          const parsed = parseCompetitionLabel(opt.rawName);
+          if (parsed.country && !opt.displayName.includes(`(${parsed.country})`)) {
+            finalDisplay = `${opt.displayName} (${parsed.country})`;
+          }
+        }
+        return { ...opt, displayName: finalDisplay };
+      })
+      .sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return a.displayName.localeCompare(b.displayName);
+      });
   }, [allMatches]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
@@ -250,19 +323,6 @@ export default function MatchesPage() {
             </p>
           </div>
         </div>
-
-        {/* DEV DEBUG BANNER - only shows in development */}
-        {debugInfo && (
-          <div className="mb-4 p-3 rounded-md bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-xs font-mono" data-testid="debug-banner">
-            <div className="font-bold text-yellow-800 dark:text-yellow-200 mb-1">DEV DEBUG - API Ordering Check</div>
-            <div className="text-yellow-700 dark:text-yellow-300">
-              <div><strong>Fetching:</strong> {debugInfo.url}</div>
-              <div><strong>First:</strong> {debugInfo.first3[0] || "N/A"}</div>
-              <div><strong>Second:</strong> {debugInfo.first3[1] || "N/A"}</div>
-              <div><strong>Third:</strong> {debugInfo.first3[2] || "N/A"}</div>
-            </div>
-          </div>
-        )}
 
         <div className="hidden md:flex items-center gap-3 flex-wrap mb-6">
           <MatchesTabs
@@ -324,7 +384,7 @@ export default function MatchesPage() {
               <SelectItem value="all">All competitions</SelectItem>
               {competitionOptions.map((opt) => (
                 <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} />
+                  <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -334,12 +394,12 @@ export default function MatchesPage() {
             value={sortMode}
             onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
           >
-            <SelectTrigger className="w-[160px]" data-testid="select-sort">
+            <SelectTrigger className="w-[180px]" data-testid="select-sort">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="competition">Competition</SelectItem>
-              <SelectItem value="kickoff">Kick-off time</SelectItem>
+              <SelectItem value="competition">Sort by: Competition</SelectItem>
+              <SelectItem value="kickoff">Sort by: Kick-off time</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -405,7 +465,7 @@ export default function MatchesPage() {
                 <SelectItem value="all">All competitions</SelectItem>
                 {competitionOptions.map((opt) => (
                   <SelectItem key={opt.id} value={opt.id}>
-                    <CompetitionOption competition={opt.rawName} />
+                    <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -415,12 +475,12 @@ export default function MatchesPage() {
               value={sortMode}
               onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
             >
-              <SelectTrigger className="w-[130px]" data-testid="select-sort-mobile">
+              <SelectTrigger className="w-[150px]" data-testid="select-sort-mobile">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="competition">Competition</SelectItem>
-                <SelectItem value="kickoff">Kick-off</SelectItem>
+                <SelectItem value="competition">Sort: Competition</SelectItem>
+                <SelectItem value="kickoff">Sort: Kick-off</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -451,9 +511,11 @@ export default function MatchesPage() {
   );
 }
 
-function CompetitionOption({ competition }: { competition: string | null | undefined }) {
+function CompetitionOption({ competition, displayName }: { competition: string | null | undefined; displayName?: string }) {
   const parsed = parseCompetitionLabel(competition);
   const flagUrl = getCountryFlagUrl(parsed.country);
+  // Use provided displayName (may include disambiguation) or fallback to parsed name
+  const label = displayName || parsed.name;
 
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -469,7 +531,7 @@ function CompetitionOption({ competition }: { competition: string | null | undef
       ) : (
         <Globe className="w-4 h-4 text-muted-foreground" />
       )}
-      <span>{parsed.name}</span>
+      <span>{label}</span>
     </span>
   );
 }
