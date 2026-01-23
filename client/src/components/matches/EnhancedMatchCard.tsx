@@ -121,20 +121,23 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
       {isLive && (
         <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
       )}
-      <Card className="hover-elevate active-elevate-2">
+      <Card className="hover-elevate active-elevate-2 overflow-hidden">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <TeamLogo team={match.homeTeam} size="sm" />
-                <span className="font-medium text-sm truncate">{match.homeTeam.name}</span>
-              </div>
+          <div className="grid grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto] gap-x-2 gap-y-1">
+            {/* Row 1: Competition pill centered */}
+            <div className="col-start-2 row-start-1 flex justify-center">
+              <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
             </div>
 
-            <div className="flex-shrink-0 text-center w-20 flex flex-col items-center gap-1">
-              <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
+            {/* Row 2: Home team | Score/Time + Status | Away team */}
+            <div className="col-start-1 row-start-2 min-w-0 flex items-center gap-2">
+              <TeamLogo team={match.homeTeam} size="sm" />
+              <span className="font-medium text-sm truncate overflow-hidden">{match.homeTeam.name}</span>
+            </div>
+
+            <div className="col-start-2 row-start-2 flex flex-col items-center justify-center gap-0.5 px-1">
               {showScore ? (
-                <div className="text-xl font-bold tabular-nums">
+                <div className="text-xl font-bold tabular-nums whitespace-nowrap">
                   {match.homeScore} – {match.awayScore}
                 </div>
               ) : match.status === "postponed" ? (
@@ -142,18 +145,16 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
                   TBC
                 </div>
               ) : (
-                <div className="text-lg font-bold tabular-nums">
+                <div className="text-lg font-bold tabular-nums whitespace-nowrap">
                   {format(kickoffTime, "HH:mm")}
                 </div>
               )}
               <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 justify-end">
-                <span className="font-medium text-sm truncate">{match.awayTeam.name}</span>
-                <TeamLogo team={match.awayTeam} size="sm" />
-              </div>
+            <div className="col-start-3 row-start-2 min-w-0 flex items-center gap-2 justify-end">
+              <span className="font-medium text-sm truncate overflow-hidden text-right">{match.awayTeam.name}</span>
+              <TeamLogo team={match.awayTeam} size="sm" />
             </div>
           </div>
 

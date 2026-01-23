@@ -459,7 +459,7 @@ export default function MatchesPage() {
             value={selectedCompetitionId || "all"}
             onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
           >
-            <SelectTrigger className="w-full" data-testid="select-competition-mobile">
+            <SelectTrigger className="w-full justify-center" data-testid="select-competition-mobile">
               <span className="text-sm">Filter by...</span>
             </SelectTrigger>
             <SelectContent>
@@ -476,7 +476,7 @@ export default function MatchesPage() {
             value={sortMode}
             onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
           >
-            <SelectTrigger className="w-full" data-testid="select-sort-mobile">
+            <SelectTrigger className="w-full justify-center" data-testid="select-sort-mobile">
               <span className="text-sm">Sort by...</span>
             </SelectTrigger>
             <SelectContent>

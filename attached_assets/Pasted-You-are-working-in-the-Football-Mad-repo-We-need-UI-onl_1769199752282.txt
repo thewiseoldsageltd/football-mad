@@ -1,0 +1,49 @@
+You are working in the Football Mad repo. We need **UI-only fixes** on /matches. DO NOT go into long test loops. Make the changes, run only:
+- `npm run typecheck` (or `pnpm typecheck` depending on repo)
+- a quick manual smoke check in the browser (mobile + desktop)
+No e2e suites, no repeated re-testing.
+
+GOALS (based on screenshots):
+1) DESKTOP — Restore the “classic” horizontal alignment:
+   - Home team crest + name on the left, away team crest + name on the right, kickoff time centered on the same horizontal line as team names/crests.
+   - The country/league pill must NOT push the kickoff time down. We want the pill **above** the kickoff time, but the kickoff time stays aligned with teams.
+2) MOBILE —
+   - Filters already stack vertically (good). Now **center** the text inside the dropdown triggers (“Filter by…”, “Sort by…”).
+   - Fix pill/time collision: pill must not squash into kickoff time.
+   - Fix team spacing/truncation: ensure both team names truncate nicely and do not overlap. Away team must not “bleed” off the right edge.
+3) LEAGUE LABELS — Remove “(Country)” brackets in the league pill and in the Filter dropdown options.
+   - We already have the country flag in the pill; that’s enough.
+   - Exception handling: if there’s a collision (same league display name from multiple countries in the same list), do NOT use brackets. Instead, show the **flag + league name** and (only when collision) append a subtle “• <Country>” (not in brackets), or show a second small muted line with country. But default should be NO country text.
+
+IMPLEMENTATION NOTES (important):
+A) Fix the match card layout using a 2-row grid so pill sits in row 1 (center only) and the “main line” sits in row 2:
+   - Outer card body: `grid` with 3 columns (home | center | away).
+   - `grid-rows-[auto_auto]`
+   - Row 1: center column contains the competition pill.
+   - Row 2: home, kickoff time, away (all aligned).
+   - Home/away content should be placed explicitly in row 2 so kickoff time aligns with team names/crests.
+B) Prevent overflow/bleed on mobile:
+   - Add `min-w-0` to grid children that contain text.
+   - Apply `truncate` + `overflow-hidden` to team name text spans.
+   - Ensure card container uses `overflow-hidden`.
+   - Right side team name should be `text-right truncate`.
+C) Center the trigger text on mobile only:
+   - On the Filter/Sort SelectTrigger (or equivalent component), add responsive classes like:
+     - `justify-center text-center` for base
+     - then override for desktop with `sm:justify-between sm:text-left` if needed
+   - Keep desktop looking the same as before.
+D) Remove “(Country)” from league pill and dropdown labels:
+   - Find where `competitionLabel` / disambiguation is created.
+   - Change default label to league name only.
+   - Only add extra country indicator on collisions and do it as “• Country” (no brackets), ideally muted.
+
+FILES LIKELY INVOLVED (adjust as needed):
+- `client/src/components/MatchesList.tsx` (grouping + label building)
+- `client/src/components/EnhancedMatchCard.tsx` (layout)
+- `client/src/pages/matches.tsx` (filter/sort triggers layout/classes)
+- Any shared select UI component used for triggers.
+
+DELIVERABLE:
+- Make the UI match the goals above.
+- Post a short summary of the exact files changed and what you changed.
+- Do NOT add new features or refactor unrelated code.
