@@ -142,7 +142,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
             </div>
 
             {/* Center: kickoff time / score */}
-            <div className="min-w-[64px] flex flex-col items-center justify-center">
+            <div className="min-w-[64px] flex items-center justify-center">
               {(() => {
                 const hasScores = match.homeScore !== null && match.homeScore !== undefined &&
                                   match.awayScore !== null && match.awayScore !== undefined;
@@ -150,25 +150,24 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
                 if (match.status === "finished" || match.status === "live") {
                   if (hasScores) {
                     return (
-                      <div className="text-lg font-bold tabular-nums whitespace-nowrap">
+                      <div className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
                         {match.homeScore}–{match.awayScore}
                       </div>
                     );
                   }
-                  // Finished/live but no scores - show nothing (FT badge handles it)
-                  return null;
+                  // Finished/live but no scores - show FT badge only
+                  return <StatusBadge status={match.status} minute={match.minute} />;
                 }
                 if (match.status === "postponed") {
-                  return <div className="text-sm text-muted-foreground font-medium whitespace-nowrap">TBC</div>;
+                  return <div className="text-sm text-muted-foreground font-medium whitespace-nowrap leading-none">TBC</div>;
                 }
                 // Scheduled - show kickoff time
                 return (
-                  <div className="text-lg font-bold tabular-nums whitespace-nowrap">
+                  <div className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
                     {format(kickoffTime, "HH:mm")}
                   </div>
                 );
               })()}
-              <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
             {/* Away name - left aligned toward center */}

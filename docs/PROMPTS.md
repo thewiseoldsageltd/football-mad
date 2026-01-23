@@ -3890,3 +3890,29 @@ Apply the minimal changes required in the correct component(s).
 
 ---
 
+Make a small UI adjustment to the Matches match card Line 2 so that the score/time sits on the same horizontal line as the team names and crests.
+
+Context:
+- Match cards use the locked 3-line structure.
+- Line 2 is a non-negotiable 5-column grid: [crestA][teamA][kickoff/score][teamB][crestB]
+- Scores now render correctly for finished matches, but the score block is vertically misaligned (sits slightly higher than the team names).
+
+Goal:
+Ensure crest, team names, and score/time are perfectly aligned on the same horizontal baseline.
+
+Implementation requirements:
+1) Locate the component that renders the 5-column Line 2 (likely client/src/components/matches/EnhancedMatchCard.tsx).
+2) In the grid row container for Line 2:
+   - Add `items-center` (or `items-baseline` if it produces a better baseline alignment) to the grid container.
+3) In the center (kickoff/score) cell:
+   - Ensure it is a flex container with `flex items-center justify-center`.
+   - Remove any `leading-*` or `mt-*` that shifts it vertically.
+   - If the score text uses a different font size/weight than team names, add `leading-none` to the score/time text element so it doesn’t sit high.
+4) Do NOT change the 3-line structure, do NOT change to flex layout for the row, do NOT change spacing rules.
+5) Keep mobile behaviour identical.
+
+Make the smallest possible changes to achieve clean “BBC Sport” alignment.
+Apply changes directly.
+
+---
+
