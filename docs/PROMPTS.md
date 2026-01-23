@@ -2558,3 +2558,38 @@ Deliverable:
 
 ---
 
+Modify the league priority ordering to support a "Euro nights override".
+
+Current tiers remain the same (Tier 0, Tier 1, Tier 2) BUT apply this extra rule:
+
+EURO NIGHTS OVERRIDE RULE
+- For the selected date, first detect if there are any matches whose competition is:
+  - UEFA Champions League
+  - UEFA Europa League
+  - UEFA Europa Conference League
+- If YES, then force these UEFA competitions to rank above all domestic competitions for that date,
+  while keeping their internal order:
+  1) Champions League
+  2) Europa League
+  3) Conference League
+- If NO UEFA matches exist on that date, then normal tier ordering applies (Premier League etc can be top).
+
+Example behavior (important):
+- Tue/Wed/Thu with UCL + Premier League: UCL matches appear above Premier League matches.
+- Sat with UCL only: UCL is top anyway.
+- Sat with no UEFA: Premier League/Championship lead the list.
+
+Implementation notes:
+- This should be applied inside /api/matches/day ordering logic BEFORE the rest of tier sorting.
+- Continue to enforce the “NO youth/reserves matching” rule (U21/PL2/etc must not match tiers).
+- Order within each competition by kickoff_time asc.
+
+Add debug=1 output field:
+- hasUefa: boolean
+- uefaCounts: { ucl: number, uel: number, uecl: number }
+- plus existing startUtc/endUtc/sampleFirst5.
+
+Do not change the UI other than continuing to support sort=kickoff|competition as previously specified.
+
+---
+

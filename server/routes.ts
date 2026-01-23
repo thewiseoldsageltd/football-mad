@@ -502,6 +502,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "conference league": 22, "europa conference league": 22, "uefa europa conference league": 22,
   };
 
+  // Helper to detect which UEFA competition a match belongs to (if any)
+  // Must be specific to avoid matching CAF/AFC/CONCACAF Champions League
+  function getUefaCompetition(competition: string | null): "ucl" | "uel" | "uecl" | null {
+    if (!competition) return null;
+    const name = competition.toLowerCase();
+    // Exclude non-UEFA champions leagues (CAF, AFC, CONCACAF)
+    if (name.includes("caf ") || name.includes("afc ") || name.includes("concacaf")) return null;
+    // Check for UEFA-specific patterns
+    if (name.includes("uefa champions league") || (name.includes("champions league") && !name.includes("caf") && !name.includes("afc") && !name.includes("concacaf"))) {
+      // Double-check it's not a non-UEFA continental league
+      if (name.includes("(intl)") || name.includes("african") || name.includes("asian") || name.includes("concacaf")) return null;
+      return "ucl";
+    }
+    if (name.includes("europa league") && !name.includes("conference")) return "uel";
+    if (name.includes("conference league")) return "uecl";
+    return null;
+  }
+
   function parseCompetitionParts(competition: string | null): { name: string; country: string } {
     if (!competition) return { name: "", country: "" };
     
@@ -533,18 +551,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { name: name.trim().toLowerCase(), country };
   }
 
-  function getCompetitionPriority(competition: string | null): number {
+  function getCompetitionPriority(competition: string | null, euroNightsOverride: boolean = false): number {
     const { name, country } = parseCompetitionParts(competition);
     if (!name) return 1000;
+    
+    // UEFA competitions - check first for Euro nights override
+    const uefaComp = getUefaCompetition(competition);
+    if (uefaComp) {
+      // When Euro nights override is active, UEFA goes to top (priority 1-3)
+      // Otherwise, UEFA stays at tier 2 (priority 20-22)
+      const uefaBase = euroNightsOverride ? 1 : 20;
+      if (uefaComp === "ucl") return uefaBase;
+      if (uefaComp === "uel") return uefaBase + 1;
+      if (uefaComp === "uecl") return uefaBase + 2;
+    }
     
     // Check for UK leagues - must have UK country
     const isUkCountry = UK_COUNTRIES.some(c => country.includes(c));
     
     // UK leagues (need country verification for generic names like "Premier League")
+    // When Euro nights active, UK leagues shift down (priority 10+)
+    // Otherwise, UK leagues are top tier (priority 1+)
+    const ukBase = euroNightsOverride ? 10 : 1;
     for (const league of UK_LEAGUES) {
       if (name === league || name.includes(league)) {
         if (isUkCountry) {
-          return UK_PRIORITY[league] || 5;
+          return ukBase + (UK_PRIORITY[league] || 5) - 1;
         }
         // Not a UK country, so lower priority
         break;
@@ -554,30 +586,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // UK cups (don't need country check as FA Cup is unique)
     for (const cup of UK_CUPS) {
       if (name === cup || name.includes(cup)) {
-        return UK_PRIORITY[cup] || 7;
+        return ukBase + (UK_PRIORITY[cup] || 7) - 1;
       }
     }
     
-    // Big 5 European leagues
+    // Big 5 European leagues - shift based on euro nights
+    const big5Base = euroNightsOverride ? 20 : 10;
     for (const [key, priority] of Object.entries(BIG5_PRIORITY)) {
-      if (name === key || name.includes(key)) return priority;
-    }
-    
-    // UEFA competitions
-    for (const [key, priority] of Object.entries(UEFA_PRIORITY)) {
-      if (name === key || name.includes(key)) return priority;
+      if (name === key || name.includes(key)) return big5Base + (priority - 10);
     }
     
     return 100; // Default for other competitions
   }
 
   // GET /api/matches/day - date-driven matches endpoint
-  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, debug=1
+  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1
   app.get("/api/matches/day", async (req, res) => {
     try {
       const dateStr = req.query.date as string;
       const status = (req.query.status as string) || "all";
       const competitionId = req.query.competitionId as string;
+      const sortMode = (req.query.sort as string) || "competition"; // competition (default) or kickoff
       const debug = req.query.debug === "1";
 
       // Default to today in UTC if no date provided
@@ -634,16 +663,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const teamMap = await fetchTeamMap(teamIds);
       const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
 
-      // Sort by priority, then kickoff time, then competition name
-      formatted.sort((a, b) => {
-        const priorityA = getCompetitionPriority(a.competition);
-        const priorityB = getCompetitionPriority(b.competition);
-        if (priorityA !== priorityB) return priorityA - priorityB;
-        const timeA = new Date(a.kickoffTime).getTime();
-        const timeB = new Date(b.kickoffTime).getTime();
-        if (timeA !== timeB) return timeA - timeB;
-        return (a.competition || "").localeCompare(b.competition || "");
+      // Count UEFA matches for Euro nights override detection
+      const uefaCounts = { ucl: 0, uel: 0, uecl: 0 };
+      formatted.forEach(m => {
+        const uefaComp = getUefaCompetition(m.competition);
+        if (uefaComp) uefaCounts[uefaComp]++;
       });
+      const hasUefa = uefaCounts.ucl > 0 || uefaCounts.uel > 0 || uefaCounts.uecl > 0;
+
+      // Sort based on sortMode
+      if (sortMode === "kickoff") {
+        // Sort by kickoff time first, then competition priority
+        formatted.sort((a, b) => {
+          const timeA = new Date(a.kickoffTime).getTime();
+          const timeB = new Date(b.kickoffTime).getTime();
+          if (timeA !== timeB) return timeA - timeB;
+          const priorityA = getCompetitionPriority(a.competition, hasUefa);
+          const priorityB = getCompetitionPriority(b.competition, hasUefa);
+          if (priorityA !== priorityB) return priorityA - priorityB;
+          return (a.competition || "").localeCompare(b.competition || "");
+        });
+      } else {
+        // Default: sort by priority (with Euro nights override), then kickoff time
+        formatted.sort((a, b) => {
+          const priorityA = getCompetitionPriority(a.competition, hasUefa);
+          const priorityB = getCompetitionPriority(b.competition, hasUefa);
+          if (priorityA !== priorityB) return priorityA - priorityB;
+          const timeA = new Date(a.kickoffTime).getTime();
+          const timeB = new Date(b.kickoffTime).getTime();
+          if (timeA !== timeB) return timeA - timeB;
+          return (a.competition || "").localeCompare(b.competition || "");
+        });
+      }
 
       if (debug) {
         return res.json({
@@ -652,6 +703,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           end: nextDate.toISOString(),
           status,
           competitionId: competitionId || null,
+          sort: sortMode,
+          hasUefa,
+          uefaCounts,
           returnedCount: formatted.length,
           sampleFirst5: formatted.slice(0, 5),
         });
