@@ -514,18 +514,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return null;
   }
 
-  // Explicit priority maps
-  const TIER0_ENGLAND: Record<string, number> = {
-    "premier league": 4, "championship": 5, "league one": 6, "league two": 7,
-    "national league": 8, "fa cup": 9, "efl cup": 10, "carabao cup": 10, "league cup": 10,
+  // Strict key-based priority map: "country|league" => priority
+  // This prevents "Polish Championship" from matching "Championship (England)"
+  const STRICT_PRIORITY_MAP: Record<string, number> = {
+    // UEFA (Tier 0, priority 1-3) - handled separately by getUefaCompetition
+    
+    // England (Tier 0, priority 4-10)
+    "england|premier league": 4,
+    "england|championship": 5,
+    "england|league one": 6,
+    "england|league two": 7,
+    "england|national league": 8,
+    "england|fa cup": 9,
+    "england|efl cup": 10,
+    "england|carabao cup": 10,
+    "england|league cup": 10,
+    
+    // Big 5 Europe (Tier 1, priority 20-29)
+    "spain|la liga": 20,
+    "spain|laliga": 20,
+    "italy|serie a": 21,
+    "germany|bundesliga": 22,
+    "france|ligue 1": 23,
+    "netherlands|eredivisie": 24,
+    "holland|eredivisie": 24,
+    
+    // Scotland (Tier 2, priority 30-39)
+    "scotland|scottish premiership": 30,
+    "scotland|premiership": 30,
+    "scotland|scottish championship": 31,
+    "scotland|championship": 31,
+    "scotland|scottish cup": 32,
   };
-  const TIER1_BIG5: Record<string, number> = {
-    "la liga": 20, "laliga": 20, "serie a": 21, "bundesliga": 22, "ligue 1": 23, "eredivisie": 24,
-  };
-  const TIER2_SCOTLAND: Record<string, number> = {
-    "scottish premiership": 30, "scottish championship": 31, "scottish cup": 32,
-  };
-  const UK_COUNTRIES = ["england", "uk", "united kingdom"];
+
+  // Fallback for ambiguous names that MUST have specific country
+  const AMBIGUOUS_LEAGUES = new Set([
+    "premier league", "championship", "league one", "league two",
+    "premiership", "serie a", "ligue 1", "ligue 2"
+  ]);
 
   function parseCompetitionParts(competition: string | null): { name: string; country: string } {
     if (!competition) return { name: "", country: "" };
@@ -569,38 +595,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { name, country } = parseCompetitionParts(competition);
     if (!name) return 1000;
     
-    // UEFA competitions - check first for Euro nights override
+    // UEFA competitions - check first, always top priority
     const uefaComp = getUefaCompetition(competition);
     if (uefaComp) {
-      // UEFA always at top: UCL=1, UEL=2, UECL=3
       if (uefaComp === "ucl") return 1;
       if (uefaComp === "uel") return 2;
       if (uefaComp === "uecl") return 3;
     }
     
-    // Check for England leagues - must have England/UK country
-    const isEnglandCountry = UK_COUNTRIES.some(c => country.includes(c));
+    // Build strict key: "country|league"
+    const strictKey = `${country}|${name}`;
     
-    // Tier 0: England leagues (priority 4-10) - but shift down if Euro nights active
-    const englandBase = euroNightsOverride ? 10 : 4;
-    for (const [league, basePriority] of Object.entries(TIER0_ENGLAND)) {
-      if (name === league || name.includes(league)) {
-        if (isEnglandCountry || league.includes("fa cup") || league.includes("efl") || league.includes("carabao")) {
-          return englandBase + (basePriority - 4);
-        }
-        break;
+    // Look up in strict map
+    if (STRICT_PRIORITY_MAP[strictKey] !== undefined) {
+      const basePriority = STRICT_PRIORITY_MAP[strictKey];
+      // Apply Euro nights offset for England leagues (priority 4-10)
+      if (euroNightsOverride && basePriority >= 4 && basePriority <= 10) {
+        return basePriority + 6; // Shift England down when UEFA playing
       }
+      return basePriority;
     }
     
-    // Tier 1: Big 5 European leagues (priority 20-29)
-    const big5Base = euroNightsOverride ? 20 : 20;
-    for (const [key, priority] of Object.entries(TIER1_BIG5)) {
-      if (name === key || name.includes(key)) return big5Base + (priority - 20);
+    // If country missing for ambiguous league, treat as "other" (priority 100)
+    if (AMBIGUOUS_LEAGUES.has(name) && !country) {
+      return 100;
     }
     
-    // Tier 2: Scottish leagues (priority 30-39)
-    for (const [key, priority] of Object.entries(TIER2_SCOTLAND)) {
-      if (name === key || name.includes(key)) return priority;
+    // Try partial matches for non-ambiguous leagues only
+    // e.g. "scottish premiership" when we only have "scotland|premiership"
+    if (country) {
+      for (const [key, priority] of Object.entries(STRICT_PRIORITY_MAP)) {
+        const [keyCountry, keyLeague] = key.split("|");
+        if (keyCountry === country && name.includes(keyLeague)) {
+          if (euroNightsOverride && priority >= 4 && priority <= 10) {
+            return priority + 6;
+          }
+          return priority;
+        }
+      }
     }
     
     return 100; // Default for other competitions (sorted alphabetically)

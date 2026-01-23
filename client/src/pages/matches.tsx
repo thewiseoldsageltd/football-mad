@@ -146,7 +146,8 @@ export default function MatchesPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
   const [sortMode, setSortMode] = useState<"competition" | "kickoff">("competition");
-  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [desktopCalendarOpen, setDesktopCalendarOpen] = useState(false);
+  const [mobileCalendarOpen, setMobileCalendarOpen] = useState(false);
 
   const today = startOfDay(new Date());
   const isToday = isSameDay(selectedDate, today);
@@ -216,10 +217,16 @@ export default function MatchesPage() {
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
-  const handleDateSelect = (date: Date | undefined) => {
+  const handleDesktopDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(startOfDay(date));
-      setCalendarOpen(false);
+      setDesktopCalendarOpen(false);
+    }
+  };
+  const handleMobileDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(startOfDay(date));
+      setMobileCalendarOpen(false);
     }
   };
 
@@ -254,7 +261,7 @@ export default function MatchesPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
             
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <Popover open={desktopCalendarOpen} onOpenChange={setDesktopCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -269,7 +276,7 @@ export default function MatchesPage() {
                 <CalendarComponent
                   mode="single"
                   selected={selectedDate}
-                  onSelect={handleDateSelect}
+                  onSelect={handleDesktopDateSelect}
                   initialFocus
                 />
               </PopoverContent>
@@ -334,7 +341,7 @@ export default function MatchesPage() {
               <ChevronLeft className="h-4 w-4" />
             </Button>
 
-            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <Popover open={mobileCalendarOpen} onOpenChange={setMobileCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
@@ -349,7 +356,7 @@ export default function MatchesPage() {
                 <CalendarComponent
                   mode="single"
                   selected={selectedDate}
-                  onSelect={handleDateSelect}
+                  onSelect={handleMobileDateSelect}
                   initialFocus
                 />
               </PopoverContent>

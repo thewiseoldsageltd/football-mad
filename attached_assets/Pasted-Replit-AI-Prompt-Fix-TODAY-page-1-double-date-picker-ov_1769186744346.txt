@@ -1,0 +1,102 @@
+Replit AI Prompt — Fix TODAY page: (1) double date picker overlay, (2) Polish Championship incorrectly prioritised
+
+Context
+On /matches, clicking the date opens TWO calendar popovers at once (see screenshot). Also league priority ordering is still wrong: “Polish Championship” is appearing above “Championship (England)”.
+
+Goal
+1) Date picker: ensure ONLY ONE calendar popover can open at a time.
+2) Priority ordering: make “Championship (England)” rank in Tier 0, but “Polish Championship” must NOT be treated as Tier 0.
+3) Keep existing layout (inline desktop, stacked mobile), keep current tabs, keep “All competitions”, keep sort dropdown.
+
+Part 1 — Fix the DOUBLE date picker
+Likely cause: the date control is rendered twice (desktop + mobile) without responsive hiding, OR we have two Popovers wired to the same trigger, OR we accidentally mount two Calendar components (one in a header, one in a filter bar).
+
+Tasks
+A) Locate the date picker UI in:
+- client/src/pages/matches.tsx (most likely)
+and/or
+- client/src/components/matches/* (if extracted)
+
+B) Search for duplicate calendar/popover usage:
+- Look for <Popover> / <Calendar> / <DatePicker> / <DayPicker> / <PopoverTrigger>
+- If there are TWO instances (desktop + mobile), enforce responsive rendering:
+  - Desktop instance should be wrapped with `hidden md:flex` (or `hidden lg:flex`)
+  - Mobile instance should be wrapped with `flex md:hidden`
+  so only one is mounted at any viewport width.
+
+C) If there’s only one instance, the issue may be event bubbling / nested triggers:
+- Ensure ONLY ONE <PopoverTrigger asChild> wraps the clickable date button.
+- Ensure the date button does NOT contain another nested trigger element.
+- Ensure we don’t render a second <Calendar> inside another PopoverContent nearby.
+
+D) Confirm fix:
+- Click date => exactly one calendar appears.
+- Clicking outside closes it.
+- Changing date updates fixtures.
+
+Part 2 — Fix league ordering: Polish Championship above English Championship
+Root cause: the priority matcher is still using loose substring checks (e.g. `includes("championship")`) or a non-country-aware mapping, so “Polish Championship” gets matched as “Championship”.
+
+Tasks
+A) Backend ordering (server/routes.ts or wherever /api/matches/day sorting lives)
+1) Identify the function that calculates “priority score” for a match/competition.
+2) Replace ANY broad checks like:
+   - name.includes("championship")
+   - name.includes("premier league")
+with strict, country-aware matching.
+
+B) Implement strict parsing + strict keys
+1) Add a parser:
+   parseCompetitionParts(raw: string) => { name: string, country: string | null }
+   Support formats you currently have:
+   - "Championship (England) [xxxx]"
+   - "ENGLAND: Championship"
+   - "UEFA Europa League (Eurocups) [1007]" => country = "UEFA"
+2) Normalize:
+   - nameNormalized = lowercased, trimmed, remove extra punctuation, remove bracketed [id]
+   - countryNormalized = lowercased, trimmed
+3) Build strict key:
+   key = `${countryNormalized}|${nameNormalized}`
+   Examples:
+   - "england|championship"
+   - "poland|championship"
+   - "uefa|champions league"
+
+C) Priority map MUST use strict keys
+Tier 0 examples (exact):
+- uefa|champions league
+- uefa|europa league
+- uefa|conference league
+- england|premier league
+- england|championship
+- england|league one
+- england|league two
+- england|national league
+- england|fa cup
+- england|efl cup
+- england|carabao cup
+
+Important rule:
+If name is ambiguous (“premier league”, “championship”), DO NOT assign Tier 0 unless country is England/UEFA as appropriate.
+So:
+- "poland|championship" must NOT map to Tier 0.
+- "premier league (jamaica)" must NOT map to Tier 0.
+If country is missing for an ambiguous name, treat as “other” (don’t over-prioritise).
+
+D) Youth/reserve demotion stays
+Ensure any league name containing:
+u21/u20/u19/u18, reserve(s), youth, academy, “premier league 2”, development
+=> priority = 9000 (unless UEFA senior comps).
+
+E) Verify with quick SQL + UI
+1) UI: Today should show “Championship (England)” above “Polish Championship”.
+2) Add a temporary debug output for /api/matches/day?debug=1 that returns:
+- top 15 competitions in returned order with their computed priority keys
+Remove debug once verified.
+
+Deliverables
+- Fix double date picker (single popover)
+- Fix strict competition priority keys so England Championship outranks Polish Championship
+- No layout regressions
+
+Now implement these changes end-to-end and provide a short summary of which files you edited and how to test.
