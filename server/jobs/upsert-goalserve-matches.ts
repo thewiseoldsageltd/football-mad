@@ -20,13 +20,16 @@ function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
     minutes = parseInt(timeParts[2], 10);
   }
   
-  const date = new Date(
+  const utcMs = Date.UTC(
     parseInt(year, 10),
     parseInt(month, 10) - 1,
     parseInt(day, 10),
     hours,
-    minutes
+    minutes,
+    0,
+    0
   );
+  const date = new Date(utcMs);
   
   if (isNaN(date.getTime())) return null;
   return date;

@@ -3959,3 +3959,29 @@ Apply changes directly.
 
 ---
 
+Fix timezone mismatch causing /api/matches/day to miss most fixtures for a given date.
+
+Problem:
+upsert-goalserve-matches.ts currently creates kickoffTime using new Date(year, month-1, day, hours, minutes) which interprets values in server local time. But /api/matches/day queries using UTC day boundaries (YYYY-MM-DDT00:00:00Z to next day). This mismatch causes fixtures to appear under the wrong day or not appear at all, especially for future dates.
+
+Goal:
+Store kickoffTime consistently in UTC when ingesting Goalserve matches.
+
+Changes:
+1) In server/jobs/upsert-goalserve-matches.ts, update parseKickoffTime():
+   - Keep the formattedDate parsing logic.
+   - When constructing the Date, use Date.UTC(...) and new Date(Date.UTC(...)) instead of new Date(...).
+   Example:
+     const utcMs = Date.UTC(year, monthIndex, day, hours, minutes, 0, 0);
+     const date = new Date(utcMs);
+
+2) Ensure hours/minutes parsing remains the same.
+
+3) Do not change any other ingestion logic.
+
+After applying this change, tomorrow's fixtures should fall into the correct UTC day bucket for /api/matches/day.
+
+Apply the code changes directly.
+
+---
+
