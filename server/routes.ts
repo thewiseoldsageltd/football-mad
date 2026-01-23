@@ -484,6 +484,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // GET /api/matches/day - date-driven matches endpoint
+  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId
+  app.get("/api/matches/day", async (req, res) => {
+    try {
+      const dateStr = req.query.date as string;
+      const status = (req.query.status as string) || "all";
+      const competitionId = req.query.competitionId as string;
+
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return res.status(400).json({ error: "date parameter required in YYYY-MM-DD format" });
+      }
+
+      // Parse the date as UTC day boundaries
+      const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
+      const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+
+      // Build conditions
+      const conditions: any[] = [
+        gte(matches.kickoffTime, startOfDay),
+        lte(matches.kickoffTime, endOfDay),
+      ];
+
+      // Status filtering
+      if (status === "fulltime") {
+        conditions.push(
+          drizzleSql`LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`
+        );
+      } else if (status === "live") {
+        conditions.push(
+          drizzleSql`(LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`
+        );
+      } else if (status === "scheduled") {
+        // Scheduled = not live and not finished
+        conditions.push(
+          drizzleSql`LOWER(COALESCE(${matches.status}, '')) NOT IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`
+        );
+        conditions.push(
+          drizzleSql`NOT (LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`
+        );
+      }
+      // status === "all" means no status filter
+
+      if (competitionId) {
+        conditions.push(eq(matches.goalserveCompetitionId, competitionId));
+      }
+
+      const results = await db.select()
+        .from(matches)
+        .where(and(...conditions))
+        .orderBy(asc(matches.kickoffTime));
+
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+
+      res.json(formatted);
+    } catch (error) {
+      console.error("Error fetching matches by day:", error);
+      res.status(500).json({ error: "Failed to fetch matches" });
+    }
+  });
+
   app.get("/api/matches/:slug", async (req, res) => {
     try {
       const match = await storage.getMatchBySlug(req.params.slug);

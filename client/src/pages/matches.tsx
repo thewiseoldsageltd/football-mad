@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
-import { Calendar, Loader2, Globe } from "lucide-react";
+import { Calendar, Loader2, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, startOfDay, isSameDay, addDays, subDays } from "date-fns";
+import { enGB } from "date-fns/locale";
 import { MatchesTabs, type MatchTab } from "@/components/matches/MatchesTabs";
-import { MatchesFilters } from "@/components/matches/MatchesFilters";
 import { MatchesList } from "@/components/matches/MatchesList";
 import { type MockMatch } from "@/components/matches/mockMatches";
 import { Button } from "@/components/ui/button";
@@ -84,11 +84,55 @@ const LIVE_STATUSES = ["playing", "1st half", "2nd half", "half time", "ht", "ex
 const FINISHED_STATUSES = ["finished", "ft", "full-time", "aet", "pen", "awarded", "postponed", "cancelled", "abandoned"];
 
 function isLiveStatus(status: string): boolean {
-  return LIVE_STATUSES.some(s => status.toLowerCase().includes(s.toLowerCase()));
+  return LIVE_STATUSES.some(s => status.toLowerCase().includes(s.toLowerCase())) || /^\d+$/.test(status);
 }
 
 function isFinishedStatus(status: string): boolean {
   return FINISHED_STATUSES.some(s => status.toLowerCase().includes(s.toLowerCase()));
+}
+
+const UK_PRIORITY: Record<string, number> = {
+  "Premier League": 1,
+  "Championship": 2,
+  "League One": 3,
+  "League Two": 4,
+  "National League": 5,
+  "FA Cup": 6,
+  "EFL Cup": 7,
+  "League Cup": 7,
+  "Carabao Cup": 7,
+};
+
+const BIG5_PRIORITY: Record<string, number> = {
+  "La Liga": 10,
+  "LaLiga": 10,
+  "Serie A": 11,
+  "Bundesliga": 12,
+  "Ligue 1": 13,
+  "Eredivisie": 14,
+  "Champions League": 15,
+  "UEFA Champions League": 15,
+  "Europa League": 16,
+  "UEFA Europa League": 16,
+  "Conference League": 17,
+  "UEFA Europa Conference League": 17,
+};
+
+function getCompetitionPriority(competitionName: string, goalserveCompetitionId: string | null): number {
+  const ukPriority = UK_PRIORITY[competitionName];
+  if (ukPriority !== undefined) return ukPriority;
+  
+  const big5Priority = BIG5_PRIORITY[competitionName];
+  if (big5Priority !== undefined) return big5Priority;
+  
+  for (const [key, priority] of Object.entries(UK_PRIORITY)) {
+    if (competitionName.toLowerCase().includes(key.toLowerCase())) return priority;
+  }
+  for (const [key, priority] of Object.entries(BIG5_PRIORITY)) {
+    if (competitionName.toLowerCase().includes(key.toLowerCase())) return priority;
+  }
+  
+  return 100;
 }
 
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
@@ -129,272 +173,218 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
     homeScore: match.homeScore,
     awayScore: match.awayScore,
     venue: match.venue || undefined,
+    goalserveCompetitionId: match.goalserveCompetitionId,
   };
 }
 
-function getDateDaysFromToday(selectedDate: Date): number {
-  const today = startOfDay(new Date());
-  const selected = startOfDay(selectedDate);
-  const diff = Math.ceil((selected.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  return diff;
+function formatDateLabel(date: Date, isToday: boolean): string {
+  if (isToday) {
+    return `Today — ${format(date, "EEE d MMM", { locale: enGB })}`;
+  }
+  return format(date, "EEE d MMM yyyy", { locale: enGB });
 }
 
 export default function MatchesPage() {
   const [activeTab, setActiveTab] = useState<MatchTab>("all");
   const [sortBy, setSortBy] = useState("kickoff");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const today = startOfDay(new Date());
-  const daysDiff = getDateDaysFromToday(selectedDate);
-  const isInFuture = daysDiff >= 0;
-  const isInPast = daysDiff < 0;
+  const isToday = isSameDay(selectedDate, today);
+  const dateStr = format(selectedDate, "yyyy-MM-dd");
 
-  const fixturesDays = Math.max(1, isInFuture ? daysDiff + 7 : 7);
-  const fixturesUrl = selectedCompetitionId
-    ? `/api/matches/fixtures?days=${fixturesDays}&competitionId=${selectedCompetitionId}`
-    : `/api/matches/fixtures?days=${fixturesDays}`;
+  const statusParam = activeTab === "all" ? "all" : activeTab === "live" ? "live" : activeTab === "scheduled" ? "scheduled" : "fulltime";
+  
+  const matchesUrl = selectedCompetitionId
+    ? `/api/matches/day?date=${dateStr}&status=${statusParam}&competitionId=${selectedCompetitionId}`
+    : `/api/matches/day?date=${dateStr}&status=${statusParam}`;
 
-  const { data: fixturesData, isLoading: fixturesLoading } = useQuery<ApiMatch[]>({
-    queryKey: ["fixtures", fixturesDays, selectedCompetitionId],
+  const { data: matchesData, isLoading } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-day", dateStr, statusParam, selectedCompetitionId],
     queryFn: async () => {
-      const res = await fetch(fixturesUrl);
-      if (!res.ok) throw new Error("Failed to load fixtures");
+      const res = await fetch(matchesUrl);
+      if (!res.ok) throw new Error("Failed to load matches");
       return res.json();
     },
   });
 
-  const resultsDays = isInPast ? Math.abs(daysDiff) + 7 : 30;
-  const resultsUrl = selectedCompetitionId
-    ? `/api/matches/results?days=${resultsDays}&competitionId=${selectedCompetitionId}`
-    : `/api/matches/results?days=${resultsDays}`;
-
-  const { data: resultsData, isLoading: resultsLoading } = useQuery<ApiMatch[]>({
-    queryKey: ["results", resultsDays, selectedCompetitionId],
+  const allMatchesUrl = `/api/matches/day?date=${dateStr}&status=all${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
+  const { data: allMatchesData } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-day", dateStr, "all", selectedCompetitionId],
     queryFn: async () => {
-      const res = await fetch(resultsUrl);
-      if (!res.ok) throw new Error("Failed to load results");
+      const res = await fetch(allMatchesUrl);
+      if (!res.ok) throw new Error("Failed to load all matches");
       return res.json();
     },
-    enabled: activeTab === "all" || activeTab === "fulltime",
+    staleTime: 30000,
   });
-
-  const liveUrl = `/api/matches/live`;
-  const { data: liveData, isLoading: liveLoading, refetch: refetchLive } = useQuery<ApiMatch[]>({
-    queryKey: ["live"],
-    queryFn: async () => {
-      const res = await fetch(liveUrl);
-      if (!res.ok) throw new Error("Failed to load live matches");
-      return res.json();
-    },
-    refetchInterval: 30000,
-    enabled: activeTab === "all" || activeTab === "live",
-  });
-
-  const allFixtures = useMemo(() => {
-    if (!fixturesData) return [];
-    return fixturesData.map(apiMatchToMockMatch);
-  }, [fixturesData]);
-
-  const allResults = useMemo(() => {
-    if (!resultsData) return [];
-    return resultsData.map(apiMatchToMockMatch);
-  }, [resultsData]);
-
-  const allLive = useMemo(() => {
-    if (!liveData) return [];
-    return liveData.map(apiMatchToMockMatch);
-  }, [liveData]);
-
-  const filterByDate = (matches: MockMatch[]): MockMatch[] => {
-    const selected = startOfDay(selectedDate);
-    return matches.filter((match) => {
-      const kickoff = new Date(match.kickOffTime);
-      return isSameDay(kickoff, selected);
-    });
-  };
-
-  const applyFilters = (matches: MockMatch[]): MockMatch[] => {
-    let filtered = [...matches];
-
-    if (sortBy === "kickoff") {
-      filtered.sort((a, b) => new Date(a.kickOffTime).getTime() - new Date(b.kickOffTime).getTime());
-    } else if (sortBy === "competition") {
-      filtered.sort((a, b) => a.competition.localeCompare(b.competition));
-    }
-
-    return filtered;
-  };
-
-  const fixturesForDate = useMemo(() => filterByDate(allFixtures), [allFixtures, selectedDate]);
-  const resultsForDate = useMemo(() => filterByDate(allResults), [allResults, selectedDate]);
-  const liveForDate = useMemo(() => {
-    return allLive.filter((match) => {
-      const kickoff = new Date(match.kickOffTime);
-      return isSameDay(kickoff, selectedDate);
-    });
-  }, [allLive, selectedDate]);
-
-  const scheduledMatches = useMemo(() => {
-    return fixturesForDate.filter(m => m.status === "scheduled" || m.status === "postponed");
-  }, [fixturesForDate]);
-
-  const fulltimeMatches = useMemo(() => {
-    return resultsForDate.filter(m => m.status === "finished" || m.status === "postponed");
-  }, [resultsForDate]);
 
   const allMatches = useMemo(() => {
-    const combined = [...liveForDate, ...scheduledMatches, ...fulltimeMatches];
-    const seen = new Set<string>();
-    return combined.filter(m => {
-      if (seen.has(m.id)) return false;
-      seen.add(m.id);
-      return true;
-    });
-  }, [liveForDate, scheduledMatches, fulltimeMatches]);
+    if (!allMatchesData) return [];
+    return allMatchesData.map(apiMatchToMockMatch);
+  }, [allMatchesData]);
 
-  const counts = {
-    all: allMatches.length,
-    live: liveForDate.length,
-    scheduled: scheduledMatches.length,
-    fulltime: fulltimeMatches.length,
-  };
+  const counts = useMemo(() => {
+    const live = allMatches.filter(m => m.status === "live").length;
+    const scheduled = allMatches.filter(m => m.status === "scheduled" || m.status === "postponed").length;
+    const fulltime = allMatches.filter(m => m.status === "finished").length;
+    return {
+      all: allMatches.length,
+      live,
+      scheduled,
+      fulltime,
+    };
+  }, [allMatches]);
 
   const currentMatches = useMemo(() => {
-    let matches: MockMatch[];
-    switch (activeTab) {
-      case "live":
-        matches = liveForDate;
-        break;
-      case "scheduled":
-        matches = scheduledMatches;
-        break;
-      case "fulltime":
-        matches = fulltimeMatches;
-        break;
-      case "all":
-      default:
-        matches = allMatches;
+    if (!matchesData) return [];
+    let matches = matchesData.map(apiMatchToMockMatch);
+
+    if (sortBy === "competition") {
+      matches.sort((a, b) => a.competition.localeCompare(b.competition));
+    } else {
+      matches.sort((a, b) => {
+        const priorityA = getCompetitionPriority(a.competition, a.goalserveCompetitionId || null);
+        const priorityB = getCompetitionPriority(b.competition, b.goalserveCompetitionId || null);
+        if (priorityA !== priorityB) return priorityA - priorityB;
+        return new Date(a.kickOffTime).getTime() - new Date(b.kickOffTime).getTime();
+      });
     }
-    return applyFilters(matches);
-  }, [activeTab, sortBy, liveForDate, scheduledMatches, fulltimeMatches, allMatches]);
+
+    return matches;
+  }, [matchesData, sortBy]);
 
   const competitionOptions = useMemo(() => {
-    const allData = [...(fixturesData || []), ...(resultsData || [])];
     const seen = new Map<string, string>();
-    allData.forEach((m) => {
-      if (m.goalserveCompetitionId && m.competition) {
-        seen.set(m.goalserveCompetitionId, m.competition);
+    allMatches.forEach((m) => {
+      const compId = m.goalserveCompetitionId;
+      if (compId && m.rawCompetition) {
+        seen.set(compId, m.rawCompetition);
       }
     });
     return Array.from(seen.entries())
       .map(([id, rawName]) => ({ id, displayName: getDisplayCompetitionName(rawName), rawName }))
-      .sort((a, b) => a.displayName.localeCompare(b.displayName));
-  }, [fixturesData, resultsData]);
+      .sort((a, b) => {
+        const priorityA = getCompetitionPriority(a.displayName, a.id);
+        const priorityB = getCompetitionPriority(b.displayName, b.id);
+        if (priorityA !== priorityB) return priorityA - priorityB;
+        return a.displayName.localeCompare(b.displayName);
+      });
+  }, [allMatches]);
 
-  const isLoading = fixturesLoading || (activeTab === "fulltime" && resultsLoading) || (activeTab === "live" && liveLoading);
+  const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
+  const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
+  const handleToday = () => setSelectedDate(today);
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(startOfDay(date));
+      setCalendarOpen(false);
+    }
+  };
 
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-8">
+        <div className="flex items-center gap-3 mb-6">
           <Calendar className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-4xl md:text-5xl font-bold" data-testid="heading-matches">Matches</h1>
-            <p className="text-muted-foreground text-lg">
+            <h1 className="text-3xl md:text-4xl font-bold" data-testid="heading-matches">Matches</h1>
+            <p className="text-muted-foreground text-sm md:text-base">
               Football fixtures and results
             </p>
           </div>
         </div>
 
-        <div className="hidden md:flex md:flex-col gap-4 mb-6">
-          <div className="flex items-center justify-between">
-            <MatchesTabs
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              counts={counts}
-              variant="desktop"
-            />
-          </div>
+        <div className="hidden md:flex items-center gap-3 flex-wrap mb-6">
+          <MatchesTabs
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            counts={counts}
+            variant="desktop"
+          />
 
-          <div className="flex items-center gap-3 flex-wrap">
-            <Popover>
+          <div className="flex items-center gap-1 ml-auto">
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handlePrevDay}
+              data-testid="btn-prev-day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className={cn(
-                    "w-[200px] justify-start text-left font-normal",
-                    !selectedDate && "text-muted-foreground"
-                  )}
+                  className="min-w-[180px] justify-center font-normal"
                   data-testid="btn-date-picker"
                 >
                   <Calendar className="mr-2 h-4 w-4" />
-                  {selectedDate ? format(selectedDate, "EEE, d MMM yyyy") : "Pick a date"}
+                  {formatDateLabel(selectedDate, isToday)}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
+              <PopoverContent className="w-auto p-0" align="center">
                 <CalendarComponent
                   mode="single"
                   selected={selectedDate}
-                  onSelect={(date) => date && setSelectedDate(date)}
+                  onSelect={handleDateSelect}
                   initialFocus
                 />
               </PopoverContent>
             </Popover>
 
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedDate(subDays(selectedDate, 1))}
-                data-testid="btn-prev-day"
-              >
-                &larr;
-              </Button>
-              <Button
-                size="sm"
-                variant={isSameDay(selectedDate, today) ? "default" : "outline"}
-                onClick={() => setSelectedDate(today)}
-                data-testid="btn-today"
-              >
-                Today
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-                data-testid="btn-next-day"
-              >
-                &rarr;
-              </Button>
-            </div>
-
-            <Select
-              value={selectedCompetitionId}
-              onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handleNextDay}
+              data-testid="btn-next-day"
             >
-              <SelectTrigger className="w-[200px]" data-testid="select-competition">
-                <SelectValue placeholder="All competitions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All competitions</SelectItem>
-                {competitionOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    <CompetitionOption competition={opt.rawName} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
 
-            <MatchesFilters
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              variant="inline"
-            />
+            <Button
+              size="sm"
+              variant={isToday ? "default" : "outline"}
+              onClick={handleToday}
+              className="ml-1"
+              data-testid="btn-today"
+            >
+              Today
+            </Button>
           </div>
+
+          <Select
+            value={selectedCompetitionId || "all"}
+            onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+          >
+            <SelectTrigger className="w-[200px]" data-testid="select-competition">
+              <SelectValue placeholder="All competitions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All competitions</SelectItem>
+              {competitionOptions.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <CompetitionOption competition={opt.rawName} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-[140px]" data-testid="select-sort">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="kickoff">Kick-off time</SelectItem>
+              <SelectItem value="competition">Competition</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        <div className="md:hidden">
+        <div className="md:hidden space-y-3 mb-4">
           <MatchesTabs
             activeTab={activeTab}
             onTabChange={setActiveTab}
@@ -402,60 +392,62 @@ export default function MatchesPage() {
             variant="mobile"
           />
 
-          <div className="flex flex-col gap-3 mb-4">
-            <div className="flex items-center gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="flex-1 justify-start text-left font-normal"
-                    data-testid="btn-date-picker-mobile"
-                  >
-                    <Calendar className="mr-2 h-4 w-4" />
-                    {selectedDate ? format(selectedDate, "EEE, d MMM") : "Pick a date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <CalendarComponent
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handlePrevDay}
+              data-testid="btn-prev-day-mobile"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
 
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedDate(subDays(selectedDate, 1))}
-                data-testid="btn-prev-day-mobile"
-              >
-                &larr;
-              </Button>
-              <Button
-                size="sm"
-                variant={isSameDay(selectedDate, today) ? "default" : "outline"}
-                onClick={() => setSelectedDate(today)}
-                data-testid="btn-today-mobile"
-              >
-                Today
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-                data-testid="btn-next-day-mobile"
-              >
-                &rarr;
-              </Button>
-            </div>
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="flex-1 justify-center font-normal"
+                  data-testid="btn-date-picker-mobile"
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  {formatDateLabel(selectedDate, isToday)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="center">
+                <CalendarComponent
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={handleDateSelect}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
 
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={handleNextDay}
+              data-testid="btn-next-day-mobile"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+
+            <Button
+              size="sm"
+              variant={isToday ? "default" : "outline"}
+              onClick={handleToday}
+              data-testid="btn-today-mobile"
+            >
+              Today
+            </Button>
+          </div>
+
+          <div className="flex gap-2">
             <Select
-              value={selectedCompetitionId}
+              value={selectedCompetitionId || "all"}
               onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
             >
-              <SelectTrigger className="w-full" data-testid="select-competition-mobile">
+              <SelectTrigger className="flex-1" data-testid="select-competition-mobile">
                 <SelectValue placeholder="All competitions" />
               </SelectTrigger>
               <SelectContent>
@@ -467,13 +459,17 @@ export default function MatchesPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
 
-          <MatchesFilters
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            variant="stacked"
-          />
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-[120px]" data-testid="select-sort-mobile">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="kickoff">Kick-off</SelectItem>
+                <SelectItem value="competition">Competition</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {isLoading ? (

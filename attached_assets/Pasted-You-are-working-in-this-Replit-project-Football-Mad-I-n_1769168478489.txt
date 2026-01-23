@@ -1,0 +1,95 @@
+You are working in this Replit project (Football Mad). I need you to fix the Matches page UX + data plumbing WITHOUT me manually editing files. Please implement the changes end-to-end and keep the UI working in both desktop + mobile.
+
+GOALS
+1) Date navigation must actually load fixtures for the selected date (currently “next day” shows 0 and the UI still says Today).
+2) Desktop layout: all controls in ONE line (tabs + date nav + competition + sort). Mobile: stacked neatly.
+3) Fixture ordering: prioritise UK leagues first, then “big 5” Europe, then everything else (still show everything).
+4) Competition badge: keep the small flag icon + league name (no emoji, no “[id]”, no “(Country)” text).
+5) Keep competition filter working (uses goalserveCompetitionId), and sort by kick-off time (default). Remove team search from this page.
+
+BACKEND CHANGES (Express routes)
+A) Add a new endpoint that is date-driven (this is the root fix):
+GET /api/matches/day
+Query params:
+- date=YYYY-MM-DD (required)
+- status=all|live|scheduled|fulltime (default all)
+- competitionId=<goalserveCompetitionId> (optional)
+
+Behavior:
+- Compute start/end for that date in UTC day boundaries:
+  start = date + "T00:00:00.000Z"
+  end   = date + "T23:59:59.999Z"
+- Filter matches.kickoff_time BETWEEN start and end (inclusive).
+- Apply status filtering:
+  - fulltime: LOWER(status) in FINISHED_STATUSES
+  - live: LOWER(status) in LIVE_STATUSES OR numeric minute status
+  - scheduled: exclude live + finished (or keep “scheduled” plus other pre-match states)
+  - all: no status filter (but still within date window)
+- Apply competitionId filter using matches.goalserve_competition_id
+- Always ORDER BY kickoff_time asc (base ordering), but also return enough fields for client-side priority sorting.
+
+B) Ensure the response shape includes:
+id, slug, kickoffTime, status, homeScore, awayScore, venue, competition, goalserveCompetitionId,
+homeTeam (mapped or nameFromRaw), awayTeam (mapped or nameFromRaw)
+
+C) Do NOT break the existing endpoints; just add this new one and use it from the UI.
+
+FRONTEND CHANGES (Matches page)
+D) Replace current data fetching on Matches page to use /api/matches/day with the selected date + status tab + competitionId.
+- Selected date defaults to today (user’s local date).
+- Prev/Next buttons shift selected date by -1/+1 day.
+- A “Today” button jumps back to today and is visually active only when selected date is today.
+- The date label should be:
+  - If selected date is today: “Today — Fri 23 Jan”
+  - Otherwise: “Sat 24 Jan 2026” (no “Today” word).
+
+E) Fix the “next day shows 0 matches” bug by ensuring the query actually uses the selected date (not now-based windows).
+
+F) Desktop layout:
+- Row 1 (single line): Tabs (All/Live/Scheduled/Full-time) on the left, then Date nav cluster, then Competition dropdown, then Sort dropdown.
+- No second-line “Show: 7/14/30” controls. Remove those.
+- Remove team search from this page entirely.
+
+G) Mobile layout:
+- Tabs on top (scrollable if needed).
+- Date nav row.
+- Competition + sort row stacked.
+
+PRIORITY ORDERING (client-side, safe + quick)
+H) Implement a priority score for competitions, then sort within the selected day:
+- UK top priority (in this order): Premier League, Championship, League One, League Two, National League, FA Cup, EFL Cup.
+- Next priority: La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie, Champions League, Europa League, Conference League.
+- Everything else after.
+Implementation detail:
+- Use goalserveCompetitionId if possible (preferred), otherwise fallback to competition name matching.
+- Keep kick-off time ordering within the same priority band.
+So final sort: (priorityScore asc, kickoffTime asc).
+
+FLAG ICONS + COMPETITION NAME CLEANUP
+I) In the competition badge and competition dropdown:
+- Show a small flag IMAGE (not emoji).
+- Remove “(Country)” and “[1234]” from display.
+- Keep the underlying filter value as goalserveCompetitionId.
+Implementation idea:
+- Parse competition strings like:
+  - "Catarinense (Brazil) [1140]" => name="Catarinense", country="Brazil", id="1140"
+  - "Premier League (Jamaica) [1270]" => name="Premier League", country="Jamaica", id="1270"
+  - "Libya: Premier League" => country="Libya", name="Premier League"
+- Maintain a small mapping from country name -> ISO2 and use a flag CDN image URL.
+- If unknown country, show a neutral globe icon.
+
+VENUE / STADIUM
+J) If venue exists in the match record, show it subtly on the card (small text under date/time). If venue is null, show nothing (don’t invent).
+
+DELIVERABLES
+1) Implement the new backend endpoint /api/matches/day
+2) Update Matches page to use it, fix date nav + layout, remove 7/14/30 + team search
+3) Add priority ordering (UK + big Europe first)
+4) Ensure competition dropdown is not duplicated and uses clean labels + flag images
+5) Quick verification steps:
+- curl a specific day: /api/matches/day?date=2026-01-23&status=all
+- click next/prev day and confirm matches load
+- confirm UK leagues appear at top when present
+- competition filter works and shows clean names + flags
+
+Please make the smallest clean set of changes across the relevant files and keep TypeScript types correct.
