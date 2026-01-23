@@ -106,7 +106,6 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
 
 export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCardProps) {
   const kickoffTime = new Date(match.kickOffTime);
-  const showScore = match.status === "live" || match.status === "finished";
   const isLive = match.status === "live";
   // Use provided competitionLabel (may be disambiguated), fallback to match.competition
   // Strip any country suffix like "(England)" or "• England" - flag is enough
@@ -144,17 +143,31 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
 
             {/* Center: kickoff time / score */}
             <div className="min-w-[64px] flex flex-col items-center justify-center">
-              {showScore ? (
-                <div className="text-lg font-bold tabular-nums whitespace-nowrap">
-                  {match.homeScore} – {match.awayScore}
-                </div>
-              ) : match.status === "postponed" ? (
-                <div className="text-sm text-muted-foreground font-medium whitespace-nowrap">TBC</div>
-              ) : (
-                <div className="text-lg font-bold tabular-nums whitespace-nowrap">
-                  {format(kickoffTime, "HH:mm")}
-                </div>
-              )}
+              {(() => {
+                const hasScores = match.homeScore !== null && match.homeScore !== undefined &&
+                                  match.awayScore !== null && match.awayScore !== undefined;
+                
+                if (match.status === "finished" || match.status === "live") {
+                  if (hasScores) {
+                    return (
+                      <div className="text-lg font-bold tabular-nums whitespace-nowrap">
+                        {match.homeScore}–{match.awayScore}
+                      </div>
+                    );
+                  }
+                  // Finished/live but no scores - show nothing (FT badge handles it)
+                  return null;
+                }
+                if (match.status === "postponed") {
+                  return <div className="text-sm text-muted-foreground font-medium whitespace-nowrap">TBC</div>;
+                }
+                // Scheduled - show kickoff time
+                return (
+                  <div className="text-lg font-bold tabular-nums whitespace-nowrap">
+                    {format(kickoffTime, "HH:mm")}
+                  </div>
+                );
+              })()}
               <StatusBadge status={match.status} minute={match.minute} />
             </div>
 

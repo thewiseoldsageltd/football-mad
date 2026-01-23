@@ -3862,3 +3862,31 @@ Apply the code changes directly.
 
 ---
 
+Fix match score rendering on the Matches page.
+
+Problem:
+Backend now returns homeScore/awayScore for finished matches, but the match cards still show a dash (–) instead of the scoreline.
+
+Goal:
+In the match card component used by MatchesList (likely client/src/components/matches/EnhancedMatchCard.tsx, and possibly client/src/components/cards/match-card.tsx), update Line 2 to display:
+- For finished matches: "HOME_SCORE–AWAY_SCORE" centered in the kickoff/score column
+- For live matches: keep current live indicator behaviour (if any)
+- For scheduled matches: keep kickoff time (HH:mm)
+
+Rules:
+- Keep the locked 3-line structure and the 5-column grid.
+- Do not reintroduce venue/country text.
+- Do not change sorting/filtering.
+- If scores are null even when finished, fall back to "FT" badge only (do not crash).
+
+Implementation details:
+- Use match.status (MockMatch) to detect finished (status === "finished")
+- Use match.homeScore and match.awayScore fields (numbers | null)
+- Render scoreline when both scores are not null.
+- If status finished but scores missing, render "FT" (as today).
+- Ensure the kickoff/score column never wraps and stays centered.
+
+Apply the minimal changes required in the correct component(s).
+
+---
+
