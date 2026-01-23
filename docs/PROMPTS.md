@@ -2886,3 +2886,92 @@ Now implement these changes end-to-end and provide a short summary of which file
 
 ---
 
+You are working in a Node/TS backend for Football Mad. We need to fix Matches page ordering by making the /api/matches/day debug output useful and by hardening priority sorting so only exact (country, league) matches can land in Tier 0/1/2.
+
+CONTEXT:
+- Current endpoint: GET /api/matches/day?date=YYYY-MM-DD&status=all|live|scheduled|fulltime&sort=competition|kickoff&debug=1
+- Right now debug=1 replaces the response with metadata only (date/start/end/returnedCount/sampleFirst5). There is no topSamples.
+- The UI ordering is still wrong (e.g. "Championship" from non-England sometimes appears top).
+- We need to be explicit: Tier 0 includes UEFA comps + England leagues/cups; Tier 1 big 5; Tier 2 Scotland. Youth/reserve must be demoted.
+
+GOALS:
+1) Change debug behavior: debug=1 should NOT replace the response. It should return the normal response (matches array) PLUS a "debug" object.
+2) Add "debug.topSamples" containing the first 50 matches AFTER sorting, but each entry should include:
+   - id, kickoffTime, status, competition (raw), goalserveCompetitionId
+   - parsedCountry, parsedLeague (from competition string)
+   - leagueKey used for priority lookup
+   - priority number
+   - sortKey tuple (priority, compName, kickoffTime) used in comparator
+3) Add "debug.leagueSummary": counts per leagueKey for the day (top 30) to see what leagues exist and their computed priorities.
+4) HARDEN parsing + priority:
+   - NEVER default missing country to "England"
+   - Normalize country + league names to lowercase, trimmed
+   - leagueKey MUST be `${countryNorm}|${leagueNorm}` when country is present
+   - If country cannot be parsed, set countryNorm="unknown"
+   - If leagueNorm is ambiguous (e.g. "championship", "premier league", "league one", "league two", "national league") and countryNorm="unknown", force priority to 9000 (bottom) to avoid incorrect Tier 0 matches.
+5) Implement explicit tier map (exact key matches only):
+   Tier 0 (0-100):
+     uefa|champions league
+     uefa|europa league
+     uefa|conference league
+     england|premier league
+     england|championship
+     england|league one
+     england|league two
+     england|national league
+     england|fa cup
+     england|efl cup
+     england|carabao cup  (treat as same as efl cup)
+   Tier 1 (200-299):
+     spain|la liga
+     italy|serie a
+     germany|bundesliga
+     france|ligue 1
+     netherlands|eredivisie
+   Tier 2 (300-399):
+     scotland|premiership
+     scotland|championship
+     scotland|scottish cup
+   Defaults:
+     - unknown leagues: 1000
+     - youth/reserve/u21/u19/u18/u23/reserve/academy/friendly competitions: 9000
+   IMPORTANT: Youth demotion must trigger if the competition name includes: "u21","u23","u19","u18","youth","reserve","reserves","academy","premier league 2","premier league cup"
+6) Sorting modes:
+   - sort=competition: primarily by (priority asc), then (competitionDisplayName asc), then kickoffTime asc
+   - sort=kickoff: primarily by kickoffTime asc, then priority asc, then competitionDisplayName asc
+   Ensure priorities are numbers and comparator is stable.
+
+IMPLEMENTATION DETAILS:
+- Edit server route handler for /api/matches/day in server/routes.ts (or whichever file defines it).
+- There is already competition parsing logic; replace it with a single helper:
+   parseCompetition(competitionString) -> { countryNorm, leagueNorm, competitionDisplayName }
+   It should handle:
+     "Name (Country) [ID]" => league=Name, country=Country
+     "Country: Name" => league=Name, country=Country
+     "UEFA Europa League" => country=UEFA, league=Europa League (treat countryNorm="uefa")
+   If no country present -> countryNorm="unknown"
+- Add helpers:
+   isYouthCompetition(competitionLower)
+   getPriority(countryNorm, leagueNorm, competitionLower)
+- Make sure the endpoint always returns:
+   { matches: MatchDTO[], ...existing fields if any..., debug?: {...} }
+   If you currently return an array, wrap it in an object so we can include debug.
+   Update frontend fetch accordingly ONLY IF needed (but prefer to keep response shape consistent with existing non-debug call).
+   If changing shape is risky, then:
+     - keep existing response for non-debug
+     - for debug only, return { matches, debug, ...meta }
+- Add tests or at least a quick local verification:
+   curl ".../api/matches/day?date=2026-01-23&status=all&sort=competition&debug=1"
+   should include debug.topSamples with computed priorities.
+
+DELIVERABLES:
+- Commit-ready code changes.
+- A brief note in the response: exactly where to look in the debug payload to see computed priorities, and how to confirm "england|championship" is not being applied to Indonesia/Poland "Championship".
+
+DO NOT:
+- Do not use jq.
+- Do not install new dependencies.
+- Do not handwave; implement actual code and ensure it compiles.
+
+---
+

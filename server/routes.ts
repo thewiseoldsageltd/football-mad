@@ -484,22 +484,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ========== EXPLICIT COMPETITION PRIORITY SYSTEM ==========
-  // Tier 0: UEFA + England top leagues (priority 1-15)
-  // Tier 1: Big 5 European leagues (priority 20-29)
-  // Tier 2: Scottish leagues (priority 30-39)
-  // Other: Alphabetical (priority 100)
-  // Youth/Reserve: Demoted (priority 9000)
+  // ========== COMPETITION PRIORITY SYSTEM ==========
+  // Tier 0: UEFA comps (1-3) + England leagues/cups (4-10)
+  // Tier 1: Big 5 Europe (200-299)
+  // Tier 2: Scotland (300-399)
+  // Default: Unknown leagues (1000)
+  // Demoted: Youth/reserve/academy/friendly (9000)
 
-  // Helper to detect youth/reserve competitions - must be demoted
-  function isYouthOrReserveCompetition(name: string): boolean {
-    const lowerName = name.toLowerCase();
-    const youthPatterns = [
-      "u21", "u23", "u19", "u18", "u17", "u16",
-      "youth", "reserve", "reserves",
-      "premier league 2", "premier league cup"
-    ];
-    return youthPatterns.some(pattern => lowerName.includes(pattern));
+  // Youth/reserve patterns - these are ALWAYS demoted to 9000
+  const YOUTH_PATTERNS = [
+    "u21", "u23", "u19", "u18", "u17", "u16",
+    "youth", "reserve", "reserves", "academy",
+    "premier league 2", "premier league cup", "friendly", "friendlies"
+  ];
+
+  function isYouthOrReserveCompetition(competitionLower: string): boolean {
+    return YOUTH_PATTERNS.some(pattern => competitionLower.includes(pattern));
   }
 
   // Helper to detect UEFA competition - MUST contain "UEFA" prefix explicitly
@@ -514,10 +514,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return null;
   }
 
-  // Strict key-based priority map: "country|league" => priority
-  // This prevents "Polish Championship" from matching "Championship (England)"
+  // STRICT tier map with EXACT key matching: "countryNorm|leagueNorm" => priority
+  // NEVER default missing country to "England" - use "unknown" instead
   const STRICT_PRIORITY_MAP: Record<string, number> = {
     // UEFA (Tier 0, priority 1-3) - handled separately by getUefaCompetition
+    "uefa|champions league": 1,
+    "uefa|europa league": 2,
+    "uefa|conference league": 3,
     
     // England (Tier 0, priority 4-10)
     "england|premier league": 4,
@@ -530,112 +533,159 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "england|carabao cup": 10,
     "england|league cup": 10,
     
-    // Big 5 Europe (Tier 1, priority 20-29)
-    "spain|la liga": 20,
-    "spain|laliga": 20,
-    "italy|serie a": 21,
-    "germany|bundesliga": 22,
-    "france|ligue 1": 23,
-    "netherlands|eredivisie": 24,
-    "holland|eredivisie": 24,
+    // Big 5 Europe (Tier 1, priority 200-299)
+    "spain|la liga": 200,
+    "spain|laliga": 200,
+    "italy|serie a": 201,
+    "germany|bundesliga": 202,
+    "france|ligue 1": 203,
+    "netherlands|eredivisie": 204,
+    "holland|eredivisie": 204,
     
-    // Scotland (Tier 2, priority 30-39)
-    "scotland|scottish premiership": 30,
-    "scotland|premiership": 30,
-    "scotland|scottish championship": 31,
-    "scotland|championship": 31,
-    "scotland|scottish cup": 32,
+    // Scotland (Tier 2, priority 300-399)
+    "scotland|scottish premiership": 300,
+    "scotland|premiership": 300,
+    "scotland|scottish championship": 301,
+    "scotland|championship": 301,
+    "scotland|scottish cup": 302,
   };
 
-  // Fallback for ambiguous names that MUST have specific country
+  // Ambiguous league names that MUST have a country to get tier priority
+  // If countryNorm="unknown" AND leagueNorm is in this set, force priority to 9000
   const AMBIGUOUS_LEAGUES = new Set([
     "premier league", "championship", "league one", "league two",
-    "premiership", "serie a", "ligue 1", "ligue 2"
+    "premiership", "serie a", "ligue 1", "ligue 2", "national league"
   ]);
 
-  function parseCompetitionParts(competition: string | null): { name: string; country: string } {
-    if (!competition) return { name: "", country: "" };
-    
-    let country = "";
-    let name = competition;
-    
-    // Extract country from parentheses like "Premier League (England) [1234]"
-    const parenMatch = competition.match(/\(([^)]+)\)/);
-    if (parenMatch) {
-      country = parenMatch[1].trim().toLowerCase();
-    }
-    
-    // Also check for "Country: League" format like "England: Premier League"
-    const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
-    if (colonMatch && !country) {
-      country = colonMatch[1].trim().toLowerCase();
-      name = colonMatch[2]; // Use the part after the colon as the name
-    }
-    
-    // Remove bracket IDs like " [1234]"
-    name = name.replace(/\s*\[\d+\]$/, "");
-    // Remove parenthetical country like " (England)"
-    name = name.replace(/\s*\([^)]+\)$/, "");
-    // Remove country prefix like "Country: " if not already handled
-    if (!colonMatch) {
-      name = name.replace(/^[^:]+:\s*/, "");
-    }
-    
-    return { name: name.trim().toLowerCase(), country };
+  // Parse competition string into normalized parts
+  // Handles: "Name (Country) [ID]", "Country: Name", "UEFA Europa League"
+  interface ParsedCompetition {
+    countryNorm: string;      // lowercase, trimmed, or "unknown"
+    leagueNorm: string;       // lowercase, trimmed
+    competitionDisplayName: string;
+    leagueKey: string;        // "countryNorm|leagueNorm" used for priority lookup
   }
 
-  function getCompetitionPriority(competition: string | null, euroNightsOverride: boolean = false): number {
-    if (!competition) return 1000;
-    
-    // FIRST: Check for youth/reserve - always demote to 9000
-    if (isYouthOrReserveCompetition(competition)) {
-      return 9000;
+  function parseCompetition(competition: string | null): ParsedCompetition {
+    if (!competition) {
+      return { countryNorm: "unknown", leagueNorm: "", competitionDisplayName: "", leagueKey: "unknown|" };
     }
     
-    const { name, country } = parseCompetitionParts(competition);
-    if (!name) return 1000;
+    let country = "";
+    let leagueName = competition;
+    const lowerComp = competition.toLowerCase();
+    
+    // Pattern 1 (FIRST): "UEFA Europa League" - treat UEFA as the country (highest priority)
+    // This MUST come before parentheses check to handle "UEFA Europa League (Eurocups) [1007]"
+    if (lowerComp.startsWith("uefa ")) {
+      country = "uefa";
+      leagueName = competition.substring(5).trim(); // Remove "UEFA " prefix
+    }
+    
+    // Pattern 2: "Name (Country) [ID]" - extract country from parentheses (only if UEFA not detected)
+    if (!country) {
+      const parenMatch = competition.match(/\(([^)]+)\)/);
+      if (parenMatch) {
+        country = parenMatch[1].trim();
+      }
+    }
+    
+    // Pattern 3: "Country: League" format
+    const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
+    if (colonMatch && !country) {
+      country = colonMatch[1].trim();
+      leagueName = colonMatch[2].trim();
+    }
+    
+    // Clean league name - remove bracket IDs and parenthetical country
+    leagueName = leagueName.replace(/\s*\[\d+\]$/, "");
+    leagueName = leagueName.replace(/\s*\([^)]+\)$/, "");
+    // Remove country prefix if not already handled
+    if (!colonMatch && !lowerComp.startsWith("uefa ")) {
+      leagueName = leagueName.replace(/^[^:]+:\s*/, "");
+    }
+    
+    // Normalize to lowercase and trim
+    const countryNorm = country ? country.toLowerCase().trim() : "unknown";
+    const leagueNorm = leagueName.toLowerCase().trim();
+    
+    // Build display name (original competition string cleaned up)
+    const competitionDisplayName = competition.replace(/\s*\[\d+\]$/, "").trim();
+    
+    // Build the lookup key
+    const leagueKey = `${countryNorm}|${leagueNorm}`;
+    
+    return { countryNorm, leagueNorm, competitionDisplayName, leagueKey };
+  }
+
+  // Get priority for a competition string
+  // Returns: 1-10 (UEFA+England Tier 0), 200-299 (Big 5 Tier 1), 300-399 (Scotland Tier 2),
+  //          1000 (unknown), 9000 (youth/reserve/ambiguous-unknown)
+  interface PriorityResult {
+    priority: number;
+    parsed: ParsedCompetition;
+  }
+
+  function getPriorityWithDetails(competition: string | null, euroNightsOverride: boolean = false): PriorityResult {
+    const parsed = parseCompetition(competition);
+    
+    if (!competition) {
+      return { priority: 1000, parsed };
+    }
+    
+    const competitionLower = competition.toLowerCase();
+    
+    // FIRST: Check for youth/reserve - always demote to 9000
+    if (isYouthOrReserveCompetition(competitionLower)) {
+      return { priority: 9000, parsed };
+    }
     
     // UEFA competitions - check first, always top priority
     const uefaComp = getUefaCompetition(competition);
     if (uefaComp) {
-      if (uefaComp === "ucl") return 1;
-      if (uefaComp === "uel") return 2;
-      if (uefaComp === "uecl") return 3;
+      if (uefaComp === "ucl") return { priority: 1, parsed };
+      if (uefaComp === "uel") return { priority: 2, parsed };
+      if (uefaComp === "uecl") return { priority: 3, parsed };
     }
     
-    // Build strict key: "country|league"
-    const strictKey = `${country}|${name}`;
+    // If country is unknown AND league is ambiguous, force to 9000 (bottom)
+    // This prevents "Championship (Indonesia)" from getting Tier 0
+    if (parsed.countryNorm === "unknown" && AMBIGUOUS_LEAGUES.has(parsed.leagueNorm)) {
+      return { priority: 9000, parsed };
+    }
     
-    // Look up in strict map
-    if (STRICT_PRIORITY_MAP[strictKey] !== undefined) {
-      const basePriority = STRICT_PRIORITY_MAP[strictKey];
+    // Look up in strict map using exact leagueKey
+    if (STRICT_PRIORITY_MAP[parsed.leagueKey] !== undefined) {
+      let basePriority = STRICT_PRIORITY_MAP[parsed.leagueKey];
       // Apply Euro nights offset for England leagues (priority 4-10)
       if (euroNightsOverride && basePriority >= 4 && basePriority <= 10) {
-        return basePriority + 6; // Shift England down when UEFA playing
+        basePriority = basePriority + 6; // Shift England down when UEFA playing
       }
-      return basePriority;
-    }
-    
-    // If country missing for ambiguous league, treat as "other" (priority 100)
-    if (AMBIGUOUS_LEAGUES.has(name) && !country) {
-      return 100;
+      return { priority: basePriority, parsed };
     }
     
     // Try partial matches for non-ambiguous leagues only
-    // e.g. "scottish premiership" when we only have "scotland|premiership"
-    if (country) {
+    // e.g. "scottish premiership" when we have "scotland|premiership"
+    if (parsed.countryNorm !== "unknown") {
       for (const [key, priority] of Object.entries(STRICT_PRIORITY_MAP)) {
         const [keyCountry, keyLeague] = key.split("|");
-        if (keyCountry === country && name.includes(keyLeague)) {
+        if (keyCountry === parsed.countryNorm && parsed.leagueNorm.includes(keyLeague)) {
+          let adjustedPriority = priority;
           if (euroNightsOverride && priority >= 4 && priority <= 10) {
-            return priority + 6;
+            adjustedPriority = priority + 6;
           }
-          return priority;
+          return { priority: adjustedPriority, parsed };
         }
       }
     }
     
-    return 100; // Default for other competitions (sorted alphabetically)
+    // Default for other competitions (sorted alphabetically within this tier)
+    return { priority: 1000, parsed };
+  }
+
+  // Simple priority getter for backward compatibility
+  function getCompetitionPriority(competition: string | null, euroNightsOverride: boolean = false): number {
+    return getPriorityWithDetails(competition, euroNightsOverride).priority;
   }
 
   // GET /api/matches/day - date-driven matches endpoint
@@ -737,17 +787,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       if (debug) {
+        // Build topSamples: first 50 matches with full priority details
+        const topSamples = formatted.slice(0, 50).map((m, idx) => {
+          const { priority, parsed } = getPriorityWithDetails(m.competition, hasUefa);
+          const kickoffTime = new Date(m.kickoffTime).getTime();
+          return {
+            index: idx,
+            id: m.id,
+            kickoffTime: m.kickoffTime,
+            status: m.status,
+            competition: m.competition,
+            goalserveCompetitionId: m.goalserveCompetitionId,
+            parsedCountry: parsed.countryNorm,
+            parsedLeague: parsed.leagueNorm,
+            leagueKey: parsed.leagueKey,
+            priority,
+            sortKey: sortMode === "kickoff" 
+              ? [kickoffTime, priority, parsed.competitionDisplayName]
+              : [priority, parsed.competitionDisplayName, kickoffTime],
+          };
+        });
+
+        // Build leagueSummary: counts per leagueKey (top 30)
+        const leagueCounter: Record<string, { count: number; priority: number }> = {};
+        formatted.forEach(m => {
+          const { priority, parsed } = getPriorityWithDetails(m.competition, hasUefa);
+          const key = parsed.leagueKey;
+          if (!leagueCounter[key]) {
+            leagueCounter[key] = { count: 0, priority };
+          }
+          leagueCounter[key].count++;
+        });
+        const leagueSummary = Object.entries(leagueCounter)
+          .map(([key, val]) => ({ leagueKey: key, count: val.count, priority: val.priority }))
+          .sort((a, b) => a.priority - b.priority || b.count - a.count)
+          .slice(0, 30);
+
         return res.json({
-          date: effectiveDate,
-          start: start.toISOString(),
-          end: nextDate.toISOString(),
-          status,
-          competitionId: competitionId || null,
-          sort: sortMode,
-          hasUefa,
-          uefaCounts,
-          returnedCount: formatted.length,
-          sampleFirst5: formatted.slice(0, 5),
+          matches: formatted,
+          debug: {
+            date: effectiveDate,
+            start: start.toISOString(),
+            end: nextDate.toISOString(),
+            status,
+            competitionId: competitionId || null,
+            sort: sortMode,
+            hasUefa,
+            uefaCounts,
+            returnedCount: formatted.length,
+            topSamples,
+            leagueSummary,
+          },
         });
       }
 
