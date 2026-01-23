@@ -4019,3 +4019,27 @@ Do not change any existing routes. Apply minimal changes.
 
 ---
 
+Add a minimal debug endpoint to identify why "Bournemouth (Championship)" appears.
+
+Create POST /api/jobs/debug-team-anomaly?query=Bournemouth
+
+- Guard it with requireJobSecret("GOALSERVE_SYNC_SECRET") (same pattern as other Goalserve jobs).
+- In the handler, query the DB and return JSON:
+
+A) teamsLike:
+Select from teams where name ILIKE %query%
+Return: id, name, slug (if exists), goalserveTeamId, competitionId (if exists), createdAt (if exists)
+
+B) matchesLike:
+Select from matches where:
+- homeTeamName ILIKE %query% OR awayTeamName ILIKE %query% (only if those fields exist)
+OR homeTeamId/awayTeamId belongs to any team in teamsLike.
+Return a sample (limit 50): id, slug, kickoffTime, status, competitionName (or competitionId), homeTeamId, awayTeamId, homeScore, awayScore
+
+C) If possible, also join teams table for homeTeamId/awayTeamId to return homeTeamNameFromTeams + awayTeamNameFromTeams.
+
+Do NOT change schema. Keep it minimal. Return:
+{ teamsLike: [...], matchesLike: [...] }
+
+---
+

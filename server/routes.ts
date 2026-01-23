@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, matches, teams } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc } from "drizzle-orm";
+import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
@@ -1369,6 +1369,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
     }
   });
+
+  // ========== DEBUG: Team Anomaly Investigation ==========
+  app.post(
+    "/api/jobs/debug-team-anomaly",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      try {
+        const query = String(req.query.query || "");
+        if (!query) {
+          return res.status(400).json({ error: "Missing query parameter" });
+        }
+
+        const teamsLike = await db
+          .select({
+            id: teams.id,
+            name: teams.name,
+            slug: teams.slug,
+            goalserveTeamId: teams.goalserveTeamId,
+            league: teams.league,
+            createdAt: teams.createdAt,
+          })
+          .from(teams)
+          .where(ilike(teams.name, `%${query}%`));
+
+        const teamIds = teamsLike.map(t => t.id);
+
+        const homeTeam = aliasedTable(teams, "homeTeam");
+        const awayTeam = aliasedTable(teams, "awayTeam");
+
+        const matchesLike = await db
+          .select({
+            id: matches.id,
+            slug: matches.slug,
+            kickoffTime: matches.kickoffTime,
+            status: matches.status,
+            competition: matches.competition,
+            goalserveCompetitionId: matches.goalserveCompetitionId,
+            homeTeamId: matches.homeTeamId,
+            awayTeamId: matches.awayTeamId,
+            homeScore: matches.homeScore,
+            awayScore: matches.awayScore,
+            homeTeamName: homeTeam.name,
+            awayTeamName: awayTeam.name,
+          })
+          .from(matches)
+          .leftJoin(homeTeam, eq(matches.homeTeamId, homeTeam.id))
+          .leftJoin(awayTeam, eq(matches.awayTeamId, awayTeam.id))
+          .where(
+            teamIds.length > 0
+              ? or(
+                  inArray(matches.homeTeamId, teamIds),
+                  inArray(matches.awayTeamId, teamIds)
+                )
+              : drizzleSql`false`
+          )
+          .orderBy(desc(matches.kickoffTime))
+          .limit(50);
+
+        res.json({ teamsLike, matchesLike });
+      } catch (error) {
+        console.error("Debug team-anomaly error:", error);
+        res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
 
   // ========== GOALSERVE MATCHES UPSERT ==========
   app.post(
