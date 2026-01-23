@@ -123,11 +123,6 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
       )}
       <Card className="hover-elevate active-elevate-2">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
-          <div className="flex items-center justify-between mb-3 gap-2">
-            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
-            <StatusBadge status={match.status} minute={match.minute} />
-          </div>
-
           <div className="flex items-center gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -136,7 +131,8 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
               </div>
             </div>
 
-            <div className="flex-shrink-0 text-center w-16">
+            <div className="flex-shrink-0 text-center w-20 flex flex-col items-center gap-1">
+              <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
               {showScore ? (
                 <div className="text-xl font-bold tabular-nums">
                   {match.homeScore} – {match.awayScore}
@@ -150,6 +146,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
                   {format(kickoffTime, "HH:mm")}
                 </div>
               )}
+              <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
             <div className="flex-1 min-w-0">

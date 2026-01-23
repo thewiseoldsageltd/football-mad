@@ -290,24 +290,8 @@ export default function MatchesPage() {
       priority: getCompetitionPriority(rawName),
     }));
 
-    // Detect display name collisions for disambiguation
-    const displayCounts = new Map<string, number>();
-    options.forEach(opt => {
-      displayCounts.set(opt.displayName, (displayCounts.get(opt.displayName) || 0) + 1);
-    });
-
-    // Disambiguate and sort
+    // Sort by priority, then alphabetically (no country disambiguation text)
     return options
-      .map(opt => {
-        let finalDisplay = opt.displayName;
-        if ((displayCounts.get(opt.displayName) || 0) > 1) {
-          const parsed = parseCompetitionLabel(opt.rawName);
-          if (parsed.country && !opt.displayName.includes(`(${parsed.country})`)) {
-            finalDisplay = `${opt.displayName} (${parsed.country})`;
-          }
-        }
-        return { ...opt, displayName: finalDisplay };
-      })
       .sort((a, b) => {
         if (a.priority !== b.priority) return a.priority - b.priority;
         return a.displayName.localeCompare(b.displayName);
@@ -471,37 +455,35 @@ export default function MatchesPage() {
             </Button>
           </div>
 
-          <div className="flex gap-2">
-            <Select
-              value={selectedCompetitionId || "all"}
-              onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
-            >
-              <SelectTrigger className="flex-1" data-testid="select-competition-mobile">
-                <span className="text-sm">Filter by...</span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All competitions</SelectItem>
-                {competitionOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <Select
+            value={selectedCompetitionId || "all"}
+            onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+          >
+            <SelectTrigger className="w-full" data-testid="select-competition-mobile">
+              <span className="text-sm">Filter by...</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All competitions</SelectItem>
+              {competitionOptions.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select
-              value={sortMode}
-              onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
-            >
-              <SelectTrigger className="w-[120px]" data-testid="select-sort-mobile">
-                <span className="text-sm">Sort by...</span>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="competition">Competition</SelectItem>
-                <SelectItem value="kickoff">Kick-off time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={sortMode}
+            onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
+          >
+            <SelectTrigger className="w-full" data-testid="select-sort-mobile">
+              <span className="text-sm">Sort by...</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="competition">Competition</SelectItem>
+              <SelectItem value="kickoff">Kick-off time</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading ? (

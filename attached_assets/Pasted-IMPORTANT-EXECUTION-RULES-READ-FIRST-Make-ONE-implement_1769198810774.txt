@@ -1,0 +1,92 @@
+IMPORTANT EXECUTION RULES (READ FIRST)
+
+- Make ONE implementation pass only.
+- DO NOT run automated tests.
+- DO NOT re-test, re-run, or iterate.
+- DO NOT refactor unrelated code.
+- DO NOT “double-check”, “validate again”, or loop.
+- After changes compile, STOP.
+
+You are working in the Football Mad frontend (Vite + React).
+Frontend UI/layout changes ONLY. No backend changes.
+
+--------------------------------------------------
+GOALS
+--------------------------------------------------
+
+1) MOBILE LAYOUT — STACKED CONTROLS
+On mobile ONLY:
+- Controls must be stacked vertically in this order:
+  1. Date navigation row (already correct)
+  2. Filter dropdown (full width)
+  3. Sort dropdown (full width, BELOW filter)
+
+On desktop:
+- Keep current layout (Filter + Sort inline to the right of date picker).
+
+Implementation note:
+- Use responsive utility classes only (e.g. Tailwind breakpoints).
+- Do NOT duplicate components.
+
+--------------------------------------------------
+
+2) REMOVE “(Country)” TEXT EVERYWHERE
+- Remove country names in brackets from ALL competition labels.
+- This includes:
+  - Match cards
+  - Filter dropdown options
+  - Selected filter labels
+
+Rules:
+- Country identification must rely ONLY on the flag pill.
+- Keep competitions separated by competitionId (already implemented).
+- DO NOT add new text-based disambiguation.
+- If two leagues share the same name, the flag alone is sufficient.
+
+--------------------------------------------------
+
+3) CENTER COMPETITION PILL ABOVE KICKOFF TIME
+- In match cards:
+  - Center the competition pill (flag + league name)
+  - Position it ABOVE the kickoff time
+  - Align centrally with the time column
+
+- Team layout stays unchanged.
+- Applies to both mobile and desktop.
+
+--------------------------------------------------
+CONSTRAINTS
+--------------------------------------------------
+
+- No new libraries.
+- No backend changes.
+- No new state management.
+- Keep existing filtering, sorting, grouping logic.
+- Keep dropdown placeholders:
+  - “Filter by…”
+  - “Sort by…”
+
+--------------------------------------------------
+LIKELY FILES
+--------------------------------------------------
+
+- Matches page layout:
+  client/src/pages/matches.tsx
+
+- Match card UI:
+  client/src/components/EnhancedMatchCard.tsx (or similar)
+
+- Filter dropdown option rendering:
+  Matches page or related component
+
+--------------------------------------------------
+STOP CONDITION
+--------------------------------------------------
+
+Once:
+- UI compiles
+- Layout matches screenshots
+- No “(Country)” text appears
+→ STOP immediately and report changes made.
+
+Do NOT continue testing.
