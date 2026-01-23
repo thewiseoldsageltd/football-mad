@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 
 const app = express();
 const httpServer = createServer(app);
@@ -93,6 +94,15 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+
+      // Live polling for match updates
+      if (process.env.ENABLE_LIVE_POLLING === "1") {
+        log("[LivePolling] enabled");
+        // Poll today's matches every 60 seconds
+        setInterval(() => upsertGoalserveMatches("soccernew/home").catch(() => {}), 60_000);
+        // Poll yesterday's matches every 10 minutes for late corrections
+        setInterval(() => upsertGoalserveMatches("soccernew/d-1").catch(() => {}), 600_000);
+      }
     },
   );
 })();

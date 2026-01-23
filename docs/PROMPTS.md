@@ -4000,3 +4000,22 @@ Apply minimal changes directly.
 
 ---
 
+Add a lightweight server-side polling loop to keep today's match statuses and scores updated in the database.
+
+Goal:
+While the server is running, periodically ingest Goalserve feeds:
+- soccernew/home every 60 seconds (live score + status changes)
+- soccernew/d-1 every 10 minutes (late score corrections)
+
+Implementation:
+1) In server/index.ts (or wherever the Express app is started), import upsertGoalserveMatches from server/jobs/upsert-goalserve-matches.
+2) After the server starts listening, add setInterval tasks:
+   - setInterval(() => upsertGoalserveMatches("soccernew/home").catch(() => {}), 60_000)
+   - setInterval(() => upsertGoalserveMatches("soccernew/d-1").catch(() => {}), 600_000)
+3) Add a simple guard so this only runs when process.env.ENABLE_LIVE_POLLING === "1".
+4) Log one line when polling is enabled (e.g. "[LivePolling] enabled").
+
+Do not change any existing routes. Apply minimal changes.
+
+---
+
