@@ -3610,3 +3610,110 @@ Deliverable:
 
 ---
 
+You are working in the Football Mad codebase (Replit). DO NOT go into long test loops. Make ONLY the changes requested, run at most: `npm test` (or `pnpm test`) once if it’s fast, otherwise skip tests and do a quick manual check in the browser.
+
+GOAL: Fix match-card alignment + mobile spacing + venue text corruption, without reworking unrelated UI.
+
+-----------------------------
+A) MATCH CARD LAYOUT (DESKTOP + MOBILE)
+-----------------------------
+Problem:
+- We lost the clean horizontal alignment of: crest + team name + KO time + away name + away crest.
+- Pills and long labels have been impacting name truncation.
+- Mobile has inconsistent crest/name positioning and truncation.
+
+Fix:
+1) Update the match card component (where each fixture row is rendered — likely `EnhancedMatchCard.tsx` or similar) to use a stable CSS Grid layout with fixed columns.
+
+DESKTOP (>= md):
+- Use a single-row grid:
+  [home crest] [home name] [center column] [away name] [away crest]
+- Keep the KO time in the center column.
+- Put the competition pill ABOVE the KO time in the center column but it must NOT push the whole card out of alignment. (It can be a small stacked column inside the center cell.)
+
+Suggested grid:
+- container: `grid items-center`
+- columns (desktop): `grid-cols-[44px_minmax(0,1fr)_140px_minmax(0,1fr)_44px]`
+- center cell: `flex flex-col items-center leading-none`
+- home/away name: `truncate` and align toward the center:
+  - home name: `text-right justify-self-end`
+  - away name: `text-left justify-self-start`
+
+MOBILE (< md):
+- Still keep 5 columns, but tighten:
+  - columns: `grid-cols-[44px_minmax(0,1fr)_96px_minmax(0,1fr)_44px]`
+- Ensure the home/away names are aligned toward the KO time (home right-aligned, away left-aligned).
+- Reduce pill width impact:
+  - Pill should be SHORT: show flag + league name ONLY (NO country in brackets, NO “• England”, nothing).
+  - If you still need disambiguation, only apply it in the competition FILTER dropdown, not on the card pill.
+
+PILL RULE:
+- Match card pill text = league name only (e.g., “Championship”, “Serie A”, “Bundesliga Women”).
+- Flag already communicates country; do not append country text anywhere in the pill on cards.
+
+2) Ensure away team name never overflows outside the card:
+- Use `min-w-0` on the name containers and `truncate` on the text span.
+
+3) Restore the “one fixture per row” everywhere (no 2-column fixture grid on desktop).
+- If there’s a parent layout using `grid-cols-2` at lg, remove it so fixtures are a single vertical list.
+
+-----------------------------
+B) FAINT DIVIDER BETWEEN COMPETITIONS (DESKTOP AND MOBILE)
+-----------------------------
+Add a subtle divider between competition groups (not between every match).
+- In the matches list grouping component (`MatchesList.tsx` or equivalent), when rendering groups, add a divider (e.g., `border-t border-gray-200/60 dark:border-white/10 my-6`) between groups.
+- Keep spacing subtle; don’t add giant headers unless already present.
+
+-----------------------------
+C) MOBILE FILTERS: CENTER TEXT, ARROW RIGHT-ALIGNED
+-----------------------------
+For the mobile Filter/Sort dropdown triggers:
+- Text should be centered.
+- Chevron icon should be right-aligned (consistent with rest of site).
+Implementation:
+- Wrap trigger content in `relative w-full`
+- Put the label in an absolutely centered span: `absolute left-1/2 -translate-x-1/2`
+- Keep chevron in a right-side container: `absolute right-3`
+- Ensure accessibility (button still works, label still present).
+
+Also: mobile filters should remain stacked (Filter on top of Sort). If they became inline at any breakpoint, fix the container to:
+- `flex flex-col gap-3 md:flex-row` (or similar), so only desktop becomes horizontal.
+
+Closed-state labels:
+- Keep closed state showing only “Filter by…” and “Sort by…” (no selected value in the trigger). Selection still applies; just don’t show it in the trigger label.
+
+-----------------------------
+D) VENUE / STADIUM NAME CORRUPTION
+-----------------------------
+We are seeing HTML entities like `&amp;apos;` in venue names on mobile.
+Fix by decoding entities before rendering venue text.
+- Add a small helper (no new heavy deps):
+  - simplest safe approach: create a browser decode helper:
+    `const decodeHtml = (s) => { const t=document.createElement('textarea'); t.innerHTML=s; return t.value; }`
+- Apply it to venue/stadium strings (and any competition string if needed) right before rendering.
+- Guard for null/undefined.
+
+(If this runs server-side during SSR, avoid DOM. But this is a Vite SPA, so DOM is fine.)
+
+-----------------------------
+E) DO NOT DO ENDLESS TESTING
+-----------------------------
+After changes:
+- Do a quick manual check in Preview on:
+  - desktop width
+  - mobile width
+- Confirm:
+  - alignment restored (crest+name inline with KO)
+  - pill above KO but not ruining row alignment
+  - no country text appended in pill
+  - names truncate gracefully but show more characters than before
+  - venue text no longer shows `&amp;apos;` corruption
+  - faint dividers appear between competition groups
+  - Filter/Sort triggers: centered label + chevron right, stacked on mobile
+
+Deliverables:
+- Show me the exact files changed and the key className/grid changes you made (brief).
+- No refactors outside these components.
+
+---
+

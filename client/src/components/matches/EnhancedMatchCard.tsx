@@ -75,6 +75,14 @@ function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "
   );
 }
 
+// Decode HTML entities (fixes &amp;apos; etc in venue names)
+function decodeHtml(html: string | null | undefined): string {
+  if (!html) return "";
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = html;
+  return textarea.value;
+}
+
 function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?: number }) {
   switch (status) {
     case "live":
@@ -123,18 +131,20 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
       )}
       <Card className="hover-elevate active-elevate-2 overflow-hidden">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""} overflow-hidden`}>
-          {/* Main row: 3-column grid - Home | Middle (pill + time) | Away */}
-          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 sm:gap-x-4 items-center max-w-[820px] mx-auto w-full">
-            {/* Home team block: fixed crest + flexible name */}
-            <div className="min-w-0 grid grid-cols-[2.5rem_1fr] gap-2 items-center">
-              <div className="w-10 h-10 shrink-0">
-                <TeamLogo team={match.homeTeam} size="sm" />
-              </div>
-              <span className="font-medium text-sm min-w-0 truncate">{match.homeTeam.name}</span>
+          {/* 5-column grid: [crest][name][center][name][crest] */}
+          <div className="grid grid-cols-[44px_minmax(0,1fr)_96px_minmax(0,1fr)_44px] md:grid-cols-[44px_minmax(0,1fr)_140px_minmax(0,1fr)_44px] gap-x-2 items-center">
+            {/* Home crest */}
+            <div className="flex items-center justify-center">
+              <TeamLogo team={match.homeTeam} size="sm" />
             </div>
 
-            {/* Middle: pill above kickoff time */}
-            <div className="flex flex-col items-center justify-center gap-1 min-w-[72px] px-1 sm:px-3">
+            {/* Home name - right aligned toward center */}
+            <div className="min-w-0 justify-self-end">
+              <span className="font-medium text-sm truncate block text-right">{match.homeTeam.name}</span>
+            </div>
+
+            {/* Center: pill above kickoff time */}
+            <div className="flex flex-col items-center justify-center gap-1">
               <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
               {showScore ? (
                 <div className="text-xl font-bold tabular-nums whitespace-nowrap">
@@ -150,12 +160,14 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
               <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
-            {/* Away team block: flexible name + fixed crest (mirrored) */}
-            <div className="min-w-0 grid grid-cols-[1fr_2.5rem] gap-2 items-center">
-              <span className="font-medium text-sm min-w-0 truncate text-right">{match.awayTeam.name}</span>
-              <div className="w-10 h-10 shrink-0">
-                <TeamLogo team={match.awayTeam} size="sm" />
-              </div>
+            {/* Away name - left aligned toward center */}
+            <div className="min-w-0 justify-self-start">
+              <span className="font-medium text-sm truncate block text-left">{match.awayTeam.name}</span>
+            </div>
+
+            {/* Away crest */}
+            <div className="flex items-center justify-center">
+              <TeamLogo team={match.awayTeam} size="sm" />
             </div>
           </div>
 
@@ -167,7 +179,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
             {match.venue && (
               <span className="flex items-center gap-1">
                 <MapPin className="h-3 w-3" />
-                {match.venue}
+                {decodeHtml(match.venue)}
               </span>
             )}
           </div>
