@@ -3162,3 +3162,51 @@ Implement the changes in the Matches page components (and any dropdown component
 - Sort toggles between competition grouping and kickoff ordering correctly.
 
 ---
+
+Fix the Matches page dropdown UX so the labels are INSIDE the dropdown triggers (not separate text next to them), and restore desktop nav consistency.
+
+Goal:
+- The top nav row should be: [status tabs] … [date nav] [Filter dropdown] [Sort dropdown]
+- No standalone "Filter by:" or "Sort by:" text sitting outside the dropdowns.
+
+What to change:
+
+1) Dropdown trigger text (collapsed state)
+- Filter dropdown trigger should display: "Filter by…"
+  - If a competition is selected, display: "Filter by… <Competition Name>"
+  - If none selected (all), display: "Filter by… All competitions"
+- Sort dropdown trigger should display: "Sort by…"
+  - Display selected mode in the trigger, e.g. "Sort by… Competition" or "Sort by… Kick-off time"
+
+2) Dropdown menu items (expanded state)
+Filter menu:
+- First item: "All competitions" (selects none)
+- Then list ONLY competitions available for that day, ordered by the same priority logic as the matches list
+- Items should still show the flag + label
+
+Sort menu:
+- Two items only:
+  - "Competition"
+  - "Kick-off time"
+
+3) Layout / alignment
+- Remove the external label elements ("Filter by:" and "Sort by:") from the layout entirely.
+- Ensure both dropdown triggers share the same sizing/height as the date picker controls and sit on the same line on desktop.
+- On mobile, they can stack under the date picker but maintain consistent spacing.
+
+4) Do NOT change behavior
+- Filter list remains “only competitions on this day”
+- Sort changes the API sort param (competition/kickoff)
+- No client-side sorting of matches
+
+Deliverable:
+- Update the Matches page JSX so the triggers contain the “Filter by…” / “Sort by…” text.
+- Remove the outside labels that currently break alignment.
+- Verify visually on desktop: date picker + both dropdowns align in one row.
+
+After implementing, share a screenshot of the updated top control row (desktop width) showing the triggers reading:
+- "Filter by… All competitions"
+- "Sort by… Competition"
+
+---
+

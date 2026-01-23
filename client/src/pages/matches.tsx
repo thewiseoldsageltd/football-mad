@@ -314,6 +314,16 @@ export default function MatchesPage() {
       });
   }, [filterableMatches]);
 
+  // Compute display text for filter dropdown trigger
+  const filterDisplayText = useMemo(() => {
+    if (!selectedCompetitionId) return "All competitions";
+    const found = competitionOptions.find(o => o.id === selectedCompetitionId);
+    return found?.displayName || "Competition";
+  }, [selectedCompetitionId, competitionOptions]);
+
+  // Compute display text for sort dropdown trigger
+  const sortDisplayText = sortMode === "competition" ? "Competition" : "Kick-off time";
+
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
   const handleDesktopDateSelect = (date: Date | undefined) => {
@@ -391,41 +401,35 @@ export default function MatchesPage() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Filter by:</span>
-            <Select
-              value={selectedCompetitionId || "all"}
-              onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
-            >
-              <SelectTrigger className="w-[200px]" data-testid="select-competition">
-                <SelectValue placeholder="All competitions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All competitions</SelectItem>
-                {competitionOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={selectedCompetitionId || "all"}
+            onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+          >
+            <SelectTrigger className="w-[260px]" data-testid="select-competition">
+              <span className="truncate">Filter by… {filterDisplayText}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All competitions</SelectItem>
+              {competitionOptions.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Sort by:</span>
-            <Select
-              value={sortMode}
-              onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
-            >
-              <SelectTrigger className="w-[160px]" data-testid="select-sort">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="competition">Competition</SelectItem>
-                <SelectItem value="kickoff">Kick-off time</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={sortMode}
+            onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
+          >
+            <SelectTrigger className="w-[180px]" data-testid="select-sort">
+              <span className="truncate">Sort by… {sortDisplayText}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="competition">Competition</SelectItem>
+              <SelectItem value="kickoff">Kick-off time</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="md:hidden space-y-3 mb-4">
@@ -477,14 +481,15 @@ export default function MatchesPage() {
             </Button>
           </div>
 
-          <div className="flex gap-2 items-center">
-            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Filter:</span>
+          <div className="flex gap-2">
             <Select
               value={selectedCompetitionId || "all"}
               onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
             >
               <SelectTrigger className="flex-1" data-testid="select-competition-mobile">
-                <SelectValue placeholder="All competitions" />
+                <span className="truncate text-sm">
+                  Filter… {selectedCompetitionId ? filterDisplayText : "All"}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All competitions</SelectItem>
@@ -495,16 +500,15 @@ export default function MatchesPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
 
-          <div className="flex gap-2 items-center">
-            <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">Sort:</span>
             <Select
               value={sortMode}
               onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
             >
-              <SelectTrigger className="flex-1" data-testid="select-sort-mobile">
-                <SelectValue />
+              <SelectTrigger className="w-[160px]" data-testid="select-sort-mobile">
+                <span className="truncate text-sm">
+                  Sort… {sortMode === "competition" ? "Competition" : "Kick-off"}
+                </span>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="competition">Competition</SelectItem>
