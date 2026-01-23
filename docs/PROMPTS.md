@@ -2593,3 +2593,191 @@ Do not change the UI other than continuing to support sort=kickoff|competition a
 
 ---
 
+We need to fix Matches page data completeness, ordering, and results accuracy.
+
+====================================================
+A) COMPETITION PRIORITY (EXPLICIT + DETERMINISTIC)
+====================================================
+
+Implement strict, explicit competition ordering in `/api/matches/day`.
+
+1) Define an explicit priority map (lowest number = highest priority):
+
+Tier 0 (must always be top):
+- UEFA Champions League
+- UEFA Europa League
+- UEFA Europa Conference League
+- Premier League (England)
+- Championship (England)
+- League One (England)
+- League Two (England)
+- National League (England)
+- FA Cup (England)
+- EFL Cup (England) / Carabao Cup (England)
+
+Tier 1 (Big 5):
+- La Liga (Spain)
+- Serie A (Italy)
+- Bundesliga (Germany)
+- Ligue 1 (France)
+- Eredivisie (Netherlands)
+
+Tier 2:
+- Scottish Premiership
+- Scottish Championship
+- Scottish Cup
+
+All other competitions:
+- Alphabetical order AFTER the above tiers
+
+2) Add a hard demotion rule for youth / reserve competitions.
+
+Create a helper:
+isYouthOrReserveCompetition(name: string)
+
+Return true if competition name contains ANY of:
+- U21
+- U23
+- U19
+- U18
+- Youth
+- Reserve
+- Reserves
+- Premier League 2
+- Premier League Cup
+
+If true:
+- Force priorityRank = 9000 (or similar)
+- These must NEVER outrank senior Tier 0 / Tier 1 leagues
+
+This fixes Premier League 2 / U21 pollution.
+
+====================================================
+B) EURO NIGHTS OVERRIDE (UEFA LOGIC)
+====================================================
+
+If the selected date contains ANY UEFA matches:
+- UEFA Champions League
+- UEFA Europa League
+- UEFA Europa Conference League
+
+Then:
+- UEFA competitions must float ABOVE all domestic leagues
+- Internal UEFA order remains:
+  UCL → UEL → UECL
+
+IMPORTANT:
+- Do NOT treat CAF / AFC / CONCACAF Champions League as UEFA
+- Match must explicitly start with "UEFA"
+
+Example:
+- Tuesday/Wednesday/Thursday with UEL → UEL above Premier League
+- Saturday with UCL night → UCL above Premier League
+- No UEFA matches → default domestic priority applies
+
+====================================================
+C) SORTING MODES (BACKEND + FRONTEND)
+====================================================
+
+Support query param: `sort=competition|kickoff`
+
+Default: sort=competition
+
+Sorting rules:
+
+sort=competition:
+1) priorityRank
+2) competitionName (alphabetical)
+3) kickoffTime
+
+sort=kickoff:
+1) kickoffTime
+2) priorityRank
+3) competitionName
+
+Frontend:
+- Restore Sort dropdown
+- Options:
+  - Competition (default)
+  - Kick-off time
+- Send `sort` param to `/api/matches/day`
+
+====================================================
+D) FIX MISSING FINAL SCORES (RESULTS BUG)
+====================================================
+
+Issue:
+Finished games are showing "-" instead of scores.
+
+Fix in Goalserve ingest:
+
+1) When status is FT / finished:
+- Parse final scores from correct Goalserve fields
+- Persist homeScore and awayScore
+
+2) Never overwrite non-null final scores with null
+- If a later ingest has no score fields, skip score update
+
+3) Add minimal logging:
+- Count FT matches ingested with scores
+- Count FT matches missing scores
+
+This fixes Thursday results showing no scores.
+
+====================================================
+E) FIX MISSING FUTURE FIXTURES (SATURDAY BUG)
+====================================================
+
+Root cause:
+Only ingesting `soccernew/home` → does NOT contain full future schedules.
+
+Required feeds to ingest:
+
+1) Continue:
+- soccernew/home (today snapshot)
+- soccernew/live (live updates)
+
+2) ADD scheduled ingests:
+- soccernew/d-1   → yesterday results
+- soccernew/d1    → tomorrow fixtures
+- soccernew/d2..d7 → next 7 days fixtures
+
+Recommended cadence:
+- home + live: every 5–10 minutes
+- d1..d7: hourly
+- d-1: hourly or daily
+
+This ensures:
+- Saturday shows FULL fixture list (Premier League first)
+- Tomorrow is not limited to 5 obscure matches
+
+(Optional hardening)
+For Tier 0 / Tier 1 leagues:
+- Periodically ingest `soccerfixtures/leagueid/{leagueId}`
+- Guarantees long-range schedules beyond 7 days
+
+====================================================
+F) ACCEPTANCE CHECKS
+====================================================
+
+✅ Today:
+- No Premier League 2 / U21 at the top
+- Senior competitions only in Tier order
+
+✅ Thursday (results):
+- UEFA Europa League first
+- Final scores visible (not "-")
+
+✅ Saturday (fixtures):
+- Full schedule visible
+- Premier League first, then Championship, etc.
+
+✅ UI:
+- Sort dropdown present
+- sort=competition and sort=kickoff both work
+
+====================================================
+END
+
+---
+

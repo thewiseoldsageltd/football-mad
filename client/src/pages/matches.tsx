@@ -145,6 +145,7 @@ export default function MatchesPage() {
   const [activeTab, setActiveTab] = useState<MatchTab>("all");
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
+  const [sortMode, setSortMode] = useState<"competition" | "kickoff">("competition");
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const today = startOfDay(new Date());
@@ -153,12 +154,10 @@ export default function MatchesPage() {
 
   const statusParam = activeTab === "all" ? "all" : activeTab === "live" ? "live" : activeTab === "scheduled" ? "scheduled" : "fulltime";
   
-  const matchesUrl = selectedCompetitionId
-    ? `/api/matches/day?date=${dateStr}&status=${statusParam}&competitionId=${selectedCompetitionId}`
-    : `/api/matches/day?date=${dateStr}&status=${statusParam}`;
+  const matchesUrl = `/api/matches/day?date=${dateStr}&status=${statusParam}&sort=${sortMode}${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
 
   const { data: matchesData, isLoading } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-day", dateStr, statusParam, selectedCompetitionId],
+    queryKey: ["matches-day", dateStr, statusParam, selectedCompetitionId, sortMode],
     queryFn: async () => {
       const res = await fetch(matchesUrl);
       if (!res.ok) throw new Error("Failed to load matches");
@@ -302,6 +301,19 @@ export default function MatchesPage() {
               ))}
             </SelectContent>
           </Select>
+
+          <Select
+            value={sortMode}
+            onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
+          >
+            <SelectTrigger className="w-[160px]" data-testid="select-sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="competition">Competition</SelectItem>
+              <SelectItem value="kickoff">Kick-off time</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="md:hidden space-y-3 mb-4">
@@ -353,22 +365,37 @@ export default function MatchesPage() {
             </Button>
           </div>
 
-          <Select
-            value={selectedCompetitionId || "all"}
-            onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
-          >
-            <SelectTrigger className="w-full" data-testid="select-competition-mobile">
-              <SelectValue placeholder="All competitions" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All competitions</SelectItem>
-              {competitionOptions.map((opt) => (
-                <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex gap-2">
+            <Select
+              value={selectedCompetitionId || "all"}
+              onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+            >
+              <SelectTrigger className="flex-1" data-testid="select-competition-mobile">
+                <SelectValue placeholder="All competitions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All competitions</SelectItem>
+                {competitionOptions.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    <CompetitionOption competition={opt.rawName} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={sortMode}
+              onValueChange={(val) => setSortMode(val as "competition" | "kickoff")}
+            >
+              <SelectTrigger className="w-[130px]" data-testid="select-sort-mobile">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="competition">Competition</SelectItem>
+                <SelectItem value="kickoff">Kick-off</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {isLoading ? (

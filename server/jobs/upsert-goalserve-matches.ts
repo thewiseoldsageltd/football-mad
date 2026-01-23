@@ -93,6 +93,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
   unmappedTeams: number;
   withRound: number;
   withoutRound: number;
+  ftWithScores: number;
+  ftMissingScores: number;
   error?: string;
 }> {
   try {
@@ -111,6 +113,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         unmappedTeams: 0,
         withRound: 0,
         withoutRound: 0,
+        ftWithScores: 0,
+        ftMissingScores: 0,
         error: "Missing scores.category in response",
       };
     }
@@ -155,6 +159,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
     let unmappedTeams = 0;
     let withRound = 0;
     let withoutRound = 0;
+    let ftWithScores = 0;
+    let ftMissingScores = 0;
 
     for (const category of categories) {
       if (!category?.matches?.match) continue;
@@ -233,7 +239,27 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           .where(eq(matches.goalserveMatchId, goalserveMatchId))
           .limit(1);
 
+        // Parse new scores from feed
+        const newHomeScore = homeScore != null && homeScore !== "" ? parseInt(String(homeScore), 10) : null;
+        const newAwayScore = awayScore != null && awayScore !== "" ? parseInt(String(awayScore), 10) : null;
+
+        // Track FT matches with/without scores
+        if (status === "finished") {
+          if (newHomeScore !== null && newAwayScore !== null) {
+            ftWithScores++;
+          } else {
+            ftMissingScores++;
+          }
+        }
+
         if (existing.length > 0) {
+          const existingMatch = existing[0];
+          
+          // IMPORTANT: Never overwrite non-null final scores with null
+          // This prevents later feeds from erasing valid scores
+          const finalHomeScore = newHomeScore !== null ? newHomeScore : existingMatch.homeScore;
+          const finalAwayScore = newAwayScore !== null ? newAwayScore : existingMatch.awayScore;
+
           await db
             .update(matches)
             .set({
@@ -244,8 +270,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               awayGoalserveTeamId: awayGsId || null,
               homeTeamId,
               awayTeamId,
-              homeScore: homeScore != null && homeScore !== "" ? parseInt(String(homeScore), 10) : null,
-              awayScore: awayScore != null && awayScore !== "" ? parseInt(String(awayScore), 10) : null,
+              homeScore: finalHomeScore,
+              awayScore: finalAwayScore,
               competition: competitionName,
               status,
               kickoffTime,
@@ -265,8 +291,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             awayGoalserveTeamId: awayGsId || null,
             homeTeamId,
             awayTeamId,
-            homeScore: homeScore != null && homeScore !== "" ? parseInt(String(homeScore), 10) : null,
-            awayScore: awayScore != null && awayScore !== "" ? parseInt(String(awayScore), 10) : null,
+            homeScore: newHomeScore,
+            awayScore: newAwayScore,
             competition: competitionName,
             status,
             kickoffTime,
@@ -290,6 +316,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       unmappedTeams,
       withRound,
       withoutRound,
+      ftWithScores,
+      ftMissingScores,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -305,6 +333,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       unmappedTeams: 0,
       withRound: 0,
       withoutRound: 0,
+      ftWithScores: 0,
+      ftMissingScores: 0,
       error,
     };
   }

@@ -484,41 +484,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Priority ordering for competitions - UK leagues need country check
-  const UK_LEAGUES = ["premier league", "championship", "league one", "league two", "national league"];
-  const UK_CUPS = ["fa cup", "efl cup", "carabao cup", "league cup"];
-  const UK_COUNTRIES = ["england", "uk", "united kingdom", "wales", "scotland", "northern ireland"];
-  
-  const UK_PRIORITY: Record<string, number> = {
-    "premier league": 1, "championship": 2, "league one": 3, "league two": 4,
-    "national league": 5, "fa cup": 6, "efl cup": 7, "carabao cup": 7, "league cup": 7,
-  };
-  const BIG5_PRIORITY: Record<string, number> = {
-    "la liga": 10, "laliga": 10, "serie a": 11, "bundesliga": 12, "ligue 1": 13, "eredivisie": 14,
-  };
-  const UEFA_PRIORITY: Record<string, number> = {
-    "champions league": 20, "uefa champions league": 20,
-    "europa league": 21, "uefa europa league": 21,
-    "conference league": 22, "europa conference league": 22, "uefa europa conference league": 22,
-  };
+  // ========== EXPLICIT COMPETITION PRIORITY SYSTEM ==========
+  // Tier 0: UEFA + England top leagues (priority 1-15)
+  // Tier 1: Big 5 European leagues (priority 20-29)
+  // Tier 2: Scottish leagues (priority 30-39)
+  // Other: Alphabetical (priority 100)
+  // Youth/Reserve: Demoted (priority 9000)
 
-  // Helper to detect which UEFA competition a match belongs to (if any)
-  // Must be specific to avoid matching CAF/AFC/CONCACAF Champions League
+  // Helper to detect youth/reserve competitions - must be demoted
+  function isYouthOrReserveCompetition(name: string): boolean {
+    const lowerName = name.toLowerCase();
+    const youthPatterns = [
+      "u21", "u23", "u19", "u18", "u17", "u16",
+      "youth", "reserve", "reserves",
+      "premier league 2", "premier league cup"
+    ];
+    return youthPatterns.some(pattern => lowerName.includes(pattern));
+  }
+
+  // Helper to detect UEFA competition - MUST contain "UEFA" prefix explicitly
   function getUefaCompetition(competition: string | null): "ucl" | "uel" | "uecl" | null {
     if (!competition) return null;
     const name = competition.toLowerCase();
-    // Exclude non-UEFA champions leagues (CAF, AFC, CONCACAF)
-    if (name.includes("caf ") || name.includes("afc ") || name.includes("concacaf")) return null;
-    // Check for UEFA-specific patterns
-    if (name.includes("uefa champions league") || (name.includes("champions league") && !name.includes("caf") && !name.includes("afc") && !name.includes("concacaf"))) {
-      // Double-check it's not a non-UEFA continental league
-      if (name.includes("(intl)") || name.includes("african") || name.includes("asian") || name.includes("concacaf")) return null;
-      return "ucl";
-    }
-    if (name.includes("europa league") && !name.includes("conference")) return "uel";
-    if (name.includes("conference league")) return "uecl";
+    // Must explicitly contain "UEFA" to avoid CAF/AFC/CONCACAF Champions League
+    if (!name.includes("uefa")) return null;
+    if (name.includes("uefa champions league")) return "ucl";
+    if (name.includes("uefa europa league") && !name.includes("conference")) return "uel";
+    if (name.includes("uefa europa conference league")) return "uecl";
     return null;
   }
+
+  // Explicit priority maps
+  const TIER0_ENGLAND: Record<string, number> = {
+    "premier league": 4, "championship": 5, "league one": 6, "league two": 7,
+    "national league": 8, "fa cup": 9, "efl cup": 10, "carabao cup": 10, "league cup": 10,
+  };
+  const TIER1_BIG5: Record<string, number> = {
+    "la liga": 20, "laliga": 20, "serie a": 21, "bundesliga": 22, "ligue 1": 23, "eredivisie": 24,
+  };
+  const TIER2_SCOTLAND: Record<string, number> = {
+    "scottish premiership": 30, "scottish championship": 31, "scottish cup": 32,
+  };
+  const UK_COUNTRIES = ["england", "uk", "united kingdom"];
 
   function parseCompetitionParts(competition: string | null): { name: string; country: string } {
     if (!competition) return { name: "", country: "" };
@@ -552,51 +559,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   function getCompetitionPriority(competition: string | null, euroNightsOverride: boolean = false): number {
+    if (!competition) return 1000;
+    
+    // FIRST: Check for youth/reserve - always demote to 9000
+    if (isYouthOrReserveCompetition(competition)) {
+      return 9000;
+    }
+    
     const { name, country } = parseCompetitionParts(competition);
     if (!name) return 1000;
     
     // UEFA competitions - check first for Euro nights override
     const uefaComp = getUefaCompetition(competition);
     if (uefaComp) {
-      // When Euro nights override is active, UEFA goes to top (priority 1-3)
-      // Otherwise, UEFA stays at tier 2 (priority 20-22)
-      const uefaBase = euroNightsOverride ? 1 : 20;
-      if (uefaComp === "ucl") return uefaBase;
-      if (uefaComp === "uel") return uefaBase + 1;
-      if (uefaComp === "uecl") return uefaBase + 2;
+      // UEFA always at top: UCL=1, UEL=2, UECL=3
+      if (uefaComp === "ucl") return 1;
+      if (uefaComp === "uel") return 2;
+      if (uefaComp === "uecl") return 3;
     }
     
-    // Check for UK leagues - must have UK country
-    const isUkCountry = UK_COUNTRIES.some(c => country.includes(c));
+    // Check for England leagues - must have England/UK country
+    const isEnglandCountry = UK_COUNTRIES.some(c => country.includes(c));
     
-    // UK leagues (need country verification for generic names like "Premier League")
-    // When Euro nights active, UK leagues shift down (priority 10+)
-    // Otherwise, UK leagues are top tier (priority 1+)
-    const ukBase = euroNightsOverride ? 10 : 1;
-    for (const league of UK_LEAGUES) {
+    // Tier 0: England leagues (priority 4-10) - but shift down if Euro nights active
+    const englandBase = euroNightsOverride ? 10 : 4;
+    for (const [league, basePriority] of Object.entries(TIER0_ENGLAND)) {
       if (name === league || name.includes(league)) {
-        if (isUkCountry) {
-          return ukBase + (UK_PRIORITY[league] || 5) - 1;
+        if (isEnglandCountry || league.includes("fa cup") || league.includes("efl") || league.includes("carabao")) {
+          return englandBase + (basePriority - 4);
         }
-        // Not a UK country, so lower priority
         break;
       }
     }
     
-    // UK cups (don't need country check as FA Cup is unique)
-    for (const cup of UK_CUPS) {
-      if (name === cup || name.includes(cup)) {
-        return ukBase + (UK_PRIORITY[cup] || 7) - 1;
-      }
+    // Tier 1: Big 5 European leagues (priority 20-29)
+    const big5Base = euroNightsOverride ? 20 : 20;
+    for (const [key, priority] of Object.entries(TIER1_BIG5)) {
+      if (name === key || name.includes(key)) return big5Base + (priority - 20);
     }
     
-    // Big 5 European leagues - shift based on euro nights
-    const big5Base = euroNightsOverride ? 20 : 10;
-    for (const [key, priority] of Object.entries(BIG5_PRIORITY)) {
-      if (name === key || name.includes(key)) return big5Base + (priority - 10);
+    // Tier 2: Scottish leagues (priority 30-39)
+    for (const [key, priority] of Object.entries(TIER2_SCOTLAND)) {
+      if (name === key || name.includes(key)) return priority;
     }
     
-    return 100; // Default for other competitions
+    return 100; // Default for other competitions (sorted alphabetically)
   }
 
   // GET /api/matches/day - date-driven matches endpoint
@@ -673,7 +680,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Sort based on sortMode
       if (sortMode === "kickoff") {
-        // Sort by kickoff time first, then competition priority
+        // sort=kickoff: kickoffTime → priorityRank → competitionName
         formatted.sort((a, b) => {
           const timeA = new Date(a.kickoffTime).getTime();
           const timeB = new Date(b.kickoffTime).getTime();
@@ -684,15 +691,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return (a.competition || "").localeCompare(b.competition || "");
         });
       } else {
-        // Default: sort by priority (with Euro nights override), then kickoff time
+        // sort=competition (default): priorityRank → competitionName → kickoffTime
         formatted.sort((a, b) => {
           const priorityA = getCompetitionPriority(a.competition, hasUefa);
           const priorityB = getCompetitionPriority(b.competition, hasUefa);
           if (priorityA !== priorityB) return priorityA - priorityB;
+          const compCompare = (a.competition || "").localeCompare(b.competition || "");
+          if (compCompare !== 0) return compCompare;
           const timeA = new Date(a.kickoffTime).getTime();
           const timeB = new Date(b.kickoffTime).getTime();
-          if (timeA !== timeB) return timeA - timeB;
-          return (a.competition || "").localeCompare(b.competition || "");
+          return timeA - timeB;
         });
       }
 
@@ -1196,6 +1204,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const feed = String(req.query.feed || "soccernew/home");
       const result = await upsertGoalserveMatches(feed);
       res.json(result);
+    }
+  );
+
+  // Multi-feed ingestion for future fixtures (d-1 through d7)
+  app.post(
+    "/api/jobs/upsert-goalserve-fixtures",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const feeds = [
+        "soccernew/home",     // Today snapshot
+        "soccernew/d-1",      // Yesterday (results)
+        "soccernew/d1",       // Tomorrow
+        "soccernew/d2",       // Day after tomorrow
+        "soccernew/d3",
+        "soccernew/d4",
+        "soccernew/d5",
+        "soccernew/d6",
+        "soccernew/d7",       // 7 days ahead
+      ];
+      
+      const results = [];
+      let totalInserted = 0;
+      let totalUpdated = 0;
+      let totalFtWithScores = 0;
+      let totalFtMissingScores = 0;
+      
+      for (const feed of feeds) {
+        const result = await upsertGoalserveMatches(feed);
+        results.push({
+          feed,
+          ok: result.ok,
+          inserted: result.inserted,
+          updated: result.updated,
+          ftWithScores: result.ftWithScores,
+          ftMissingScores: result.ftMissingScores,
+          error: result.error,
+        });
+        totalInserted += result.inserted;
+        totalUpdated += result.updated;
+        totalFtWithScores += result.ftWithScores;
+        totalFtMissingScores += result.ftMissingScores;
+      }
+      
+      res.json({
+        ok: results.every(r => r.ok),
+        totalFeeds: feeds.length,
+        totalInserted,
+        totalUpdated,
+        totalFtWithScores,
+        totalFtMissingScores,
+        feeds: results,
+      });
     }
   );
 
