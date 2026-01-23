@@ -1,25 +1,19 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
 
 interface MatchesFiltersProps {
   sortBy: string;
   onSortChange: (value: string) => void;
-  teamSearch: string;
-  onTeamSearchChange: (value: string) => void;
   variant?: "inline" | "stacked";
 }
 
 export function MatchesFilters({
   sortBy,
   onSortChange,
-  teamSearch,
-  onTeamSearchChange,
   variant = "inline",
 }: MatchesFiltersProps) {
   if (variant === "stacked") {
     return (
-      <div className="space-y-3 mb-6" data-testid="filters-matches-mobile">
+      <div className="mb-6" data-testid="filters-matches-mobile">
         <Select value={sortBy} onValueChange={onSortChange}>
           <SelectTrigger className="w-full" data-testid="select-sort-mobile">
             <span className="flex-1 text-center">
@@ -31,18 +25,6 @@ export function MatchesFilters({
             <SelectItem value="competition">Competition</SelectItem>
           </SelectContent>
         </Select>
-
-        <div className="relative">
-          <Input
-            type="text"
-            placeholder="Search team..."
-            value={teamSearch}
-            onChange={(e) => onTeamSearchChange(e.target.value)}
-            className="h-9 text-sm font-normal text-center pr-9 placeholder:text-center placeholder:text-muted-foreground"
-            data-testid="input-team-search-mobile"
-          />
-          <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        </div>
       </div>
     );
   }
@@ -58,18 +40,6 @@ export function MatchesFilters({
           <SelectItem value="competition">Competition</SelectItem>
         </SelectContent>
       </Select>
-
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          type="text"
-          placeholder="Search team..."
-          value={teamSearch}
-          onChange={(e) => onTeamSearchChange(e.target.value)}
-          className="w-[160px] pl-9"
-          data-testid="input-team-search"
-        />
-      </div>
     </div>
   );
 }

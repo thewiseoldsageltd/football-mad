@@ -1,11 +1,57 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin } from "lucide-react";
+import { Calendar, MapPin, Globe } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
+import { getCountryFlagUrl } from "@/lib/flags";
 
 interface EnhancedMatchCardProps {
   match: MockMatch;
+}
+
+interface ParsedCompetition {
+  name: string;
+  country?: string;
+  id?: string;
+}
+
+function parseCompetitionLabel(competition: string | null | undefined): ParsedCompetition {
+  if (!competition) return { name: "Unknown" };
+  
+  const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
+  if (fullMatch) {
+    return { name: fullMatch[1].trim(), country: fullMatch[2].trim(), id: fullMatch[3] };
+  }
+  
+  const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
+  if (colonMatch) {
+    return { name: colonMatch[2].trim(), country: colonMatch[1].trim() };
+  }
+  
+  return { name: competition };
+}
+
+function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: string | null; displayName: string }) {
+  const parsed = parseCompetitionLabel(rawCompetition);
+  const flagUrl = getCountryFlagUrl(parsed.country);
+
+  return (
+    <Badge variant="outline" className="text-xs flex-shrink-0 gap-1.5">
+      {flagUrl ? (
+        <img 
+          src={flagUrl} 
+          alt={parsed.country || ""} 
+          className="w-4 h-3 object-cover rounded-sm"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      ) : (
+        <Globe className="w-3 h-3 text-muted-foreground" />
+      )}
+      <span>{displayName}</span>
+    </Badge>
+  );
 }
 
 function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
@@ -75,9 +121,7 @@ export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
       <Card className="hover-elevate active-elevate-2">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
           <div className="flex items-center justify-between mb-3 gap-2">
-            <Badge variant="outline" className="text-xs flex-shrink-0">
-              {match.competition}
-            </Badge>
+            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={match.competition} />
             <StatusBadge status={match.status} minute={match.minute} />
           </div>
 

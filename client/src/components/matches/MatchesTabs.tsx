@@ -1,33 +1,33 @@
 import { cn } from "@/lib/utils";
 
-export type MatchTab = "today" | "tomorrow" | "thisWeek" | "results";
+export type MatchTab = "all" | "live" | "scheduled" | "fulltime";
 
 interface MatchesTabsProps {
   activeTab: MatchTab;
   onTabChange: (tab: MatchTab) => void;
   counts: {
-    today: number;
-    tomorrow: number;
-    thisWeek: number;
-    results: number;
+    all: number;
+    live: number;
+    scheduled: number;
+    fulltime: number;
   };
   variant?: "desktop" | "mobile";
 }
 
 const tabs: { value: MatchTab; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "tomorrow", label: "Tomorrow" },
-  { value: "thisWeek", label: "This Week" },
-  { value: "results", label: "Results" },
+  { value: "all", label: "All" },
+  { value: "live", label: "Live" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "fulltime", label: "Full-time" },
 ];
 
 export function MatchesTabs({ activeTab, onTabChange, counts, variant = "desktop" }: MatchesTabsProps) {
   const getCount = (tab: MatchTab): number => {
     switch (tab) {
-      case "today": return counts.today;
-      case "tomorrow": return counts.tomorrow;
-      case "thisWeek": return counts.thisWeek;
-      case "results": return counts.results;
+      case "all": return counts.all;
+      case "live": return counts.live;
+      case "scheduled": return counts.scheduled;
+      case "fulltime": return counts.fulltime;
     }
   };
 
@@ -51,10 +51,19 @@ export function MatchesTabs({ activeTab, onTabChange, counts, variant = "desktop
                   "px-4 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                   activeTab === tab.value
                     ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                  tab.value === "live" && counts.live > 0 && activeTab !== "live"
+                    ? "text-red-500"
+                    : ""
                 )}
                 data-testid={`tab-${tab.value}-mobile`}
               >
+                {tab.value === "live" && counts.live > 0 && (
+                  <span className="relative flex h-2 w-2 mr-1.5 inline-flex">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  </span>
+                )}
                 {tab.label} ({getCount(tab.value)})
               </button>
             ))}
@@ -72,13 +81,22 @@ export function MatchesTabs({ activeTab, onTabChange, counts, variant = "desktop
           key={tab.value}
           onClick={() => onTabChange(tab.value)}
           className={cn(
-            "px-4 py-2 text-sm font-medium rounded-md transition-colors",
+            "px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center",
             activeTab === tab.value
               ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+            tab.value === "live" && counts.live > 0 && activeTab !== "live"
+              ? "text-red-500"
+              : ""
           )}
           data-testid={`tab-${tab.value}`}
         >
+          {tab.value === "live" && counts.live > 0 && (
+            <span className="relative flex h-2 w-2 mr-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
+          )}
           {tab.label} ({getCount(tab.value)})
         </button>
       ))}

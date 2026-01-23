@@ -1,0 +1,59 @@
+You are working in a Replit TypeScript + React app.
+
+Goal: Clean up the Matches page UX to match Soccerway-style navigation and remove confusing filters.
+
+Please implement the following changes (NO guesses, keep changes minimal and consistent with existing shadcn/ui patterns):
+
+A) Matches page navigation
+1) Replace the current top tabs (Today/Tomorrow/This Week/Results) with status tabs:
+   - All
+   - Live
+   - Scheduled
+   - Full-time
+   These tabs should filter which endpoint we call (or which results we show) based on status.
+
+2) Add a date picker control (single day is fine to start) with default = today (local user time).
+   - The date picker controls the fixtures/results window.
+   - Remove the 7/14/30 day buttons entirely.
+
+3) Remove the “Search team…” input from the Matches page UI (we will rely on team hub pages for team-specific fixture browsing).
+
+B) API usage (keep backend unchanged unless absolutely required)
+1) For “Scheduled” and “All”, fetch from: GET /api/matches/fixtures
+   - Add query params that represent the selected date.
+   - If the backend only supports days today, implement a simple mapping:
+     - selectedDate = today => days=1
+     - selectedDate = tomorrow => days=2 and then client-filter to tomorrow only
+     - Otherwise use a small range (days=7) and client-filter to selected date.
+   Keep it reliable and avoid huge payloads.
+
+2) For “Full-time”, fetch from: GET /api/matches/results
+   - Use the same date selection approach.
+
+3) For “Live”, fetch from: GET /api/matches/live
+
+C) Competition dropdown cleanup
+1) Ensure there is only ONE competition dropdown on the page.
+2) Keep it inline in the same row as the date picker and sort control (not pushed to a second line).
+3) Competition dropdown values should NOT show the [id] suffix.
+   Example: show “Catarinense” not “Catarinense (Brazil) [1140]”.
+   Also remove “(Country)” from the label if we’re showing a flag (see below).
+
+D) Replace emoji flags with proper flag icons
+1) Replace emoji flags in competition pills with a small flag icon badge (rounded square or circle, ~16–18px).
+2) Implement a helper that maps country names from competition strings to ISO2 codes and uses flagcdn:
+   - URL format: https://flagcdn.com/w20/{iso2}.png (lowercase)
+3) If country is unknown, show a neutral globe icon badge instead.
+
+E) Fixture card enhancements (only if data exists)
+1) If the API response includes venue (match.venue), display it subtly under the date/time line.
+2) If venue is null/undefined, do not render the venue row.
+
+Implementation notes:
+- Make changes in client/src/pages/matches.tsx and only touch other components if required to remove duplicated UI.
+- Keep styling consistent with existing components.
+- Do not add new heavy dependencies.
+- After changes, the page should show “All/Scheduled/Full-time/Live” tabs, date picker, competition dropdown, sort dropdown, and the fixture list.
+
+When finished:
+- Provide a short summary of files changed and how to test manually in the browser.
