@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin, Trophy } from "lucide-react";
+import { Calendar, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 
@@ -75,8 +75,7 @@ export function EnhancedMatchCard({ match }: EnhancedMatchCardProps) {
       <Card className="hover-elevate active-elevate-2">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""}`}>
           <div className="flex items-center justify-between mb-3 gap-2">
-            <Badge variant="outline" className="text-xs gap-1 flex-shrink-0">
-              <Trophy className="h-3 w-3" />
+            <Badge variant="outline" className="text-xs flex-shrink-0">
               {match.competition}
             </Badge>
             <StatusBadge status={match.status} minute={match.minute} />

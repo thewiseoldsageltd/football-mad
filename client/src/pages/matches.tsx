@@ -6,7 +6,7 @@ import { isToday, isTomorrow, addDays, startOfDay, isBefore, isAfter } from "dat
 import { MatchesTabs, type MatchTab } from "@/components/matches/MatchesTabs";
 import { MatchesFilters } from "@/components/matches/MatchesFilters";
 import { MatchesList } from "@/components/matches/MatchesList";
-import { mockMatches, type MockMatch } from "@/components/matches/mockMatches";
+import { type MockMatch } from "@/components/matches/mockMatches";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -21,11 +21,11 @@ interface ApiMatch {
   competition: string | null;
   goalserveCompetitionId: string | null;
   goalserveMatchId: string | null;
+  goalserveRound: string | null;
   homeTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string; logoUrl?: string };
   awayTeam: { id?: string; name?: string; slug?: string; goalserveTeamId?: string; nameFromRaw?: string; logoUrl?: string };
 }
 
-// Country flag emoji mapping
 const countryFlags: Record<string, string> = {
   "Brazil": "🇧🇷", "Argentina": "🇦🇷", "England": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "Scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
   "Wales": "🏴󠁧󠁢󠁷󠁬󠁳󠁿", "Ireland": "🇮🇪", "Northern Ireland": "🇬🇧", "France": "🇫🇷",
@@ -36,7 +36,8 @@ const countryFlags: Record<string, string> = {
   "Jamaica": "🇯🇲", "Egypt": "🇪🇬", "Iraq": "🇮🇶", "Qatar": "🇶🇦",
   "Saudi Arabia": "🇸🇦", "UAE": "🇦🇪", "Morocco": "🇲🇦", "Algeria": "🇩🇿",
   "Tunisia": "🇹🇳", "Libya": "🇱🇾", "South Africa": "🇿🇦", "Guatemala": "🇬🇹",
-  "El Salvador": "🇸🇻", "intl": "🌍",
+  "El Salvador": "🇸🇻", "intl": "🌍", "India": "🇮🇳", "Japan": "🇯🇵",
+  "South Korea": "🇰🇷", "China": "🇨🇳", "Australia": "🇦🇺", "New Zealand": "🇳🇿",
 };
 
 function getFlagEmoji(countryName: string | undefined): string | null {
@@ -53,13 +54,11 @@ interface ParsedCompetition {
 function parseCompetitionLabel(competition: string | null | undefined): ParsedCompetition {
   if (!competition) return { name: "Unknown" };
   
-  // Pattern: "Name (Country) [ID]"
   const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
   if (fullMatch) {
     return { name: fullMatch[1].trim(), country: fullMatch[2].trim(), id: fullMatch[3] };
   }
   
-  // Pattern: "Country: Name"
   const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
   if (colonMatch) {
     return { name: colonMatch[2].trim(), country: colonMatch[1].trim() };
@@ -74,9 +73,6 @@ function displayCompetitionWithFlag(competition: string | null | undefined): str
   return flag ? `${flag} ${parsed.name}` : parsed.name;
 }
 
-// NOTE: Goalserve match feed provides team IDs/names but does NOT reliably provide crest image URLs.
-// TODO: If mapped Team objects have logoUrl/crestUrl/badgeUrl from our database, pass it through.
-// For now, we use letter avatars as fallback.
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   const homeName = match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown";
   const awayName = match.awayTeam.name || match.awayTeam.nameFromRaw || "Unknown";
@@ -108,12 +104,26 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   };
 }
 
+type ResultsMode = "quick" | "browse";
+type QuickPeriod = "yesterday" | "thisWeek" | "last30";
+
+const quickPeriodDays: Record<QuickPeriod, number> = {
+  yesterday: 1,
+  thisWeek: 7,
+  last30: 30,
+};
+
 export default function MatchesPage() {
   const [activeTab, setActiveTab] = useState<MatchTab>("today");
   const [sortBy, setSortBy] = useState("kickoff");
   const [teamSearch, setTeamSearch] = useState("");
   const [fixtureDays, setFixtureDays] = useState(7);
   const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
+
+  const [resultsMode, setResultsMode] = useState<ResultsMode>("quick");
+  const [quickPeriod, setQuickPeriod] = useState<QuickPeriod>("yesterday");
+  const [browseCompetitionId, setBrowseCompetitionId] = useState("");
+  const [browseRound, setBrowseRound] = useState("");
 
   const today = startOfDay(new Date());
   const tomorrow = addDays(today, 1);
@@ -127,14 +137,41 @@ export default function MatchesPage() {
     queryKey: ["fixtures", fixtureDays, selectedCompetitionId],
     queryFn: async () => {
       const res = await fetch(fixturesUrl);
-      if (!res.ok) {
-        throw new Error("Failed to load fixtures");
-      }
+      if (!res.ok) throw new Error("Failed to load fixtures");
       return res.json();
     },
   });
 
-  const competitionOptions = useMemo(() => {
+  const resultsDays = resultsMode === "quick" ? quickPeriodDays[quickPeriod] : 30;
+  const resultsUrl = useMemo(() => {
+    const params = new URLSearchParams({ days: String(resultsDays) });
+    if (resultsMode === "browse" && browseCompetitionId) {
+      params.set("competitionId", browseCompetitionId);
+      if (browseRound) params.set("round", browseRound);
+    }
+    return `/api/matches/results?${params.toString()}`;
+  }, [resultsDays, resultsMode, browseCompetitionId, browseRound]);
+
+  const { data: resultsData, isLoading: resultsLoading } = useQuery<ApiMatch[]>({
+    queryKey: ["results", resultsDays, resultsMode, browseCompetitionId, browseRound],
+    queryFn: async () => {
+      const res = await fetch(resultsUrl);
+      if (!res.ok) throw new Error("Failed to load results");
+      return res.json();
+    },
+  });
+
+  const { data: roundsData } = useQuery<{ ok: boolean; rounds: string[] }>({
+    queryKey: ["rounds", browseCompetitionId],
+    queryFn: async () => {
+      const res = await fetch(`/api/matches/rounds?competitionId=${browseCompetitionId}&days=30`);
+      if (!res.ok) throw new Error("Failed to load rounds");
+      return res.json();
+    },
+    enabled: resultsMode === "browse" && !!browseCompetitionId,
+  });
+
+  const fixtureCompetitionOptions = useMemo(() => {
     if (!fixturesData) return [];
     const seen = new Map<string, string>();
     fixturesData.forEach((m) => {
@@ -143,17 +180,32 @@ export default function MatchesPage() {
       }
     });
     return Array.from(seen.entries())
-      .map(([id, rawName]) => ({ 
-        id, 
-        displayName: displayCompetitionWithFlag(rawName) 
-      }))
+      .map(([id, rawName]) => ({ id, displayName: displayCompetitionWithFlag(rawName) }))
       .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [fixturesData]);
+
+  const resultsCompetitionOptions = useMemo(() => {
+    if (!resultsData) return [];
+    const seen = new Map<string, string>();
+    resultsData.forEach((m) => {
+      if (m.goalserveCompetitionId && m.competition) {
+        seen.set(m.goalserveCompetitionId, m.competition);
+      }
+    });
+    return Array.from(seen.entries())
+      .map(([id, rawName]) => ({ id, displayName: displayCompetitionWithFlag(rawName) }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }, [resultsData]);
 
   const liveFixtures = useMemo(() => {
     if (!fixturesData) return [];
     return fixturesData.map(apiMatchToMockMatch);
   }, [fixturesData]);
+
+  const liveResults = useMemo(() => {
+    if (!resultsData) return [];
+    return resultsData.map(apiMatchToMockMatch);
+  }, [resultsData]);
 
   const filterByTab = (matches: MockMatch[], tab: MatchTab): MockMatch[] => {
     return matches.filter((match) => {
@@ -168,7 +220,7 @@ export default function MatchesPage() {
         case "thisWeek":
           return isAfter(kickoffDay, tomorrow) && isBefore(kickoff, endOfWeek);
         case "results":
-          return match.status === "finished" || match.status === "postponed";
+          return true;
         default:
           return true;
       }
@@ -201,24 +253,119 @@ export default function MatchesPage() {
   const todaysMatches = useMemo(() => filterByTab(liveFixtures, "today"), [liveFixtures]);
   const tomorrowsMatches = useMemo(() => filterByTab(liveFixtures, "tomorrow"), [liveFixtures]);
   const thisWeekMatches = useMemo(() => filterByTab(liveFixtures, "thisWeek"), [liveFixtures]);
-  const resultsMatches = useMemo(() => filterByTab(mockMatches, "results"), []);
 
   const counts = {
     today: todaysMatches.length,
     tomorrow: tomorrowsMatches.length,
     thisWeek: thisWeekMatches.length,
-    results: resultsMatches.length,
+    results: liveResults.length,
   };
 
   const currentMatches = useMemo(() => {
     if (activeTab === "results") {
-      return applyFilters(filterByTab(mockMatches, activeTab));
+      return applyFilters(liveResults);
     }
     const tabMatches = filterByTab(liveFixtures, activeTab);
     return applyFilters(tabMatches);
-  }, [activeTab, sortBy, teamSearch, liveFixtures]);
+  }, [activeTab, sortBy, teamSearch, liveFixtures, liveResults]);
 
   const isFixturesTab = activeTab !== "results";
+  const isResultsTab = activeTab === "results";
+  const isLoading = isFixturesTab ? fixturesLoading : resultsLoading;
+
+  const ResultsControls = () => (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2" data-testid="results-mode-toggle">
+        <Button
+          size="sm"
+          variant={resultsMode === "quick" ? "default" : "outline"}
+          onClick={() => { setResultsMode("quick"); setBrowseRound(""); }}
+          data-testid="btn-quick"
+        >
+          Quick
+        </Button>
+        <Button
+          size="sm"
+          variant={resultsMode === "browse" ? "default" : "outline"}
+          onClick={() => setResultsMode("browse")}
+          data-testid="btn-browse"
+        >
+          Browse
+        </Button>
+      </div>
+
+      {resultsMode === "quick" && (
+        <div className="flex items-center gap-2" data-testid="quick-period-selector">
+          <Button
+            size="sm"
+            variant={quickPeriod === "yesterday" ? "default" : "outline"}
+            onClick={() => setQuickPeriod("yesterday")}
+            data-testid="btn-yesterday"
+          >
+            Yesterday
+          </Button>
+          <Button
+            size="sm"
+            variant={quickPeriod === "thisWeek" ? "default" : "outline"}
+            onClick={() => setQuickPeriod("thisWeek")}
+            data-testid="btn-this-week"
+          >
+            This Week
+          </Button>
+          <Button
+            size="sm"
+            variant={quickPeriod === "last30" ? "default" : "outline"}
+            onClick={() => setQuickPeriod("last30")}
+            data-testid="btn-last-30"
+          >
+            Last 30 Days
+          </Button>
+        </div>
+      )}
+
+      {resultsMode === "browse" && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="browse-controls">
+          <Select
+            value={browseCompetitionId}
+            onValueChange={(val) => {
+              setBrowseCompetitionId(val === "all" ? "" : val);
+              setBrowseRound("");
+            }}
+          >
+            <SelectTrigger className="w-[200px]" data-testid="select-browse-competition">
+              <SelectValue placeholder="Select competition" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All competitions</SelectItem>
+              {resultsCompetitionOptions.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  {opt.displayName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={browseRound}
+            onValueChange={(val) => setBrowseRound(val === "all" ? "" : val)}
+            disabled={!browseCompetitionId}
+          >
+            <SelectTrigger className="w-[150px]" data-testid="select-browse-round">
+              <SelectValue placeholder={browseCompetitionId ? "Select round" : "Select competition first"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All rounds</SelectItem>
+              {roundsData?.rounds?.map((round) => (
+                <SelectItem key={round} value={round}>
+                  Round {round}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <MainLayout>
@@ -233,48 +380,14 @@ export default function MatchesPage() {
           </div>
         </div>
 
-        <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
-          <MatchesTabs
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            counts={counts}
-            variant="desktop"
-          />
-          <div className="flex items-center gap-4">
-            {isFixturesTab && (
-              <>
-                <div className="flex items-center gap-2" data-testid="days-selector">
-                  <span className="text-sm text-muted-foreground">Show:</span>
-                  {[7, 14, 30].map((days) => (
-                    <Button
-                      key={days}
-                      size="sm"
-                      variant={fixtureDays === days ? "default" : "outline"}
-                      onClick={() => setFixtureDays(days)}
-                      data-testid={`days-${days}`}
-                    >
-                      {days} days
-                    </Button>
-                  ))}
-                </div>
-                <Select
-                  value={selectedCompetitionId}
-                  onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
-                >
-                  <SelectTrigger className="w-[220px]" data-testid="select-competition">
-                    <SelectValue placeholder="All competitions" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All competitions</SelectItem>
-                    {competitionOptions.map((opt) => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.displayName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </>
-            )}
+        <div className="hidden md:flex md:flex-col gap-4 mb-6">
+          <div className="flex items-center justify-between">
+            <MatchesTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              counts={counts}
+              variant="desktop"
+            />
             <MatchesFilters
               sortBy={sortBy}
               onSortChange={setSortBy}
@@ -283,6 +396,43 @@ export default function MatchesPage() {
               variant="inline"
             />
           </div>
+
+          {isFixturesTab && (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2" data-testid="days-selector">
+                <span className="text-sm text-muted-foreground">Show:</span>
+                {[7, 14, 30].map((days) => (
+                  <Button
+                    key={days}
+                    size="sm"
+                    variant={fixtureDays === days ? "default" : "outline"}
+                    onClick={() => setFixtureDays(days)}
+                    data-testid={`days-${days}`}
+                  >
+                    {days} days
+                  </Button>
+                ))}
+              </div>
+              <Select
+                value={selectedCompetitionId}
+                onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+              >
+                <SelectTrigger className="w-[220px]" data-testid="select-competition">
+                  <SelectValue placeholder="All competitions" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All competitions</SelectItem>
+                  {fixtureCompetitionOptions.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id}>
+                      {opt.displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {isResultsTab && <ResultsControls />}
         </div>
 
         <div className="md:hidden">
@@ -292,6 +442,7 @@ export default function MatchesPage() {
             counts={counts}
             variant="mobile"
           />
+
           {isFixturesTab && (
             <div className="flex flex-col gap-3 mb-4">
               <div className="flex items-center gap-2" data-testid="days-selector-mobile">
@@ -317,7 +468,7 @@ export default function MatchesPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All competitions</SelectItem>
-                  {competitionOptions.map((opt) => (
+                  {fixtureCompetitionOptions.map((opt) => (
                     <SelectItem key={opt.id} value={opt.id}>
                       {opt.displayName}
                     </SelectItem>
@@ -326,6 +477,13 @@ export default function MatchesPage() {
               </Select>
             </div>
           )}
+
+          {isResultsTab && (
+            <div className="mb-4">
+              <ResultsControls />
+            </div>
+          )}
+
           <MatchesFilters
             sortBy={sortBy}
             onSortChange={setSortBy}
@@ -335,17 +493,25 @@ export default function MatchesPage() {
           />
         </div>
 
-        {fixturesLoading && isFixturesTab ? (
-          <div className="flex items-center justify-center py-16" data-testid="loading-fixtures">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-16" data-testid="loading-matches">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            <span className="ml-3 text-muted-foreground">Loading fixtures...</span>
+            <span className="ml-3 text-muted-foreground">
+              Loading {isFixturesTab ? "fixtures" : "results"}...
+            </span>
           </div>
-        ) : currentMatches.length === 0 && isFixturesTab ? (
-          <div className="text-center py-16" data-testid="empty-fixtures">
+        ) : currentMatches.length === 0 ? (
+          <div className="text-center py-16" data-testid="empty-matches">
             <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No upcoming fixtures</h3>
+            <h3 className="text-lg font-medium mb-2">
+              {isFixturesTab ? "No upcoming fixtures" : "No results found"}
+            </h3>
             <p className="text-sm text-muted-foreground">
-              No fixtures found in the next {fixtureDays} days.
+              {isFixturesTab
+                ? `No fixtures found in the next ${fixtureDays} days.`
+                : resultsMode === "quick"
+                ? `No results from ${quickPeriod === "yesterday" ? "yesterday" : quickPeriod === "thisWeek" ? "this week" : "the last 30 days"}.`
+                : "No results found for the selected competition and round."}
             </p>
           </div>
         ) : (

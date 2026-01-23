@@ -238,6 +238,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       competition: match.competition,
       goalserveCompetitionId: match.goalserveCompetitionId,
       goalserveMatchId: match.goalserveMatchId,
+      goalserveRound: match.goalserveRound || null,
       homeTeam: match.homeTeamId && homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
         : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: timeline?.home?.name || "Unknown" },
@@ -353,6 +354,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const days = parseInt(req.query.days as string) || 7;
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
+      const round = req.query.round as string;
       const limit = Math.min(parseInt(req.query.limit as string) || 200, 200);
 
       const now = new Date();
@@ -371,6 +373,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       if (teamId) {
         conditions.push(or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)));
+      }
+
+      if (round) {
+        conditions.push(eq(matches.goalserveRound, round));
       }
 
       const results = await db.select()
@@ -432,6 +438,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching live matches:", error);
       res.status(500).json({ error: "Failed to fetch live matches" });
+    }
+  });
+
+  // GET /api/matches/rounds - get distinct rounds for a competition
+  app.get("/api/matches/rounds", async (req, res) => {
+    try {
+      const competitionId = req.query.competitionId as string;
+      const days = parseInt(req.query.days as string) || 30;
+
+      if (!competitionId) {
+        return res.json({ ok: true, competitionId: null, days, rounds: [] });
+      }
+
+      const now = new Date();
+      const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+      const result = await db
+        .selectDistinct({ round: matches.goalserveRound })
+        .from(matches)
+        .where(
+          and(
+            eq(matches.goalserveCompetitionId, competitionId),
+            gte(matches.kickoffTime, startDate),
+            drizzleSql`${matches.goalserveRound} IS NOT NULL`
+          )
+        );
+
+      const rounds = result
+        .map(r => r.round)
+        .filter((r): r is string => r !== null)
+        .sort((a, b) => {
+          const numA = parseInt(a, 10);
+          const numB = parseInt(b, 10);
+          if (!isNaN(numA) && !isNaN(numB)) {
+            return numA - numB;
+          }
+          return a.localeCompare(b);
+        });
+
+      res.json({ ok: true, competitionId, days, rounds });
+    } catch (error) {
+      console.error("Error fetching rounds:", error);
+      res.status(500).json({ ok: false, error: "Failed to fetch rounds" });
     }
   });
 

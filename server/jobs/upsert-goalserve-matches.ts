@@ -50,6 +50,32 @@ function normalizeStatus(rawStatus: string): string {
   return "scheduled";
 }
 
+function extractRound(match: any, category: any): string | null {
+  const candidates = [
+    match?.["@round"],
+    match?.["@matchday"],
+    match?.["@week"],
+    match?.["@round_id"],
+    match?.round,
+    match?.matchday,
+    match?.week,
+    category?.["@round"],
+    category?.["@matchday"],
+    category?.round,
+    category?.matchday,
+  ];
+  
+  for (const val of candidates) {
+    if (val != null && val !== "") {
+      const str = String(val).trim();
+      if (str.length > 0) {
+        return str;
+      }
+    }
+  }
+  return null;
+}
+
 interface DbTeam {
   id: string;
   goalserveTeamId: string | null;
@@ -65,6 +91,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
   skippedNoKickoff: number;
   mappedTeams: number;
   unmappedTeams: number;
+  withRound: number;
+  withoutRound: number;
   error?: string;
 }> {
   try {
@@ -81,6 +109,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         skippedNoKickoff: 0,
         mappedTeams: 0,
         unmappedTeams: 0,
+        withRound: 0,
+        withoutRound: 0,
         error: "Missing scores.category in response",
       };
     }
@@ -123,6 +153,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
     let skippedNoKickoff = 0;
     let mappedTeams = 0;
     let unmappedTeams = 0;
+    let withRound = 0;
+    let withoutRound = 0;
 
     for (const category of categories) {
       if (!category?.matches?.match) continue;
@@ -178,6 +210,13 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         const venue = String(match["@venue"] ?? match.venue ?? "");
         const slug = `gs-${goalserveMatchId}`;
 
+        const goalserveRound = extractRound(match, category);
+        if (goalserveRound) {
+          withRound++;
+        } else {
+          withoutRound++;
+        }
+
         const compactRaw = {
           id: goalserveMatchId,
           staticId: goalserveStaticId,
@@ -200,6 +239,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             .set({
               goalserveStaticId: goalserveStaticId || null,
               goalserveCompetitionId: competitionId || null,
+              goalserveRound,
               homeGoalserveTeamId: homeGsId || null,
               awayGoalserveTeamId: awayGsId || null,
               homeTeamId,
@@ -220,6 +260,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             goalserveMatchId,
             goalserveStaticId: goalserveStaticId || null,
             goalserveCompetitionId: competitionId || null,
+            goalserveRound,
             homeGoalserveTeamId: homeGsId || null,
             awayGoalserveTeamId: awayGsId || null,
             homeTeamId,
@@ -247,6 +288,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       skippedNoKickoff,
       mappedTeams,
       unmappedTeams,
+      withRound,
+      withoutRound,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -260,6 +303,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       skippedNoKickoff: 0,
       mappedTeams: 0,
       unmappedTeams: 0,
+      withRound: 0,
+      withoutRound: 0,
       error,
     };
   }
