@@ -1358,6 +1358,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== DEBUG: GOALSERVE MATCHES UPSERT (no auth, for dev) ==========
+  app.get("/api/debug/upsert-goalserve-matches", async (req, res) => {
+    try {
+      const feed = String(req.query.feed || "soccernew/home");
+      const result = await upsertGoalserveMatches(feed);
+      res.json(result);
+    } catch (error) {
+      console.error("Debug upsert-goalserve-matches error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
   // ========== GOALSERVE MATCHES UPSERT ==========
   app.post(
     "/api/jobs/upsert-goalserve-matches",

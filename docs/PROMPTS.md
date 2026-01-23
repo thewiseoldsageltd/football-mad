@@ -3842,3 +3842,23 @@ Apply the changes directly.
 
 ---
 
+Add a new debug endpoint in server/routes.ts that is accessible from Preview and triggers Goalserve match ingestion.
+
+Requirements:
+1) In server/routes.ts, import upsertGoalserveMatches from "./jobs/upsert-goalserve-matches" if it is not already imported.
+2) Add this route:
+
+GET /api/debug/upsert-goalserve-matches
+
+- Query param: feed (string). Default "soccernew/home"
+- It should call: await upsertGoalserveMatches(feed)
+- Return the result JSON with res.json(result)
+- Wrap in try/catch and return 500 with { error: message } on failure.
+
+3) Place this route near other /api routes (not after any catch-all static/SPA route).
+4) Do NOT add any secret requirement. This is for development use in Replit Preview.
+
+Apply the code changes directly.
+
+---
+
