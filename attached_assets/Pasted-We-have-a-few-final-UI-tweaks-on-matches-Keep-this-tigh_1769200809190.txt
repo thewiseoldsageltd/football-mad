@@ -1,0 +1,63 @@
+We have a few final UI tweaks on /matches. Keep this tight: implement + typecheck + quick manual check. NO long test loops.
+
+A) DESKTOP — One fixture per row + faint divider between competitions
+1) Change the matches grid/list so desktop is SINGLE column (1 card per line), not 2-column.
+   - If there is a grid like `md:grid-cols-2` / `lg:grid-cols-2`, remove it and keep `grid-cols-1` always.
+2) Add a subtle divider between competition groups:
+   - When rendering grouped competitions in `MatchesList.tsx`, insert a thin divider between groups (not between each match).
+   - Use Tailwind like: `border-t border-gray-200/60 dark:border-white/10 my-6` or equivalent.
+   - Do NOT add heavy headings; keep it faint and clean.
+
+B) MOBILE — Center text, arrow right aligned in dropdown triggers (consistent with site)
+Currently we centered the whole trigger which also centers the chevron. Fix:
+1) For Filter and Sort triggers, keep:
+   - text centered
+   - chevron icon pinned to the right
+2) Implement by making trigger `relative` and absolutely positioning chevron:
+   - Trigger: `relative`
+   - Text container: `w-full text-center`
+   - Chevron: `absolute right-3 top-1/2 -translate-y-1/2`
+3) Apply on mobile only (base), preserve desktop default with `sm:` overrides if necessary.
+
+C) REMOVE ALL “(Country)” BRACKETS EVERYWHERE (pill + dropdown + cards)
+We should never show “(England)” (or any country) in brackets.
+1) Find label builder (likely in `MatchesList.tsx` disambiguation logic):
+   - Default label must be JUST league name (e.g. “Championship”).
+2) Collision case (same league name appears for multiple countries in the current list):
+   - Still no brackets.
+   - Use: “Championship • England” (muted bullet separator) OR a second muted line with the country.
+   - Keep pill flag visible either way.
+3) Ensure this applies both to:
+   - Match cards’ competition pill
+   - Filter dropdown options
+
+D) MOBILE — Reduce team-name truncation by aligning names closer to kickoff time
+Goal: maximize usable width for both team names on mobile.
+1) In the match card layout on small screens:
+   - Put home crest + name in a left block that ends near the center.
+   - Put away crest + name in a right block that starts near the center.
+   - Kickoff time stays centered.
+2) Practical approach (small screen):
+   - Use 3-column grid: `grid-cols-[1fr_auto_1fr]` for the “main row”.
+   - Home block: `min-w-0 flex items-center gap-2 justify-end` (name hugs center)
+   - Away block: `min-w-0 flex items-center gap-2 justify-start` (name hugs center)
+   - Keep truncate on names, but this will give them more room.
+   - Ensure away side still doesn’t overflow: add `min-w-0` + `truncate` + `overflow-hidden`.
+
+FILES TO CHANGE (likely):
+- `client/src/components/MatchesList.tsx`
+  - force single-column
+  - add divider between competition groups
+  - remove bracketed country in labels (and implement collision formatting without brackets)
+- `client/src/components/EnhancedMatchCard.tsx`
+  - mobile layout tweaks for name alignment (hug center)
+- `client/src/pages/matches.tsx` (or shared Select component)
+  - trigger layout: centered text + chevron right aligned on mobile
+
+VALIDATION (do only this):
+- run `npm run typecheck` (or repo equivalent)
+- quick manual check:
+  - desktop: one card per row + subtle divider between competitions
+  - mobile: centered text, chevron right, no “(Country)” anywhere, improved name spacing, no bleed/overflow
+
+Return a short summary of what changed + which files.

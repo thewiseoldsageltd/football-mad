@@ -103,10 +103,10 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           let displayLabel = baseDisplayLabel;
           
           if (collisions.length > 1) {
-            // Disambiguate with country from raw competition
+            // Disambiguate with country using bullet separator (no brackets)
             const country = extractCountryFromRaw(rawCompetition);
             if (country) {
-              displayLabel = `${baseDisplayLabel} (${country})`;
+              displayLabel = `${baseDisplayLabel} • ${country}`;
             }
           }
           
@@ -148,19 +148,16 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
             {dateGroup.label}
           </h2>
           
-          {dateGroup.competitions.map((compGroup) => (
-            <div key={compGroup.groupKey} className="space-y-3">
-              {compGroup.matches.length === 1 ? (
-                <div className="w-full">
-                  <EnhancedMatchCard match={compGroup.matches[0]} competitionLabel={compGroup.displayLabel} />
-                </div>
-              ) : (
-                <div className="grid md:grid-cols-2 gap-4">
-                  {compGroup.matches.map((match) => (
-                    <EnhancedMatchCard key={match.id} match={match} competitionLabel={compGroup.displayLabel} />
-                  ))}
-                </div>
+          {dateGroup.competitions.map((compGroup, compIndex) => (
+            <div key={compGroup.groupKey}>
+              {compIndex > 0 && (
+                <div className="border-t border-gray-200/60 dark:border-white/10 my-6" />
               )}
+              <div className="grid grid-cols-1 gap-4">
+                {compGroup.matches.map((match) => (
+                  <EnhancedMatchCard key={match.id} match={match} competitionLabel={compGroup.displayLabel} />
+                ))}
+              </div>
             </div>
           ))}
         </div>
