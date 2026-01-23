@@ -484,29 +484,119 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // Priority ordering for competitions - UK leagues need country check
+  const UK_LEAGUES = ["premier league", "championship", "league one", "league two", "national league"];
+  const UK_CUPS = ["fa cup", "efl cup", "carabao cup", "league cup"];
+  const UK_COUNTRIES = ["england", "uk", "united kingdom", "wales", "scotland", "northern ireland"];
+  
+  const UK_PRIORITY: Record<string, number> = {
+    "premier league": 1, "championship": 2, "league one": 3, "league two": 4,
+    "national league": 5, "fa cup": 6, "efl cup": 7, "carabao cup": 7, "league cup": 7,
+  };
+  const BIG5_PRIORITY: Record<string, number> = {
+    "la liga": 10, "laliga": 10, "serie a": 11, "bundesliga": 12, "ligue 1": 13, "eredivisie": 14,
+  };
+  const UEFA_PRIORITY: Record<string, number> = {
+    "champions league": 20, "uefa champions league": 20,
+    "europa league": 21, "uefa europa league": 21,
+    "conference league": 22, "europa conference league": 22, "uefa europa conference league": 22,
+  };
+
+  function parseCompetitionParts(competition: string | null): { name: string; country: string } {
+    if (!competition) return { name: "", country: "" };
+    
+    let country = "";
+    let name = competition;
+    
+    // Extract country from parentheses like "Premier League (England) [1234]"
+    const parenMatch = competition.match(/\(([^)]+)\)/);
+    if (parenMatch) {
+      country = parenMatch[1].trim().toLowerCase();
+    }
+    
+    // Also check for "Country: League" format like "England: Premier League"
+    const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
+    if (colonMatch && !country) {
+      country = colonMatch[1].trim().toLowerCase();
+      name = colonMatch[2]; // Use the part after the colon as the name
+    }
+    
+    // Remove bracket IDs like " [1234]"
+    name = name.replace(/\s*\[\d+\]$/, "");
+    // Remove parenthetical country like " (England)"
+    name = name.replace(/\s*\([^)]+\)$/, "");
+    // Remove country prefix like "Country: " if not already handled
+    if (!colonMatch) {
+      name = name.replace(/^[^:]+:\s*/, "");
+    }
+    
+    return { name: name.trim().toLowerCase(), country };
+  }
+
+  function getCompetitionPriority(competition: string | null): number {
+    const { name, country } = parseCompetitionParts(competition);
+    if (!name) return 1000;
+    
+    // Check for UK leagues - must have UK country
+    const isUkCountry = UK_COUNTRIES.some(c => country.includes(c));
+    
+    // UK leagues (need country verification for generic names like "Premier League")
+    for (const league of UK_LEAGUES) {
+      if (name === league || name.includes(league)) {
+        if (isUkCountry) {
+          return UK_PRIORITY[league] || 5;
+        }
+        // Not a UK country, so lower priority
+        break;
+      }
+    }
+    
+    // UK cups (don't need country check as FA Cup is unique)
+    for (const cup of UK_CUPS) {
+      if (name === cup || name.includes(cup)) {
+        return UK_PRIORITY[cup] || 7;
+      }
+    }
+    
+    // Big 5 European leagues
+    for (const [key, priority] of Object.entries(BIG5_PRIORITY)) {
+      if (name === key || name.includes(key)) return priority;
+    }
+    
+    // UEFA competitions
+    for (const [key, priority] of Object.entries(UEFA_PRIORITY)) {
+      if (name === key || name.includes(key)) return priority;
+    }
+    
+    return 100; // Default for other competitions
+  }
+
   // GET /api/matches/day - date-driven matches endpoint
-  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId
+  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, debug=1
   app.get("/api/matches/day", async (req, res) => {
     try {
       const dateStr = req.query.date as string;
       const status = (req.query.status as string) || "all";
       const competitionId = req.query.competitionId as string;
+      const debug = req.query.debug === "1";
 
-      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return res.status(400).json({ error: "date parameter required in YYYY-MM-DD format" });
-      }
+      // Default to today in UTC if no date provided
+      const effectiveDate = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) 
+        ? dateStr 
+        : new Date().toISOString().split("T")[0];
 
-      // Parse the date as UTC day boundaries
-      const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
-      const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+      // Parse date range: start of day to start of next day (exclusive upper bound)
+      const start = new Date(`${effectiveDate}T00:00:00.000Z`);
+      const nextDate = new Date(start);
+      nextDate.setUTCDate(nextDate.getUTCDate() + 1);
 
-      // Build conditions
+      // Build conditions using kickoffTime >= start AND kickoffTime < nextDay
       const conditions: any[] = [
-        gte(matches.kickoffTime, startOfDay),
-        lte(matches.kickoffTime, endOfDay),
+        gte(matches.kickoffTime, start),
+        drizzleSql`${matches.kickoffTime} < ${nextDate}`,
       ];
 
-      // Status filtering
+      // Status filtering (case-insensitive)
       if (status === "fulltime") {
         conditions.push(
           drizzleSql`LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`
@@ -543,6 +633,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const teamMap = await fetchTeamMap(teamIds);
       const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+
+      // Sort by priority, then kickoff time, then competition name
+      formatted.sort((a, b) => {
+        const priorityA = getCompetitionPriority(a.competition);
+        const priorityB = getCompetitionPriority(b.competition);
+        if (priorityA !== priorityB) return priorityA - priorityB;
+        const timeA = new Date(a.kickoffTime).getTime();
+        const timeB = new Date(b.kickoffTime).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return (a.competition || "").localeCompare(b.competition || "");
+      });
+
+      if (debug) {
+        return res.json({
+          date: effectiveDate,
+          start: start.toISOString(),
+          end: nextDate.toISOString(),
+          status,
+          competitionId: competitionId || null,
+          returnedCount: formatted.length,
+          sampleFirst5: formatted.slice(0, 5),
+        });
+      }
 
       res.json(formatted);
     } catch (error) {

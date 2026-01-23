@@ -2479,3 +2479,82 @@ Please make the smallest clean set of changes across the relevant files and keep
 
 ---
 
+You are working in the Football Mad Replit project.
+
+Goal: fix 3 UX issues on the Matches page:
+1) Remove the green “Today” button (it’s redundant because the date picker already shows Today).
+2) Implement proper priority ordering so UK leagues come first, then Big 5 European leagues, then UEFA comps, then everything else.
+3) Fix date navigation so moving to tomorrow/other dates loads the FULL set of fixtures for that date (not a tiny subset / sometimes empty).
+
+IMPORTANT CONSTRAINTS
+- Do NOT change the database schema.
+- Keep the existing Matches UI layout with everything on one line on desktop and stacked on mobile.
+- Use the existing /api/matches/day endpoint (or adjust it) so the frontend is date-driven.
+
+PART A — BACKEND: make /api/matches/day date-correct and sortable
+1) Find the /api/matches/day route in server/routes.ts.
+2) Ensure the endpoint filters by the selected calendar day reliably using the DB’s kickoff_time column (timestamp without time zone).
+   - Accept query params:
+     - date=YYYY-MM-DD (required; default to today in UTC if missing)
+     - status=all|live|scheduled|fulltime (default all)
+     - competitionId=optional
+   - Build the day window as:
+     - start = `${date} 00:00:00`
+     - end   = `${nextDate} 00:00:00`
+     - Compare using kickoff_time >= start AND kickoff_time < end
+     - IMPORTANT: do not use NOW() for excluding earlier kickoffs within that day — if the user selects a date, return all matches for that date.
+3) Status filtering rules (case-insensitive):
+   - FINISHED_STATUSES: finished, ft, full_time, ended, final, aet
+   - LIVE_STATUSES: live, inplay, in_play, ht, halftime, et, extra_time, penalties, pen, 1h, 2h
+   - scheduled: anything NOT in finished statuses AND NOT in live statuses
+   - fulltime: in finished statuses
+   - live: in live statuses OR status looks like a minute number (regex ^[0-9]+$)
+   - all: no status constraint other than being within the selected day
+4) Add priority ordering server-side (so the API returns ordered results):
+   - Create a helper normalizeCompetitionName() that strips country prefixes like “Country: ” and removes bracket IDs “ [1234]” and trims.
+   - Create getCompetitionPriority(name) returning a low number for higher priority.
+   - Priority groups (highest → lowest):
+     A) UK: Premier League, Championship, League One, League Two, National League, FA Cup, EFL Cup/Carabao Cup
+     B) Big 5: La Liga, Serie A, Bundesliga, Ligue 1, Eredivisie
+     C) UEFA: Champions League, Europa League, Conference League
+     D) Everything else
+   - Implement ordering as:
+     (priority ASC), (kickoff_time ASC), (competition name ASC)
+   - If competition is null, treat it as lowest priority.
+5) Keep response shape unchanged (id, kickoffTime, status, scores, venue, competition, goalserveCompetitionId, team objects, etc.).
+6) Add a debug=1 option that returns { date, start, end, status, competitionId, returnedCount, sampleFirst5 } to help verify the day window.
+
+PART B — FRONTEND: remove Today button + ensure date navigation refetches
+1) In client/src/pages/matches.tsx:
+   - Remove the separate green “Today” button entirely (UI + state + handlers).
+   - Keep the date picker and left/right arrows.
+2) Ensure date changes trigger refetch:
+   - selectedDate should be stored as a YYYY-MM-DD string.
+   - The React Query key MUST include: ["matches-day", selectedDate, activeStatusTab, selectedCompetitionId]
+   - The fetch URL must be: `/api/matches/day?date=${selectedDate}&status=${status}&competitionId=${selectedCompetitionId}`
+     (omit competitionId when empty).
+3) Fix the label:
+   - When selectedDate == today: show “Today — Fri 23 Jan”
+   - Otherwise: show “Sat 24 Jan 2026” (or similar), with no “Tomorrow” heading.
+   - The page heading under filters should match the selected date label too.
+4) Competition dropdown:
+   - Ensure there is only ONE competition dropdown.
+   - Options should be derived from the returned matches for that day (unique goalserveCompetitionId + competition name).
+5) If the backend sorts, do NOT re-sort differently on the client. Just render in the order received.
+
+PART C — VERIFICATION STEPS (run after changes)
+1) Hit the API:
+   - curl -sS "http://localhost:5000/api/matches/day?date=2026-01-23&status=all&debug=1" | head
+   - curl -sS "http://localhost:5000/api/matches/day?date=2026-01-24&status=all&debug=1" | head
+   Confirm returnedCount is > 0 for dates that have fixtures.
+2) In the UI:
+   - Confirm “Today” button is gone.
+   - Clicking next day loads a different (non-empty where applicable) list.
+   - UK leagues appear first when present, then Big 5, then UEFA, then the rest.
+
+Deliverable:
+- Make the minimum necessary code changes across server/routes.ts and client/src/pages/matches.tsx (and small shared helpers if needed) to satisfy the above.
+- Explain briefly what you changed and where.
+
+---
+

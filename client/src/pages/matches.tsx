@@ -91,49 +91,6 @@ function isFinishedStatus(status: string): boolean {
   return FINISHED_STATUSES.some(s => status.toLowerCase().includes(s.toLowerCase()));
 }
 
-const UK_PRIORITY: Record<string, number> = {
-  "Premier League": 1,
-  "Championship": 2,
-  "League One": 3,
-  "League Two": 4,
-  "National League": 5,
-  "FA Cup": 6,
-  "EFL Cup": 7,
-  "League Cup": 7,
-  "Carabao Cup": 7,
-};
-
-const BIG5_PRIORITY: Record<string, number> = {
-  "La Liga": 10,
-  "LaLiga": 10,
-  "Serie A": 11,
-  "Bundesliga": 12,
-  "Ligue 1": 13,
-  "Eredivisie": 14,
-  "Champions League": 15,
-  "UEFA Champions League": 15,
-  "Europa League": 16,
-  "UEFA Europa League": 16,
-  "Conference League": 17,
-  "UEFA Europa Conference League": 17,
-};
-
-function getCompetitionPriority(competitionName: string, goalserveCompetitionId: string | null): number {
-  const ukPriority = UK_PRIORITY[competitionName];
-  if (ukPriority !== undefined) return ukPriority;
-  
-  const big5Priority = BIG5_PRIORITY[competitionName];
-  if (big5Priority !== undefined) return big5Priority;
-  
-  for (const [key, priority] of Object.entries(UK_PRIORITY)) {
-    if (competitionName.toLowerCase().includes(key.toLowerCase())) return priority;
-  }
-  for (const [key, priority] of Object.entries(BIG5_PRIORITY)) {
-    if (competitionName.toLowerCase().includes(key.toLowerCase())) return priority;
-  }
-  
-  return 100;
-}
 
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   const homeName = match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown";
@@ -186,7 +143,6 @@ function formatDateLabel(date: Date, isToday: boolean): string {
 
 export default function MatchesPage() {
   const [activeTab, setActiveTab] = useState<MatchTab>("all");
-  const [sortBy, setSortBy] = useState("kickoff");
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [selectedCompetitionId, setSelectedCompetitionId] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -240,21 +196,10 @@ export default function MatchesPage() {
 
   const currentMatches = useMemo(() => {
     if (!matchesData) return [];
-    let matches = matchesData.map(apiMatchToMockMatch);
-
-    if (sortBy === "competition") {
-      matches.sort((a, b) => a.competition.localeCompare(b.competition));
-    } else {
-      matches.sort((a, b) => {
-        const priorityA = getCompetitionPriority(a.competition, a.goalserveCompetitionId || null);
-        const priorityB = getCompetitionPriority(b.competition, b.goalserveCompetitionId || null);
-        if (priorityA !== priorityB) return priorityA - priorityB;
-        return new Date(a.kickOffTime).getTime() - new Date(b.kickOffTime).getTime();
-      });
-    }
-
-    return matches;
-  }, [matchesData, sortBy]);
+    // Server returns sorted by priority, kickoff time, then competition name
+    // Just convert to MockMatch format without re-sorting
+    return matchesData.map(apiMatchToMockMatch);
+  }, [matchesData]);
 
   const competitionOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -264,19 +209,14 @@ export default function MatchesPage() {
         seen.set(compId, m.rawCompetition);
       }
     });
+    // Sort alphabetically - server handles priority ordering for matches
     return Array.from(seen.entries())
       .map(([id, rawName]) => ({ id, displayName: getDisplayCompetitionName(rawName), rawName }))
-      .sort((a, b) => {
-        const priorityA = getCompetitionPriority(a.displayName, a.id);
-        const priorityB = getCompetitionPriority(b.displayName, b.id);
-        if (priorityA !== priorityB) return priorityA - priorityB;
-        return a.displayName.localeCompare(b.displayName);
-      });
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [allMatches]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
-  const handleToday = () => setSelectedDate(today);
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(startOfDay(date));
@@ -344,16 +284,6 @@ export default function MatchesPage() {
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-
-            <Button
-              size="sm"
-              variant={isToday ? "default" : "outline"}
-              onClick={handleToday}
-              className="ml-1"
-              data-testid="btn-today"
-            >
-              Today
-            </Button>
           </div>
 
           <Select
@@ -370,16 +300,6 @@ export default function MatchesPage() {
                   <CompetitionOption competition={opt.rawName} />
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-[140px]" data-testid="select-sort">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="kickoff">Kick-off time</SelectItem>
-              <SelectItem value="competition">Competition</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -431,45 +351,24 @@ export default function MatchesPage() {
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-
-            <Button
-              size="sm"
-              variant={isToday ? "default" : "outline"}
-              onClick={handleToday}
-              data-testid="btn-today-mobile"
-            >
-              Today
-            </Button>
           </div>
 
-          <div className="flex gap-2">
-            <Select
-              value={selectedCompetitionId || "all"}
-              onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
-            >
-              <SelectTrigger className="flex-1" data-testid="select-competition-mobile">
-                <SelectValue placeholder="All competitions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All competitions</SelectItem>
-                {competitionOptions.map((opt) => (
-                  <SelectItem key={opt.id} value={opt.id}>
-                    <CompetitionOption competition={opt.rawName} />
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-[120px]" data-testid="select-sort-mobile">
-                <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="kickoff">Kick-off</SelectItem>
-                <SelectItem value="competition">Competition</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Select
+            value={selectedCompetitionId || "all"}
+            onValueChange={(val) => setSelectedCompetitionId(val === "all" ? "" : val)}
+          >
+            <SelectTrigger className="w-full" data-testid="select-competition-mobile">
+              <SelectValue placeholder="All competitions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All competitions</SelectItem>
+              {competitionOptions.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  <CompetitionOption competition={opt.rawName} />
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {isLoading ? (
