@@ -688,8 +688,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return getPriorityWithDetails(competition, euroNightsOverride).priority;
   }
 
+  // Helper: parse YYYY-MM-DD to UTC midnight timestamp
+  function ymdToUtcMs(ymd: string): number | null {
+    const match = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    return Date.UTC(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10));
+  }
+
+  // Helper: map date to Goalserve feed name
+  function goalserveFeedForDate(effectiveDateYmd: string): string | null {
+    const effectiveMs = ymdToUtcMs(effectiveDateYmd);
+    if (!effectiveMs) return null;
+    const now = new Date();
+    const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const diffDays = Math.round((effectiveMs - todayMs) / (24 * 60 * 60 * 1000));
+    if (diffDays === 0) return "soccernew/home";
+    if (diffDays === -1) return "soccernew/d-1";
+    if (diffDays >= 1 && diffDays <= 7) return `soccernew/d${diffDays}`;
+    return null; // Outside supported range
+  }
+
   // GET /api/matches/day - date-driven matches endpoint
-  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1
+  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1, refresh=1
   app.get("/api/matches/day", async (req, res) => {
     try {
       const dateStr = req.query.date as string;
@@ -738,10 +758,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(eq(matches.goalserveCompetitionId, competitionId));
       }
 
-      const results = await db.select()
+      const refresh = req.query.refresh === "1";
+
+      let results = await db.select()
         .from(matches)
         .where(and(...conditions))
         .orderBy(asc(matches.kickoffTime));
+
+      // If no results (or refresh requested), try Goalserve sync
+      if (refresh || results.length === 0) {
+        const feed = goalserveFeedForDate(effectiveDate);
+        if (feed) {
+          try {
+            await upsertGoalserveMatches(feed);
+            // Re-run query after sync
+            results = await db.select()
+              .from(matches)
+              .where(and(...conditions))
+              .orderBy(asc(matches.kickoffTime));
+          } catch (syncErr) {
+            console.error(`Goalserve sync failed for feed ${feed}:`, syncErr);
+            // Continue with existing results (may be empty)
+          }
+        }
+      }
 
       const teamIds = new Set<string>();
       results.forEach(m => {

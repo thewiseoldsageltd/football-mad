@@ -1,0 +1,37 @@
+You are editing a Vite/Express + Drizzle app.
+
+Goal: Fix /api/matches/day so that when the user navigates to yesterday/tomorrow (or d1–d7), the endpoint returns data by triggering a Goalserve sync when the DB has no rows for that date.
+
+Context:
+- Client calls: GET /api/matches/day?date=YYYY-MM-DD&status=...&sort=...&competitionId=...
+- Server route exists in server/routes.ts around line ~693.
+- There is a Goalserve ingestion job: server/jobs/upsert-goalserve-matches.ts exporting upsertGoalserveMatches(feed: string)
+- Known Goalserve feeds already used elsewhere:
+  - "soccernew/home" (today)
+  - "soccernew/d-1" (yesterday)
+  - "soccernew/d1" .. "soccernew/d7" (tomorrow -> 7 days ahead)
+
+Make the smallest safe change to server/routes.ts:
+1) Import upsertGoalserveMatches from "./jobs/upsert-goalserve-matches" near the top of server/routes.ts.
+2) Add helper functions (can be placed near the /api/matches/day route or near other helpers):
+   - ymdToUtcMs(ymd: string): number | null
+   - goalserveFeedForDate(effectiveDateYmd: string): string | null
+     - Determine offset days between effectiveDateYmd and today (both in UTC date, using Date.UTC).
+     - Map: 0 -> "soccernew/home", -1 -> "soccernew/d-1", 1..7 -> `soccernew/d${n}`, else null.
+3) In /api/matches/day handler:
+   - Keep existing date parsing and the DB date window logic exactly as-is.
+   - Change the initial `const results = await ...` to `let results = await ...`
+   - Add: `const refresh = req.query.refresh === "1";`
+   - Immediately after the first DB query, if (refresh || results.length === 0):
+       - compute feed = goalserveFeedForDate(effectiveDate)
+       - if feed exists: await upsertGoalserveMatches(feed) inside try/catch
+       - then re-run the same DB query to update results
+   - Do NOT change any sorting/grouping decisions already implemented.
+4) Do not introduce new endpoints. Only patch /api/matches/day.
+
+After changes, /api/matches/day should:
+- Return existing DB results when available
+- If empty, automatically populate from Goalserve (within supported window) and return results
+- Support manual refresh via query param refresh=1
+
+Apply the code changes directly.
