@@ -255,21 +255,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return new Map(teamsData.map(t => [t.id, t]));
   }
 
-  // GET /api/matches/fixtures - scheduled matches in next N days
+  // Status sets for robust matching (case-insensitive)
+  const FINISHED_STATUSES = ['finished', 'ft', 'full_time', 'ended', 'final', 'aet', 'pen'];
+  const LIVE_STATUSES = ['live', 'inplay', 'in_play', 'ht', 'halftime', 'et', 'extra_time', 'pen', 'penalties', '1h', '2h'];
+  
+  function isFinishedStatus(status: string | null): boolean {
+    if (!status) return false;
+    return FINISHED_STATUSES.includes(status.toLowerCase());
+  }
+  
+  function isLiveStatus(status: string | null): boolean {
+    if (!status) return false;
+    const lower = status.toLowerCase();
+    return LIVE_STATUSES.includes(lower) || /^\d+$/.test(status); // numeric minute = live
+  }
+
+  // GET /api/matches/fixtures - upcoming matches (not finished) in next N days
   app.get("/api/matches/fixtures", async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 7;
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
       const limit = Math.min(parseInt(req.query.limit as string) || 200, 200);
+      const debug = req.query.debug === "1";
 
       const now = new Date();
       const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
+      // Fixtures: kickoff within window AND status is NOT finished (case-insensitive)
       const conditions: any[] = [
-        eq(matches.status, "scheduled"),
         gte(matches.kickoffTime, now),
         lte(matches.kickoffTime, endDate),
+        drizzleSql`LOWER(COALESCE(${matches.status}, '')) NOT IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`,
       ];
 
       if (competitionId) {
@@ -295,6 +312,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const teamMap = await fetchTeamMap(teamIds);
       const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
 
+      if (debug) {
+        // Debug info
+        const countFuture = await db.select({ count: drizzleSql<number>`COUNT(*)` })
+          .from(matches)
+          .where(gte(matches.kickoffTime, now));
+        const sampleNext5 = await db.select({ 
+          kickoffTime: matches.kickoffTime, 
+          status: matches.status, 
+          competition: matches.competition 
+        })
+          .from(matches)
+          .orderBy(asc(matches.kickoffTime))
+          .limit(5);
+        
+        return res.json({
+          debug: {
+            nowServer: now.toISOString(),
+            nowUtc: new Date().toISOString(),
+            days,
+            endDate: endDate.toISOString(),
+            countFutureAll: countFuture[0]?.count || 0,
+            sampleNext5,
+          },
+          count: formatted.length,
+          matches: formatted,
+        });
+      }
+
       res.json(formatted);
     } catch (error) {
       console.error("Error fetching fixtures:", error);
@@ -313,17 +358,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const now = new Date();
       const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
+      // Results: kickoff in past N days AND status is finished (case-insensitive)
       const conditions: any[] = [
-        or(
-          eq(matches.status, "finished"),
-          and(
-            drizzleSql`${matches.homeScore} IS NOT NULL`,
-            drizzleSql`${matches.awayScore} IS NOT NULL`,
-            lt(matches.kickoffTime, now)
-          )
-        ),
         gte(matches.kickoffTime, startDate),
         lte(matches.kickoffTime, now),
+        drizzleSql`LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`,
       ];
 
       if (competitionId) {
@@ -356,13 +395,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // GET /api/matches/live - currently live matches
+  // GET /api/matches/live - currently live matches (case-insensitive status matching)
   app.get("/api/matches/live", async (req, res) => {
     try {
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
 
-      const conditions: any[] = [eq(matches.status, "live")];
+      // Live: status matches live patterns (case-insensitive)
+      const conditions: any[] = [
+        drizzleSql`(LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`,
+      ];
 
       if (competitionId) {
         conditions.push(eq(matches.goalserveCompetitionId, competitionId));

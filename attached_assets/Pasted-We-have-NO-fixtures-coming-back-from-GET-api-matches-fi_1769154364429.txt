@@ -1,0 +1,90 @@
+We have NO fixtures coming back from:
+GET /api/matches/fixtures?days=7
+It returns [].
+
+Goal:
+Fix the backend fixtures/results/live endpoints so they return matches correctly based on kickoff_time and real Goalserve status values.
+
+Constraints:
+- Only change server/routes.ts (and helper/query code if needed).
+- Do NOT change ingestion jobs right now.
+- Keep response shape the same.
+- Must remain fast (use indexes already present on kickoff_time).
+
+Step A — Diagnose quickly in code
+1) Find the handlers for:
+   GET /api/matches/fixtures
+   GET /api/matches/results
+   GET /api/matches/live
+2) Identify current filters for status and time window.
+
+Step B — Make the fixtures endpoint robust
+Fixtures should include matches that have kickoff_time within the next N days AND are not finished.
+Because Goalserve statuses vary, treat these statuses as “upcoming”:
+- scheduled
+- not_started
+- ns
+- postponed
+- delayed
+- TBD / TBA (if present)
+Also, some feeds may use empty status for scheduled — handle that too.
+
+Implement fixtures filter as:
+- kickoff_time >= NOW()  (server time)
+- kickoff_time < NOW() + interval '${days} days'
+- status NOT IN ('finished', 'ft', 'full_time', 'ended', 'final')  (case-insensitive)
+This is safer than only checking status='scheduled'.
+
+Step C — Make results endpoint robust
+Results should include matches within past N days AND are finished.
+Treat these as “finished”:
+- finished
+- ft
+- full_time
+- ended
+- final
+
+Filter:
+- kickoff_time >= NOW() - interval '${days} days'
+- kickoff_time < NOW()
+- status IN finished set (case-insensitive)
+
+Step D — Live endpoint robust
+Live matches:
+Statuses often look like:
+- live
+- inplay
+- in_play
+- 1h / 2h
+- halftime / ht
+- extra_time / et
+- penalties / pen
+Implement a case-insensitive live status set OR numeric minute-based status if present.
+If we don’t have minute statuses stored, at least match:
+live/inplay/in_play/ht/halftime/et/extra_time/pen/penalties
+
+Step E — Timezone sanity
+kickoff_time is timestamp without time zone.
+Ensure comparisons use consistent server time.
+If the app runs in UTC but kickoff_time is effectively UTC, NOW() is fine.
+If mismatch is suspected, use NOW() AT TIME ZONE 'UTC' for comparisons.
+Pick ONE approach and apply consistently across fixtures/results/live.
+
+Step F — Add temporary debug switch (so we can verify quickly)
+If query param debug=1 is present on /api/matches/fixtures,
+return extra fields:
+- nowServer
+- nowUtc
+- days
+- countFutureAll (count of matches with kickoff_time >= now)
+- sampleNext5 (kickoff_time + status + competition for next 5 matches ordered by kickoff_time)
+
+Step G — Verification steps (output in summary)
+After changes, these should work:
+1) curl -sS "http://localhost:5000/api/matches/fixtures?days=7&debug=1" | head -c 1200
+2) curl -sS "http://localhost:5000/api/matches/fixtures?days=30" | head -c 400
+3) curl -sS "http://localhost:5000/api/matches/results?days=7" | head -c 400
+
+Deliverables:
+- Give me the exact diff/summary of the code change.
+- Explain which filter was causing [].
