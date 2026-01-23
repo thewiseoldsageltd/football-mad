@@ -130,9 +130,11 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
             </div>
 
             {/* Row 2: Home team | Score/Time + Status | Away team */}
-            <div className="col-start-1 row-start-2 min-w-0 flex items-center gap-2">
-              <TeamLogo team={match.homeTeam} size="sm" />
-              <span className="font-medium text-sm truncate overflow-hidden">{match.homeTeam.name}</span>
+            <div className="col-start-1 row-start-2 min-w-0 flex items-center gap-2 justify-end">
+              <div className="shrink-0">
+                <TeamLogo team={match.homeTeam} size="sm" />
+              </div>
+              <span className="font-medium text-sm min-w-0 truncate overflow-hidden whitespace-nowrap">{match.homeTeam.name}</span>
             </div>
 
             <div className="col-start-2 row-start-2 flex flex-col items-center justify-center gap-0.5 px-1">
@@ -152,9 +154,11 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
               <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
-            <div className="col-start-3 row-start-2 min-w-0 flex items-center gap-2 justify-end">
-              <span className="font-medium text-sm truncate overflow-hidden text-right">{match.awayTeam.name}</span>
-              <TeamLogo team={match.awayTeam} size="sm" />
+            <div className="col-start-3 row-start-2 min-w-0 flex items-center gap-2 justify-start">
+              <span className="font-medium text-sm min-w-0 truncate overflow-hidden whitespace-nowrap">{match.awayTeam.name}</span>
+              <div className="shrink-0">
+                <TeamLogo team={match.awayTeam} size="sm" />
+              </div>
             </div>
           </div>
 

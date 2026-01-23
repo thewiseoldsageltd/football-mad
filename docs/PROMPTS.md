@@ -3423,3 +3423,59 @@ Return a short summary of what changed + which files.
 
 ---
 
+Fix D) mobile truncation in match cards by changing the small-screen layout to a true 3-column grid: [home | kickoff | away], with home/away names hugging the kickoff time (towards centre), not the outer edges.
+
+CONSTRAINTS:
+- Do NOT change data fetching, sorting, grouping, or backend.
+- Do NOT rework desktop layout unless needed; scope changes to mobile (base) with `sm:`/`md:` overrides.
+- No long test loops: make changes, run typecheck once, quick manual visual check only.
+
+WHAT TO CHANGE
+1) Find the match card component used in /matches list (likely `client/src/components/EnhancedMatchCard.tsx`).
+   Locate the section that renders:
+   - home crest + home name (left)
+   - kickoff time (centre)
+   - away name + away crest (right)
+
+2) On MOBILE (base classes), implement this structure:
+   - Wrap the “main row” in:
+     `grid grid-cols-[1fr_auto_1fr] items-center gap-3`
+   - HOME column (left):
+     `min-w-0 flex items-center justify-end gap-2`
+     (IMPORTANT: justify-end makes the name hug the centre)
+     Inside it:
+       crest (fixed size)
+       name with `min-w-0 truncate text-left` (or text-right if you prefer, but must truncate correctly)
+   - KICKOFF column (middle):
+     `flex flex-col items-center justify-center`
+     include the competition pill above time if currently there, but ensure it does NOT affect the row’s width:
+       - pill should be centered and `max-w-full`
+       - time stays centered
+   - AWAY column (right):
+     `min-w-0 flex items-center justify-start gap-2`
+     Inside it:
+       name with `min-w-0 truncate text-right` (or text-left, but truncate correctly)
+       crest (fixed size)
+
+3) Ensure NO OVERFLOW / BLEED:
+   - Apply `min-w-0` to both home and away containers AND the name span.
+   - Names must use `truncate overflow-hidden whitespace-nowrap`.
+   - Crests must be fixed: e.g. `shrink-0 w-10 h-10` (whatever you currently use).
+
+4) Keep DESKTOP behaviour as-is:
+   - Use `sm:` or `md:` to restore the existing desktop flex layout if needed.
+   Example pattern:
+   - Mobile: grid (as above)
+   - `sm:flex sm:items-center sm:justify-between` for your current desktop row
+
+ACCEPTANCE CHECKS (manual, quick):
+- On mobile, Derby and West Brom should display far less truncation (ideally full on common names).
+- Home/away names should visually “hug” the centre time.
+- No horizontal scrolling; away team must not bleed off-screen.
+
+After implementation:
+- run `npm run typecheck` (or repo equivalent) once.
+- reply with the exact file(s) changed and what classes/structure you used.
+
+---
+
