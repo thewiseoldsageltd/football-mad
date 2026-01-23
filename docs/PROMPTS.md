@@ -3575,3 +3575,38 @@ DELIVERABLE
 
 ---
 
+You are working in the Football Mad repo (React + Tailwind). Do NOT run long test loops. Make only targeted changes and do a single quick manual sanity check by running the dev server and visually inspecting /matches.
+
+Goal: Fix match card spacing/alignment on desktop + mobile so crests don’t drift with team-name length, spacing feels balanced on desktop, and truncation is consistent.
+
+Requirements:
+1) Update the match card layout (likely EnhancedMatchCard.tsx / MatchCard component) to use a consistent 3-column grid for the main row:
+   - Left: Home team block (crest + name)
+   - Middle: Competition pill (top) + kickoff time (below)
+   - Right: Away team block (name + crest)
+2) Inside each team block, use a 2-column layout with fixed crest width and a flexible name column:
+   - Crest column fixed width (e.g., w-10 or w-11)
+   - Name column uses min-w-0 and truncate
+   - Home team: crest then name
+   - Away team: name then crest (mirror)
+3) Desktop: prevent teams being pushed to far edges.
+   - The internal “main row” grid should be centered and capped with a max width (e.g., max-w-[820px] mx-auto w-full) while the card can remain full width.
+4) Mobile: keep the same structure but ensure it stacks nicely within the card and doesn’t cause overflow.
+   - Middle column (kickoff) should have a sensible min-width (e.g., min-w-[72px]) so names don’t squeeze it unpredictably.
+   - Ensure no horizontal overflow; apply overflow-hidden where needed.
+5) Keep the competition pill above the kickoff time in the middle column.
+6) Do not reintroduce country text into the pill label. The pill should remain just the league name (flag already indicates country).
+7) After change, do ONE quick check:
+   - /matches on mobile viewport shows “Derby” and “West Brom” fully (or at least far less truncated than before) and crests aligned.
+   - Desktop spacing feels balanced (teams not hugging center weirdly, not stretched to far edges).
+
+Implementation notes:
+- Prefer Tailwind utility classes. Use CSS grid and min-w-0 + truncate.
+- Keep existing data/model logic unchanged; this is a layout-only change.
+
+Deliverable:
+- Provide the minimal code diff with the updated component(s).
+- No lengthy automated test loops. One manual visual sanity check only.
+
+---
+

@@ -123,25 +123,19 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
       )}
       <Card className="hover-elevate active-elevate-2 overflow-hidden">
         <CardContent className={`p-4 ${isLive ? "pl-5" : ""} overflow-hidden`}>
-          {/* Mobile: pill on its own row */}
-          <div className="flex justify-center mb-2 sm:hidden">
-            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
-          </div>
+          {/* Main row: 3-column grid - Home | Middle (pill + time) | Away */}
+          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 sm:gap-x-4 items-center max-w-[820px] mx-auto w-full">
+            {/* Home team block: fixed crest + flexible name */}
+            <div className="min-w-0 grid grid-cols-[2.5rem_1fr] gap-2 items-center">
+              <div className="w-10 h-10 shrink-0">
+                <TeamLogo team={match.homeTeam} size="sm" />
+              </div>
+              <span className="font-medium text-sm min-w-0 truncate">{match.homeTeam.name}</span>
+            </div>
 
-          {/* Desktop: 2-row grid with pill above teams */}
-          <div className="hidden sm:grid grid-cols-[1fr_auto_1fr] grid-rows-[auto_auto] gap-x-3 gap-y-1">
-            <div className="col-start-2 row-start-1 flex justify-center">
+            {/* Middle: pill above kickoff time */}
+            <div className="flex flex-col items-center justify-center gap-1 min-w-[72px] px-1 sm:px-3">
               <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
-            </div>
-
-            <div className="col-start-1 row-start-2 min-w-0 flex items-center gap-2">
-              <div className="shrink-0">
-                <TeamLogo team={match.homeTeam} size="sm" />
-              </div>
-              <span className="font-medium text-sm min-w-0 truncate">{match.homeTeam.name}</span>
-            </div>
-
-            <div className="col-start-2 row-start-2 flex flex-col items-center justify-center gap-0.5 px-2">
               {showScore ? (
                 <div className="text-xl font-bold tabular-nums whitespace-nowrap">
                   {match.homeScore} – {match.awayScore}
@@ -156,41 +150,10 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
               <StatusBadge status={match.status} minute={match.minute} />
             </div>
 
-            <div className="col-start-3 row-start-2 min-w-0 flex items-center gap-2 justify-end">
+            {/* Away team block: flexible name + fixed crest (mirrored) */}
+            <div className="min-w-0 grid grid-cols-[1fr_2.5rem] gap-2 items-center">
               <span className="font-medium text-sm min-w-0 truncate text-right">{match.awayTeam.name}</span>
-              <div className="shrink-0">
-                <TeamLogo team={match.awayTeam} size="sm" />
-              </div>
-            </div>
-          </div>
-
-          {/* Mobile: 3-column teams row (no pill here, already above) */}
-          <div className="grid grid-cols-[1fr_auto_1fr] gap-x-2 items-center sm:hidden">
-            <div className="min-w-0 flex items-center gap-2 justify-end">
-              <div className="shrink-0">
-                <TeamLogo team={match.homeTeam} size="sm" />
-              </div>
-              <span className="font-medium text-sm min-w-0 truncate">{match.homeTeam.name}</span>
-            </div>
-
-            <div className="flex flex-col items-center justify-center gap-0.5 px-1">
-              {showScore ? (
-                <div className="text-xl font-bold tabular-nums whitespace-nowrap">
-                  {match.homeScore} – {match.awayScore}
-                </div>
-              ) : match.status === "postponed" ? (
-                <div className="text-sm text-muted-foreground font-medium">TBC</div>
-              ) : (
-                <div className="text-lg font-bold tabular-nums whitespace-nowrap">
-                  {format(kickoffTime, "HH:mm")}
-                </div>
-              )}
-              <StatusBadge status={match.status} minute={match.minute} />
-            </div>
-
-            <div className="min-w-0 flex items-center gap-2 justify-start">
-              <span className="font-medium text-sm min-w-0 truncate">{match.awayTeam.name}</span>
-              <div className="shrink-0">
+              <div className="w-10 h-10 shrink-0">
                 <TeamLogo team={match.awayTeam} size="sm" />
               </div>
             </div>
