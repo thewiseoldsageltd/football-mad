@@ -4576,3 +4576,30 @@ Return:
 
 ---
 
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+Bug: Tables UI shows "Team undefined" for every row, even though /api/standings returns team objects.
+
+API row shape:
+{
+  position: number,
+  team: { id: string, name: string, slug: string, crestUrl: string|null },
+  played, won, drawn, lost, goalsFor, goalsAgainst, goalDifference, points, recentForm
+}
+
+Please fix the client mapping (mapApiToTableRow) so that:
+- team name uses apiRow.team.name
+- team slug uses apiRow.team.slug
+- crest uses apiRow.team.crestUrl (fallback to null)
+- remove any fallback label like "Team undefined" unless team is genuinely missing
+
+Do not change table layout/styling.
+
+Return:
+- files changed
+- the updated mapping function
+- 2 manual verification steps
+
+---

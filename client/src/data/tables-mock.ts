@@ -1,6 +1,8 @@
 export interface TableRow {
   pos: number;
   teamName: string;
+  teamSlug?: string;
+  teamCrestUrl?: string | null;
   played: number;
   won: number;
   drawn: number;

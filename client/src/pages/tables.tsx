@@ -46,8 +46,12 @@ function normalizeSeason(input: string | null | undefined): string | undefined {
 
 interface StandingsApiRow {
   position: number;
-  teamId: string;
-  teamName?: string;
+  team: {
+    id: string;
+    name: string;
+    slug: string;
+    crestUrl: string | null;
+  };
   played: number;
   won: number;
   drawn: number;
@@ -71,7 +75,9 @@ interface StandingsApiResponse {
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
   return {
     pos: row.position,
-    teamName: row.teamName || `Team ${row.teamId}`,
+    teamName: row.team?.name ?? "Unknown Team",
+    teamSlug: row.team?.slug,
+    teamCrestUrl: row.team?.crestUrl ?? null,
     played: row.played,
     won: row.won,
     drawn: row.drawn,
