@@ -4874,3 +4874,47 @@ Please implement the changes now.
 
 ---
 
+IMPORTANT:
+- Do NOT run automated end-to-end testing, screenshot/video capture, or long verification loops.
+- Do NOT run test suites unless explicitly asked.
+- Make minimal code changes and stop with a short summary + files changed.
+
+Problem:
+POST /api/jobs/upsert-goalserve-standings?leagueId=1205 fails with:
+"Missing teams - cannot ingest standings until all teams exist"
+It lists missingTeamIds and missingTeamNames (Championship clubs).
+
+Goal:
+For dev phase, standings ingestion should automatically upsert any missing teams from the standings payload BEFORE inserting standings rows. Then it should ingest standings normally.
+
+Implementation requirements:
+1) Update server/jobs/upsert-goalserve-standings.ts:
+   - While parsing teamRows from Goalserve payload, collect:
+     - goalserveTeamId (team.id)
+     - team name (team.name)
+   - Before inserting standings rows, ensure each referenced goalserveTeamId exists in our teams table.
+   - For missing teams, UPSERT them:
+     - name = team.name
+     - slug = slugify(team.name) (same approach used elsewhere in the repo)
+     - goalserveTeamId = team.id
+     - competition/league link if your schema supports it; if not, just create team records.
+   - After upserting, proceed with standings snapshot insert.
+
+2) Keep the existing defensive checks, but change behavior:
+   - Instead of returning an error when teams are missing, auto-create them and continue.
+
+3) Ensure this change does NOT break Premier League (1204).
+   - It should simply find all teams exist and continue as before.
+
+4) Targeted verification only:
+   - Re-run Championship ingest call; expect ok:true and insertedRowsCount (likely 24).
+   - Then GET /api/standings?leagueId=1205&season=2025/2026 should return a table array.
+
+Return:
+- files changed
+- summary of the team upsert logic
+- the two curl commands to verify (POST ingest + GET standings)
+- do not run broad tests or create test videos
+
+---
+

@@ -49,6 +49,13 @@ function toInt(value: unknown, fallback = 0): number {
   return isNaN(parsed) ? fallback : parsed;
 }
 
+function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 interface GoalserveStatBlock {
   gp?: string;
   w?: string;
@@ -203,23 +210,36 @@ export async function upsertGoalserveStandings(
 
   const teamIdMap = new Map(existingTeams.map((t) => [t.goalserveTeamId, t.id]));
 
-  const missingTeams: { goalserveTeamId: string; name: string }[] = [];
-  for (const row of teamRows) {
-    if (!teamIdMap.has(row.id)) {
-      missingTeams.push({ goalserveTeamId: row.id, name: row.name });
+  // Auto-create missing teams (dev convenience)
+  const missingTeamRows = teamRows.filter((row) => !teamIdMap.has(row.id));
+  if (missingTeamRows.length > 0) {
+    console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} AUTO-CREATING ${missingTeamRows.length} teams`);
+    
+    for (const row of missingTeamRows) {
+      const [inserted] = await db
+        .insert(teams)
+        .values({
+          name: row.name,
+          slug: slugify(row.name),
+          goalserveTeamId: row.id,
+        })
+        .onConflictDoNothing()
+        .returning({ id: teams.id });
+      
+      if (inserted) {
+        teamIdMap.set(row.id, inserted.id);
+      } else {
+        // If onConflictDoNothing triggered, fetch the existing team
+        const [existing] = await db
+          .select({ id: teams.id })
+          .from(teams)
+          .where(eq(teams.goalserveTeamId, row.id))
+          .limit(1);
+        if (existing) {
+          teamIdMap.set(row.id, existing.id);
+        }
+      }
     }
-  }
-
-  if (missingTeams.length > 0) {
-    console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} MISSING ${missingTeams.length} teams`);
-    return {
-      ok: false,
-      leagueId,
-      season,
-      insertedRowsCount: 0,
-      error: "Missing teams - cannot ingest standings until all teams exist",
-      missingTeams,
-    };
   }
 
   // Compute hash from normalized numeric values to detect actual data changes
