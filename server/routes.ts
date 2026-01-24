@@ -1727,13 +1727,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const leagueId = req.query.leagueId as string;
       const season = req.query.season as string | undefined;
+      const force = req.query.force === "1";
 
       if (!leagueId) {
         return res.status(400).json({ ok: false, error: "leagueId query param required" });
       }
 
       try {
-        const result = await upsertGoalserveStandings(leagueId, season);
+        const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
         if (!result.ok && result.missingTeams && result.missingTeams.length > 0) {
           return res.status(409).json({
             error: result.error,
@@ -1746,6 +1747,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.json(result);
       } catch (error) {
         console.error("Standings upsert error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
+  // ========== PURGE STANDINGS (dev-only for fixing bad data) ==========
+  app.post(
+    "/api/jobs/purge-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      const season = req.query.season as string;
+
+      if (!leagueId || !season) {
+        return res.status(400).json({ ok: false, error: "leagueId and season query params required" });
+      }
+
+      try {
+        // Find all snapshots for this league+season
+        const snapshotsToPurge = await db
+          .select({ id: standingsSnapshots.id })
+          .from(standingsSnapshots)
+          .where(and(
+            eq(standingsSnapshots.leagueId, leagueId),
+            eq(standingsSnapshots.season, season)
+          ));
+
+        const snapshotIds = snapshotsToPurge.map(s => s.id);
+        
+        let deletedRowsCount = 0;
+        let deletedSnapshotsCount = 0;
+
+        if (snapshotIds.length > 0) {
+          // Delete rows first (foreign key constraint)
+          const rowsResult = await db
+            .delete(standingsRows)
+            .where(inArray(standingsRows.snapshotId, snapshotIds))
+            .returning({ id: standingsRows.id });
+          deletedRowsCount = rowsResult.length;
+
+          // Then delete snapshots
+          const snapshotsResult = await db
+            .delete(standingsSnapshots)
+            .where(inArray(standingsSnapshots.id, snapshotIds))
+            .returning({ id: standingsSnapshots.id });
+          deletedSnapshotsCount = snapshotsResult.length;
+        }
+
+        console.log(`[PurgeStandings] leagueId=${leagueId} season=${season} deletedSnapshots=${deletedSnapshotsCount} deletedRows=${deletedRowsCount}`);
+
+        res.json({
+          ok: true,
+          leagueId,
+          season,
+          deletedSnapshotsCount,
+          deletedRowsCount,
+        });
+      } catch (error) {
+        console.error("Purge standings error:", error);
         res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
       }
     }
@@ -1779,7 +1839,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (nowMs - lastRun >= STANDINGS_REFRESH_COOLDOWN_MS) {
           standingsAutoRefreshThrottle.set(throttleKey, nowMs);
           try {
-            const result = await upsertGoalserveStandings(leagueId, season);
+            const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
             if (result.ok) {
               console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
             } else {

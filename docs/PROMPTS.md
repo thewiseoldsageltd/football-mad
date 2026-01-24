@@ -5078,3 +5078,48 @@ Make the edits, keep formatting consistent, and ensure TypeScript types compile.
 
 ---
 
+Implement a safe dev-only purge + force reingest flow for standings snapshots, so we can replace earlier bad Championship snapshots that stored null teamIds (showing team names as numbers like "9227").
+
+GOAL:
+- Add a protected endpoint/job to purge standings snapshots for a given leagueId + season.
+- Add a force mode to upsert-goalserve-standings so we can override the "skipped" optimization.
+- After purge + ingest, the /api/standings response must have no team.id null and no numeric-only team.name values.
+
+CHANGES REQUIRED:
+
+A) Add purge endpoint (protected)
+- In server/routes.ts (or wherever your job routes live), add:
+  POST /api/jobs/purge-standings?leagueId=XXXX&season=YYYY/YYYY
+  Requires header "x-sync-secret" to match GOALSERVE_SYNC_SECRET (same as other jobs).
+- It should delete, in the correct order:
+  1) standings rows for all snapshots matching leagueId+season
+  2) standings snapshots matching leagueId+season
+- Return JSON: { ok: true, leagueId, season, deletedSnapshotsCount, deletedRowsCount }
+
+Notes:
+- Use your existing DB layer. If your schema has tables like standings_snapshots + standings_rows, delete rows first, then snapshots.
+- If your schema names differ, locate the tables used by upsert-goalserve-standings.ts and purge those.
+
+B) Add force param to upsert-goalserve-standings
+- In server/jobs/upsert-goalserve-standings.ts:
+  - Accept query param force=1 from the route calling it (or accept an options arg).
+  - If force=1, bypass "skipped" behavior and ALWAYS write a new snapshot + rows.
+
+C) Ensure numeric team names never persist
+- In getTeamDisplayName():
+  - If the derived name is numeric-only (e.g. "9227"), treat as missing and fallback to `Team ${goalserveTeamId}`.
+- When inserting teams, always store a non-numeric name (fallback as above).
+
+ACCEPTANCE TEST:
+1) Purge Championship standings:
+   POST /api/jobs/purge-standings?leagueId=1205&season=2025/2026  (with x-sync-secret header)
+2) Re-ingest with force:
+   POST /api/jobs/upsert-goalserve-standings?leagueId=1205&force=1  (with x-sync-secret header)
+3) GET /api/standings?leagueId=1205&season=2025/2026 should contain:
+   - no `"id":null`
+   - no `"name":"9227"` (worst case should be `"name":"Team 9227"` until we enrich)
+
+Do not change client code in this prompt.
+
+---
+

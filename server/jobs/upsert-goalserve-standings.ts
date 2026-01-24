@@ -217,10 +217,16 @@ interface UpsertStandingsResult {
   };
 }
 
+export interface UpsertStandingsOptions {
+  seasonParam?: string;
+  force?: boolean;
+}
+
 export async function upsertGoalserveStandings(
   leagueId: string,
-  seasonParam?: string
+  options: UpsertStandingsOptions = {}
 ): Promise<UpsertStandingsResult> {
+  const { seasonParam, force = false } = options;
   let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
   if (seasonParam) {
     url += `&season=${encodeURIComponent(seasonParam)}`;
@@ -357,7 +363,7 @@ export async function upsertGoalserveStandings(
     .orderBy(desc(standingsSnapshots.asOf))
     .limit(1);
 
-  if (latestSnapshot?.payloadHash === payloadHash) {
+  if (latestSnapshot?.payloadHash === payloadHash && !force) {
     console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} NO CHANGE (hash match)`);
     return {
       ok: true,
@@ -368,6 +374,10 @@ export async function upsertGoalserveStandings(
       snapshotId: latestSnapshot.id,
       skipped: true,
     };
+  }
+
+  if (force) {
+    console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} FORCE mode - bypassing hash check`);
   }
 
   const result = await db.transaction(async (tx) => {
