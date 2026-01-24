@@ -4371,3 +4371,54 @@ After fixing, rerun the same job and it should insert 20 rows for leagueId=1204.
 
 ---
 
+Our standings ingestion job currently returns:
+{"ok":false,"leagueId":"1204","season":"","insertedRowsCount":0,"error":"No team rows in standings"}
+
+This indicates we are reading the wrong JSON path and/or not normalizing Goalserve object/array variants.
+
+Please update /api/jobs/upsert-goalserve-standings to correctly locate tournament + team rows.
+
+Ground truth (from curl):
+payload shape is:
+{
+  "standings": {
+    "timestamp": "DD.MM.YYYY HH:mm:ss",
+    "tournament": {
+      "season": "2025/2026",
+      "stage_id": "...",
+      "team": [ { id, name, position, overall/home/away/total... }, ... ]
+    }
+  }
+}
+
+Required changes:
+
+1) Resolve standings root safely:
+const s = payload?.standings ?? payload
+
+2) Resolve tournament safely:
+const tRaw = s?.tournament
+const t = Array.isArray(tRaw) ? tRaw[0] : tRaw
+
+3) Resolve teams safely:
+const teamRaw = t?.team
+const teams = Array.isArray(teamRaw) ? teamRaw : (teamRaw ? [teamRaw] : [])
+
+4) Use these for metadata:
+season = t?.season || ""
+stageId = t?.stage_id || null
+leagueId = t?.id || t?.gid || request leagueId
+
+5) If teams is empty:
+Return ok:false with a debug object:
+- payloadTopKeys = Object.keys(payload||{})
+- standingsKeys = Object.keys(s||{})
+- tournamentType = typeof tRaw + (Array.isArray(tRaw) ? " array" : "")
+- tournamentKeys = Object.keys(t||{})
+- teamType = typeof teamRaw + (Array.isArray(teamRaw) ? " array" : "")
+- teamCount = teams.length
+
+6) Do not change DB schema. Only fix parsing + add debug info.
+
+---
+

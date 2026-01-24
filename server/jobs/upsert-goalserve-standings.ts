@@ -87,6 +87,10 @@ interface UpsertStandingsResult {
     timestampType: string;
     payloadTopKeys: string[];
     standingsKeys: string[];
+    tournamentType?: string;
+    tournamentKeys?: string[];
+    teamType?: string;
+    teamCount?: number;
   };
 }
 
@@ -110,17 +114,32 @@ export async function upsertGoalserveStandings(
     };
   }
 
-  const data = await response.json();
-  const standings = data?.standings;
+  const payload = await response.json();
   
+  // Resolve standings root safely
+  const s = payload?.standings ?? payload;
+  
+  // Resolve tournament safely (may be object or array)
+  const tRaw = s?.tournament;
+  const t = Array.isArray(tRaw) ? tRaw[0] : tRaw;
+  
+  // Resolve teams safely (may be array or single object)
+  const teamRaw = t?.team;
+  const teamRows: GoalserveTeamRow[] = Array.isArray(teamRaw) ? teamRaw : (teamRaw ? [teamRaw] : []);
+  
+  // Build comprehensive debug info
   const debugInfo = {
-    timestampRaw: standings?.timestamp,
-    timestampType: typeof standings?.timestamp,
-    payloadTopKeys: Object.keys(data || {}),
-    standingsKeys: Object.keys(standings || {}),
+    timestampRaw: s?.timestamp,
+    timestampType: typeof s?.timestamp + (Array.isArray(s?.timestamp) ? " array" : ""),
+    payloadTopKeys: Object.keys(payload || {}),
+    standingsKeys: Object.keys(s || {}),
+    tournamentType: typeof tRaw + (Array.isArray(tRaw) ? " array" : ""),
+    tournamentKeys: Object.keys(t || {}),
+    teamType: typeof teamRaw + (Array.isArray(teamRaw) ? " array" : ""),
+    teamCount: teamRows.length,
   };
 
-  if (!standings) {
+  if (!s) {
     return {
       ok: false,
       leagueId,
@@ -131,7 +150,7 @@ export async function upsertGoalserveStandings(
     };
   }
 
-  const timestampRaw = standings.timestamp;
+  const timestampRaw = s.timestamp;
   let asOf: Date;
   try {
     asOf = parseGoalserveTimestamp(timestampRaw);
@@ -146,8 +165,7 @@ export async function upsertGoalserveStandings(
     };
   }
 
-  const tournament = standings.tournament;
-  if (!tournament) {
+  if (!t) {
     return {
       ok: false,
       leagueId,
@@ -158,15 +176,9 @@ export async function upsertGoalserveStandings(
     };
   }
 
-  const season = tournament.season || seasonParam || "";
-  const stageId = tournament.stage_id || null;
-
-  let teamRows: GoalserveTeamRow[] = [];
-  if (Array.isArray(tournament.team)) {
-    teamRows = tournament.team;
-  } else if (tournament.team) {
-    teamRows = [tournament.team];
-  }
+  // Extract metadata from resolved tournament
+  const season = t?.season || seasonParam || "";
+  const stageId = t?.stage_id || null;
 
   if (teamRows.length === 0) {
     return {
@@ -175,6 +187,7 @@ export async function upsertGoalserveStandings(
       season,
       insertedRowsCount: 0,
       error: "No team rows in standings",
+      debug: debugInfo,
     };
   }
 
@@ -205,7 +218,7 @@ export async function upsertGoalserveStandings(
     };
   }
 
-  const payloadHash = computeHash(tournament.team);
+  const payloadHash = computeHash(t.team);
 
   const [latestSnapshot] = await db
     .select({ id: standingsSnapshots.id, payloadHash: standingsSnapshots.payloadHash })
