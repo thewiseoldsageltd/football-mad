@@ -1638,6 +1638,88 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== DEBUG GOALSERVE STANDINGS ==========
+  app.post(
+    "/api/jobs/debug-goalserve-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      const season = req.query.season as string | undefined;
+
+      if (!leagueId) {
+        return res.status(400).json({ error: "leagueId query param required" });
+      }
+
+      try {
+        const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
+        let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
+        if (season) {
+          url += `&season=${encodeURIComponent(season)}`;
+        }
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          return res.json({ ok: false, error: `Goalserve API returned ${response.status}`, leagueId });
+        }
+
+        const data = await response.json();
+        const standings = data?.standings;
+        if (!standings) {
+          return res.json({ ok: false, error: "No standings object in response", leagueId });
+        }
+
+        const tournament = standings.tournament;
+        if (!tournament) {
+          return res.json({ ok: false, error: "No tournament object in response", leagueId });
+        }
+
+        let teamRows: { id: string; name: string; position: string }[] = [];
+        if (Array.isArray(tournament.team)) {
+          teamRows = tournament.team;
+        } else if (tournament.team) {
+          teamRows = [tournament.team];
+        }
+
+        const goalserveTeamIds = teamRows.map((t) => t.id);
+        const existingTeams = await db
+          .select({ goalserveTeamId: teams.goalserveTeamId })
+          .from(teams)
+          .where(inArray(teams.goalserveTeamId, goalserveTeamIds));
+
+        const existingSet = new Set(existingTeams.map((t) => t.goalserveTeamId));
+        const missingTeamIds = goalserveTeamIds.filter((id) => !existingSet.has(id));
+        const missingTeams = teamRows.filter((t) => missingTeamIds.includes(t.id)).map((t) => ({
+          goalserveTeamId: t.id,
+          name: t.name,
+        }));
+
+        res.json({
+          ok: true,
+          leagueId,
+          season: tournament.season || season || "",
+          fetchedAt: new Date().toISOString(),
+          tournament: {
+            league: tournament.league,
+            season: tournament.season,
+            stageId: tournament.stage_id,
+            timestamp: standings.timestamp,
+          },
+          sampleTeams: teamRows.slice(0, 3).map((t) => ({
+            id: t.id,
+            name: t.name,
+            position: t.position,
+          })),
+          totalTeams: teamRows.length,
+          missingTeams,
+          missingCount: missingTeams.length,
+        });
+      } catch (error) {
+        console.error("Debug standings error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
   // ========== GOALSERVE STANDINGS UPSERT ==========
   app.post(
     "/api/jobs/upsert-goalserve-standings",

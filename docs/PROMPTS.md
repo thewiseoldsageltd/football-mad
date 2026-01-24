@@ -4314,3 +4314,23 @@ Ensure:
 
 ---
 
+Add a debug-only job endpoint:
+
+POST /api/jobs/debug-goalserve-standings?leagueId=<id>&season=<optional>
+
+Requirements:
+- Secured by x-sync-secret
+- Fetch the Goalserve standings feed (same URL as ingestion)
+- Do NOT write to DB
+- Return:
+  - leagueId
+  - season
+  - fetchedAt
+  - tournament metadata
+  - first 3 team rows (id, name, position)
+  - list of team ids that do NOT resolve to teams.goalserveTeamId
+
+This endpoint is for diagnostics only.
+
+---
+
