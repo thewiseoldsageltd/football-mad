@@ -4455,3 +4455,23 @@ Implementation notes:
 
 ---
 
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT explore the UI beyond the specific change requested.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+We implemented FormPills and upgraded the tables UI. However, I want to remove any reliance on "updated mock data" in the production rendering path.
+
+Tasks:
+1) Ensure the LeagueTable/Standings table component reads `recentForm` from the real standings API response only.
+2) If `recentForm` is missing/null/empty, FormPills should render a subtle placeholder (e.g. "—") or render nothing (choose one approach consistently).
+3) Remove or isolate mock standings data so it is not used by the live /tables page. If mock data exists, keep it only in dev/demo/test files and not in the production component path.
+4) Do NOT change styling or layout otherwise.
+
+Return:
+- Which files were modified
+- Exactly where mock data was removed/isolated
+- A 4-bullet manual verification checklist for /tables (desktop + mobile)
+
+---
+

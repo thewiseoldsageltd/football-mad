@@ -44,99 +44,6 @@ export const cupCompetitions: Competition[] = [
   { id: "coppa-italia", name: "Coppa Italia", shortName: "CI", type: "cup" },
 ];
 
-export const premierLeagueTable: TableRow[] = [
-  { pos: 1, teamName: "Liverpool", played: 21, won: 15, drawn: 5, lost: 1, goalsFor: 52, goalsAgainst: 24, gd: 28, pts: 50, recentForm: "WWDWW" },
-  { pos: 2, teamName: "Arsenal", played: 21, won: 13, drawn: 5, lost: 3, goalsFor: 45, goalsAgainst: 22, gd: 23, pts: 44, recentForm: "WDWWL" },
-  { pos: 3, teamName: "Nottingham Forest", played: 21, won: 12, drawn: 5, lost: 4, goalsFor: 33, goalsAgainst: 24, gd: 9, pts: 41, recentForm: "DWWWD" },
-  { pos: 4, teamName: "Chelsea", played: 21, won: 11, drawn: 6, lost: 4, goalsFor: 42, goalsAgainst: 26, gd: 16, pts: 39, recentForm: "WDWDW" },
-  { pos: 5, teamName: "Manchester City", played: 21, won: 10, drawn: 5, lost: 6, goalsFor: 40, goalsAgainst: 25, gd: 15, pts: 35, recentForm: "WLDWL" },
-  { pos: 6, teamName: "Newcastle", played: 21, won: 10, drawn: 5, lost: 6, goalsFor: 35, goalsAgainst: 24, gd: 11, pts: 35, recentForm: "DWWDW" },
-  { pos: 7, teamName: "Bournemouth", played: 21, won: 9, drawn: 6, lost: 6, goalsFor: 32, goalsAgainst: 27, gd: 5, pts: 33, recentForm: "WDDWL" },
-  { pos: 8, teamName: "Brighton", played: 21, won: 9, drawn: 5, lost: 7, goalsFor: 34, goalsAgainst: 30, gd: 4, pts: 32, recentForm: "DLWWD" },
-  { pos: 9, teamName: "Aston Villa", played: 21, won: 8, drawn: 7, lost: 6, goalsFor: 30, goalsAgainst: 27, gd: 3, pts: 31, recentForm: "DDDWW" },
-  { pos: 10, teamName: "Fulham", played: 21, won: 8, drawn: 6, lost: 7, goalsFor: 28, goalsAgainst: 26, gd: 2, pts: 30, recentForm: "WDLDW" },
-  { pos: 11, teamName: "Tottenham", played: 21, won: 8, drawn: 5, lost: 8, goalsFor: 38, goalsAgainst: 32, gd: 6, pts: 29, recentForm: "LWWDL" },
-  { pos: 12, teamName: "Brentford", played: 21, won: 7, drawn: 6, lost: 8, goalsFor: 32, goalsAgainst: 34, gd: -2, pts: 27, recentForm: "DLWDW" },
-  { pos: 13, teamName: "West Ham", played: 21, won: 7, drawn: 5, lost: 9, goalsFor: 28, goalsAgainst: 35, gd: -7, pts: 26, recentForm: "LWDLL" },
-  { pos: 14, teamName: "Manchester United", played: 21, won: 6, drawn: 6, lost: 9, goalsFor: 26, goalsAgainst: 28, gd: -2, pts: 24, recentForm: "DLDLW" },
-  { pos: 15, teamName: "Crystal Palace", played: 21, won: 5, drawn: 8, lost: 8, goalsFor: 22, goalsAgainst: 28, gd: -6, pts: 23, recentForm: "DDDWL" },
-  { pos: 16, teamName: "Everton", played: 21, won: 5, drawn: 7, lost: 9, goalsFor: 20, goalsAgainst: 30, gd: -10, pts: 22, recentForm: "DLDDL" },
-  { pos: 17, teamName: "Wolves", played: 21, won: 5, drawn: 6, lost: 10, goalsFor: 24, goalsAgainst: 38, gd: -14, pts: 21, recentForm: "LDLWL" },
-  { pos: 18, teamName: "Leicester", played: 21, won: 4, drawn: 7, lost: 10, goalsFor: 24, goalsAgainst: 42, gd: -18, pts: 19, recentForm: "LLDLD" },
-  { pos: 19, teamName: "Ipswich", played: 21, won: 3, drawn: 8, lost: 10, goalsFor: 21, goalsAgainst: 40, gd: -19, pts: 17, recentForm: "DDLLD" },
-  { pos: 20, teamName: "Southampton", played: 21, won: 2, drawn: 5, lost: 14, goalsFor: 15, goalsAgainst: 45, gd: -30, pts: 11, recentForm: "LLLLD" },
-];
-
-export const laLigaTable: TableRow[] = [
-  { pos: 1, teamName: "Barcelona", played: 20, won: 15, drawn: 3, lost: 2, goalsFor: 52, goalsAgainst: 22, gd: 30, pts: 48 },
-  { pos: 2, teamName: "Real Madrid", played: 20, won: 14, drawn: 4, lost: 2, goalsFor: 48, goalsAgainst: 20, gd: 28, pts: 46 },
-  { pos: 3, teamName: "Atletico Madrid", played: 20, won: 13, drawn: 4, lost: 3, goalsFor: 38, goalsAgainst: 20, gd: 18, pts: 43 },
-  { pos: 4, teamName: "Athletic Bilbao", played: 20, won: 11, drawn: 5, lost: 4, goalsFor: 32, goalsAgainst: 20, gd: 12, pts: 38 },
-  { pos: 5, teamName: "Villarreal", played: 20, won: 10, drawn: 6, lost: 4, goalsFor: 35, goalsAgainst: 25, gd: 10, pts: 36 },
-  { pos: 6, teamName: "Real Sociedad", played: 20, won: 9, drawn: 5, lost: 6, goalsFor: 28, goalsAgainst: 23, gd: 5, pts: 32 },
-  { pos: 7, teamName: "Real Betis", played: 20, won: 8, drawn: 6, lost: 6, goalsFor: 26, goalsAgainst: 23, gd: 3, pts: 30 },
-  { pos: 8, teamName: "Girona", played: 20, won: 7, drawn: 6, lost: 7, goalsFor: 28, goalsAgainst: 28, gd: 0, pts: 27 },
-  { pos: 9, teamName: "Sevilla", played: 20, won: 6, drawn: 7, lost: 7, goalsFor: 24, goalsAgainst: 26, gd: -2, pts: 25 },
-  { pos: 10, teamName: "Valencia", played: 20, won: 4, drawn: 7, lost: 9, goalsFor: 18, goalsAgainst: 26, gd: -8, pts: 19 },
-];
-
-export const championshipTable: TableRow[] = [
-  { pos: 1, teamName: "Leeds United", played: 25, won: 18, drawn: 4, lost: 3, goalsFor: 52, goalsAgainst: 22, gd: 30, pts: 58 },
-  { pos: 2, teamName: "Sheffield United", played: 25, won: 17, drawn: 5, lost: 3, goalsFor: 48, goalsAgainst: 20, gd: 28, pts: 56 },
-  { pos: 3, teamName: "Burnley", played: 25, won: 15, drawn: 6, lost: 4, goalsFor: 44, goalsAgainst: 24, gd: 20, pts: 51 },
-  { pos: 4, teamName: "Sunderland", played: 25, won: 14, drawn: 6, lost: 5, goalsFor: 40, goalsAgainst: 26, gd: 14, pts: 48 },
-  { pos: 5, teamName: "Middlesbrough", played: 25, won: 13, drawn: 7, lost: 5, goalsFor: 38, goalsAgainst: 28, gd: 10, pts: 46 },
-  { pos: 6, teamName: "West Brom", played: 25, won: 12, drawn: 8, lost: 5, goalsFor: 35, goalsAgainst: 25, gd: 10, pts: 44 },
-  { pos: 7, teamName: "Watford", played: 25, won: 12, drawn: 6, lost: 7, goalsFor: 38, goalsAgainst: 30, gd: 8, pts: 42 },
-  { pos: 8, teamName: "Norwich City", played: 25, won: 11, drawn: 7, lost: 7, goalsFor: 34, goalsAgainst: 28, gd: 6, pts: 40 },
-  { pos: 9, teamName: "Coventry City", played: 25, won: 10, drawn: 8, lost: 7, goalsFor: 32, goalsAgainst: 28, gd: 4, pts: 38 },
-  { pos: 10, teamName: "Bristol City", played: 25, won: 10, drawn: 6, lost: 9, goalsFor: 30, goalsAgainst: 32, gd: -2, pts: 36 },
-];
-
-export const leagueOneTable: TableRow[] = [
-  { pos: 1, teamName: "Birmingham City", played: 25, won: 20, drawn: 3, lost: 2, goalsFor: 60, goalsAgainst: 18, gd: 42, pts: 63 },
-  { pos: 2, teamName: "Wrexham", played: 25, won: 17, drawn: 5, lost: 3, goalsFor: 52, goalsAgainst: 22, gd: 30, pts: 56 },
-  { pos: 3, teamName: "Wigan Athletic", played: 25, won: 15, drawn: 6, lost: 4, goalsFor: 45, goalsAgainst: 25, gd: 20, pts: 51 },
-  { pos: 4, teamName: "Huddersfield", played: 25, won: 14, drawn: 6, lost: 5, goalsFor: 40, goalsAgainst: 26, gd: 14, pts: 48 },
-  { pos: 5, teamName: "Reading", played: 25, won: 13, drawn: 7, lost: 5, goalsFor: 38, goalsAgainst: 28, gd: 10, pts: 46 },
-  { pos: 6, teamName: "Bolton", played: 25, won: 12, drawn: 8, lost: 5, goalsFor: 35, goalsAgainst: 25, gd: 10, pts: 44 },
-];
-
-export const leagueTwoTable: TableRow[] = [
-  { pos: 1, teamName: "Port Vale", played: 25, won: 18, drawn: 4, lost: 3, goalsFor: 48, goalsAgainst: 18, gd: 30, pts: 58 },
-  { pos: 2, teamName: "Doncaster", played: 25, won: 16, drawn: 6, lost: 3, goalsFor: 44, goalsAgainst: 20, gd: 24, pts: 54 },
-  { pos: 3, teamName: "Crewe", played: 25, won: 15, drawn: 5, lost: 5, goalsFor: 40, goalsAgainst: 22, gd: 18, pts: 50 },
-  { pos: 4, teamName: "Grimsby Town", played: 25, won: 14, drawn: 6, lost: 5, goalsFor: 38, goalsAgainst: 24, gd: 14, pts: 48 },
-  { pos: 5, teamName: "Chesterfield", played: 25, won: 13, drawn: 7, lost: 5, goalsFor: 36, goalsAgainst: 26, gd: 10, pts: 46 },
-  { pos: 6, teamName: "Notts County", played: 25, won: 12, drawn: 8, lost: 5, goalsFor: 34, goalsAgainst: 25, gd: 9, pts: 44 },
-];
-
-export const serieATable: TableRow[] = [
-  { pos: 1, teamName: "Inter Milan", played: 20, won: 14, drawn: 4, lost: 2, goalsFor: 42, goalsAgainst: 18, gd: 24, pts: 46 },
-  { pos: 2, teamName: "Napoli", played: 20, won: 13, drawn: 4, lost: 3, goalsFor: 38, goalsAgainst: 20, gd: 18, pts: 43 },
-  { pos: 3, teamName: "Juventus", played: 20, won: 12, drawn: 5, lost: 3, goalsFor: 36, goalsAgainst: 22, gd: 14, pts: 41 },
-  { pos: 4, teamName: "AC Milan", played: 20, won: 11, drawn: 5, lost: 4, goalsFor: 34, goalsAgainst: 24, gd: 10, pts: 38 },
-  { pos: 5, teamName: "Atalanta", played: 20, won: 10, drawn: 6, lost: 4, goalsFor: 38, goalsAgainst: 28, gd: 10, pts: 36 },
-  { pos: 6, teamName: "Lazio", played: 20, won: 10, drawn: 5, lost: 5, goalsFor: 32, goalsAgainst: 26, gd: 6, pts: 35 },
-];
-
-export const bundesligaTable: TableRow[] = [
-  { pos: 1, teamName: "Bayern Munich", played: 17, won: 12, drawn: 3, lost: 2, goalsFor: 46, goalsAgainst: 20, gd: 26, pts: 39 },
-  { pos: 2, teamName: "Bayer Leverkusen", played: 17, won: 11, drawn: 4, lost: 2, goalsFor: 42, goalsAgainst: 22, gd: 20, pts: 37 },
-  { pos: 3, teamName: "Borussia Dortmund", played: 17, won: 10, drawn: 4, lost: 3, goalsFor: 38, goalsAgainst: 24, gd: 14, pts: 34 },
-  { pos: 4, teamName: "RB Leipzig", played: 17, won: 10, drawn: 3, lost: 4, goalsFor: 36, goalsAgainst: 26, gd: 10, pts: 33 },
-  { pos: 5, teamName: "Stuttgart", played: 17, won: 9, drawn: 4, lost: 4, goalsFor: 34, goalsAgainst: 24, gd: 10, pts: 31 },
-  { pos: 6, teamName: "Eintracht Frankfurt", played: 17, won: 8, drawn: 5, lost: 4, goalsFor: 30, goalsAgainst: 22, gd: 8, pts: 29 },
-];
-
-export const ligue1Table: TableRow[] = [
-  { pos: 1, teamName: "PSG", played: 18, won: 14, drawn: 2, lost: 2, goalsFor: 48, goalsAgainst: 18, gd: 30, pts: 44 },
-  { pos: 2, teamName: "Monaco", played: 18, won: 12, drawn: 4, lost: 2, goalsFor: 40, goalsAgainst: 20, gd: 20, pts: 40 },
-  { pos: 3, teamName: "Marseille", played: 18, won: 11, drawn: 4, lost: 3, goalsFor: 36, goalsAgainst: 22, gd: 14, pts: 37 },
-  { pos: 4, teamName: "Lyon", played: 18, won: 10, drawn: 5, lost: 3, goalsFor: 34, goalsAgainst: 24, gd: 10, pts: 35 },
-  { pos: 5, teamName: "Lille", played: 18, won: 9, drawn: 6, lost: 3, goalsFor: 30, goalsAgainst: 22, gd: 8, pts: 33 },
-  { pos: 6, teamName: "Nice", played: 18, won: 8, drawn: 6, lost: 4, goalsFor: 28, goalsAgainst: 20, gd: 8, pts: 30 },
-];
 
 export const championsLeagueGroups: Record<string, TableRow[]> = {
   "Group A": [
@@ -309,29 +216,6 @@ export const tableViews = [
   { value: "home", label: "Home" },
   { value: "away", label: "Away" },
 ];
-
-export function getTableForCompetition(competitionId: string): TableRow[] {
-  switch (competitionId) {
-    case "premier-league":
-      return premierLeagueTable;
-    case "championship":
-      return championshipTable;
-    case "league-one":
-      return leagueOneTable;
-    case "league-two":
-      return leagueTwoTable;
-    case "la-liga":
-      return laLigaTable;
-    case "serie-a":
-      return serieATable;
-    case "bundesliga":
-      return bundesligaTable;
-    case "ligue-1":
-      return ligue1Table;
-    default:
-      return premierLeagueTable;
-  }
-}
 
 export function getGroupsForEuropeCompetition(competitionId: string): Record<string, TableRow[]> {
   switch (competitionId) {

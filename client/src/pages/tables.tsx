@@ -1,20 +1,60 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy } from "lucide-react";
+import { Trophy, Loader2 } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { RoundsList } from "@/components/tables/rounds-list";
 import { GroupSelector } from "@/components/tables/group-selector";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
+import { getGoalserveLeagueId } from "@/lib/league-config";
 import {
-  getTableForCompetition,
   getGroupsForEuropeCompetition,
   getRoundsForCup,
   knockoutRounds,
 } from "@/data/tables-mock";
+import type { TableRow } from "@/data/tables-mock";
+
+interface StandingsApiRow {
+  position: number;
+  teamId: string;
+  teamName?: string;
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+  recentForm?: string | null;
+}
+
+interface StandingsApiResponse {
+  leagueId: string;
+  season: string;
+  asOf: string;
+  rows: StandingsApiRow[];
+}
+
+function mapApiToTableRow(row: StandingsApiRow): TableRow {
+  return {
+    pos: row.position,
+    teamName: row.teamName || `Team ${row.teamId}`,
+    played: row.played,
+    won: row.won,
+    drawn: row.drawn,
+    lost: row.lost,
+    goalsFor: row.goalsFor,
+    goalsAgainst: row.goalsAgainst,
+    gd: row.goalDifference,
+    pts: row.points,
+    recentForm: row.recentForm ?? undefined,
+  };
+}
 
 type TopTab = "leagues" | "cups" | "europe";
 type EuropeView = "groups" | "knockout";
@@ -112,12 +152,69 @@ export default function TablesPage() {
   const currentGroupData = currentGroups[selectedGroup] || [];
   const currentCupRounds = getRoundsForCup(cupCompetition);
 
+  const goalserveLeagueId = useMemo(
+    () => getGoalserveLeagueId(leagueCompetition),
+    [leagueCompetition]
+  );
+
+  const apiSeason = useMemo(() => {
+    const parts = season.split("/");
+    if (parts.length === 2) {
+      return `${parts[0]}/20${parts[1]}`;
+    }
+    return season;
+  }, [season]);
+
+  const standingsUrl = goalserveLeagueId
+    ? `/api/standings?leagueId=${goalserveLeagueId}&season=${encodeURIComponent(apiSeason)}`
+    : null;
+
+  const { data: standingsData, isLoading: standingsLoading, error: standingsError } = useQuery<StandingsApiResponse>({
+    queryKey: [standingsUrl],
+    enabled: topTab === "leagues" && !!standingsUrl,
+  });
+
+  const tableRows = useMemo(() => {
+    if (!standingsData?.rows) return [];
+    return standingsData.rows.map(mapApiToTableRow);
+  }, [standingsData]);
+
   const renderLeaguesContent = () => {
-    const tableData = getTableForCompetition(leagueCompetition);
+    if (!goalserveLeagueId) {
+      return (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            Standings data not available for this competition.
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (standingsLoading) {
+      return (
+        <Card>
+          <CardContent className="p-6 flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Loading standings...</span>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (standingsError || tableRows.length === 0) {
+      return (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            No standings data available. Check back later.
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card>
         <CardContent className="p-4 sm:p-6">
-          <LeagueTable data={tableData} showZones={true} />
+          <LeagueTable data={tableRows} showZones={true} />
         </CardContent>
       </Card>
     );

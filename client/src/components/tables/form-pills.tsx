@@ -1,12 +1,12 @@
 import { memo } from "react";
 
 interface FormPillsProps {
-  form: string;
+  form?: string | null;
   maxPills?: number;
 }
 
 function FormPillsComponent({ form, maxPills }: FormPillsProps) {
-  if (!form) return null;
+  if (!form || form.trim() === "") return null;
   
   const results = form.toUpperCase().split("").slice(0, maxPills ?? form.length);
   
