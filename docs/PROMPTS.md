@@ -4603,3 +4603,37 @@ Return:
 - 2 manual verification steps
 
 ---
+
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+Change request: On /tables, desktop should be data-enriched by DEFAULT (no click-to-expand on desktop).
+Row expansion can remain MOBILE-only.
+
+Implement responsive table columns:
+
+1) Desktop (>= md breakpoint):
+Render full standings columns:
+Pos | Team | P | W | D | L | GF | GA | GD | Pts | Form
+- Pts bold
+- GD shows + for positive and subtle tint
+- Form uses existing FormPills (5 pills)
+- Keep zone indicator left border logic
+
+2) Mobile (< md breakpoint):
+Keep compact default:
+Pos | Team | Pts
+- Keep mobile expand/tap behaviour to show:
+  P, W/D/L, GF/GA, GD, Form (5 pills)
+
+3) Do NOT require desktop users to click rows to see core stats.
+4) Keep styling consistent with current design system.
+
+Return:
+- files changed
+- the exact breakpoint used (e.g. md)
+- 4 manual verification steps (desktop vs mobile)
+
+---
+

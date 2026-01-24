@@ -47,14 +47,18 @@ const ExpandedRowContent = memo(function ExpandedRowContent({ row }: ExpandedRow
           <span className="font-medium">{row.played}</span>
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">W/D/L:</span>
+          <span className="font-medium">{row.won}/{row.drawn}/{row.lost}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">GF/GA:</span>
+          <span className="font-medium">{row.goalsFor}/{row.goalsAgainst}</span>
+        </div>
+        <div className="flex items-center gap-2">
           <span className="text-muted-foreground">GD:</span>
           <span className={`font-medium ${getGDColorClass(row.gd)}`}>
             {formatGD(row.gd)}
           </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">W/D/L:</span>
-          <span className="font-medium">{row.won}/{row.drawn}/{row.lost}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">Form:</span>
@@ -85,39 +89,84 @@ const StandingsRow = memo(function StandingsRow({
   return (
     <>
       <TableRow
-        className={`${zoneClass} cursor-pointer md:cursor-default`}
+        className={`${zoneClass} md:cursor-default cursor-pointer`}
         data-testid={`row-table-${row.pos}`}
-        onClick={onToggle}
+        onClick={() => {
+          if (window.innerWidth < 768) {
+            onToggle();
+          }
+        }}
         role="row"
         aria-expanded={isExpanded}
         tabIndex={0}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
+          if ((e.key === "Enter" || e.key === " ") && window.innerWidth < 768) {
             e.preventDefault();
             onToggle();
           }
         }}
       >
+        {/* Position - always visible */}
         <TableCell className="text-center font-medium w-10">
           <span className="text-sm">{row.pos}</span>
         </TableCell>
+
+        {/* Team - always visible */}
         <TableCell>
           <div className="flex items-center gap-2 min-w-0">
             <TeamCrest teamName={row.teamName} size="sm" />
             <span className="font-medium text-sm truncate">{row.teamName}</span>
           </div>
         </TableCell>
-        <TableCell className="text-center w-12">
-          <span className="font-bold text-sm">{row.pts}</span>
+
+        {/* P (Played) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
+          <span className="text-sm">{row.played}</span>
         </TableCell>
-        <TableCell className="text-center hidden md:table-cell w-12">
+
+        {/* W (Won) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
+          <span className="text-sm">{row.won}</span>
+        </TableCell>
+
+        {/* D (Drawn) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
+          <span className="text-sm">{row.drawn}</span>
+        </TableCell>
+
+        {/* L (Lost) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
+          <span className="text-sm">{row.lost}</span>
+        </TableCell>
+
+        {/* GF (Goals For) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
+          <span className="text-sm">{row.goalsFor}</span>
+        </TableCell>
+
+        {/* GA (Goals Against) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
+          <span className="text-sm">{row.goalsAgainst}</span>
+        </TableCell>
+
+        {/* GD (Goal Difference) - desktop only */}
+        <TableCell className="text-center w-10 hidden md:table-cell">
           <span className={`text-sm ${getGDColorClass(row.gd)}`}>
             {formatGD(row.gd)}
           </span>
         </TableCell>
-        <TableCell className="hidden md:table-cell w-24">
-          <FormPills form={row.recentForm} showPlaceholder />
+
+        {/* Pts (Points) - always visible */}
+        <TableCell className="text-center w-12">
+          <span className="font-bold text-sm">{row.pts}</span>
         </TableCell>
+
+        {/* Form - desktop only */}
+        <TableCell className="hidden md:table-cell w-24">
+          <FormPills form={row.recentForm} maxPills={5} showPlaceholder />
+        </TableCell>
+
+        {/* Expand chevron - mobile only */}
         <TableCell className="md:hidden w-8 text-center">
           <ChevronDown 
             className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
@@ -125,6 +174,8 @@ const StandingsRow = memo(function StandingsRow({
           />
         </TableCell>
       </TableRow>
+
+      {/* Expanded row content - mobile only */}
       {isExpanded && (
         <tr className="md:hidden" data-testid={`row-expanded-${row.pos}`}>
           <td colSpan={4} className="p-0">
@@ -160,8 +211,14 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
             <TableRow>
               <TableHead className="w-10 text-center">Pos</TableHead>
               <TableHead>Team</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">P</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">W</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">D</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">L</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">GF</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">GA</TableHead>
+              <TableHead className="w-10 text-center hidden md:table-cell">GD</TableHead>
               <TableHead className="w-12 text-center font-semibold">Pts</TableHead>
-              <TableHead className="w-12 text-center hidden md:table-cell">GD</TableHead>
               <TableHead className="w-24 hidden md:table-cell">Form</TableHead>
               <TableHead className="md:hidden w-8"></TableHead>
             </TableRow>
