@@ -56,6 +56,55 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function getTeamDisplayName(row: GoalserveTeamRow): string {
+  // Priority: row.name is the standard field from Goalserve
+  if (row.name && typeof row.name === "string" && !/^\d+$/.test(row.name)) {
+    return row.name;
+  }
+  // Fallback to goalserve ID (rare)
+  return String(row.id);
+}
+
+async function ensureTeamId(
+  teamIdMap: Map<string, string>,
+  goalserveTeamId: string,
+  displayName: string
+): Promise<string> {
+  // Already in map
+  const existing = teamIdMap.get(goalserveTeamId);
+  if (existing) return existing;
+
+  // Try to insert, handle conflict
+  const [inserted] = await db
+    .insert(teams)
+    .values({
+      name: displayName,
+      slug: slugify(displayName),
+      goalserveTeamId,
+    })
+    .onConflictDoNothing()
+    .returning({ id: teams.id });
+
+  if (inserted) {
+    teamIdMap.set(goalserveTeamId, inserted.id);
+    return inserted.id;
+  }
+
+  // Conflict occurred - fetch existing
+  const [found] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.goalserveTeamId, goalserveTeamId))
+    .limit(1);
+
+  if (!found) {
+    throw new Error(`Failed to create or find team for goalserveTeamId=${goalserveTeamId}`);
+  }
+
+  teamIdMap.set(goalserveTeamId, found.id);
+  return found.id;
+}
+
 interface GoalserveStatBlock {
   gp?: string;
   w?: string;
@@ -208,38 +257,17 @@ export async function upsertGoalserveStandings(
     .from(teams)
     .where(inArray(teams.goalserveTeamId, goalserveTeamIds));
 
-  const teamIdMap = new Map(existingTeams.map((t) => [t.goalserveTeamId, t.id]));
-
-  // Auto-create missing teams (dev convenience)
-  const missingTeamRows = teamRows.filter((row) => !teamIdMap.has(row.id));
-  if (missingTeamRows.length > 0) {
-    console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} AUTO-CREATING ${missingTeamRows.length} teams`);
-    
-    for (const row of missingTeamRows) {
-      const [inserted] = await db
-        .insert(teams)
-        .values({
-          name: row.name,
-          slug: slugify(row.name),
-          goalserveTeamId: row.id,
-        })
-        .onConflictDoNothing()
-        .returning({ id: teams.id });
-      
-      if (inserted) {
-        teamIdMap.set(row.id, inserted.id);
-      } else {
-        // If onConflictDoNothing triggered, fetch the existing team
-        const [existing] = await db
-          .select({ id: teams.id })
-          .from(teams)
-          .where(eq(teams.goalserveTeamId, row.id))
-          .limit(1);
-        if (existing) {
-          teamIdMap.set(row.id, existing.id);
-        }
-      }
+  const teamIdMap = new Map<string, string>();
+  for (const t of existingTeams) {
+    if (t.goalserveTeamId) {
+      teamIdMap.set(t.goalserveTeamId, t.id);
     }
+  }
+
+  // Ensure all teams exist in DB (auto-create missing)
+  for (const row of teamRows) {
+    const displayName = getTeamDisplayName(row);
+    await ensureTeamId(teamIdMap, row.id, displayName);
   }
 
   // Compute hash from normalized numeric values to detect actual data changes
@@ -303,9 +331,15 @@ export async function upsertGoalserveStandings(
         ? row.recent_form 
         : (row.recent_form != null ? String(row.recent_form) : null);
       
+      // teamId is guaranteed by ensureTeamId loop above
+      const teamId = teamIdMap.get(row.id);
+      if (!teamId) {
+        throw new Error(`teamId not found for goalserveTeamId=${row.id} - this should never happen`);
+      }
+      
       return {
         snapshotId,
-        teamId: teamIdMap.get(row.id) || null,
+        teamId,
         teamGoalserveId: row.id,
         position: toInt(row.position),
         points: toInt(row.total?.p),

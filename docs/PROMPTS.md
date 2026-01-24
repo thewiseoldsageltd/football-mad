@@ -4918,3 +4918,163 @@ Return:
 
 ---
 
+You are working in the Football Mad repo.
+
+Goal: Fix Championship standings so:
+A) Team names never show as numeric Goalserve ids (e.g. "9227", "9240", "9363"). Every standings row must link to a real team record (teamId UUID), and team.name must be the proper team name.
+B) Tables zone stripes + legend are league-specific. Premier League keeps current behaviour, but Championship uses:
+   - 1st–2nd = Automatic Promotion (green)
+   - 3rd–6th = Playoffs (amber)
+   - Bottom 3 (22nd–24th) = Relegation (red)
+   No Champions League / Europa League wording for Championship.
+
+Implement with minimal disruption and keep existing PL working.
+
+----------------------------
+PART 1 — Server: Guarantee teamId mapping for ALL Goalserve teams
+----------------------------
+
+File: server/jobs/upsert-goalserve-standings.ts
+
+Problem:
+Some Championship rows are being saved with teamId = null, causing /api/standings to return team.name as the numeric Goalserve id.
+
+Fix:
+Introduce a helper that ALWAYS returns a UUID team id for a given goalserveTeamId, creating the team if missing, then selecting it back, and updating the in-memory map.
+
+Requirements:
+- Determine a reliable team display name from the Goalserve payload row.
+- If team doesn't exist, insert into teams table with:
+  - name: display name (NOT the numeric id)
+  - slug: slugify(name)
+  - goalserveTeamId: the numeric id string
+- Handle race conditions using onConflictDoNothing, then SELECT to get the id.
+- Update teamIdMap[goalserveTeamId] = uuid
+- Use this function when building standings rows so teamId is never null.
+
+Implementation guidance:
+
+1) Add helpers near the top (or appropriate section):
+- slugify(input: string): string
+- toInt(...) already exists
+- getTeamDisplayName(row: GoalserveTeamRow): string
+  It should return the team name from the feed. Use the best available field(s) in priority order (depending on your actual Goalserve shape), e.g:
+    row.name
+    row.team?.name
+    row.team_name
+    row.club_name
+  If nothing exists, fall back to goalserveTeamId (but this should be rare).
+
+2) Add:
+async function ensureTeamIdForGoalserveTeam(
+  db,
+  teamIdMap: Record<string,string>,
+  goalserveTeamId: string,
+  displayName: string
+): Promise<string>
+
+Pseudo:
+- if (teamIdMap[goalserveTeamId]) return it
+- try insert team { name: displayName, slug: slugify(displayName), goalserveTeamId }
+  with onConflictDoNothing on goalserveTeamId (or the appropriate unique constraint you already use)
+- then SELECT the team by goalserveTeamId
+- if still not found, throw a descriptive error (this should never happen)
+- set teamIdMap[goalserveTeamId] = team.id
+- return team.id
+
+3) When mapping teamRows into standings rows, do:
+const goalserveTeamId = String(row.id ?? row.team?.id ?? row.team_id).trim()
+const displayName = getTeamDisplayName(row)
+const teamId = await ensureTeamIdForGoalserveTeam(db, teamIdMap, goalserveTeamId, displayName)
+
+Then create standings row with teamId always set.
+
+4) Re-run:
+POST /api/jobs/upsert-goalserve-standings?leagueId=1205
+Then GET /api/standings?leagueId=1205&season=2025/2026
+Verify the response no longer contains:
+  "team":{"id":null,"name":"9227",...}
+All teams should have UUID ids and real names.
+
+----------------------------
+PART 2 — Client: League-specific zones + legend
+----------------------------
+
+Files:
+- client/src/lib/league-config.ts
+- client/src/components/tables/league-table.tsx
+- (if needed) client/src/pages/tables.tsx (only to pass league slug/config through)
+
+Approach:
+Define “standings zones” in league-config, then render stripes + legend from that config.
+
+1) In client/src/lib/league-config.ts:
+Add a type:
+type StandingsZone = { from: number; to: number; label: string; color: "emerald" | "amber" | "red" }
+
+Add optional property to each league config:
+standingsZones?: StandingsZone[]
+
+Premier League zones should match current UI intent:
+- 1–4: Champions League
+- 5: Europa League
+- 18–20: Relegation
+
+Championship zones:
+- 1–2: Automatic Promotion (emerald)
+- 3–6: Playoffs (amber)
+- 22–24: Relegation (red)
+
+2) In client/src/components/tables/league-table.tsx:
+Replace any hardcoded zone logic (pos <= 4, pos === 5, pos >= 18, etc.) with config-driven logic.
+
+Implement:
+function getZoneForPos(pos: number, zones?: StandingsZone[]) {
+  if (!zones) return null
+  return zones.find(z => pos >= z.from && pos <= z.to) ?? null
+}
+
+Stripe:
+- Keep your robust stripe implementation (absolute stripe inside first cell).
+- Determine stripe color class from zone.color:
+  emerald -> bg-emerald-500/70
+  amber   -> bg-amber-500/70
+  red     -> bg-red-500/70
+- If no zone, make stripe transparent.
+
+Legend:
+Render unique zone entries in order (as defined), showing the label and matching color.
+For Championship, legend must show:
+Automatic Promotion, Playoffs, Relegation
+For PL, legend remains Champions League, Europa League, Relegation
+
+3) Ensure LeagueTable receives zones:
+Either:
+- pass zones from Tables page (preferred): const league = getLeagueConfigBySlug(activeLeagueSlug); <LeagueTable zones={league.standingsZones} ... />
+or
+- LeagueTable can accept leagueSlug and look up config itself.
+
+Do whichever matches existing architecture with minimal changes.
+
+----------------------------
+Verification checklist
+----------------------------
+
+Server:
+- POST upsert-goalserve-standings?leagueId=1205 returns ok
+- GET standings for 1205 shows all team ids are UUIDs and names are real club names (no numeric-only "9227"/etc)
+
+Client:
+- /tables -> Championship:
+  - Rows 1–2 show green stripe
+  - Rows 3–6 show amber stripe
+  - Rows 22–24 show red stripe
+  - Legend labels match Championship (no Champions League / Europa League)
+- /tables -> Premier League remains unchanged.
+
+Do not change production scheduling; this is dev-time live-ish behaviour only.
+
+Make the edits, keep formatting consistent, and ensure TypeScript types compile.
+
+---
+

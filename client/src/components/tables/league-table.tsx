@@ -4,23 +4,29 @@ import { TeamCrest } from "@/components/team-crest";
 import { FormPills } from "./form-pills";
 import { ChevronDown } from "lucide-react";
 import type { TableRow as LeagueTableRow } from "@/data/tables-mock";
+import type { StandingsZone, ZoneColor } from "@/lib/league-config";
 
 interface LeagueTableProps {
   data: LeagueTableRow[];
   showZones?: boolean;
+  zones?: StandingsZone[];
 }
 
-function getZoneStripeColor(pos: number, showZones: boolean): string | null {
+const zoneColorMap: Record<ZoneColor, string> = {
+  emerald: "bg-emerald-500/70",
+  amber: "bg-amber-500/70",
+  red: "bg-red-500/70",
+};
+
+function getZoneForPos(pos: number, zones?: StandingsZone[]): StandingsZone | null {
+  if (!zones) return null;
+  return zones.find((z) => pos >= z.from && pos <= z.to) ?? null;
+}
+
+function getZoneStripeColor(pos: number, showZones: boolean, zones?: StandingsZone[]): string | null {
   if (!showZones) return null;
-  
-  // Champions League: positions 1-4
-  if (pos >= 1 && pos <= 4) return "bg-emerald-500/70";
-  // Europa League: position 5
-  if (pos === 5) return "bg-amber-500/70";
-  // Relegation: positions 18-20
-  if (pos >= 18) return "bg-red-500/70";
-  
-  return null;
+  const zone = getZoneForPos(pos, zones);
+  return zone ? zoneColorMap[zone.color] : null;
 }
 
 function formatGD(gd: number): string {
@@ -72,17 +78,19 @@ const ExpandedRowContent = memo(function ExpandedRowContent({ row }: ExpandedRow
 interface StandingsRowProps {
   row: LeagueTableRow;
   showZones: boolean;
+  zones?: StandingsZone[];
   isExpanded: boolean;
   onToggle: () => void;
 }
 
 const StandingsRow = memo(function StandingsRow({ 
   row, 
-  showZones, 
+  showZones,
+  zones,
   isExpanded, 
   onToggle 
 }: StandingsRowProps) {
-  const zoneStripeColor = getZoneStripeColor(row.pos, showZones);
+  const zoneStripeColor = getZoneStripeColor(row.pos, showZones, zones);
   
   return (
     <>
@@ -191,7 +199,7 @@ const StandingsRow = memo(function StandingsRow({
   );
 });
 
-export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
+export function LeagueTable({ data, showZones = true, zones }: LeagueTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   const toggleRow = useCallback((pos: number) => {
@@ -205,6 +213,12 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
       return next;
     });
   }, []);
+
+  // Build unique legend entries from zones
+  const legendEntries = zones?.map((z) => ({
+    label: z.label,
+    color: zoneColorMap[z.color],
+  })) ?? [];
 
   return (
     <div className="space-y-4">
@@ -232,6 +246,7 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
                 key={row.pos}
                 row={row}
                 showZones={showZones}
+                zones={zones}
                 isExpanded={expandedRows.has(row.pos)}
                 onToggle={() => toggleRow(row.pos)}
               />
@@ -240,20 +255,14 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
         </Table>
       </div>
 
-      {showZones && (
+      {showZones && legendEntries.length > 0 && (
         <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-4 rounded-sm bg-emerald-500/70" />
-            <span>Champions League</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-4 rounded-sm bg-amber-500/70" />
-            <span>Europa League</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-1 h-4 rounded-sm bg-red-500/70" />
-            <span>Relegation</span>
-          </div>
+          {legendEntries.map((entry) => (
+            <div key={entry.label} className="flex items-center gap-2">
+              <div className={`w-1 h-4 rounded-sm ${entry.color}`} />
+              <span>{entry.label}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -10,7 +10,7 @@ import { GroupSelector } from "@/components/tables/group-selector";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
-import { getGoalserveLeagueId } from "@/lib/league-config";
+import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import {
   getGroupsForEuropeCompetition,
   getRoundsForCup,
@@ -217,6 +217,8 @@ export default function TablesPage() {
     return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
 
+  const currentLeagueConfig = getLeagueBySlug(leagueCompetition);
+
   const renderLeaguesContent = () => {
     if (!goalserveLeagueId) {
       return (
@@ -262,7 +264,7 @@ export default function TablesPage() {
     return (
       <Card>
         <CardContent className="p-4 sm:p-6">
-          <LeagueTable data={tableRows} showZones={true} />
+          <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
         </CardContent>
       </Card>
     );
