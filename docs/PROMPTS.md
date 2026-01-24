@@ -4206,3 +4206,57 @@ Do not modify existing tables.
 
 ---
 
+Add a new POST-only job endpoint secured by x-sync-secret (GOALSERVE_SYNC_SECRET):
+
+POST /api/jobs/upsert-goalserve-standings?leagueId=<id>&season=<optional>
+
+Requirements:
+- Reject GET requests
+- Validate x-sync-secret header against GOALSERVE_SYNC_SECRET
+- leagueId is required
+- season is optional
+
+Fetch Goalserve standings using:
+https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true
+
+If season is provided, append &season=<value>
+
+Parsing rules:
+- Parse JSON response
+- standings.timestamp → parse "DD.MM.YYYY HH:mm:ss" into Date as asOf
+- tournament.league, tournament.season, tournament.stage_id
+- tournament.team[] array
+
+Team resolution:
+- For each team row, resolve team via teams.goalserveTeamId === team.id
+- If ANY team is missing, return HTTP 409 with:
+  - missingTeamIds
+  - missingTeamNames
+  - leagueId
+  - season
+- Do NOT create teams automatically in v1
+
+Insert logic:
+- Wrap in a single transaction
+- Create a standings_snapshots record
+- Insert all standings_rows linked to snapshotId
+- Store parsed ints (Goalserve values are strings)
+
+Optional optimisation:
+- Compute payload hash
+- If hash matches most recent snapshot for leagueId+season, skip insert and return "no change"
+
+Response:
+- leagueId
+- season
+- asOf
+- insertedRowsCount
+- snapshotId
+
+Add logging:
+[StandingsIngest] leagueId=<id> season=<season> rows=<count>
+
+Keep implementation consistent with existing Goalserve match ingestion jobs.
+
+---
+

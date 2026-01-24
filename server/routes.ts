@@ -18,6 +18,7 @@ import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
+import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -1634,6 +1635,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const result = await upsertGoalserveTable(leagueId);
       res.json(result);
+    }
+  );
+
+  // ========== GOALSERVE STANDINGS UPSERT ==========
+  app.post(
+    "/api/jobs/upsert-goalserve-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      const season = req.query.season as string | undefined;
+
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
+      }
+
+      try {
+        const result = await upsertGoalserveStandings(leagueId, season);
+        if (!result.ok && result.missingTeams && result.missingTeams.length > 0) {
+          return res.status(409).json({
+            error: result.error,
+            leagueId: result.leagueId,
+            season: result.season,
+            missingTeamIds: result.missingTeams.map((t) => t.goalserveTeamId),
+            missingTeamNames: result.missingTeams.map((t) => t.name),
+          });
+        }
+        res.json(result);
+      } catch (error) {
+        console.error("Standings upsert error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
     }
   );
 
