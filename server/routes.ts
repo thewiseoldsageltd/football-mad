@@ -1455,47 +1455,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return res.status(400).json({ error: "keepTeamId and removeTeamId cannot be the same" });
         }
 
+        // ===== PREFLIGHT: Load teams and check for conflicts BEFORE transaction =====
+        const [keepTeam] = await db.select().from(teams).where(eq(teams.id, keepTeamId));
+        const [removeTeam] = await db.select().from(teams).where(eq(teams.id, removeTeamId));
+
+        if (!keepTeam) {
+          return res.status(404).json({ error: `keepTeam not found: ${keepTeamId}` });
+        }
+        if (!removeTeam) {
+          return res.status(404).json({ error: `removeTeam not found: ${removeTeamId}` });
+        }
+
+        // Determine if we need to transfer goalserveTeamId
+        const needsGoalserveIdTransfer = (!keepTeam.goalserveTeamId || keepTeam.goalserveTeamId === "") && removeTeam.goalserveTeamId;
+        const desiredGoalserveTeamId = needsGoalserveIdTransfer ? removeTeam.goalserveTeamId : keepTeam.goalserveTeamId;
+
+        // Check for conflicting team if we have a goalserveTeamId to work with
+        if (desiredGoalserveTeamId) {
+          const [conflictingTeam] = await db.select({
+            id: teams.id,
+            name: teams.name,
+            slug: teams.slug,
+            goalserveTeamId: teams.goalserveTeamId,
+          })
+            .from(teams)
+            .where(and(
+              eq(teams.goalserveTeamId, desiredGoalserveTeamId),
+              drizzleSql`${teams.id} NOT IN (${keepTeamId}, ${removeTeamId})`
+            ));
+
+          if (conflictingTeam) {
+            return res.status(409).json({
+              error: "goalserveTeamId already in use by another team",
+              goalserveTeamId: desiredGoalserveTeamId,
+              conflictingTeam: {
+                id: conflictingTeam.id,
+                name: conflictingTeam.name,
+                slug: conflictingTeam.slug,
+                goalserveTeamId: conflictingTeam.goalserveTeamId,
+              },
+            });
+          }
+        }
+
+        // ===== TRANSACTION: All updates in safe order, no try/catch inside =====
         const result = await db.transaction(async (tx) => {
-          const [keepTeam] = await tx.select().from(teams).where(eq(teams.id, keepTeamId));
-          const [removeTeam] = await tx.select().from(teams).where(eq(teams.id, removeTeamId));
-
-          if (!keepTeam) {
-            throw new Error(`keepTeam not found: ${keepTeamId}`);
-          }
-          if (!removeTeam) {
-            throw new Error(`removeTeam not found: ${removeTeamId}`);
-          }
-
           let updatedKeepGoalserveId = false;
-          const goalserveIdToTransfer = removeTeam.goalserveTeamId;
-          
-          if ((!keepTeam.goalserveTeamId || keepTeam.goalserveTeamId === "") && goalserveIdToTransfer) {
-            const [conflictingTeam] = await tx.select({ id: teams.id })
-              .from(teams)
-              .where(and(
-                eq(teams.goalserveTeamId, goalserveIdToTransfer),
-                drizzleSql`${teams.id} NOT IN (${keepTeamId}, ${removeTeamId})`
-              ));
-            
-            if (conflictingTeam) {
-              throw { 
-                type: "conflict", 
-                error: "goalserveTeamId already in use", 
-                goalserveTeamId: goalserveIdToTransfer, 
-                conflictingTeamId: conflictingTeam.id 
-              };
-            }
 
+          // a) Transfer goalserveTeamId if needed: clear removeTeam first, then set keepTeam
+          if (needsGoalserveIdTransfer && desiredGoalserveTeamId) {
             await tx.update(teams)
-              .set({ goalserveTeamId: null, name: `[DEPRECATED] ${removeTeam.name}` })
+              .set({ goalserveTeamId: null })
               .where(eq(teams.id, removeTeamId));
 
             await tx.update(teams)
-              .set({ goalserveTeamId: goalserveIdToTransfer })
+              .set({ goalserveTeamId: desiredGoalserveTeamId })
               .where(eq(teams.id, keepTeamId));
             updatedKeepGoalserveId = true;
           }
 
+          // b) Update matches: move homeTeamId and awayTeamId from removeTeam to keepTeam
           const homeResult = await tx.update(matches)
             .set({ homeTeamId: keepTeamId })
             .where(eq(matches.homeTeamId, removeTeamId));
@@ -1506,22 +1525,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             .where(eq(matches.awayTeamId, removeTeamId));
           const movedAwayCount = awayResult.rowCount || 0;
 
+          // c) Delete or deprecate the remove team
           let removedDeleted = false;
-          let removedDeprecationApplied = false;
-
           if (deleteRemoved) {
-            try {
-              await tx.delete(teams).where(eq(teams.id, removeTeamId));
-              removedDeleted = true;
-            } catch (deleteErr) {
-              await tx.update(teams)
-                .set({
-                  goalserveTeamId: null,
-                  name: `[DEPRECATED] ${removeTeam.name}`,
-                })
-                .where(eq(teams.id, removeTeamId));
-              removedDeprecationApplied = true;
-            }
+            await tx.delete(teams).where(eq(teams.id, removeTeamId));
+            removedDeleted = true;
           }
 
           return {
@@ -1532,21 +1540,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             movedAwayCount,
             updatedKeepGoalserveId,
             removedDeleted,
-            removedDeprecationApplied,
           };
         });
 
         res.json(result);
       } catch (error: any) {
         console.error("Merge teams error:", error);
-        if (error?.type === "conflict") {
-          return res.status(409).json({
-            error: error.error,
-            goalserveTeamId: error.goalserveTeamId,
-            conflictingTeamId: error.conflictingTeamId,
-          });
-        }
-        res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+        // Clean error message - never leak "current transaction is aborted"
+        const message = error instanceof Error ? error.message : "Unknown error";
+        res.status(500).json({ error: message });
       }
     }
   );

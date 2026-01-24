@@ -4100,3 +4100,48 @@ Implement minimal edits to the existing code.
 
 ---
 
+Fix the /api/jobs/merge-teams endpoint so it never returns "current transaction is aborted..." and correctly handles the teams_goalserve_team_id_unique constraint.
+
+Context:
+Calling merge-teams currently returns 500 with:
+"current transaction is aborted, commands ignored until end of transaction block"
+Previously it also threw:
+"duplicate key value violates unique constraint teams_goalserve_team_id_unique"
+
+Requirements:
+1) Refactor merge-teams to use Drizzle's db.transaction(async (tx) => { ... }) ONLY.
+   - No manual BEGIN/COMMIT.
+   - No catching errors inside the transaction and continuing.
+   - If anything fails, throw so Drizzle rolls back.
+
+2) Preflight (BEFORE starting tx):
+   - Load keepTeam and removeTeam from teams by id.
+   - Determine desiredGoalserveTeamId:
+       - If keepTeam.goalserveTeamId is null and removeTeam.goalserveTeamId exists -> we want to move it to keep
+       - Otherwise keep keepTeam.goalserveTeamId
+   - If desiredGoalserveTeamId exists, check if ANY other team (id not in [keep, remove]) already has that goalserveTeamId.
+     - If yes, return 409 with a helpful message listing that conflicting team id+name+slug+goalserveTeamId.
+
+3) In the transaction, do updates in this safe order:
+   a) If moving goalserveTeamId from remove -> keep:
+      - First set removeTeam.goalserveTeamId = null
+      - Then set keepTeam.goalserveTeamId = desiredGoalserveTeamId
+   b) Update matches.homeTeamId and matches.awayTeamId from removeTeamId -> keepTeamId
+   c) Optionally normalize keep team display name/slug/league if needed (keep as-is for now unless already implemented)
+   d) If deleteRemoved === true: delete the remove team row after match updates
+
+4) Error handling:
+   - Outside tx, catch once.
+   - Map conflict/preflight failures to 409.
+   - Otherwise return 500 with a clean error message.
+   - Never leak "current transaction is aborted..." again.
+
+5) Keep auth middleware the same: requireJobSecret("GOALSERVE_SYNC_SECRET")
+6) Keep route path and request body shape unchanged.
+
+After changes:
+- Restart dev server.
+- Re-run the exact curl merge request.
+
+---
+
