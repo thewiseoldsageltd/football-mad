@@ -1467,9 +1467,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
 
           let updatedKeepGoalserveId = false;
-          if ((!keepTeam.goalserveTeamId || keepTeam.goalserveTeamId === "") && removeTeam.goalserveTeamId) {
+          const goalserveIdToTransfer = removeTeam.goalserveTeamId;
+          
+          if ((!keepTeam.goalserveTeamId || keepTeam.goalserveTeamId === "") && goalserveIdToTransfer) {
+            const [conflictingTeam] = await tx.select({ id: teams.id })
+              .from(teams)
+              .where(and(
+                eq(teams.goalserveTeamId, goalserveIdToTransfer),
+                drizzleSql`${teams.id} NOT IN (${keepTeamId}, ${removeTeamId})`
+              ));
+            
+            if (conflictingTeam) {
+              throw { 
+                type: "conflict", 
+                error: "goalserveTeamId already in use", 
+                goalserveTeamId: goalserveIdToTransfer, 
+                conflictingTeamId: conflictingTeam.id 
+              };
+            }
+
             await tx.update(teams)
-              .set({ goalserveTeamId: removeTeam.goalserveTeamId })
+              .set({ goalserveTeamId: null, name: `[DEPRECATED] ${removeTeam.name}` })
+              .where(eq(teams.id, removeTeamId));
+
+            await tx.update(teams)
+              .set({ goalserveTeamId: goalserveIdToTransfer })
               .where(eq(teams.id, keepTeamId));
             updatedKeepGoalserveId = true;
           }
@@ -1515,8 +1537,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
 
         res.json(result);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Merge teams error:", error);
+        if (error?.type === "conflict") {
+          return res.status(409).json({
+            error: error.error,
+            goalserveTeamId: error.goalserveTeamId,
+            conflictingTeamId: error.conflictingTeamId,
+          });
+        }
         res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
       }
     }

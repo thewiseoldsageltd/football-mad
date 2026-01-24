@@ -4079,3 +4079,24 @@ curl -s -X POST -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" -H "content-type: app
 
 ---
 
+Fix the /api/jobs/merge-teams job to respect the unique constraint on teams.goalserveTeamId.
+
+Problem:
+Currently it tries to set keepTeam.goalserveTeamId to removeTeam.goalserveTeamId while removeTeam still holds that value, causing:
+duplicate key value violates unique constraint "teams_goalserve_team_id_unique"
+
+Required changes:
+1) In the transaction, if we are transferring removeTeam.goalserveTeamId -> keepTeam:
+   a) FIRST set removeTeam.goalserveTeamId = null (and optionally rename it "[DEPRECATED] ...") so the unique value is freed.
+   b) THEN set keepTeam.goalserveTeamId = the transferred value.
+2) Add a safety check:
+   - If any OTHER team (id not in {keepTeamId, removeTeamId}) already has that goalserveTeamId, return 409 with a helpful JSON error:
+     { error: "goalserveTeamId already in use", goalserveTeamId, conflictingTeamId }
+   - Do not proceed with match updates in that case.
+3) Keep everything else the same (moving match homeTeamId/awayTeamId and updating match names, deleting or deprecating removed team).
+4) Do not change route paths or auth. Keep requireJobSecret("GOALSERVE_SYNC_SECRET").
+
+Implement minimal edits to the existing code.
+
+---
+
