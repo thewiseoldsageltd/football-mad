@@ -9,6 +9,7 @@ export interface TableRow {
   goalsAgainst: number;
   gd: number;
   pts: number;
+  recentForm?: string;
 }
 
 export interface Competition {
@@ -44,26 +45,26 @@ export const cupCompetitions: Competition[] = [
 ];
 
 export const premierLeagueTable: TableRow[] = [
-  { pos: 1, teamName: "Liverpool", played: 21, won: 15, drawn: 5, lost: 1, goalsFor: 52, goalsAgainst: 24, gd: 28, pts: 50 },
-  { pos: 2, teamName: "Arsenal", played: 21, won: 13, drawn: 5, lost: 3, goalsFor: 45, goalsAgainst: 22, gd: 23, pts: 44 },
-  { pos: 3, teamName: "Nottingham Forest", played: 21, won: 12, drawn: 5, lost: 4, goalsFor: 33, goalsAgainst: 24, gd: 9, pts: 41 },
-  { pos: 4, teamName: "Chelsea", played: 21, won: 11, drawn: 6, lost: 4, goalsFor: 42, goalsAgainst: 26, gd: 16, pts: 39 },
-  { pos: 5, teamName: "Manchester City", played: 21, won: 10, drawn: 5, lost: 6, goalsFor: 40, goalsAgainst: 25, gd: 15, pts: 35 },
-  { pos: 6, teamName: "Newcastle", played: 21, won: 10, drawn: 5, lost: 6, goalsFor: 35, goalsAgainst: 24, gd: 11, pts: 35 },
-  { pos: 7, teamName: "Bournemouth", played: 21, won: 9, drawn: 6, lost: 6, goalsFor: 32, goalsAgainst: 27, gd: 5, pts: 33 },
-  { pos: 8, teamName: "Brighton", played: 21, won: 9, drawn: 5, lost: 7, goalsFor: 34, goalsAgainst: 30, gd: 4, pts: 32 },
-  { pos: 9, teamName: "Aston Villa", played: 21, won: 8, drawn: 7, lost: 6, goalsFor: 30, goalsAgainst: 27, gd: 3, pts: 31 },
-  { pos: 10, teamName: "Fulham", played: 21, won: 8, drawn: 6, lost: 7, goalsFor: 28, goalsAgainst: 26, gd: 2, pts: 30 },
-  { pos: 11, teamName: "Tottenham", played: 21, won: 8, drawn: 5, lost: 8, goalsFor: 38, goalsAgainst: 32, gd: 6, pts: 29 },
-  { pos: 12, teamName: "Brentford", played: 21, won: 7, drawn: 6, lost: 8, goalsFor: 32, goalsAgainst: 34, gd: -2, pts: 27 },
-  { pos: 13, teamName: "West Ham", played: 21, won: 7, drawn: 5, lost: 9, goalsFor: 28, goalsAgainst: 35, gd: -7, pts: 26 },
-  { pos: 14, teamName: "Manchester United", played: 21, won: 6, drawn: 6, lost: 9, goalsFor: 26, goalsAgainst: 28, gd: -2, pts: 24 },
-  { pos: 15, teamName: "Crystal Palace", played: 21, won: 5, drawn: 8, lost: 8, goalsFor: 22, goalsAgainst: 28, gd: -6, pts: 23 },
-  { pos: 16, teamName: "Everton", played: 21, won: 5, drawn: 7, lost: 9, goalsFor: 20, goalsAgainst: 30, gd: -10, pts: 22 },
-  { pos: 17, teamName: "Wolves", played: 21, won: 5, drawn: 6, lost: 10, goalsFor: 24, goalsAgainst: 38, gd: -14, pts: 21 },
-  { pos: 18, teamName: "Leicester", played: 21, won: 4, drawn: 7, lost: 10, goalsFor: 24, goalsAgainst: 42, gd: -18, pts: 19 },
-  { pos: 19, teamName: "Ipswich", played: 21, won: 3, drawn: 8, lost: 10, goalsFor: 21, goalsAgainst: 40, gd: -19, pts: 17 },
-  { pos: 20, teamName: "Southampton", played: 21, won: 2, drawn: 5, lost: 14, goalsFor: 15, goalsAgainst: 45, gd: -30, pts: 11 },
+  { pos: 1, teamName: "Liverpool", played: 21, won: 15, drawn: 5, lost: 1, goalsFor: 52, goalsAgainst: 24, gd: 28, pts: 50, recentForm: "WWDWW" },
+  { pos: 2, teamName: "Arsenal", played: 21, won: 13, drawn: 5, lost: 3, goalsFor: 45, goalsAgainst: 22, gd: 23, pts: 44, recentForm: "WDWWL" },
+  { pos: 3, teamName: "Nottingham Forest", played: 21, won: 12, drawn: 5, lost: 4, goalsFor: 33, goalsAgainst: 24, gd: 9, pts: 41, recentForm: "DWWWD" },
+  { pos: 4, teamName: "Chelsea", played: 21, won: 11, drawn: 6, lost: 4, goalsFor: 42, goalsAgainst: 26, gd: 16, pts: 39, recentForm: "WDWDW" },
+  { pos: 5, teamName: "Manchester City", played: 21, won: 10, drawn: 5, lost: 6, goalsFor: 40, goalsAgainst: 25, gd: 15, pts: 35, recentForm: "WLDWL" },
+  { pos: 6, teamName: "Newcastle", played: 21, won: 10, drawn: 5, lost: 6, goalsFor: 35, goalsAgainst: 24, gd: 11, pts: 35, recentForm: "DWWDW" },
+  { pos: 7, teamName: "Bournemouth", played: 21, won: 9, drawn: 6, lost: 6, goalsFor: 32, goalsAgainst: 27, gd: 5, pts: 33, recentForm: "WDDWL" },
+  { pos: 8, teamName: "Brighton", played: 21, won: 9, drawn: 5, lost: 7, goalsFor: 34, goalsAgainst: 30, gd: 4, pts: 32, recentForm: "DLWWD" },
+  { pos: 9, teamName: "Aston Villa", played: 21, won: 8, drawn: 7, lost: 6, goalsFor: 30, goalsAgainst: 27, gd: 3, pts: 31, recentForm: "DDDWW" },
+  { pos: 10, teamName: "Fulham", played: 21, won: 8, drawn: 6, lost: 7, goalsFor: 28, goalsAgainst: 26, gd: 2, pts: 30, recentForm: "WDLDW" },
+  { pos: 11, teamName: "Tottenham", played: 21, won: 8, drawn: 5, lost: 8, goalsFor: 38, goalsAgainst: 32, gd: 6, pts: 29, recentForm: "LWWDL" },
+  { pos: 12, teamName: "Brentford", played: 21, won: 7, drawn: 6, lost: 8, goalsFor: 32, goalsAgainst: 34, gd: -2, pts: 27, recentForm: "DLWDW" },
+  { pos: 13, teamName: "West Ham", played: 21, won: 7, drawn: 5, lost: 9, goalsFor: 28, goalsAgainst: 35, gd: -7, pts: 26, recentForm: "LWDLL" },
+  { pos: 14, teamName: "Manchester United", played: 21, won: 6, drawn: 6, lost: 9, goalsFor: 26, goalsAgainst: 28, gd: -2, pts: 24, recentForm: "DLDLW" },
+  { pos: 15, teamName: "Crystal Palace", played: 21, won: 5, drawn: 8, lost: 8, goalsFor: 22, goalsAgainst: 28, gd: -6, pts: 23, recentForm: "DDDWL" },
+  { pos: 16, teamName: "Everton", played: 21, won: 5, drawn: 7, lost: 9, goalsFor: 20, goalsAgainst: 30, gd: -10, pts: 22, recentForm: "DLDDL" },
+  { pos: 17, teamName: "Wolves", played: 21, won: 5, drawn: 6, lost: 10, goalsFor: 24, goalsAgainst: 38, gd: -14, pts: 21, recentForm: "LDLWL" },
+  { pos: 18, teamName: "Leicester", played: 21, won: 4, drawn: 7, lost: 10, goalsFor: 24, goalsAgainst: 42, gd: -18, pts: 19, recentForm: "LLDLD" },
+  { pos: 19, teamName: "Ipswich", played: 21, won: 3, drawn: 8, lost: 10, goalsFor: 21, goalsAgainst: 40, gd: -19, pts: 17, recentForm: "DDLLD" },
+  { pos: 20, teamName: "Southampton", played: 21, won: 2, drawn: 5, lost: 14, goalsFor: 15, goalsAgainst: 45, gd: -30, pts: 11, recentForm: "LLLLD" },
 ];
 
 export const laLigaTable: TableRow[] = [

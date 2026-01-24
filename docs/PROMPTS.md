@@ -4422,3 +4422,36 @@ Return ok:false with a debug object:
 
 ---
 
+We have a Tables page (/tables) that shows standings.
+
+Please upgrade the standings table UI to:
+1) Add a "Form" column using standings row field recentForm (e.g. "DDWWW").
+2) Render recentForm as 5 small rounded pills: W=green, D=amber, L=red.
+3) Desktop table should default to a clean set of columns:
+   Pos | Team | Pts | GD | Form
+   - Pts should be bold.
+   - GD should show + for positive.
+4) Mobile should be ruthless:
+   - Default row layout: Pos | Team | Pts (no horizontal scroll)
+   - Show only last 3 form pills inline (optional) OR hide form inline and show on expand (choose the best UX).
+   - Tap/click a row expands it to show:
+     - P (played)
+     - GD
+     - Full Form (5 pills)
+     - (Optional) W/D/L line in small text
+5) Add subtle "zone" indicator on the far-left of each row:
+   - Positions 1-4: a thin green-ish left border
+   - Position 5: thin amber left border (optional)
+   - Bottom 3: thin red left border
+   - Others: transparent
+   Keep this subtle (not loud).
+6) Use existing team info in the row (crest if available, name, slug) and keep current styling consistent.
+7) Do not change navigation or filters; only table rendering and row expansion behaviour.
+
+Implementation notes:
+- Use a reusable component, e.g. <StandingsTable /> and <FormPills form="DDWWW" />
+- Make sure accessibility: row expansion should be keyboard accessible; add aria-expanded and button semantics.
+- Keep it performant (no heavy re-renders).
+
+---
+
