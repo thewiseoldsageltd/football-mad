@@ -1,0 +1,47 @@
+Update server/jobs/upsert-goalserve-standings.ts to make ensureTeamId() robust and never throw for missing/odd Goalserve team name fields.
+
+Problem:
+The Championship ingest fails with: {"ok":false,"error":"Failed to create or find team for goalserveTeamId=9227"}.
+This is caused by ensureTeamId() failing to create OR re-fetch a team row, likely because getTeamDisplayName() returns an unusable value (numeric ID) or the insert/fetch comparison mismatches types.
+
+Required changes:
+
+1) Make getTeamDisplayName(row, goalserveTeamId) MUCH more defensive:
+   - Try common Goalserve name fields in order (string only, trim):
+     row.team?.name
+     row.team?.team_name
+     row.team_name
+     row.team
+     row.name
+     row.club_name
+     row.club
+     row.competition_team_name
+     row.short_name
+   - If the chosen value is purely numeric (e.g. "9227"), treat it as missing.
+   - Final fallback MUST be: `Team ${goalserveTeamId}` (so we always have a non-empty name).
+
+2) Make ensureTeamId(goalserveTeamId, displayName) never throw:
+   - Normalize goalserveTeamId to string everywhere: const gsId = String(goalserveTeamId)
+   - First: attempt to SELECT existing team by teams.goalserveTeamId == gsId. If found, return its id.
+   - If not found:
+     - Determine name = (displayName && not numeric) ? displayName : `Team ${gsId}`
+     - slug = slugify(name) and if slug is empty, slug = `team-${gsId}`
+     - Insert into teams with { name, slug, goalserveTeamId: gsId } using onConflictDoNothing on goalserveTeamId.
+   - After insert (even if conflict):
+     - SELECT again by goalserveTeamId == gsId and return id if found.
+   - If still not found (should be impossible), return a generated placeholder UUID OR (preferred) log an error and return null BUT DO NOT abort ingest; instead skip that row with a warning. (We prefer returning id, but must not crash.)
+
+3) Add a targeted debug log for the failing ID only:
+   - If gsId === "9227", console.log a compact object of the raw row keys + any candidate name fields (team_name/name/team/team.name etc), so we can see what Goalserve provides without dumping huge payloads.
+
+4) Update the standings mapping to call:
+   const teamName = getTeamDisplayName(row, gsTeamId)
+   const teamId = await ensureTeamId(gsTeamId, teamName)
+   - If teamId is null, skip inserting that standings row (and log warning), but continue the rest.
+
+Acceptance:
+- POST /api/jobs/upsert-goalserve-standings?leagueId=1205 returns ok:true.
+- GET /api/standings?leagueId=1205&season=2025/2026 shows NO team.id null.
+- Team names are no longer numeric-only; worst case they show "Team 9227" temporarily (but ingest succeeds).
+
+Do not change any client code in this prompt.

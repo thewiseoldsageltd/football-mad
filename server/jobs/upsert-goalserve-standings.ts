@@ -56,53 +56,116 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function getTeamDisplayName(row: GoalserveTeamRow): string {
-  // Priority: row.name is the standard field from Goalserve
-  if (row.name && typeof row.name === "string" && !/^\d+$/.test(row.name)) {
-    return row.name;
+function isUsableName(val: unknown): val is string {
+  if (typeof val !== "string") return false;
+  const trimmed = val.trim();
+  if (!trimmed) return false;
+  // Reject purely numeric strings like "9227"
+  if (/^\d+$/.test(trimmed)) return false;
+  return true;
+}
+
+function getTeamDisplayName(row: GoalserveTeamRow, goalserveTeamId: string): string {
+  // Try common Goalserve name fields in priority order
+  const rowAny = row as unknown as Record<string, unknown>;
+  const teamObj = rowAny.team as Record<string, unknown> | undefined;
+  
+  const candidates = [
+    teamObj?.name,
+    teamObj?.team_name,
+    rowAny.team_name,
+    typeof rowAny.team === "string" ? rowAny.team : null,
+    rowAny.name,
+    rowAny.club_name,
+    rowAny.club,
+    rowAny.competition_team_name,
+    rowAny.short_name,
+  ];
+
+  for (const c of candidates) {
+    if (isUsableName(c)) {
+      return c.trim();
+    }
   }
-  // Fallback to goalserve ID (rare)
-  return String(row.id);
+
+  // Debug log for specific problematic IDs
+  if (goalserveTeamId === "9227") {
+    console.log(`[DEBUG] goalserveTeamId=9227 raw row keys:`, Object.keys(rowAny));
+    console.log(`[DEBUG] goalserveTeamId=9227 candidate values:`, {
+      "teamObj?.name": teamObj?.name,
+      "rowAny.name": rowAny.name,
+      "rowAny.team_name": rowAny.team_name,
+      "rowAny.team": typeof rowAny.team,
+    });
+  }
+
+  // Final fallback - always return something usable
+  return `Team ${goalserveTeamId}`;
 }
 
 async function ensureTeamId(
   teamIdMap: Map<string, string>,
   goalserveTeamId: string,
   displayName: string
-): Promise<string> {
+): Promise<string | null> {
+  const gsId = String(goalserveTeamId).trim();
+
   // Already in map
-  const existing = teamIdMap.get(goalserveTeamId);
+  const existing = teamIdMap.get(gsId);
   if (existing) return existing;
 
-  // Try to insert, handle conflict
-  const [inserted] = await db
-    .insert(teams)
-    .values({
-      name: displayName,
-      slug: slugify(displayName),
-      goalserveTeamId,
-    })
-    .onConflictDoNothing()
-    .returning({ id: teams.id });
+  // First: try to SELECT existing team
+  const [existingTeam] = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(eq(teams.goalserveTeamId, gsId))
+    .limit(1);
 
-  if (inserted) {
-    teamIdMap.set(goalserveTeamId, inserted.id);
-    return inserted.id;
+  if (existingTeam) {
+    teamIdMap.set(gsId, existingTeam.id);
+    return existingTeam.id;
   }
 
-  // Conflict occurred - fetch existing
+  // Determine safe name and slug
+  const name = isUsableName(displayName) ? displayName : `Team ${gsId}`;
+  let slug = slugify(name);
+  if (!slug) slug = `team-${gsId}`;
+
+  // Try to insert
+  try {
+    const [inserted] = await db
+      .insert(teams)
+      .values({
+        name,
+        slug,
+        goalserveTeamId: gsId,
+      })
+      .onConflictDoNothing()
+      .returning({ id: teams.id });
+
+    if (inserted) {
+      teamIdMap.set(gsId, inserted.id);
+      return inserted.id;
+    }
+  } catch (insertErr) {
+    console.warn(`[ensureTeamId] Insert failed for gsId=${gsId}:`, insertErr);
+  }
+
+  // After insert (or conflict), SELECT again
   const [found] = await db
     .select({ id: teams.id })
     .from(teams)
-    .where(eq(teams.goalserveTeamId, goalserveTeamId))
+    .where(eq(teams.goalserveTeamId, gsId))
     .limit(1);
 
-  if (!found) {
-    throw new Error(`Failed to create or find team for goalserveTeamId=${goalserveTeamId}`);
+  if (found) {
+    teamIdMap.set(gsId, found.id);
+    return found.id;
   }
 
-  teamIdMap.set(goalserveTeamId, found.id);
-  return found.id;
+  // Should be impossible, but don't crash - return null
+  console.error(`[ensureTeamId] Could not create or find team for gsId=${gsId}, skipping row`);
+  return null;
 }
 
 interface GoalserveStatBlock {
@@ -266,8 +329,9 @@ export async function upsertGoalserveStandings(
 
   // Ensure all teams exist in DB (auto-create missing)
   for (const row of teamRows) {
-    const displayName = getTeamDisplayName(row);
-    await ensureTeamId(teamIdMap, row.id, displayName);
+    const gsTeamId = String(row.id).trim();
+    const displayName = getTeamDisplayName(row, gsTeamId);
+    await ensureTeamId(teamIdMap, gsTeamId, displayName);
   }
 
   // Compute hash from normalized numeric values to detect actual data changes
@@ -321,26 +385,57 @@ export async function upsertGoalserveStandings(
 
     const snapshotId = snapshot.id;
 
-    const rowsToInsert = teamRows.map((row) => {
+    const rowsToInsert: Array<{
+      snapshotId: string;
+      teamId: string;
+      teamGoalserveId: string;
+      position: number;
+      points: number;
+      played: number;
+      won: number;
+      drawn: number;
+      lost: number;
+      goalsFor: number;
+      goalsAgainst: number;
+      goalDifference: number;
+      recentForm: string | null;
+      movementStatus: string | null;
+      qualificationNote: string | null;
+      homePlayed: number;
+      homeWon: number;
+      homeDrawn: number;
+      homeLost: number;
+      homeGoalsFor: number;
+      homeGoalsAgainst: number;
+      awayPlayed: number;
+      awayWon: number;
+      awayDrawn: number;
+      awayLost: number;
+      awayGoalsFor: number;
+      awayGoalsAgainst: number;
+    }> = [];
+
+    for (const row of teamRows) {
+      const gsTeamId = String(row.id).trim();
+      const teamId = teamIdMap.get(gsTeamId);
+      
+      if (!teamId) {
+        console.warn(`[StandingsIngest] Skipping row for gsTeamId=${gsTeamId} - no teamId found`);
+        continue;
+      }
+
       const goalsFor = toInt(row.overall?.gs);
       const goalsAgainst = toInt(row.overall?.ga);
       const goalDifference = toInt(row.total?.gd, goalsFor - goalsAgainst);
       
-      // Handle recentForm variants
       const recentForm = typeof row.recent_form === "string" 
         ? row.recent_form 
         : (row.recent_form != null ? String(row.recent_form) : null);
       
-      // teamId is guaranteed by ensureTeamId loop above
-      const teamId = teamIdMap.get(row.id);
-      if (!teamId) {
-        throw new Error(`teamId not found for goalserveTeamId=${row.id} - this should never happen`);
-      }
-      
-      return {
+      rowsToInsert.push({
         snapshotId,
         teamId,
-        teamGoalserveId: row.id,
+        teamGoalserveId: gsTeamId,
         position: toInt(row.position),
         points: toInt(row.total?.p),
         played: toInt(row.overall?.gp),
@@ -365,10 +460,12 @@ export async function upsertGoalserveStandings(
         awayLost: toInt(row.away?.l),
         awayGoalsFor: toInt(row.away?.gs),
         awayGoalsAgainst: toInt(row.away?.ga),
-      };
-    });
+      });
+    }
 
-    await tx.insert(standingsRows).values(rowsToInsert);
+    if (rowsToInsert.length > 0) {
+      await tx.insert(standingsRows).values(rowsToInsert);
+    }
 
     return { snapshotId, insertedRowsCount: rowsToInsert.length };
   });
