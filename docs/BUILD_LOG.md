@@ -404,3 +404,22 @@ Article/entity linking  ← LATER
 
 ---
 
+
+## Championship Standings Integration
+
+Championship standings now use the same live-refresh pipeline as Premier League.
+
+### Dev Verification Steps
+1. Go to `/tables` → click "Championship" tab
+2. Open Network tab → confirm request URL includes:
+   - `leagueId=1205`
+   - `season=YYYY%2FYYYY` (e.g., `2025%2F2026`)
+   - `autoRefresh=1`
+3. (Optional) Trigger ingestion manually:
+   ```
+   curl -X POST "http://localhost:5000/api/jobs/upsert-goalserve-standings?leagueId=1205" \
+     -H "x-sync-secret: YOUR_SECRET"
+   ```
+4. Table should populate or show "No standings snapshot found" if Goalserve has no data yet.
+
+---

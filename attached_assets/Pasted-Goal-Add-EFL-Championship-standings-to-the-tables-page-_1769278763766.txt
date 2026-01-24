@@ -1,0 +1,35 @@
+Goal: Add EFL Championship standings to the /tables page using the existing standings pipeline (GET /api/standings + autoRefresh=1 + polling). Do NOT add any “video testing” loops. Keep changes minimal and targeted.
+
+Context:
+- Premier League standings already work via /api/standings?leagueId=1204&season=YYYY/YYYY and client polling.
+- There is a league id mapping helper in client/src/lib/league-config.ts.
+- The /tables page uses the selected competition slug + season to build the standings request.
+
+Tasks:
+
+1) Add Championship mapping
+- Update client/src/lib/league-config.ts to include Championship.
+- Find the competition slug used for Championship in the Tables UI (likely "championship" or similar).
+- Map that slug to Goalserve leagueId for Championship.
+- If you are unsure of the correct Goalserve leagueId, add the mapping but also add a short developer note comment explaining it must match Goalserve.
+
+2) Ensure /tables requests the correct leagueId for Championship
+- When the user clicks the “Championship” tab, the network request to /api/standings must include the Championship leagueId and season normalized to “YYYY/YYYY”.
+- Confirm the request URL includes autoRefresh=1.
+
+3) Add a lightweight “dev verify” note (NO automated test loops)
+- Add a short comment in docs/BUILD_LOG.md describing how to verify Championship:
+  - Go to /tables → Championship → confirm request URL includes correct leagueId and season=YYYY%2FYYYY
+  - Optional: trigger ingestion manually via the existing job endpoint with x-sync-secret
+- Do not run any autoplay test recordings.
+
+4) Manual ingestion (optional but helpful)
+- If there is already a way to ingest standings for a league via /api/jobs/upsert-goalserve-standings?leagueId=..., confirm it works for Championship too (no code changes needed if it’s generic).
+- Do NOT hardcode secrets anywhere.
+
+Acceptance criteria:
+- Clicking Championship shows a populated standings table (or a graceful “No standings data” card if Goalserve has no snapshot yet).
+- No UI regressions on Premier League.
+- No automated test loop / video generation.
+
+Please implement the changes now.
