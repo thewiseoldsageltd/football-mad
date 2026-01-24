@@ -18,6 +18,32 @@ import {
 } from "@/data/tables-mock";
 import type { TableRow } from "@/data/tables-mock";
 
+/**
+ * Normalizes season strings to "YYYY/YYYY" format for API compatibility.
+ * - "2025/26" or "2025-26" → "2025/2026"
+ * - "2025/2026" → "2025/2026" (unchanged)
+ * - null/undefined → undefined
+ */
+function normalizeSeason(input: string | null | undefined): string | undefined {
+  if (!input) return undefined;
+  
+  // Match "YYYY/YY" or "YYYY-YY" format
+  const shortMatch = input.match(/^(\d{4})[/\-](\d{2})$/);
+  if (shortMatch) {
+    const startYear = parseInt(shortMatch[1], 10);
+    const endYear = startYear + 1;
+    return `${startYear}/${endYear}`;
+  }
+  
+  // Already "YYYY/YYYY" format - return as-is
+  if (/^\d{4}\/\d{4}$/.test(input)) {
+    return input;
+  }
+  
+  // Return unchanged for any other format
+  return input;
+}
+
 interface StandingsApiRow {
   position: number;
   teamId: string;
@@ -157,17 +183,17 @@ export default function TablesPage() {
     [leagueCompetition]
   );
 
-  const apiSeason = useMemo(() => {
-    const parts = season.split("/");
-    if (parts.length === 2) {
-      return `${parts[0]}/20${parts[1]}`;
-    }
-    return season;
-  }, [season]);
+  const apiSeason = useMemo(() => normalizeSeason(season), [season]);
 
-  const standingsUrl = goalserveLeagueId
-    ? `/api/standings?leagueId=${goalserveLeagueId}&season=${encodeURIComponent(apiSeason)}`
-    : null;
+  const standingsUrl = useMemo(() => {
+    if (!goalserveLeagueId) return null;
+    const params = new URLSearchParams();
+    params.set("leagueId", goalserveLeagueId);
+    if (apiSeason) {
+      params.set("season", apiSeason);
+    }
+    return `/api/standings?${params.toString()}`;
+  }, [goalserveLeagueId, apiSeason]);
 
   const { data: standingsData, isLoading: standingsLoading, error: standingsError } = useQuery<StandingsApiResponse>({
     queryKey: [standingsUrl],

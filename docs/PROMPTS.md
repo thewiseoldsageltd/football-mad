@@ -4502,3 +4502,34 @@ Return:
 
 ---
 
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT explore the UI beyond the specific change requested.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+Bug: /tables shows “No standings data available” because the UI passes season as "2025/26" but standings snapshots store season as "2025/2026".
+API confirms:
+- /api/standings?leagueId=1204 returns data
+- /api/standings?leagueId=1204&season=2025/26 returns {"error":"No standings snapshot found"...}
+
+Please implement client-side season normalization before calling /api/standings:
+
+1) Add helper normalizeSeason(input: string | null | undefined): string | undefined
+Rules:
+- If input matches "YYYY/YY" (e.g. 2025/26), convert to "YYYY/YYYY+1" => "2025/2026"
+- If input matches "YYYY-YY" (e.g. 2025-26), convert to "YYYY/YYYY+1"
+- If input already matches "YYYY/YYYY", return as-is
+- Otherwise return input unchanged
+
+2) In client/src/pages/tables.tsx (where useQuery fetches /api/standings), pass the normalized season in the query params.
+If normalized season is undefined, omit the season param.
+
+3) Keep existing UI states. Only change request params / season handling.
+
+Return:
+- files changed
+- the normalizeSeason function code
+- 3 manual verification steps (no automated testing)
+
+---
+
