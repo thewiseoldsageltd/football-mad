@@ -4334,3 +4334,40 @@ This endpoint is for diagnostics only.
 
 ---
 
+We have a failing job endpoint:
+POST /api/jobs/upsert-goalserve-standings?leagueId=1204
+
+It returns:
+{"ok":false,"error":"ts.match is not a function"}
+
+This indicates our timestamp parsing is calling `.match()` on a non-string.
+
+Please fix the standings ingestion so that timestamp parsing is robust and uses the correct field.
+
+Requirements:
+
+1) Locate where ts is read and parsed (likely `parseGoalserveTimestamp(ts)`).
+   - Ensure we read `payload.standings.timestamp` (NOT `tournament.timestamp`).
+   - In the Goalserve standings payload, timestamp is like: "24.01.2026 03:17:40".
+
+2) Make the timestamp parser defensive:
+   - Accept `string | undefined | null | Date`.
+   - If ts is a Date, return it.
+   - If ts is not a string, throw a clear error like:
+     "Invalid standings.timestamp type: <typeof>"
+
+3) Parse format "DD.MM.YYYY HH:mm:ss" into a JS Date in UTC (or server timezone consistently), using explicit parsing (do not rely on Date.parse).
+
+4) Improve error reporting in the job response:
+   - include a `debug` object with:
+     - `timestampRaw`
+     - `timestampType`
+     - `payloadTopKeys` (Object.keys(payload))
+     - `standingsKeys` (Object.keys(payload.standings || {}))
+
+5) Do not change any DB schema, just fix parsing + debugging.
+
+After fixing, rerun the same job and it should insert 20 rows for leagueId=1204.
+
+---
+

@@ -5,10 +5,28 @@ import crypto from "crypto";
 
 const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
 
-function parseGoalserveTimestamp(ts: string): Date {
-  const match = ts.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
+function parseGoalserveTimestamp(ts: unknown): Date {
+  if (ts instanceof Date) {
+    return ts;
+  }
+  let tsStr: string;
+  if (Array.isArray(ts)) {
+    tsStr = ts[0];
+  } else if (typeof ts === "string") {
+    tsStr = ts;
+  } else if (ts === undefined || ts === null) {
+    throw new Error(`Invalid standings.timestamp type: ${typeof ts}`);
+  } else {
+    throw new Error(`Invalid standings.timestamp type: ${typeof ts}`);
+  }
+  
+  if (typeof tsStr !== "string") {
+    throw new Error(`Invalid standings.timestamp value after unwrap: ${typeof tsStr}`);
+  }
+  
+  const match = tsStr.match(/^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})$/);
   if (!match) {
-    return new Date();
+    throw new Error(`Invalid standings.timestamp format: "${tsStr}"`);
   }
   const [, dd, mm, yyyy, hh, min, ss] = match;
   return new Date(Date.UTC(
@@ -64,6 +82,12 @@ interface UpsertStandingsResult {
   skipped?: boolean;
   error?: string;
   missingTeams?: { goalserveTeamId: string; name: string }[];
+  debug?: {
+    timestampRaw: unknown;
+    timestampType: string;
+    payloadTopKeys: string[];
+    standingsKeys: string[];
+  };
 }
 
 export async function upsertGoalserveStandings(
@@ -88,6 +112,14 @@ export async function upsertGoalserveStandings(
 
   const data = await response.json();
   const standings = data?.standings;
+  
+  const debugInfo = {
+    timestampRaw: standings?.timestamp,
+    timestampType: typeof standings?.timestamp,
+    payloadTopKeys: Object.keys(data || {}),
+    standingsKeys: Object.keys(standings || {}),
+  };
+
   if (!standings) {
     return {
       ok: false,
@@ -95,11 +127,24 @@ export async function upsertGoalserveStandings(
       season: seasonParam || "",
       insertedRowsCount: 0,
       error: "No standings object in response",
+      debug: debugInfo,
     };
   }
 
-  const timestamp = standings.timestamp || "";
-  const asOf = parseGoalserveTimestamp(timestamp);
+  const timestampRaw = standings.timestamp;
+  let asOf: Date;
+  try {
+    asOf = parseGoalserveTimestamp(timestampRaw);
+  } catch (parseErr) {
+    return {
+      ok: false,
+      leagueId,
+      season: seasonParam || "",
+      insertedRowsCount: 0,
+      error: parseErr instanceof Error ? parseErr.message : "Timestamp parse error",
+      debug: debugInfo,
+    };
+  }
 
   const tournament = standings.tournament;
   if (!tournament) {
@@ -109,6 +154,7 @@ export async function upsertGoalserveStandings(
       season: seasonParam || "",
       insertedRowsCount: 0,
       error: "No tournament object in response",
+      debug: debugInfo,
     };
   }
 
