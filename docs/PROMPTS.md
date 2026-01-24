@@ -5245,3 +5245,43 @@ Do not touch any other files unless required.
 
 ---
 
+We have now confirmed correct Goalserve league IDs:
+- Premier League: 1204
+- Championship: 1205
+- League One: 1206
+- League Two: 1197  (IMPORTANT: 1207 is Estonia Esiliiga)
+
+Goal:
+Wire League Two properly end-to-end and ingest the correct standings snapshot, using our existing purge + force ingest flow.
+
+Constraints:
+- DO NOT run broad automated test loops or video-based testing.
+- Keep changes minimal and targeted.
+- Do not refactor unrelated files.
+
+Tasks:
+1) Update client/src/lib/league-config.ts:
+   - league-two goalserveLeagueId must be "1197" (not 1207).
+   - Ensure league-one remains "1206".
+
+2) Confirm standingsZones are correct for EFL leagues:
+   - Championship: 1-2 Automatic Promotion, 3-6 Playoffs, 22-24 Relegation (already done)
+   - League One: 1-2 Automatic Promotion, 3-6 Playoffs, 21-24 Relegation
+   - League Two: 1-3 Automatic Promotion, 4-7 Playoffs, 21-24 Relegation
+   Implement/adjust zones in league-config.ts only.
+
+3) Verify the tables UI picks up League Two correctly:
+   - /tables → League Two should call /api/standings?leagueId=1197&season=2025%2F2026&autoRefresh=1
+
+4) Provide me with the exact shell commands (using my Replit domain) to:
+   - Purge the old wrong League Two snapshot for leagueId=1207 (Estonia)
+   - Purge any existing League Two snapshot for leagueId=1197 (safe)
+   - Force ingest standings for leagueId=1197
+   - Fetch standings for leagueId=1197 and confirm 24 teams
+
+Output:
+- Summary of exactly what changed
+- The final shell commands ready to copy/paste
+
+---
+
