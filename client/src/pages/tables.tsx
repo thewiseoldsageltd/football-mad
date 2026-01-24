@@ -60,10 +60,12 @@ interface StandingsApiRow {
 }
 
 interface StandingsApiResponse {
-  leagueId: string;
-  season: string;
-  asOf: string;
-  rows: StandingsApiRow[];
+  snapshot: {
+    leagueId: string;
+    season: string;
+    fetchedAt: string;
+  };
+  table: StandingsApiRow[];
 }
 
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
@@ -203,8 +205,8 @@ export default function TablesPage() {
   });
 
   const tableRows = useMemo(() => {
-    if (!standingsData?.rows) return [];
-    return standingsData.rows.map(mapApiToTableRow);
+    if (!Array.isArray(standingsData?.table)) return [];
+    return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
 
   const renderLeaguesContent = () => {
@@ -229,7 +231,17 @@ export default function TablesPage() {
       );
     }
 
-    if (standingsError || tableRows.length === 0) {
+    if (standingsError) {
+      return (
+        <Card>
+          <CardContent className="p-6 text-center text-muted-foreground">
+            Failed to load standings. Please try again later.
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (Array.isArray(standingsData?.table) && standingsData.table.length === 0) {
       return (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">

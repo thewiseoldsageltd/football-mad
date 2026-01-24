@@ -4533,3 +4533,46 @@ Return:
 
 ---
 
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+Bug confirmed via Network tab:
+- /api/standings?leagueId=1204&season=2025/2026 returns 200 OK with JSON:
+  { snapshot, table: [...] }
+- UI still shows "No standings data available".
+
+This means the rendering condition is incorrect.
+
+Please fix client-side rendering logic in the Tables page:
+
+1) Treat the API response shape as:
+   - data.snapshot
+   - data.table (array)
+
+2) Update the "no data" condition so it ONLY renders when:
+   - request succeeded (not loading, not error)
+   - AND Array.isArray(data.table)
+   - AND data.table.length === 0
+
+3) Ensure the table renders when:
+   - Array.isArray(data.table)
+   - AND data.table.length > 0
+
+4) Do NOT gate rendering on:
+   - data.standings
+   - data.rows
+   - data.data
+   - or any nested property that doesn't exist
+
+5) If request fails (non-2xx), show an error message instead of the "no data" message.
+
+Do not change styling, layout, or API calls.
+
+Return:
+- files changed
+- the exact conditional logic used for:
+  loading / error / no-data / render-table
+
+---
+
