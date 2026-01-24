@@ -1,0 +1,50 @@
+REPLIT AI PROMPT (copy/paste)
+
+Context:
+We have a league standings table at /tables. Desktop shows full columns (Pos | Team | P | W | D | L | GF | GA | GD | Pts | Form). Mobile shows a compact layout.
+Two UX bugs remain:
+1) Relegation zone left border is showing for positions 18 & 19 but NOT for position 20.
+2) Mobile: “Pts” is visually cut off on the right, and the whole table feels like it has a tiny horizontal “wiggle”/movement (like a scroll container) even though we don’t want that.
+
+Requirements:
+- Do NOT introduce any “desktop row expand” behavior. Desktop should be fully data-enriched by default.
+- Keep current navigation/filters as-is. Only adjust table rendering/styling.
+- Keep the existing FormPills behavior.
+- No “Replit video test loops” / broad automated testing. Only do targeted verification: (a) confirm pos 20 shows red zone border, (b) confirm mobile Pts is not clipped, (c) confirm no horizontal wiggle on mobile.
+- Make minimal changes and explain exactly what changed.
+
+Work to do:
+A) Fix relegation border for pos 20 reliably.
+   - The most likely cause is the left border being applied to a <tr> or being clipped/overridden by Tailwind class ordering / overflow-hidden / rounded container.
+   - Implement the zone indicator in a way that cannot fail on the last row:
+     Option 1 (preferred): add a dedicated “zone stripe” element inside the first cell:
+       - In each row, the first cell (Pos) should contain a wrapper div with `relative pl-3` and an absolutely positioned stripe:
+         `<span aria-hidden className={cn("absolute left-0 top-0 h-full w-1 rounded-full", zoneStripeColor)} />`
+       - Make sure the stripe spans full row height.
+       - Ensure pos 18-20 use red.
+     Option 2: use `before:` pseudo-element on the row container (NOT <tr>) if we’re not using semantic table row styling. But avoid <tr> borders.
+
+   - Also ensure Tailwind class ordering can’t override the color:
+     - Do not include a default `border-l-transparent` that could override later.
+     - Or ensure the zone color class is always appended last.
+
+B) Fix mobile Pts clipping.
+   - Ensure the mobile row layout has enough right padding and the Pts column has a stable width:
+     - Add `pr-4` (or similar) to the mobile row container / last cell.
+     - Set the Pts cell to `text-right tabular-nums whitespace-nowrap` and a min width like `min-w-[3rem]`.
+     - If we’re using a table on mobile, ensure the table has `w-full table-fixed` and cells allow shrinking: `min-w-0`.
+   - Verify the “Pts” header and values are fully visible on iPhone-width.
+
+C) Remove the “wiggle” / phantom horizontal scroll on mobile.
+   - Find the wrapper that has `overflow-x-auto` / `overflow-auto` and is applied on mobile.
+   - Make it `overflow-x-visible` on mobile and only allow horizontal scroll on desktop if needed:
+     Example:
+       - Wrapper: `overflow-x-visible md:overflow-x-auto`
+   - Make sure nothing inside forces overflow on mobile (`min-w-[...]`, long strings). For mobile, enforce `w-full` and avoid `min-w` on the overall table.
+
+Files:
+- Most likely only: `client/src/components/tables/league-table.tsx`
+- Keep changes focused.
+
+After changes:
+- Provide a short manual verification checklist (3 bullets max) and STOP. No long-running tests.

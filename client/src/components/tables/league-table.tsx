@@ -10,17 +10,17 @@ interface LeagueTableProps {
   showZones?: boolean;
 }
 
-function getZoneBorderClass(pos: number, showZones: boolean): string {
-  if (!showZones) return "";
+function getZoneStripeColor(pos: number, showZones: boolean): string | null {
+  if (!showZones) return null;
   
   // Champions League: positions 1-4
-  if (pos >= 1 && pos <= 4) return "border-l-4 border-l-emerald-500/70";
+  if (pos >= 1 && pos <= 4) return "bg-emerald-500/70";
   // Europa League: position 5
-  if (pos === 5) return "border-l-4 border-l-amber-500/70";
+  if (pos === 5) return "bg-amber-500/70";
   // Relegation: positions 18-20
-  if (pos >= 18) return "border-l-4 border-l-red-500/70";
-  // All others: transparent
-  return "border-l-4 border-l-transparent";
+  if (pos >= 18) return "bg-red-500/70";
+  
+  return null;
 }
 
 function formatGD(gd: number): string {
@@ -82,12 +82,12 @@ const StandingsRow = memo(function StandingsRow({
   isExpanded, 
   onToggle 
 }: StandingsRowProps) {
-  const zoneClass = getZoneBorderClass(row.pos, showZones);
+  const zoneStripeColor = getZoneStripeColor(row.pos, showZones);
   
   return (
     <>
       <TableRow
-        className={`${zoneClass} md:cursor-default cursor-pointer`}
+        className="md:cursor-default cursor-pointer"
         data-testid={`row-table-${row.pos}`}
         onClick={() => {
           if (window.innerWidth < 768) {
@@ -104,8 +104,14 @@ const StandingsRow = memo(function StandingsRow({
           }
         }}
       >
-        {/* Position - always visible */}
-        <TableCell className="text-center font-medium w-10">
+        {/* Position - always visible, with zone stripe */}
+        <TableCell className="text-center font-medium w-10 relative pl-3">
+          {zoneStripeColor && (
+            <span 
+              aria-hidden="true" 
+              className={`absolute left-0 top-0 h-full w-1 ${zoneStripeColor}`} 
+            />
+          )}
           <span className="text-sm">{row.pos}</span>
         </TableCell>
 
@@ -155,8 +161,8 @@ const StandingsRow = memo(function StandingsRow({
         </TableCell>
 
         {/* Pts (Points) - always visible */}
-        <TableCell className="text-center w-12">
-          <span className="font-bold text-sm">{row.pts}</span>
+        <TableCell className="text-right w-12 min-w-[3rem] pr-3 md:text-center md:pr-0">
+          <span className="font-bold text-sm tabular-nums whitespace-nowrap">{row.pts}</span>
         </TableCell>
 
         {/* Form - desktop only */}
@@ -202,8 +208,8 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto">
-        <Table>
+      <div className="overflow-x-visible md:overflow-x-auto">
+        <Table className="w-full table-fixed md:table-auto">
           <TableHeader>
             <TableRow>
               <TableHead className="w-10 text-center">Pos</TableHead>
@@ -215,7 +221,7 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
               <TableHead className="w-10 text-center hidden md:table-cell">GF</TableHead>
               <TableHead className="w-10 text-center hidden md:table-cell">GA</TableHead>
               <TableHead className="w-10 text-center hidden md:table-cell">GD</TableHead>
-              <TableHead className="w-12 text-center font-semibold">Pts</TableHead>
+              <TableHead className="w-12 min-w-[3rem] text-right pr-3 md:text-center md:pr-0 font-semibold">Pts</TableHead>
               <TableHead className="w-24 hidden md:table-cell">Form</TableHead>
               <TableHead className="md:hidden w-8"></TableHead>
             </TableRow>
