@@ -431,7 +431,7 @@ League One and League Two standings now use the same live-refresh pipeline as Pr
 
 **goalserveLeagueId values (from `client/src/lib/league-config.ts`):**
 - League One: `1206`
-- League Two: `1207`
+- League Two: `1197`
 
 ### Zones Configuration
 - **League One:** Automatic Promotion (1-2), Playoffs (3-6), Relegation (21-24)
@@ -455,12 +455,12 @@ curl -sS -X POST \
 # League Two - Purge
 curl -sS -X POST \
   -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
-  "https://<replit-domain>/api/jobs/purge-standings?leagueId=1207&season=2025/2026"
+  "https://<replit-domain>/api/jobs/purge-standings?leagueId=1197&season=2025/2026"
 
 # League Two - Force reingest
 curl -sS -X POST \
   -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
-  "https://<replit-domain>/api/jobs/upsert-goalserve-standings?leagueId=1207&force=1"
+  "https://<replit-domain>/api/jobs/upsert-goalserve-standings?leagueId=1197&force=1"
 ```
 
 ### Dev Verification Steps

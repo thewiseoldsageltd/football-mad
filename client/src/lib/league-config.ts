@@ -43,7 +43,7 @@ export const leagueConfigs: LeagueConfig[] = [
   { slug: "premier-league", name: "Premier League", shortName: "PL", goalserveLeagueId: "1204", standingsZones: PLZones },
   { slug: "championship", name: "Championship", shortName: "CH", goalserveLeagueId: "1205", standingsZones: ChampionshipZones },
   { slug: "league-one", name: "League One", shortName: "L1", goalserveLeagueId: "1206", standingsZones: LeagueOneZones },
-  { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1207", standingsZones: LeagueTwoZones },
+  { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1197", standingsZones: LeagueTwoZones },
   { slug: "la-liga", name: "La Liga", shortName: "LL", goalserveLeagueId: "1399" },
   { slug: "serie-a", name: "Serie A", shortName: "SA", goalserveLeagueId: "1229" },
   { slug: "bundesliga", name: "Bundesliga", shortName: "BL", goalserveLeagueId: "1269" },

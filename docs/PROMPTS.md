@@ -5196,3 +5196,52 @@ Make only the necessary changes. Keep code consistent with existing patterns.
 
 ---
 
+We discovered standings/1207 is Estonia Esiliiga (10 teams), so our League Two Goalserve leagueId mapping is WRONG.
+
+Goal:
+Find the correct Goalserve leagueId for:
+- EFL League One
+- EFL League Two
+(and confirm Championship is 1205, Premier League is 1204)
+
+Constraints:
+- Do NOT run broad automated test loops.
+- Keep verification targeted: small scripts, quick curls, small output.
+
+Tasks:
+
+1) Search our repo + docs for Goalserve standings IDs
+- Scan any feed docs we have in the project (especially any file that looks like "full_package_feed.txt" or similar).
+- Search for "League Two", "League 2", "EFL League Two", "EFL League 2", "Sky Bet League Two", "League One", "Sky Bet League One"
+- Also search for "standings/" and "tournament" and "leagueId"
+
+2) Add a tiny helper script (or just a list in code) that lets us quickly validate candidate IDs by curling Goalserve and printing:
+- country
+- tournament league name
+- season
+- team count
+Example curl:
+curl -sS "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/standings/<ID>.xml?json=true" | head -n 30
+
+We only need to validate a handful of candidates.
+
+3) Once correct IDs are found:
+- Update client/src/lib/league-config.ts mappings so:
+  - league-one -> correct ID
+  - league-two -> correct ID
+- Ensure the standingsZones for League One and League Two match EFL:
+  - Top 3 = Promotion (or top 3 with 4-7 playoffs depending on league rules — but for now keep it consistent with current EFL structure we are using in UI)
+  - Playoffs positions as appropriate
+  - Bottom 4 = Relegation (EFL League One/Two are typically bottom 4, not bottom 3)
+
+But: before changing zones, confirm the team count is 24 and the league name matches.
+
+4) Provide me with:
+- The final confirmed leagueIds for League One and League Two
+- The exact curl commands I can run to verify them (using my replit domain is not needed for Goalserve curls)
+- Then make the minimal mapping change in league-config.ts.
+
+Do not touch any other files unless required.
+
+---
+
