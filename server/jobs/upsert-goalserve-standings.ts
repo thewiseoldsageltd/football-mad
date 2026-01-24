@@ -43,33 +43,37 @@ function computeHash(data: unknown): string {
   return crypto.createHash("sha256").update(JSON.stringify(data)).digest("hex");
 }
 
+function toInt(value: unknown, fallback = 0): number {
+  if (value === null || value === undefined) return fallback;
+  const parsed = parseInt(String(value), 10);
+  return isNaN(parsed) ? fallback : parsed;
+}
+
+interface GoalserveStatBlock {
+  gp?: string;
+  w?: string;
+  d?: string;
+  l?: string;
+  gs?: string;
+  ga?: string;
+}
+
+interface GoalserveTotalBlock {
+  p?: string;
+  gd?: string;
+}
+
 interface GoalserveTeamRow {
   id: string;
   name: string;
-  position: string;
-  overall_gp: string;
-  overall_w: string;
-  overall_d: string;
-  overall_l: string;
-  overall_gs: string;
-  overall_ga: string;
-  gd: string;
-  p: string;
+  position?: string;
+  overall?: GoalserveStatBlock;
+  total?: GoalserveTotalBlock;
+  home?: GoalserveStatBlock;
+  away?: GoalserveStatBlock;
   recent_form?: string;
   status?: string;
   description?: string;
-  home_gp?: string;
-  home_w?: string;
-  home_d?: string;
-  home_l?: string;
-  home_gs?: string;
-  home_ga?: string;
-  away_gp?: string;
-  away_w?: string;
-  away_d?: string;
-  away_l?: string;
-  away_gs?: string;
-  away_ga?: string;
 }
 
 interface UpsertStandingsResult {
@@ -218,7 +222,21 @@ export async function upsertGoalserveStandings(
     };
   }
 
-  const payloadHash = computeHash(t.team);
+  // Compute hash from normalized numeric values to detect actual data changes
+  const normalizedForHash = teamRows.map((row) => ({
+    id: row.id,
+    position: toInt(row.position),
+    points: toInt(row.total?.p),
+    played: toInt(row.overall?.gp),
+    won: toInt(row.overall?.w),
+    drawn: toInt(row.overall?.d),
+    lost: toInt(row.overall?.l),
+    goalsFor: toInt(row.overall?.gs),
+    goalsAgainst: toInt(row.overall?.ga),
+    goalDifference: toInt(row.total?.gd),
+    recentForm: row.recent_form ?? null,
+  }));
+  const payloadHash = computeHash(normalizedForHash);
 
   const [latestSnapshot] = await db
     .select({ id: standingsSnapshots.id, payloadHash: standingsSnapshots.payloadHash })
@@ -255,35 +273,46 @@ export async function upsertGoalserveStandings(
 
     const snapshotId = snapshot.id;
 
-    const rowsToInsert = teamRows.map((row) => ({
-      snapshotId,
-      teamId: teamIdMap.get(row.id) || null,
-      teamGoalserveId: row.id,
-      position: parseInt(row.position, 10) || 0,
-      points: parseInt(row.p, 10) || 0,
-      played: parseInt(row.overall_gp, 10) || 0,
-      won: parseInt(row.overall_w, 10) || 0,
-      drawn: parseInt(row.overall_d, 10) || 0,
-      lost: parseInt(row.overall_l, 10) || 0,
-      goalsFor: parseInt(row.overall_gs, 10) || 0,
-      goalsAgainst: parseInt(row.overall_ga, 10) || 0,
-      goalDifference: parseInt(row.gd, 10) || 0,
-      recentForm: row.recent_form || null,
-      movementStatus: row.status || null,
-      qualificationNote: row.description || null,
-      homePlayed: parseInt(row.home_gp || "0", 10),
-      homeWon: parseInt(row.home_w || "0", 10),
-      homeDrawn: parseInt(row.home_d || "0", 10),
-      homeLost: parseInt(row.home_l || "0", 10),
-      homeGoalsFor: parseInt(row.home_gs || "0", 10),
-      homeGoalsAgainst: parseInt(row.home_ga || "0", 10),
-      awayPlayed: parseInt(row.away_gp || "0", 10),
-      awayWon: parseInt(row.away_w || "0", 10),
-      awayDrawn: parseInt(row.away_d || "0", 10),
-      awayLost: parseInt(row.away_l || "0", 10),
-      awayGoalsFor: parseInt(row.away_gs || "0", 10),
-      awayGoalsAgainst: parseInt(row.away_ga || "0", 10),
-    }));
+    const rowsToInsert = teamRows.map((row) => {
+      const goalsFor = toInt(row.overall?.gs);
+      const goalsAgainst = toInt(row.overall?.ga);
+      const goalDifference = toInt(row.total?.gd, goalsFor - goalsAgainst);
+      
+      // Handle recentForm variants
+      const recentForm = typeof row.recent_form === "string" 
+        ? row.recent_form 
+        : (row.recent_form != null ? String(row.recent_form) : null);
+      
+      return {
+        snapshotId,
+        teamId: teamIdMap.get(row.id) || null,
+        teamGoalserveId: row.id,
+        position: toInt(row.position),
+        points: toInt(row.total?.p),
+        played: toInt(row.overall?.gp),
+        won: toInt(row.overall?.w),
+        drawn: toInt(row.overall?.d),
+        lost: toInt(row.overall?.l),
+        goalsFor,
+        goalsAgainst,
+        goalDifference,
+        recentForm,
+        movementStatus: row.status || null,
+        qualificationNote: row.description || null,
+        homePlayed: toInt(row.home?.gp),
+        homeWon: toInt(row.home?.w),
+        homeDrawn: toInt(row.home?.d),
+        homeLost: toInt(row.home?.l),
+        homeGoalsFor: toInt(row.home?.gs),
+        homeGoalsAgainst: toInt(row.home?.ga),
+        awayPlayed: toInt(row.away?.gp),
+        awayWon: toInt(row.away?.w),
+        awayDrawn: toInt(row.away?.d),
+        awayLost: toInt(row.away?.l),
+        awayGoalsFor: toInt(row.away?.gs),
+        awayGoalsAgainst: toInt(row.away?.ga),
+      };
+    });
 
     await tx.insert(standingsRows).values(rowsToInsert);
 

@@ -4637,3 +4637,49 @@ Return:
 
 ---
 
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+Bug: Standings UI shows correct team names and recentForm, but ALL numeric stats are 0 (P/W/D/L/GF/GA/GD/Pts).
+This is a standings ingestion mapping issue.
+
+Goalserve standings JSON team row keys (strings):
+- overall: { gp, w, d, l, gs, ga }
+- total: { p, gd }
+- home: { gp, w, d, l, gs, ga }
+- away: { gp, w, d, l, gs, ga }
+- recent_form: string like "DDWWW"
+
+Please update server/jobs/upsert-goalserve-standings.ts mapping so snapshot rows use:
+
+played = toInt(team.overall.gp)
+won = toInt(team.overall.w)
+drawn = toInt(team.overall.d)
+lost = toInt(team.overall.l)
+goalsFor = toInt(team.overall.gs)
+goalsAgainst = toInt(team.overall.ga)
+goalDifference = toInt(team.total.gd, goalsFor - goalsAgainst)
+points = toInt(team.total.p)
+
+homePlayed = toInt(team.home.gp) etc
+awayPlayed = toInt(team.away.gp) etc
+
+Add helper:
+function toInt(value: unknown, fallback = 0): number { ... }
+
+Also ensure we correctly read recent form:
+recentForm = team.recent_form ?? team.recent_form?.toString() ?? team.recent_form?? (handle variants)
+(Do not break existing recentForm storage.)
+
+After changing mapping:
+- recompute hash based on the normalized numeric values too (so it won’t incorrectly "skipped: true")
+- rerun ingestion for leagueId=1204 should create a new snapshot (insertedRowsCount > 0).
+
+Return:
+- files changed
+- a before/after mapping example for Arsenal showing real numbers
+- the curl command to re-run ingestion (no automated tests)
+
+---
+
