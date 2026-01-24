@@ -4260,3 +4260,57 @@ Keep implementation consistent with existing Goalserve match ingestion jobs.
 
 ---
 
+Add a public read endpoint:
+
+GET /api/standings?leagueId=<id>&season=<optional>&asOf=<optional>
+
+Behaviour:
+- leagueId is required
+- season defaults to current season if omitted
+- asOf:
+  - if provided, return the latest snapshot <= asOf
+  - if omitted, return latest snapshot for leagueId+season
+
+Query logic:
+- Find matching standings_snapshots row
+- Join standings_rows ordered by position ASC
+- Join teams table to include:
+  - team name
+  - slug
+  - crestUrl (if exists)
+
+Response shape:
+{
+  snapshot: {
+    leagueId,
+    season,
+    stageId,
+    asOf
+  },
+  table: [
+    {
+      position,
+      team: { id, name, slug, crestUrl },
+      played,
+      won,
+      drawn,
+      lost,
+      goalsFor,
+      goalsAgainst,
+      goalDifference,
+      points,
+      recentForm,
+      movementStatus,
+      qualificationNote,
+      home: {...},
+      away: {...}
+    }
+  ]
+}
+
+Ensure:
+- Results are cached safely (if existing cache helper exists)
+- 404 returned if no snapshot found
+
+---
+

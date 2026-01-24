@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -1668,6 +1668,130 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
   );
+
+  // ========== PUBLIC STANDINGS ENDPOINT ==========
+  app.get("/api/standings", async (req, res) => {
+    try {
+      const leagueId = req.query.leagueId as string;
+      if (!leagueId) {
+        return res.status(400).json({ error: "leagueId query param required" });
+      }
+
+      const now = new Date();
+      const currentYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
+      const defaultSeason = `${currentYear}/${currentYear + 1}`;
+      const season = (req.query.season as string) || defaultSeason;
+      const asOfParam = req.query.asOf as string | undefined;
+
+      const conditions = [
+        eq(standingsSnapshots.leagueId, leagueId),
+        eq(standingsSnapshots.season, season),
+      ];
+
+      if (asOfParam) {
+        const asOfDate = new Date(asOfParam);
+        conditions.push(lte(standingsSnapshots.asOf, asOfDate));
+      }
+
+      const [snapshot] = await db
+        .select()
+        .from(standingsSnapshots)
+        .where(and(...conditions))
+        .orderBy(desc(standingsSnapshots.asOf))
+        .limit(1);
+
+      if (!snapshot) {
+        return res.status(404).json({ error: "No standings snapshot found", leagueId, season });
+      }
+
+      const rows = await db
+        .select({
+          position: standingsRows.position,
+          teamId: standingsRows.teamId,
+          teamGoalserveId: standingsRows.teamGoalserveId,
+          played: standingsRows.played,
+          won: standingsRows.won,
+          drawn: standingsRows.drawn,
+          lost: standingsRows.lost,
+          goalsFor: standingsRows.goalsFor,
+          goalsAgainst: standingsRows.goalsAgainst,
+          goalDifference: standingsRows.goalDifference,
+          points: standingsRows.points,
+          recentForm: standingsRows.recentForm,
+          movementStatus: standingsRows.movementStatus,
+          qualificationNote: standingsRows.qualificationNote,
+          homePlayed: standingsRows.homePlayed,
+          homeWon: standingsRows.homeWon,
+          homeDrawn: standingsRows.homeDrawn,
+          homeLost: standingsRows.homeLost,
+          homeGoalsFor: standingsRows.homeGoalsFor,
+          homeGoalsAgainst: standingsRows.homeGoalsAgainst,
+          awayPlayed: standingsRows.awayPlayed,
+          awayWon: standingsRows.awayWon,
+          awayDrawn: standingsRows.awayDrawn,
+          awayLost: standingsRows.awayLost,
+          awayGoalsFor: standingsRows.awayGoalsFor,
+          awayGoalsAgainst: standingsRows.awayGoalsAgainst,
+          teamName: teams.name,
+          teamSlug: teams.slug,
+          teamCrestUrl: teams.logoUrl,
+        })
+        .from(standingsRows)
+        .leftJoin(teams, eq(standingsRows.teamId, teams.id))
+        .where(eq(standingsRows.snapshotId, snapshot.id))
+        .orderBy(asc(standingsRows.position));
+
+      const table = rows.map((r) => ({
+        position: r.position,
+        team: {
+          id: r.teamId,
+          name: r.teamName || r.teamGoalserveId,
+          slug: r.teamSlug,
+          crestUrl: r.teamCrestUrl,
+        },
+        played: r.played,
+        won: r.won,
+        drawn: r.drawn,
+        lost: r.lost,
+        goalsFor: r.goalsFor,
+        goalsAgainst: r.goalsAgainst,
+        goalDifference: r.goalDifference,
+        points: r.points,
+        recentForm: r.recentForm,
+        movementStatus: r.movementStatus,
+        qualificationNote: r.qualificationNote,
+        home: {
+          played: r.homePlayed,
+          won: r.homeWon,
+          drawn: r.homeDrawn,
+          lost: r.homeLost,
+          goalsFor: r.homeGoalsFor,
+          goalsAgainst: r.homeGoalsAgainst,
+        },
+        away: {
+          played: r.awayPlayed,
+          won: r.awayWon,
+          drawn: r.awayDrawn,
+          lost: r.awayLost,
+          goalsFor: r.awayGoalsFor,
+          goalsAgainst: r.awayGoalsAgainst,
+        },
+      }));
+
+      res.json({
+        snapshot: {
+          leagueId: snapshot.leagueId,
+          season: snapshot.season,
+          stageId: snapshot.stageId,
+          asOf: snapshot.asOf,
+        },
+        table,
+      });
+    } catch (error) {
+      console.error("Error fetching standings:", error);
+      res.status(500).json({ error: "Failed to fetch standings" });
+    }
+  });
 
   // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
   app.get("/api/teams/:teamSlug/availability", async (req, res) => {
