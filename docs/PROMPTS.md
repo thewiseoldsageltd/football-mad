@@ -4145,3 +4145,64 @@ After changes:
 
 ---
 
+We already use Drizzle ORM and have an existing schema with Teams, Matches, etc.
+
+Please add a new snapshot-based Standings schema.
+
+Create two new tables:
+
+1) standings_snapshots
+- id (primary key)
+- leagueId (string or int)
+- season (string)
+- stageId (string, nullable)
+- asOf (timestamp)
+- source (string, default "goalserve")
+- payloadHash (string, nullable)
+- createdAt (timestamp, default now)
+
+Add indexes:
+- (leagueId, season, asOf desc)
+
+2) standings_rows
+- id (primary key)
+- snapshotId (foreign key → standings_snapshots.id, cascade on delete)
+- teamId (foreign key → teams.id)
+- teamGoalserveId (string)
+- position (int)
+- points (int)
+- played (int)
+- won (int)
+- drawn (int)
+- lost (int)
+- goalsFor (int)
+- goalsAgainst (int)
+- goalDifference (int)
+- recentForm (string, nullable)
+- movementStatus (string, nullable)
+- qualificationNote (string, nullable)
+
+Home stats:
+- homePlayed (int)
+- homeWon (int)
+- homeDrawn (int)
+- homeLost (int)
+- homeGoalsFor (int)
+- homeGoalsAgainst (int)
+
+Away stats:
+- awayPlayed (int)
+- awayWon (int)
+- awayDrawn (int)
+- awayLost (int)
+- awayGoalsFor (int)
+- awayGoalsAgainst (int)
+
+Add indexes:
+- (snapshotId, position)
+
+Use Drizzle conventions consistent with the rest of the codebase.
+Do not modify existing tables.
+
+---
+

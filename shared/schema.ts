@@ -611,3 +611,68 @@ export const standingsRelations = relations(standings, ({ one }) => ({
 export const insertStandingsSchema = createInsertSchema(standings).omit({ id: true, updatedAt: true });
 export type InsertStandings = z.infer<typeof insertStandingsSchema>;
 export type Standings = typeof standings.$inferSelect;
+
+// ============ STANDINGS SNAPSHOTS ============
+export const standingsSnapshots = pgTable("standings_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leagueId: text("league_id").notNull(),
+  season: text("season").notNull(),
+  stageId: text("stage_id"),
+  asOf: timestamp("as_of").notNull(),
+  source: text("source").default("goalserve"),
+  payloadHash: text("payload_hash"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("standings_snapshots_league_season_asof_idx").on(table.leagueId, table.season, table.asOf),
+]);
+
+export const standingsSnapshotsRelations = relations(standingsSnapshots, ({ many }) => ({
+  rows: many(standingsRows),
+}));
+
+export const insertStandingsSnapshotSchema = createInsertSchema(standingsSnapshots).omit({ id: true, createdAt: true });
+export type InsertStandingsSnapshot = z.infer<typeof insertStandingsSnapshotSchema>;
+export type StandingsSnapshot = typeof standingsSnapshots.$inferSelect;
+
+// ============ STANDINGS ROWS ============
+export const standingsRows = pgTable("standings_rows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  snapshotId: varchar("snapshot_id").notNull().references(() => standingsSnapshots.id, { onDelete: "cascade" }),
+  teamId: varchar("team_id").references(() => teams.id),
+  teamGoalserveId: text("team_goalserve_id").notNull(),
+  position: integer("position").notNull(),
+  points: integer("points").notNull(),
+  played: integer("played").notNull(),
+  won: integer("won").notNull(),
+  drawn: integer("drawn").notNull(),
+  lost: integer("lost").notNull(),
+  goalsFor: integer("goals_for").notNull(),
+  goalsAgainst: integer("goals_against").notNull(),
+  goalDifference: integer("goal_difference").notNull(),
+  recentForm: text("recent_form"),
+  movementStatus: text("movement_status"),
+  qualificationNote: text("qualification_note"),
+  homePlayed: integer("home_played").notNull(),
+  homeWon: integer("home_won").notNull(),
+  homeDrawn: integer("home_drawn").notNull(),
+  homeLost: integer("home_lost").notNull(),
+  homeGoalsFor: integer("home_goals_for").notNull(),
+  homeGoalsAgainst: integer("home_goals_against").notNull(),
+  awayPlayed: integer("away_played").notNull(),
+  awayWon: integer("away_won").notNull(),
+  awayDrawn: integer("away_drawn").notNull(),
+  awayLost: integer("away_lost").notNull(),
+  awayGoalsFor: integer("away_goals_for").notNull(),
+  awayGoalsAgainst: integer("away_goals_against").notNull(),
+}, (table) => [
+  index("standings_rows_snapshot_position_idx").on(table.snapshotId, table.position),
+]);
+
+export const standingsRowsRelations = relations(standingsRows, ({ one }) => ({
+  snapshot: one(standingsSnapshots, { fields: [standingsRows.snapshotId], references: [standingsSnapshots.id] }),
+  team: one(teams, { fields: [standingsRows.teamId], references: [teams.id] }),
+}));
+
+export const insertStandingsRowSchema = createInsertSchema(standingsRows).omit({ id: true });
+export type InsertStandingsRow = z.infer<typeof insertStandingsRowSchema>;
+export type StandingsRow = typeof standingsRows.$inferSelect;
