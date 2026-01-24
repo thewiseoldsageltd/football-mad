@@ -4475,3 +4475,30 @@ Return:
 
 ---
 
+IMPORTANT: Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+Do NOT explore the UI beyond the specific change requested.
+Do NOT run test suites unless explicitly asked.
+Stop after code changes + summary.
+
+We have /tables now fetching real standings data via useQuery.
+
+Please implement two small improvements:
+
+1) Form column consistency:
+- On DESKTOP table: if recentForm is null/undefined/empty, render a subtle placeholder "—" (muted text) so the column doesn't look broken.
+- On MOBILE compact view: it's okay to render nothing unless expanded; when expanded, if missing, show "—" next to the Form label.
+
+2) Query behaviour:
+- In the useQuery call fetching /api/standings:
+  - set staleTime to 5 minutes
+  - set refetchOnWindowFocus to false
+  - keep existing loading/error UI intact
+
+Do not change layout, columns, colors, or expand behaviour otherwise.
+
+Return:
+- files changed
+- a 3-bullet manual verification checklist
+
+---
+

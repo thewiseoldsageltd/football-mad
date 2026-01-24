@@ -56,12 +56,10 @@ const ExpandedRowContent = memo(function ExpandedRowContent({ row }: ExpandedRow
           <span className="text-muted-foreground">W/D/L:</span>
           <span className="font-medium">{row.won}/{row.drawn}/{row.lost}</span>
         </div>
-        {row.recentForm && (
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Form:</span>
-            <FormPills form={row.recentForm} />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Form:</span>
+          <FormPills form={row.recentForm} showPlaceholder />
+        </div>
       </div>
     </div>
   );
@@ -118,7 +116,7 @@ const StandingsRow = memo(function StandingsRow({
           </span>
         </TableCell>
         <TableCell className="hidden md:table-cell w-24">
-          {row.recentForm && <FormPills form={row.recentForm} />}
+          <FormPills form={row.recentForm} showPlaceholder />
         </TableCell>
         <TableCell className="md:hidden w-8 text-center">
           <ChevronDown 

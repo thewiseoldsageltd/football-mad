@@ -172,6 +172,8 @@ export default function TablesPage() {
   const { data: standingsData, isLoading: standingsLoading, error: standingsError } = useQuery<StandingsApiResponse>({
     queryKey: [standingsUrl],
     enabled: topTab === "leagues" && !!standingsUrl,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const tableRows = useMemo(() => {

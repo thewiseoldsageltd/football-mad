@@ -3,10 +3,16 @@ import { memo } from "react";
 interface FormPillsProps {
   form?: string | null;
   maxPills?: number;
+  showPlaceholder?: boolean;
 }
 
-function FormPillsComponent({ form, maxPills }: FormPillsProps) {
-  if (!form || form.trim() === "") return null;
+function FormPillsComponent({ form, maxPills, showPlaceholder = false }: FormPillsProps) {
+  if (!form || form.trim() === "") {
+    if (showPlaceholder) {
+      return <span className="text-muted-foreground text-sm">—</span>;
+    }
+    return null;
+  }
   
   const results = form.toUpperCase().split("").slice(0, maxPills ?? form.length);
   
