@@ -4043,3 +4043,39 @@ Do NOT change schema. Keep it minimal. Return:
 
 ---
 
+Create a secure one-off job endpoint to merge duplicate teams and fix the Bournemouth anomaly.
+
+Context:
+- There are two teams:
+  - keepTeamId = "8f3a7a04-3cc0-409e-9511-0ddb48efcc82"  (name "Bournemouth", slug "afc-bournemouth", goalserveTeamId null, league "Premier League")
+  - removeTeamId = "531428c1-57c8-4210-a38e-a0143ddaf9ca" (name "Bournemouth (Championship)", slug "bournemouth", goalserveTeamId "9053", league "Championship")
+- Matches are incorrectly linked to removeTeamId because it’s the only one with goalserveTeamId=9053.
+
+Requirements:
+1) Add POST /api/jobs/merge-teams protected by requireJobSecret("GOALSERVE_SYNC_SECRET").
+2) The endpoint accepts JSON body: { keepTeamId: string, removeTeamId: string, deleteRemoved?: boolean }
+   - deleteRemoved defaults to true.
+3) In a DB transaction:
+   - Read both teams.
+   - If keepTeam.goalserveTeamId is null/empty and removeTeam.goalserveTeamId exists, copy it onto keepTeam.
+   - Update matches:
+     - set homeTeamId = keepTeamId where homeTeamId = removeTeamId
+     - set awayTeamId = keepTeamId where awayTeamId = removeTeamId
+   - Also normalize stored names on affected matches so UI is correct even if it uses match.homeTeamName/awayTeamName:
+     - where homeTeamId moved, set homeTeamName = keepTeam.name
+     - where awayTeamId moved, set awayTeamName = keepTeam.name
+   - If deleteRemoved is true:
+     - delete the removeTeam row from teams.
+     - If deletion fails due to constraints, instead set removeTeam.goalserveTeamId = null and rename it to "[DEPRECATED] " + existing name.
+4) Return JSON with counts:
+   { ok: true, keepTeamId, removeTeamId, movedHomeCount, movedAwayCount, updatedKeepGoalserveId: boolean, removedDeleted: boolean, removedDeprecationApplied: boolean }
+
+After implementing, do NOT run it automatically.
+
+Then I will run:
+curl -s -X POST -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" -H "content-type: application/json" \
+  -d '{"keepTeamId":"8f3a7a04-3cc0-409e-9511-0ddb48efcc82","removeTeamId":"531428c1-57c8-4210-a38e-a0143ddaf9ca","deleteRemoved":true}' \
+  "https://<my-domain>/api/jobs/merge-teams"
+
+---
+

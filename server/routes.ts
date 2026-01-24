@@ -1435,6 +1435,93 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== MERGE DUPLICATE TEAMS ==========
+  app.post(
+    "/api/jobs/merge-teams",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      try {
+        const { keepTeamId, removeTeamId, deleteRemoved = true } = req.body as {
+          keepTeamId: string;
+          removeTeamId: string;
+          deleteRemoved?: boolean;
+        };
+
+        if (!keepTeamId || !removeTeamId) {
+          return res.status(400).json({ error: "Missing keepTeamId or removeTeamId" });
+        }
+
+        if (keepTeamId === removeTeamId) {
+          return res.status(400).json({ error: "keepTeamId and removeTeamId cannot be the same" });
+        }
+
+        const result = await db.transaction(async (tx) => {
+          const [keepTeam] = await tx.select().from(teams).where(eq(teams.id, keepTeamId));
+          const [removeTeam] = await tx.select().from(teams).where(eq(teams.id, removeTeamId));
+
+          if (!keepTeam) {
+            throw new Error(`keepTeam not found: ${keepTeamId}`);
+          }
+          if (!removeTeam) {
+            throw new Error(`removeTeam not found: ${removeTeamId}`);
+          }
+
+          let updatedKeepGoalserveId = false;
+          if ((!keepTeam.goalserveTeamId || keepTeam.goalserveTeamId === "") && removeTeam.goalserveTeamId) {
+            await tx.update(teams)
+              .set({ goalserveTeamId: removeTeam.goalserveTeamId })
+              .where(eq(teams.id, keepTeamId));
+            updatedKeepGoalserveId = true;
+          }
+
+          const homeResult = await tx.update(matches)
+            .set({ homeTeamId: keepTeamId })
+            .where(eq(matches.homeTeamId, removeTeamId));
+          const movedHomeCount = homeResult.rowCount || 0;
+
+          const awayResult = await tx.update(matches)
+            .set({ awayTeamId: keepTeamId })
+            .where(eq(matches.awayTeamId, removeTeamId));
+          const movedAwayCount = awayResult.rowCount || 0;
+
+          let removedDeleted = false;
+          let removedDeprecationApplied = false;
+
+          if (deleteRemoved) {
+            try {
+              await tx.delete(teams).where(eq(teams.id, removeTeamId));
+              removedDeleted = true;
+            } catch (deleteErr) {
+              await tx.update(teams)
+                .set({
+                  goalserveTeamId: null,
+                  name: `[DEPRECATED] ${removeTeam.name}`,
+                })
+                .where(eq(teams.id, removeTeamId));
+              removedDeprecationApplied = true;
+            }
+          }
+
+          return {
+            ok: true,
+            keepTeamId,
+            removeTeamId,
+            movedHomeCount,
+            movedAwayCount,
+            updatedKeepGoalserveId,
+            removedDeleted,
+            removedDeprecationApplied,
+          };
+        });
+
+        res.json(result);
+      } catch (error) {
+        console.error("Merge teams error:", error);
+        res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
   // ========== GOALSERVE MATCHES UPSERT ==========
   app.post(
     "/api/jobs/upsert-goalserve-matches",
