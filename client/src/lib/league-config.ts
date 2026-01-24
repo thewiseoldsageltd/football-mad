@@ -27,11 +27,23 @@ const ChampionshipZones: StandingsZone[] = [
   { from: 22, to: 24, label: "Relegation", color: "red" },
 ];
 
+const LeagueOneZones: StandingsZone[] = [
+  { from: 1, to: 2, label: "Automatic Promotion", color: "emerald" },
+  { from: 3, to: 6, label: "Playoffs", color: "amber" },
+  { from: 21, to: 24, label: "Relegation", color: "red" },
+];
+
+const LeagueTwoZones: StandingsZone[] = [
+  { from: 1, to: 3, label: "Automatic Promotion", color: "emerald" },
+  { from: 4, to: 7, label: "Playoffs", color: "amber" },
+  { from: 23, to: 24, label: "Relegation", color: "red" },
+];
+
 export const leagueConfigs: LeagueConfig[] = [
   { slug: "premier-league", name: "Premier League", shortName: "PL", goalserveLeagueId: "1204", standingsZones: PLZones },
   { slug: "championship", name: "Championship", shortName: "CH", goalserveLeagueId: "1205", standingsZones: ChampionshipZones },
-  { slug: "league-one", name: "League One", shortName: "L1", goalserveLeagueId: "1206" },
-  { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1207" },
+  { slug: "league-one", name: "League One", shortName: "L1", goalserveLeagueId: "1206", standingsZones: LeagueOneZones },
+  { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1207", standingsZones: LeagueTwoZones },
   { slug: "la-liga", name: "La Liga", shortName: "LL", goalserveLeagueId: "1399" },
   { slug: "serie-a", name: "Serie A", shortName: "SA", goalserveLeagueId: "1229" },
   { slug: "bundesliga", name: "Bundesliga", shortName: "BL", goalserveLeagueId: "1269" },

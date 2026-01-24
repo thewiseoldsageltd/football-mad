@@ -423,3 +423,53 @@ Championship standings now use the same live-refresh pipeline as Premier League.
 4. Table should populate or show "No standings snapshot found" if Goalserve has no data yet.
 
 ---
+
+
+## League One & League Two Standings Integration
+
+League One and League Two standings now use the same live-refresh pipeline as Premier League and Championship.
+
+**goalserveLeagueId values (from `client/src/lib/league-config.ts`):**
+- League One: `1206`
+- League Two: `1207`
+
+### Zones Configuration
+- **League One:** Automatic Promotion (1-2), Playoffs (3-6), Relegation (21-24)
+- **League Two:** Automatic Promotion (1-3), Playoffs (4-7), Relegation (23-24)
+
+### Dev Purge + Force Re-ingest Commands
+
+If you need to clear bad data and force a fresh ingest:
+
+```bash
+# League One - Purge
+curl -sS -X POST \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
+  "https://<replit-domain>/api/jobs/purge-standings?leagueId=1206&season=2025/2026"
+
+# League One - Force reingest
+curl -sS -X POST \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
+  "https://<replit-domain>/api/jobs/upsert-goalserve-standings?leagueId=1206&force=1"
+
+# League Two - Purge
+curl -sS -X POST \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
+  "https://<replit-domain>/api/jobs/purge-standings?leagueId=1207&season=2025/2026"
+
+# League Two - Force reingest
+curl -sS -X POST \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
+  "https://<replit-domain>/api/jobs/upsert-goalserve-standings?leagueId=1207&force=1"
+```
+
+### Dev Verification Steps
+1. Go to `/tables` → click "League One" or "League Two" tab
+2. Open Network tab → confirm request URL includes:
+   - `leagueId=1206` (L1) or `leagueId=1207` (L2)
+   - `season=YYYY%2FYYYY` (e.g., `2025%2F2026`)
+   - `autoRefresh=1`
+3. Confirm legend shows: Automatic Promotion, Playoffs, Relegation (no Champions League / Europa)
+4. Confirm left stripe colors match zone positions
+
+---
