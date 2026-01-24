@@ -10,17 +10,17 @@ interface LeagueTableProps {
   showZones?: boolean;
 }
 
-function getZoneBorderClass(pos: number, totalTeams: number, showZones: boolean): string {
+function getZoneBorderClass(pos: number, showZones: boolean): string {
   if (!showZones) return "";
   
-  const clSpots = 4;
-  const europaSpot = 5;
-  const relegationStart = totalTeams - 2;
-  
-  if (pos <= clSpots) return "border-l-2 border-l-emerald-500/70";
-  if (pos === europaSpot) return "border-l-2 border-l-amber-500/70";
-  if (pos >= relegationStart) return "border-l-2 border-l-red-500/70";
-  return "border-l-2 border-l-transparent";
+  // Champions League: positions 1-4
+  if (pos >= 1 && pos <= 4) return "border-l-4 border-l-emerald-500/70";
+  // Europa League: position 5
+  if (pos === 5) return "border-l-4 border-l-amber-500/70";
+  // Relegation: positions 18-20
+  if (pos >= 18) return "border-l-4 border-l-red-500/70";
+  // All others: transparent
+  return "border-l-4 border-l-transparent";
 }
 
 function formatGD(gd: number): string {
@@ -71,7 +71,6 @@ const ExpandedRowContent = memo(function ExpandedRowContent({ row }: ExpandedRow
 
 interface StandingsRowProps {
   row: LeagueTableRow;
-  totalTeams: number;
   showZones: boolean;
   isExpanded: boolean;
   onToggle: () => void;
@@ -79,12 +78,11 @@ interface StandingsRowProps {
 
 const StandingsRow = memo(function StandingsRow({ 
   row, 
-  totalTeams, 
   showZones, 
   isExpanded, 
   onToggle 
 }: StandingsRowProps) {
-  const zoneClass = getZoneBorderClass(row.pos, totalTeams, showZones);
+  const zoneClass = getZoneBorderClass(row.pos, showZones);
   
   return (
     <>
@@ -189,7 +187,6 @@ const StandingsRow = memo(function StandingsRow({
 
 export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
-  const totalTeams = data.length;
 
   const toggleRow = useCallback((pos: number) => {
     setExpandedRows((prev) => {
@@ -228,7 +225,6 @@ export function LeagueTable({ data, showZones = true }: LeagueTableProps) {
               <StandingsRow
                 key={row.pos}
                 row={row}
-                totalTeams={totalTeams}
                 showZones={showZones}
                 isExpanded={expandedRows.has(row.pos)}
                 onToggle={() => toggleRow(row.pos)}

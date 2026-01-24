@@ -4683,3 +4683,40 @@ Return:
 
 ---
 
+IMPORTANT:
+- Do NOT run automated end-to-end testing, “Testing your app”, screenshot/video capture, or broad verification loops.
+- Do NOT run test suites unless explicitly asked.
+- Make only the minimal code changes required, then stop with a short summary and which files changed.
+
+Goal:
+Fix the relegation zone left-border indicator on the /tables League Table. Currently positions 18 and 19 show red, but position 20 (e.g. Wolves) does NOT show red. This is a logic bug.
+
+Required behaviour (Premier League):
+- Positions 1–4 => Champions League zone (green left border)
+- Position 5 => Europa League zone (amber left border)
+- Positions 18–20 => Relegation zone (red left border)
+- Others => transparent (no visible border)
+
+Implementation requirements:
+1) Locate where the “zone indicator” / left border class is computed in:
+   client/src/components/tables/league-table.tsx (or the exact current file that renders table rows).
+2) Replace any existing relegation logic that depends on team count, array length, or totalTeams (anything like position >= totalTeams - 2, etc).
+3) Use explicit position checks instead:
+   - champions: position >= 1 && position <= 4
+   - europa: position === 5
+   - relegation: position >= 18
+4) Ensure the left border class is applied to every row consistently (desktop and mobile).
+   - Use border-l-4 plus:
+     - emerald for champions
+     - amber for europa
+     - red for relegation
+     - transparent otherwise
+5) Keep the rest of the table UI unchanged.
+
+After changes:
+- Provide a short summary.
+- List the exact files modified and the key code snippet(s) you changed.
+- Do not start any broad testing loop; only do a quick targeted check in code (no recordings).
+
+---
+
