@@ -4773,3 +4773,66 @@ After changes:
 
 ---
 
+You are working in this repo. Implement live standings updates for the Tables page without requiring manual job triggers.
+
+Goal:
+- Matches page already updates live.
+- Tables page should update automatically as games finish.
+- Do NOT add broad automated testing or “video test loops”. Only do targeted manual verification notes.
+
+Key requirements:
+1) Add an auto-refresh mechanism to GET /api/standings that can (optionally) trigger a standings ingestion before returning data.
+2) This MUST be safe:
+   - No client secrets required.
+   - Rate-limited per league+season to avoid hammering Goalserve.
+   - If nothing changed, the existing hash/snapshot logic should make ingestion cheap (skips).
+3) Update client Tables page to poll standings during live match periods (or just poll while the user is on /tables), and request auto-refresh.
+
+Implementation details:
+
+A) Server: Auto-refresh on /api/standings
+- Locate the server route handler for GET /api/standings (likely in server/routes.ts or similar).
+- Add optional query param: autoRefresh=1
+- When autoRefresh=1:
+  - Determine leagueId + season exactly as current handler already does.
+  - Add an in-memory throttle map keyed by `${leagueId}:${season}` storing lastRunMs.
+  - Only allow an auto-refresh attempt if:
+      now - lastRunMs >= 60_000 (1 minute)  [or 120_000 if you prefer]
+  - If allowed, call the existing standings ingestion logic directly (do not require x-sync-secret).
+    - IMPORTANT: do not do an internal HTTP call; import/call the job function directly if possible.
+    - Reuse the existing Goalserve fetch + parse + upsert snapshot logic in `server/jobs/upsert-goalserve-standings.ts`.
+    - If that job currently expects to be invoked only via the secured endpoint, refactor the job module so it exports a function like:
+        `export async function upsertGoalserveStandings({ leagueId, season }: { leagueId: string; season?: string })`
+      and the secured endpoint just calls it.
+  - Swallow auto-refresh errors (log them) and still return the last known snapshot/table, so UI never hard-fails because Goalserve is temporarily flaky.
+
+B) Client: Poll standings while viewing /tables
+- In client/src/pages/tables.tsx, update the standings useQuery:
+  - Include `autoRefresh=1` in the request URL.
+  - Add `refetchInterval` while on the Leagues tab and a league is selected:
+      - refetchInterval: 60_000 (1 minute)
+      - keep staleTime as-is or reduce to ~30s during live polling.
+  - Keep `refetchOnWindowFocus: true` (or set to true) so switching back to the tab refreshes.
+- Do NOT poll Cups/Europe paths yet (only leagues).
+
+C) Manual verification notes only (no automated test runs)
+Provide a short checklist:
+1) Open /tables, Premier League, 2025/26 -> confirm request includes autoRefresh=1.
+2) Confirm network calls repeat every 60s while staying on /tables.
+3) Trigger a standings change by running the secured job once:
+   POST /api/jobs/upsert-goalserve-standings?leagueId=1204 with x-sync-secret
+   Then confirm within 60s the UI reflects the new snapshot (points/played etc).
+4) Confirm rate-limit works: refreshing page repeatedly does NOT cause ingestion every time (server logs show at most once per minute per league+season).
+
+Constraints:
+- Keep code changes minimal and local.
+- Do not change navigation or table UI/columns; only refresh behavior.
+- Avoid any “run full test suite”, “record video”, or endless verification loops.
+
+Deliverables:
+- Modified server code exporting/reusing the job function + autoRefresh behavior in GET /api/standings.
+- Modified client tables query adding autoRefresh and polling.
+- A short manual verification checklist.
+
+---
+

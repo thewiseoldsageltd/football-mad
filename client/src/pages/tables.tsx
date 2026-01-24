@@ -200,14 +200,16 @@ export default function TablesPage() {
     if (apiSeason) {
       params.set("season", apiSeason);
     }
+    params.set("autoRefresh", "1");
     return `/api/standings?${params.toString()}`;
   }, [goalserveLeagueId, apiSeason]);
 
   const { data: standingsData, isLoading: standingsLoading, error: standingsError } = useQuery<StandingsApiResponse>({
     queryKey: [standingsUrl],
     enabled: topTab === "leagues" && !!standingsUrl,
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
 
   const tableRows = useMemo(() => {

@@ -1752,6 +1752,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== PUBLIC STANDINGS ENDPOINT ==========
+  // In-memory throttle map for auto-refresh: key = "leagueId:season", value = lastRunMs
+  const standingsAutoRefreshThrottle = new Map<string, number>();
+  const STANDINGS_REFRESH_COOLDOWN_MS = 60_000; // 1 minute
+
   app.get("/api/standings", async (req, res) => {
     try {
       const leagueId = req.query.leagueId as string;
@@ -1764,6 +1768,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const defaultSeason = `${currentYear}/${currentYear + 1}`;
       const season = (req.query.season as string) || defaultSeason;
       const asOfParam = req.query.asOf as string | undefined;
+      const autoRefresh = req.query.autoRefresh === "1";
+
+      // Auto-refresh logic: attempt standings ingestion if allowed by throttle
+      if (autoRefresh) {
+        const throttleKey = `${leagueId}:${season}`;
+        const lastRun = standingsAutoRefreshThrottle.get(throttleKey) || 0;
+        const nowMs = Date.now();
+        
+        if (nowMs - lastRun >= STANDINGS_REFRESH_COOLDOWN_MS) {
+          standingsAutoRefreshThrottle.set(throttleKey, nowMs);
+          try {
+            const result = await upsertGoalserveStandings(leagueId, season);
+            if (result.ok) {
+              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
+            } else {
+              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} FAILED: ${result.error}`);
+            }
+          } catch (refreshErr) {
+            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ERROR:`, refreshErr);
+          }
+        }
+      }
 
       const conditions = [
         eq(standingsSnapshots.leagueId, leagueId),
