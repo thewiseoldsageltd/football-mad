@@ -5285,3 +5285,23 @@ Output:
 
 ---
 
+Update League Two standings zones.
+
+Context:
+League Two (EFL) relegation is ONLY 2 teams: positions 23 and 24.
+The rest of the League Two zones should remain:
+- Automatic Promotion: positions 1-3
+- Playoffs: positions 4-7
+- Relegation: positions 23-24
+
+Task:
+1) In client/src/lib/league-config.ts, find the league config for slug "league-two".
+2) Update standingsZones so the relegation zone uses startPos: 23 and endPos: 24 (NOT 21-24).
+3) Do not change League One or Championship zones.
+4) Ensure the legend and left-hand stripe rendering still uses the zones config (no hardcoding).
+5) Return a short summary of exactly what changed.
+
+After the change, /tables → League Two should show the red relegation highlight only for 23rd and 24th.
+
+---
+

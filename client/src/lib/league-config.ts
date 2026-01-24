@@ -36,7 +36,7 @@ const LeagueOneZones: StandingsZone[] = [
 const LeagueTwoZones: StandingsZone[] = [
   { from: 1, to: 3, label: "Automatic Promotion", color: "emerald" },
   { from: 4, to: 7, label: "Playoffs", color: "amber" },
-  { from: 21, to: 24, label: "Relegation", color: "red" },
+  { from: 23, to: 24, label: "Relegation", color: "red" },
 ];
 
 export const leagueConfigs: LeagueConfig[] = [

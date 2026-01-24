@@ -435,7 +435,7 @@ League One and League Two standings now use the same live-refresh pipeline as Pr
 
 ### Zones Configuration
 - **League One:** Automatic Promotion (1-2), Playoffs (3-6), Relegation (21-24)
-- **League Two:** Automatic Promotion (1-3), Playoffs (4-7), Relegation (21-24)
+- **League Two:** Automatic Promotion (1-3), Playoffs (4-7), Relegation (23-24)
 
 ### Dev Purge + Force Re-ingest Commands
 
