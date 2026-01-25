@@ -5685,3 +5685,46 @@ IMPORTANT: Do NOT change the standings work. Only fix the cup fixtures feed URL 
 
 ---
 
+TASK: Fix FA Cup round ordering collisions in /api/cup/progress.
+
+CONTEXT:
+The endpoint returns rounds with { name, order, matches }. Right now "1/8-finals" and "Quarter-finals" both map to order=6, causing unstable ordering. We want unique ordering for every main round.
+
+REQUIREMENTS:
+1) Locate the round normalization / ordering logic used by server endpoint GET /api/cup/progress (likely in server/routes.ts or a helper used by that route). Find the function that converts a round label into an "order" number (e.g. roundOrder(), normalizeRound(), getRoundOrder()).
+2) Update the mapping so these round names produce UNIQUE order values in this sequence:
+   - "1/128-finals" => -4
+   - "1/64-finals"  => -3
+   - "1/32-finals"  => -2
+   - "1/16-finals"  => -1
+   - "1/8-finals"   =>  0
+   - "Quarter-finals" => 1
+   - "Semi-finals"    => 2
+   - "Final"          => 3
+3) Keep existing support for qualifying rounds + “Proper” rounds (Extra Preliminary, Preliminary, 1st–4th Qualifying, First–Fifth Round Proper, etc). Do not break them.
+4) Ensure sorting uses (order ASC, kickoff ASC) within each round group.
+5) Add a tiny dev-only sanity log or comment showing the expected order list, but do NOT spam logs in production.
+
+ACCEPTANCE TEST:
+Run:
+curl -sS "$DOMAIN/api/cup/progress?competitionId=1198&season=2025/2026" \
+| grep -Eo '"name":"[^"]+","order":-?[0-9]+,"matches":\[' \
+| sed -E 's/"name":"([^"]+)","order":(-?[0-9]+).*/\2\t\1/' \
+| sort -n \
+| nl -ba
+
+Expected ordering:
+-4 1/128-finals
+-3 1/64-finals
+-2 1/32-finals
+-1 1/16-finals
+ 0 1/8-finals
+ 1 Quarter-finals
+ 2 Semi-finals
+(And Final appears as 3 when present)
+
+DELIVERABLE:
+Commit the code change with a clear message like: "Fix FA Cup round ordering (unique orders for 1/8, QF, SF, Final)".
+
+---
+

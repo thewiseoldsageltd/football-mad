@@ -2246,44 +2246,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // FA Cup order: Extra Preliminary -> Preliminary -> 1st Qualifying -> 2nd Q -> 3rd Q -> 4th Q 
       // -> First Round -> Second Round -> Third Round -> Fourth Round -> Fifth Round
       // -> Quarter-finals -> Semi-finals -> Final
+      // FA Cup round ordering - unique values for each stage
+      // Expected order: -4 to 3 for main knockout stages
+      // Dev sanity check: 1/128(-4) → 1/64(-3) → 1/32(-2) → 1/16(-1) → 1/8(0) → QF(1) → SF(2) → F(3)
       const roundOrder: Record<string, number> = {
-        // FA Cup qualifying stages (Goalserve uses "Quarter-finals" for qualifying round stages)
+        // FA Cup qualifying stages
         "Extra Preliminary Round": -10,
         "Preliminary Round": -9,
         "First Qualifying Round": -8,
         "Second Qualifying Round": -7,
         "Third Qualifying Round": -6,
         "Fourth Qualifying Round": -5,
-        // Goalserve fractional round notation (e.g., 1/128-finals, 1/64-finals)
+        // Goalserve fractional round notation - unique orders
         "1/128-finals": -4,
         "1/64-finals": -3,
         "1/32-finals": -2,
         "1/16-finals": -1,
-        "1/8-finals": 6, // This is Quarter-finals (8 teams remaining)
-        // Standard FA Cup main rounds
-        "First Round": 1,
-        "First Round Proper": 1,
-        "Second Round": 2,
-        "Second Round Proper": 2,
-        "Third Round": 3,
-        "Third Round Proper": 3,
-        "Fourth Round": 4,
-        "Fourth Round Proper": 4,
-        "Fifth Round": 5,
-        "Fifth Round Proper": 5,
-        "Round of 64": 0.5,
-        "Round of 32": 0.75,
-        "Round of 16": 5.5,
-        "Quarter-finals": 6,
-        "Semi-finals": 7,
-        "Final": 8,
+        "1/8-finals": 0,
+        "Quarter-finals": 1,
+        "Semi-finals": 2,
+        "Final": 3,
+        // Standard FA Cup main rounds (legacy/alternate naming)
+        "First Round": -4,
+        "First Round Proper": -4,
+        "Second Round": -3,
+        "Second Round Proper": -3,
+        "Third Round": -2,
+        "Third Round Proper": -2,
+        "Fourth Round": -1,
+        "Fourth Round Proper": -1,
+        "Fifth Round": 0,
+        "Fifth Round Proper": 0,
+        "Round of 64": -3,
+        "Round of 32": -2,
+        "Round of 16": -1,
       };
 
       const normalizeRoundName = (name: string): string => {
         const lower = name.toLowerCase().trim();
         // Keep Goalserve fractional notation as-is (e.g., 1/128-finals, 1/64-finals)
-        // These are valid round names that map to roundOrder
-        if (/^1\/\d+-finals$/.test(lower)) return name;
+        // Return lowercase to match roundOrder keys
+        if (/^1\/\d+-finals$/.test(lower)) return lower;
         // Handle quarter/semi/final variations
         if (lower.includes("quarter") && !lower.includes("qualifying")) return "Quarter-finals";
         if (lower.includes("semi") && !lower.includes("qualifying")) return "Semi-finals";
@@ -2331,7 +2334,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         cupRounds.push({
           name: normalizedName,
-          order: roundOrder[normalizedName] || 99,
+          order: roundOrder[normalizedName] ?? 99,
           matches: matchList,
         });
       }
