@@ -15,6 +15,7 @@ interface LeagueTableProps {
 const zoneColorMap: Record<ZoneColor, string> = {
   emerald: "bg-emerald-500/70",
   amber: "bg-amber-500/70",
+  orange: "bg-orange-500/70",
   red: "bg-red-500/70",
 };
 

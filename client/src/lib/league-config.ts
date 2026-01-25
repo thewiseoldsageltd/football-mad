@@ -1,4 +1,4 @@
-export type ZoneColor = "emerald" | "amber" | "red";
+export type ZoneColor = "emerald" | "amber" | "orange" | "red";
 
 export interface StandingsZone {
   from: number;
@@ -39,11 +39,19 @@ const LeagueTwoZones: StandingsZone[] = [
   { from: 23, to: 24, label: "Relegation", color: "red" },
 ];
 
+const NationalLeagueZones: StandingsZone[] = [
+  { from: 1, to: 1, label: "Promoted", color: "emerald" },
+  { from: 2, to: 3, label: "Playoff Semi-final", color: "amber" },
+  { from: 4, to: 7, label: "Playoff Quarter-final", color: "orange" },
+  { from: 21, to: 24, label: "Relegation", color: "red" },
+];
+
 export const leagueConfigs: LeagueConfig[] = [
   { slug: "premier-league", name: "Premier League", shortName: "PL", goalserveLeagueId: "1204", standingsZones: PLZones },
   { slug: "championship", name: "Championship", shortName: "CH", goalserveLeagueId: "1205", standingsZones: ChampionshipZones },
   { slug: "league-one", name: "League One", shortName: "L1", goalserveLeagueId: "1206", standingsZones: LeagueOneZones },
   { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1197", standingsZones: LeagueTwoZones },
+  { slug: "national-league", name: "National League", shortName: "NL", goalserveLeagueId: "TODO_GOALSERVE_ID", standingsZones: NationalLeagueZones },
   { slug: "la-liga", name: "La Liga", shortName: "LL", goalserveLeagueId: "1399" },
   { slug: "serie-a", name: "Serie A", shortName: "SA", goalserveLeagueId: "1229" },
   { slug: "bundesliga", name: "Bundesliga", shortName: "BL", goalserveLeagueId: "1269" },

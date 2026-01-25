@@ -466,10 +466,51 @@ curl -sS -X POST \
 ### Dev Verification Steps
 1. Go to `/tables` → click "League One" or "League Two" tab
 2. Open Network tab → confirm request URL includes:
-   - `leagueId=1206` (L1) or `leagueId=1207` (L2)
+   - `leagueId=1206` (L1) or `leagueId=1197` (L2)
    - `season=YYYY%2FYYYY` (e.g., `2025%2F2026`)
    - `autoRefresh=1`
 3. Confirm legend shows: Automatic Promotion, Playoffs, Relegation (no Champions League / Europa)
 4. Confirm left stripe colors match zone positions
+
+---
+
+## National League Support
+
+National League (5th tier of English football) is now added to the Tables page.
+
+**goalserveLeagueId:** `TODO_GOALSERVE_ID` (use preview endpoint to find correct ID)
+
+### Zones Configuration
+- **Promoted:** Position 1 (emerald)
+- **Playoff Semi-final:** Positions 2-3 (amber)
+- **Playoff Quarter-final:** Positions 4-7 (orange)
+- **Relegation:** Positions 21-24 (red)
+
+### Dev Preview Endpoint
+
+Use this endpoint to verify Goalserve league metadata before ingesting:
+
+```bash
+# Preview standings metadata for a leagueId
+curl -sS -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
+  "https://football-mad.replit.app/api/dev/goalserve/standings-preview?leagueId=XXXX"
+
+# Expected response:
+# {
+#   "ok": true,
+#   "leagueId": "XXXX",
+#   "country": "England",
+#   "leagueName": "National League",
+#   "season": "2025/2026",
+#   "stageCount": 1,
+#   "teamCount": 24
+# }
+```
+
+### Finding the Correct National League ID
+
+1. Try candidate IDs using the preview endpoint
+2. Look for: `country: "England"`, `leagueName: "National League"`, `teamCount: 24`
+3. Once found, update `league-config.ts` with the correct ID
 
 ---

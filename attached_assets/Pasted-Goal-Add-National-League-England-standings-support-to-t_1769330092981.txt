@@ -1,0 +1,46 @@
+Goal: Add National League (England) standings support to the Tables page, including correct promotion/playoff/relegation zone highlighting as per Soccerway:
+- 1st: Promoted
+- 2nd–3rd: Playoff Semi-final
+- 4th–7th: Playoff Quarter-final
+- 21st–24th: Relegation (bottom 4)
+
+Also: Add a small dev-only endpoint to preview Goalserve standings metadata (league name/country/season/team count) for a given goalserve leagueId, so we can confirm the correct leagueId before we ingest.
+
+Changes:
+
+1) client/src/lib/league-config.ts
+- Add a new league config entry:
+  slug: "national-league"
+  name: "National League"
+  (goalserveLeagueId: leave as a placeholder string for now e.g. "TODO_GOALSERVE_ID")
+- Add standingsZones for National League:
+  - { label: "Promoted", range: [1,1], color: "emerald" }
+  - { label: "Playoff Semi-final", range: [2,3], color: "amber" }
+  - { label: "Playoff Quarter-final", range: [4,7], color: "orange" }
+  - { label: "Relegation", range: [21,24], color: "red" }
+
+Make sure the zones system supports multiple different colours (we already use emerald/amber/red — add orange if not present, using Tailwind classes).
+
+2) client/src/data/tables-mock.ts (or wherever the Tables league tabs are defined)
+- Add "National League" as a selectable tab in the Leagues list, using id/slug: "national-league".
+- Ensure it flows through the existing tables page logic the same way as PL/Championship/League One/League Two.
+
+3) server/routes.ts
+Add a DEV utility route to preview goalserve standings without ingesting:
+GET /api/dev/goalserve/standings-preview?leagueId=XXXX
+- Must require x-sync-secret header and reuse GOALSERVE_SYNC_SECRET to protect it.
+- It should call Goalserve standings feed for that leagueId using the existing GOALSERVE_FEED_KEY env var.
+- Parse enough to return:
+  { ok: true, leagueId, country, leagueName, season, stageId, teamCount }
+- If the response doesn’t look like standings data, return ok:false and include the raw top-level keys.
+
+Important: Keep this endpoint lightweight and safe (no DB writes). It is for development only.
+
+4) After wiring, update docs/BUILD_LOG.md with:
+- The National League zone rules
+- The new preview endpoint usage
+
+Acceptance checks:
+- National League appears in /tables.
+- Zones render with the correct ranges and legend labels.
+- Preview endpoint works and helps us find the correct goalserve leagueId.

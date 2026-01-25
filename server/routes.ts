@@ -1811,6 +1811,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== DEV: Preview Goalserve Standings Metadata ==========
+  app.get(
+    "/api/dev/goalserve/standings-preview",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
+      }
+
+      const feedKey = process.env.GOALSERVE_FEED_KEY;
+      if (!feedKey) {
+        return res.status(500).json({ ok: false, error: "GOALSERVE_FEED_KEY not configured" });
+      }
+
+      try {
+        const url = `https://www.goalserve.com/getfeed/${feedKey}/standings/${leagueId}.xml?json=true`;
+        const response = await fetch(url, { headers: { Accept: "application/json" } });
+
+        if (!response.ok) {
+          return res.status(502).json({
+            ok: false,
+            error: `Goalserve returned ${response.status}`,
+            leagueId,
+          });
+        }
+
+        const json = await response.json();
+        const standings = json?.standings;
+        if (!standings) {
+          return res.json({
+            ok: false,
+            error: "No 'standings' key in response",
+            leagueId,
+            topLevelKeys: Object.keys(json || {}),
+          });
+        }
+
+        const tournament = standings.tournament;
+        if (!tournament) {
+          return res.json({
+            ok: false,
+            error: "No 'tournament' in standings",
+            leagueId,
+            standingsKeys: Object.keys(standings),
+          });
+        }
+
+        // Parse teams from stages
+        let teamCount = 0;
+        const stages = tournament.stage;
+        const stageArr = Array.isArray(stages) ? stages : stages ? [stages] : [];
+        for (const stage of stageArr) {
+          const teams = stage?.team;
+          const teamArr = Array.isArray(teams) ? teams : teams ? [teams] : [];
+          teamCount += teamArr.length;
+        }
+
+        res.json({
+          ok: true,
+          leagueId,
+          country: tournament.country ?? null,
+          leagueName: tournament.league ?? null,
+          season: tournament.season ?? null,
+          stageCount: stageArr.length,
+          stageIds: stageArr.map((s: any) => s?.id ?? null),
+          teamCount,
+        });
+      } catch (error) {
+        console.error("Goalserve standings preview error:", error);
+        res.status(500).json({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+          leagueId,
+        });
+      }
+    }
+  );
+
   // ========== PUBLIC STANDINGS ENDPOINT ==========
   // In-memory throttle map for auto-refresh: key = "leagueId:season", value = lastRunMs
   const standingsAutoRefreshThrottle = new Map<string, number>();
