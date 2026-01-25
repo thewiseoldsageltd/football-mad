@@ -2248,76 +2248,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // -> Quarter-finals -> Semi-finals -> Final
       // FA Cup round ordering - unique values for each stage
       // Expected order: -4 to 3 for main knockout stages
+      // Note: We use ?? not || because order can be 0 (for 1/8-finals or Fifth Round)
       // Dev sanity check: 1/128(-4) → 1/64(-3) → 1/32(-2) → 1/16(-1) → 1/8(0) → QF(1) → SF(2) → F(3)
+      // All keys are lowercase to match normalizeRoundName() output
       const roundOrder: Record<string, number> = {
         // FA Cup qualifying stages
-        "Extra Preliminary Round": -10,
-        "Preliminary Round": -9,
-        "First Qualifying Round": -8,
-        "Second Qualifying Round": -7,
-        "Third Qualifying Round": -6,
-        "Fourth Qualifying Round": -5,
+        "extra preliminary round": -10,
+        "preliminary round": -9,
+        "first qualifying round": -8,
+        "second qualifying round": -7,
+        "third qualifying round": -6,
+        "fourth qualifying round": -5,
         // Goalserve fractional round notation - unique orders
         "1/128-finals": -4,
         "1/64-finals": -3,
         "1/32-finals": -2,
         "1/16-finals": -1,
         "1/8-finals": 0,
-        "Quarter-finals": 1,
-        "Semi-finals": 2,
-        "Final": 3,
-        // Standard FA Cup main rounds (legacy/alternate naming)
-        "First Round": -4,
-        "First Round Proper": -4,
-        "Second Round": -3,
-        "Second Round Proper": -3,
-        "Third Round": -2,
-        "Third Round Proper": -2,
-        "Fourth Round": -1,
-        "Fourth Round Proper": -1,
-        "Fifth Round": 0,
-        "Fifth Round Proper": 0,
-        "Round of 64": -3,
-        "Round of 32": -2,
-        "Round of 16": -1,
+        "quarter-finals": 1,
+        "semi-finals": 2,
+        "final": 3,
+        // Standard FA Cup main rounds (First–Fifth Round mappings)
+        "first round": -4,
+        "first round proper": -4,
+        "second round": -3,
+        "second round proper": -3,
+        "third round": -2,
+        "third round proper": -2,
+        "fourth round": -1,
+        "fourth round proper": -1,
+        "fifth round": 0,
+        "fifth round proper": 0,
+        "round of 64": -3,
+        "round of 32": -2,
+        "round of 16": -1,
       };
 
+      // normalizeRoundName: always returns lowercase to match roundOrder keys
       const normalizeRoundName = (name: string): string => {
         const lower = name.toLowerCase().trim();
-        // Keep Goalserve fractional notation as-is (e.g., 1/128-finals, 1/64-finals)
-        // Return lowercase to match roundOrder keys
+        // Keep Goalserve fractional notation as-is (already lowercase)
         if (/^1\/\d+-finals$/.test(lower)) return lower;
         // Handle quarter/semi/final variations
-        if (lower.includes("quarter") && !lower.includes("qualifying")) return "Quarter-finals";
-        if (lower.includes("semi") && !lower.includes("qualifying")) return "Semi-finals";
-        if ((lower === "final" || lower === "finals") && !lower.includes("qualifying")) return "Final";
+        if (lower.includes("quarter") && !lower.includes("qualifying")) return "quarter-finals";
+        if (lower.includes("semi") && !lower.includes("qualifying")) return "semi-finals";
+        if ((lower === "final" || lower === "finals") && !lower.includes("qualifying")) return "final";
         // Handle qualifying rounds
-        if (lower.includes("extra") && lower.includes("prelim")) return "Extra Preliminary Round";
-        if (lower.includes("prelim") && !lower.includes("extra")) return "Preliminary Round";
-        if ((lower.includes("1st") || lower.includes("first")) && lower.includes("qual")) return "First Qualifying Round";
-        if ((lower.includes("2nd") || lower.includes("second")) && lower.includes("qual")) return "Second Qualifying Round";
-        if ((lower.includes("3rd") || lower.includes("third")) && lower.includes("qual")) return "Third Qualifying Round";
-        if ((lower.includes("4th") || lower.includes("fourth")) && lower.includes("qual")) return "Fourth Qualifying Round";
+        if (lower.includes("extra") && lower.includes("prelim")) return "extra preliminary round";
+        if (lower.includes("prelim") && !lower.includes("extra")) return "preliminary round";
+        if ((lower.includes("1st") || lower.includes("first")) && lower.includes("qual")) return "first qualifying round";
+        if ((lower.includes("2nd") || lower.includes("second")) && lower.includes("qual")) return "second qualifying round";
+        if ((lower.includes("3rd") || lower.includes("third")) && lower.includes("qual")) return "third qualifying round";
+        if ((lower.includes("4th") || lower.includes("fourth")) && lower.includes("qual")) return "fourth qualifying round";
         // Handle "Round of XX"
-        if (lower.includes("round of 64") || lower.includes("last 64")) return "Round of 64";
-        if (lower.includes("round of 32") || lower.includes("last 32")) return "Round of 32";
-        if (lower.includes("round of 16") || lower.includes("last 16")) return "Round of 16";
+        if (lower.includes("round of 64") || lower.includes("last 64")) return "round of 64";
+        if (lower.includes("round of 32") || lower.includes("last 32")) return "round of 32";
+        if (lower.includes("round of 16") || lower.includes("last 16")) return "round of 16";
         // Handle "1st Round", "Round 1", etc.
         const ordinalMatch = lower.match(/^(1st|first|round\s*1)\s*(round)?$/);
-        if (ordinalMatch) return "First Round";
+        if (ordinalMatch) return "first round";
         const secondMatch = lower.match(/^(2nd|second|round\s*2)\s*(round)?$/);
-        if (secondMatch) return "Second Round";
+        if (secondMatch) return "second round";
         const thirdMatch = lower.match(/^(3rd|third|round\s*3)\s*(round)?$/);
-        if (thirdMatch) return "Third Round";
+        if (thirdMatch) return "third round";
         const fourthMatch = lower.match(/^(4th|fourth|round\s*4)\s*(round)?$/);
-        if (fourthMatch) return "Fourth Round";
+        if (fourthMatch) return "fourth round";
         const fifthMatch = lower.match(/^(5th|fifth|round\s*5)\s*(round)?$/);
-        if (fifthMatch) return "Fifth Round";
-        // Strip "proper" suffix for cleaner display
+        if (fifthMatch) return "fifth round";
+        // Strip "proper" suffix for cleaner display, return lowercase
         if (lower.includes("proper")) {
-          return name.replace(/\s*proper\s*/i, "").trim();
+          return lower.replace(/\s*proper\s*/, " ").trim();
         }
-        return name;
+        return lower;
       };
 
       const cupRounds: CupRound[] = [];

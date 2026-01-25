@@ -42,7 +42,22 @@ Preferred communication style: Simple, everyday language.
   - API: `/api/cup/progress?competitionId=1198&season=2025/2026`
   - Goalserve feed: `soccerfixtures/leagueid/{LEAGUE_ID}?json=true`
   - Verify with: `curl -sS "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/soccerfixtures/leagueid/1198?json=true" | head -n 40`
-  - Round ordering: Qualifying rounds (-10 to -5) → 1/128(-4) → 1/64(-3) → 1/32(-2) → 1/16(-1) → 1/8(0) → QF(1) → SF(2) → Final(3)
+  - **JavaScript gotcha**: Use `??` instead of `||` when 0 is a valid value (0 is falsy in JavaScript)
+  - Round ordering (all keys lowercase for consistent lookup):
+    - Extra Preliminary Round: -10
+    - Preliminary Round: -9
+    - First Qualifying Round: -8
+    - Second Qualifying Round: -7
+    - Third Qualifying Round: -6
+    - Fourth Qualifying Round: -5
+    - 1/128-finals / First Round: -4
+    - 1/64-finals / Second Round: -3
+    - 1/32-finals / Third Round: -2
+    - 1/16-finals / Fourth Round: -1
+    - 1/8-finals / Fifth Round: 0
+    - Quarter-finals: 1
+    - Semi-finals: 2
+    - Final: 3
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds

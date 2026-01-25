@@ -5728,3 +5728,66 @@ Commit the code change with a clear message like: "Fix FA Cup round ordering (un
 
 ---
 
+TASK: Finalise FA Cup round ordering + restore “First Round”..“Fifth Round” support.
+
+CONTEXT:
+In /api/cup/progress we normalise a round name then map it to an integer order via a roundOrder dictionary.
+Bug: code used `roundOrder[key] || 99`, which breaks when the mapped order is 0 (e.g. "1/8-finals"), because 0 is falsy and becomes 99.
+Also ensure standard FA Cup "First Round" through "Fifth Round" mappings are present.
+
+DO THIS:
+1) Find the round ordering logic used by GET /api/cup/progress (likely in server/routes.ts or a helper file).
+2) Ensure normalisation + lookup use consistent casing:
+   - EITHER make normalizeRoundName() return lowercased output
+   - OR lowercase the lookup key: `const key = normalizedName.toLowerCase()`
+   (Choose the cleanest + most consistent approach in the file.)
+3) Restore/ensure these mappings exist (keys should match your chosen casing):
+   - "first round"  -> order for First Round Proper (after qualifying)
+   - "second round" -> order
+   - "third round"  -> order
+   - "fourth round" -> order
+   - "fifth round"  -> order
+   Keep the existing qualifying mappings too (Extra Preliminary, Preliminary, 1st–4th Qualifying, etc).
+4) Fix the falsy-zero bug by replacing:
+      `roundOrder[key] || 99`
+   with:
+      `roundOrder[key] ?? 99`
+   so 0 is respected.
+5) Ensure these fractional rounds map uniquely:
+   - 1/128-finals => -4
+   - 1/64-finals  => -3
+   - 1/32-finals  => -2
+   - 1/16-finals  => -1
+   - 1/8-finals   => 0
+   - Quarter-finals => 1
+   - Semi-finals    => 2
+   - Final          => 3
+6) Remove any debug logging you added.
+7) Update docs (replit.md or docs/BUILD_LOG.md – whichever you’re using) to note:
+   - We use `??` not `||` because order can be 0.
+   - List the round ordering table above.
+
+ACCEPTANCE TEST:
+export DOMAIN="https://f04e3e83-5dee-4d43-ba21-fba6506a8e19-00-3rjffbqt7u6wn.spock.replit.dev"
+
+curl -sS "$DOMAIN/api/cup/progress?competitionId=1198&season=2025/2026" \
+| grep -Eo '"name":"[^"]+","order":-?[0-9]+,"matches":\[' \
+| sed -E 's/"name":"([^"]+)","order":(-?[0-9]+).*/\2\t\1/' \
+| sort -n \
+| nl -ba
+
+Expected to include (in this order):
+-4  1/128-finals
+-3  1/64-finals
+-2  1/32-finals
+-1  1/16-finals
+ 0  1/8-finals
+ 1  Quarter-finals
+ 2  Semi-finals
+(and Final as 3 when present)
+
+DELIVERABLE:
+Commit with message: "Fix FA Cup round ordering (use ??, restore First–Fifth Round mappings)".
+
+---
+
