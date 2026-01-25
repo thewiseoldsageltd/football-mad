@@ -5354,3 +5354,20 @@ Acceptance checks:
 
 ---
 
+Add a DEV-only API endpoint to search our competitions mapping so we can find Goalserve league IDs (e.g., National League).
+
+Implement:
+- File: server/routes.ts
+- Add GET /api/dev/competitions/search?q=...&country=...&limit=...
+- No auth required (DEV only)
+- It should return JSON array results of competitions that match q (case-insensitive substring match).
+- Include fields: { id, name, country, goalserveLeagueId } (or closest equivalents in our schema).
+- If we don’t have a competitions table, search whatever mapping/store we used previously to discover League Two = 1197 and League One = 1206.
+- Sort best matches first (name match + country match).
+- Add a short note + example curl to docs/BUILD_LOG.md.
+
+After this, I will call:
+curl -sS "https://f04e3e83-5dee-4d43-ba21-fba6506a8e19-00-3rjffbqt7u6wn.spock.replit.dev/api/dev/competitions/search?q=national%20league&country=england"
+
+---
+

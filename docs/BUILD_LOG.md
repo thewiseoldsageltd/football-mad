@@ -514,3 +514,40 @@ curl -sS -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" \
 3. Once found, update `league-config.ts` with the correct ID
 
 ---
+
+## Dev Competitions Search Endpoint
+
+Search our synced competitions table to find Goalserve league IDs.
+
+**Endpoint:** `GET /api/dev/competitions/search`
+
+**Query params:**
+- `q` - Name substring (case-insensitive)
+- `country` - Country substring filter
+- `limit` - Max results (default 50, max 100)
+
+**Example:**
+
+```bash
+# Find National League in England
+curl -sS "https://football-mad.replit.app/api/dev/competitions/search?q=national%20league&country=england"
+
+# Find all English leagues
+curl -sS "https://football-mad.replit.app/api/dev/competitions/search?country=england&limit=20"
+```
+
+**Response format:**
+
+```json
+[
+  {
+    "id": "...",
+    "name": "National League",
+    "country": "England",
+    "goalserveCompetitionId": "1234",
+    "type": "league"
+  }
+]
+```
+
+---

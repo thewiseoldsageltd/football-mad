@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -1810,6 +1810,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
   );
+
+  // ========== DEV: Search Competitions Mapping ==========
+  app.get("/api/dev/competitions/search", async (req, res) => {
+    const q = (req.query.q as string || "").toLowerCase().trim();
+    const countryFilter = (req.query.country as string || "").toLowerCase().trim();
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+    if (!q && !countryFilter) {
+      return res.status(400).json({ error: "Provide at least 'q' or 'country' query param" });
+    }
+
+    try {
+      const allComps = await db.select({
+        id: competitions.id,
+        name: competitions.name,
+        country: competitions.country,
+        goalserveCompetitionId: competitions.goalserveCompetitionId,
+        type: competitions.type,
+      }).from(competitions);
+
+      let results = allComps.filter((c) => {
+        const nameMatch = !q || (c.name?.toLowerCase().includes(q));
+        const countryMatch = !countryFilter || (c.country?.toLowerCase().includes(countryFilter));
+        return nameMatch && countryMatch;
+      });
+
+      // Sort: exact name match first, then country match, then alphabetical
+      results.sort((a, b) => {
+        const aNameExact = a.name?.toLowerCase() === q ? 0 : 1;
+        const bNameExact = b.name?.toLowerCase() === q ? 0 : 1;
+        if (aNameExact !== bNameExact) return aNameExact - bNameExact;
+
+        const aCountryMatch = a.country?.toLowerCase().includes(countryFilter) ? 0 : 1;
+        const bCountryMatch = b.country?.toLowerCase().includes(countryFilter) ? 0 : 1;
+        if (aCountryMatch !== bCountryMatch) return aCountryMatch - bCountryMatch;
+
+        return (a.name || "").localeCompare(b.name || "");
+      });
+
+      res.json(results.slice(0, limit));
+    } catch (error) {
+      console.error("Competitions search error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
 
   // ========== DEV: Preview Goalserve Standings Metadata ==========
   app.get(
