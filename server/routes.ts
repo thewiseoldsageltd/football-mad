@@ -2100,20 +2100,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(500).json({ error: "GOALSERVE_FEED_KEY not configured" });
       }
 
-      // Season param is optional - Goalserve may use it for filtering
+      // Season param is optional - Goalserve uses it for filtering (e.g., 2025/2026)
       const season = req.query.season as string | undefined;
 
       // Use goalserveFetch helper for consistent handling
+      // CORRECT URL format: soccerfixtures/leagueid/{LEAGUE_ID}
+      // Verify with: curl -sS "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/soccerfixtures/leagueid/1198?json=true" | head -n 40
       const { goalserveFetch } = await import("./integrations/goalserve/client");
-      // Build the endpoint - note: Goalserve cup feeds may not support season filtering,
-      // but we pass it if provided for future compatibility
       const endpoint = season 
-        ? `soccerfixtures/league/${competitionId}?season=${encodeURIComponent(season)}`
-        : `soccerfixtures/league/${competitionId}`;
-      const data = await goalserveFetch(endpoint);
+        ? `soccerfixtures/leagueid/${competitionId}?season=${encodeURIComponent(season)}`
+        : `soccerfixtures/leagueid/${competitionId}`;
+      
+      let data: any;
+      try {
+        data = await goalserveFetch(endpoint);
+      } catch (fetchError: any) {
+        // Check if Goalserve returned HTML (wrong endpoint/auth/feed key)
+        const errorMsg = fetchError?.message || "";
+        if (errorMsg.includes("<") || errorMsg.includes("html") || errorMsg.includes("non-JSON")) {
+          console.error("[CupProgress] Goalserve returned HTML (likely wrong endpoint/auth/feed key):", errorMsg.slice(0, 300));
+          return res.status(502).json({ 
+            error: "Goalserve returned HTML instead of JSON. Check feed key and endpoint.", 
+            competitionId, 
+            rounds: [] 
+          });
+        }
+        throw fetchError;
+      }
 
-      // Parse the Goalserve structure: res.fixtures.tournament.stage[].round[].match[]
-      // or similar nested structure
+      // Parse the Goalserve structure - handle BOTH shapes:
+      // a) results.tournament.stage[].week[].match[]
+      // b) results.tournament.stage[].match[]
+      // Also handle: stage.round[].match[] (some cups use "round" instead of "week")
       interface CupMatch {
         id: string;
         home: { id?: string; name: string };
@@ -2130,76 +2148,95 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const roundsMap = new Map<string, CupMatch[]>();
 
-      // Goalserve cup feed typically has: res.fixtures.tournament (array or object)
-      const fixtures = data?.res?.fixtures;
-      if (!fixtures) {
+      // Goalserve cup feed: results.tournament.stage... (note: "results" not "fixtures" for this feed)
+      // Try both data.results and data.res.fixtures for compatibility
+      const results = data?.results || data?.res?.fixtures;
+      if (!results) {
+        console.log("[CupProgress] No results/fixtures found in response, returning empty rounds");
         return res.json({ competitionId, rounds: [] });
       }
 
       // Tournament can be single object or array
-      const tournaments = Array.isArray(fixtures.tournament) 
-        ? fixtures.tournament 
-        : fixtures.tournament 
-          ? [fixtures.tournament] 
+      const tournaments = Array.isArray(results.tournament) 
+        ? results.tournament 
+        : results.tournament 
+          ? [results.tournament] 
           : [];
 
+      // Helper to parse a single match object
+      const parseMatch = (m: any, roundName: string) => {
+        const homeTeam = m.hometeam || m.localteam || {};
+        const awayTeam = m.awayteam || m.visitorteam || {};
+        
+        const homeScore = homeTeam["@score"] ?? m["@homescore"] ?? m.homescore;
+        const awayScore = awayTeam["@score"] ?? m["@awayscore"] ?? m.awayscore;
+        
+        const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
+
+        const match: CupMatch = {
+          id: m["@id"] || m.id || String(Math.random()),
+          home: {
+            id: homeTeam["@id"] || homeTeam.id,
+            name: homeTeam["@name"] || homeTeam.name || "TBD",
+          },
+          away: {
+            id: awayTeam["@id"] || awayTeam.id,
+            name: awayTeam["@name"] || awayTeam.name || "TBD",
+          },
+          score: hasScore ? {
+            home: parseInt(String(homeScore), 10),
+            away: parseInt(String(awayScore), 10),
+          } : null,
+          kickoff: m["@formatted_date"] || m["@date"] || m.date || m.time || undefined,
+          status: m["@status"] || m.status || "NS",
+        };
+
+        if (!roundsMap.has(roundName)) {
+          roundsMap.set(roundName, []);
+        }
+        roundsMap.get(roundName)!.push(match);
+      };
+
+      // Helper to get matches as array
+      const toArray = (item: any) => {
+        if (!item) return [];
+        return Array.isArray(item) ? item : [item];
+      };
+
       for (const tournament of tournaments) {
-        // Stage can be single or array
-        const stages = Array.isArray(tournament.stage) 
-          ? tournament.stage 
-          : tournament.stage 
-            ? [tournament.stage] 
-            : [];
+        const stages = toArray(tournament.stage);
 
         for (const stage of stages) {
-          // Round can be single or array
-          const rounds = Array.isArray(stage.round) 
-            ? stage.round 
-            : stage.round 
-              ? [stage.round] 
-              : [];
+          const stageName = stage["@name"] || stage.name || "";
+          
+          // Shape A: stage.week[].match[] (some cup feeds use "week" for rounds)
+          const weeks = toArray(stage.week);
+          for (const week of weeks) {
+            const roundName = week["@name"] || week.name || week["@round_name"] || stageName || "Unknown Round";
+            const matches = toArray(week.match);
+            for (const m of matches) {
+              // Use match-level round info if available, else use week name
+              const matchRound = m["@round_name"] || m.round || roundName;
+              parseMatch(m, matchRound);
+            }
+          }
 
+          // Shape B: stage.round[].match[] (some cups use "round")
+          const rounds = toArray(stage.round);
           for (const round of rounds) {
-            const roundName = round["@name"] || round.name || "Unknown Round";
-            
-            // Matches can be single or array
-            const matchList = Array.isArray(round.match) 
-              ? round.match 
-              : round.match 
-                ? [round.match] 
-                : [];
+            const roundName = round["@name"] || round.name || stageName || "Unknown Round";
+            const matches = toArray(round.match);
+            for (const m of matches) {
+              parseMatch(m, roundName);
+            }
+          }
 
-            for (const m of matchList) {
-              const homeTeam = m.hometeam || m.localteam || {};
-              const awayTeam = m.awayteam || m.visitorteam || {};
-              
-              const homeScore = m.hometeam?.["@score"] ?? m.localteam?.["@score"] ?? m["@homescore"];
-              const awayScore = m.awayteam?.["@score"] ?? m.visitorteam?.["@score"] ?? m["@awayscore"];
-              
-              const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
-
-              const match: CupMatch = {
-                id: m["@id"] || m.id || String(Math.random()),
-                home: {
-                  id: homeTeam["@id"] || homeTeam.id,
-                  name: homeTeam["@name"] || homeTeam.name || "TBD",
-                },
-                away: {
-                  id: awayTeam["@id"] || awayTeam.id,
-                  name: awayTeam["@name"] || awayTeam.name || "TBD",
-                },
-                score: hasScore ? {
-                  home: parseInt(String(homeScore), 10),
-                  away: parseInt(String(awayScore), 10),
-                } : null,
-                kickoff: m["@formatted_date"] || m["@date"] || m.date || undefined,
-                status: m["@status"] || m.status || "NS",
-              };
-
-              if (!roundsMap.has(roundName)) {
-                roundsMap.set(roundName, []);
-              }
-              roundsMap.get(roundName)!.push(match);
+          // Shape C: stage.match[] (matches directly under stage)
+          if (stage.match && !weeks.length && !rounds.length) {
+            const matches = toArray(stage.match);
+            for (const m of matches) {
+              const roundName = m["@round_name"] || m.round || stageName || "Unknown Round";
+              parseMatch(m, roundName);
             }
           }
         }
@@ -2210,14 +2247,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // -> First Round -> Second Round -> Third Round -> Fourth Round -> Fifth Round
       // -> Quarter-finals -> Semi-finals -> Final
       const roundOrder: Record<string, number> = {
-        "Extra Preliminary Round": -5,
-        "Preliminary Round": -4,
-        "First Qualifying Round": -3,
-        "Second Qualifying Round": -2,
-        "Third Qualifying Round": -1,
-        "Fourth Qualifying Round": 0,
-        "Round of 64": 0.5,
-        "Round of 32": 0.75,
+        // FA Cup qualifying stages (Goalserve uses "Quarter-finals" for qualifying round stages)
+        "Extra Preliminary Round": -10,
+        "Preliminary Round": -9,
+        "First Qualifying Round": -8,
+        "Second Qualifying Round": -7,
+        "Third Qualifying Round": -6,
+        "Fourth Qualifying Round": -5,
+        // Goalserve fractional round notation (e.g., 1/128-finals, 1/64-finals)
+        "1/128-finals": -4,
+        "1/64-finals": -3,
+        "1/32-finals": -2,
+        "1/16-finals": -1,
+        "1/8-finals": 6, // This is Quarter-finals (8 teams remaining)
+        // Standard FA Cup main rounds
         "First Round": 1,
         "First Round Proper": 1,
         "Second Round": 2,
@@ -2228,6 +2271,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Fourth Round Proper": 4,
         "Fifth Round": 5,
         "Fifth Round Proper": 5,
+        "Round of 64": 0.5,
+        "Round of 32": 0.75,
         "Round of 16": 5.5,
         "Quarter-finals": 6,
         "Semi-finals": 7,
@@ -2236,6 +2281,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const normalizeRoundName = (name: string): string => {
         const lower = name.toLowerCase().trim();
+        // Keep Goalserve fractional notation as-is (e.g., 1/128-finals, 1/64-finals)
+        // These are valid round names that map to roundOrder
+        if (/^1\/\d+-finals$/.test(lower)) return name;
         // Handle quarter/semi/final variations
         if (lower.includes("quarter") && !lower.includes("qualifying")) return "Quarter-finals";
         if (lower.includes("semi") && !lower.includes("qualifying")) return "Semi-finals";

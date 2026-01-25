@@ -1,0 +1,51 @@
+We have an FA Cup (Goalserve competitionId 1198) cups progress feature, but /api/cup/progress currently returns {"rounds":[]} because the backend is calling the WRONG Goalserve URL.
+
+Goalserve soccer fixtures/results must use:
+https://www.goalserve.com/getfeed/{GOALSERVE_FEED_KEY}/soccerfixtures/leagueid/{LEAGUE_ID}?json=true
+(For cups like FA Cup 1198, the feed shape is tournament -> stage -> (week) -> match.)
+
+PLEASE DO THIS:
+
+1) Find the code that fetches Goalserve fixtures for /api/cup/progress (search for:
+   - "/api/cup/progress"
+   - "fixtures/"
+   - "goalserve" + "competitionId"
+   - "1198"
+   - "getfeed" )
+
+2) Replace any URL like:
+   .../fixtures/{competitionId}.xml?json=true
+   .../soccernew/fixtures/{competitionId}.xml?json=true
+   .../fixtures/1198.xml?json=true
+   with the correct soccer fixtures feed:
+   https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/soccerfixtures/leagueid/${competitionId}?json=true
+
+3) Support optional season filtering:
+   - If season is provided, add it as a query param:
+     ?season=2025/2026&json=true
+     (URL-encode the season value)
+   - If season is not provided:
+     ?json=true
+
+4) Add a safety check before parsing:
+   - If the response starts with "<" or contains "<html", treat it as an error and log a helpful message:
+     "Goalserve returned HTML (likely wrong endpoint / auth / feed key)."
+   - Return { competitionId, rounds: [] } with an error field OR throw a 502 with a clear message (your choice, but be consistent).
+
+5) Parsing logic:
+   - Handle BOTH shapes:
+     a) results.tournament.stage[].week[].match[]
+     b) results.tournament.stage[].match[]
+   - Flatten matches into your internal model, then group by round using:
+     - stage.name and/or stage.round and/or match.round / match.round_name (whatever exists in the JSON)
+   - Keep your existing round ordering rules.
+
+6) Update or add a dev verification command in your docs and/or comments:
+
+   curl -sS "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/soccerfixtures/leagueid/1198?json=true" | head -n 40
+
+7) Re-test the app:
+   - /api/cup/progress?competitionId=1198&season=2025/2026 should return non-empty rounds (assuming fixtures exist in that season)
+   - /tables -> Cups tab should populate.
+
+IMPORTANT: Do NOT change the standings work. Only fix the cup fixtures feed URL + parsing robustness.

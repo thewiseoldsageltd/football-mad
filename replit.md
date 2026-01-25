@@ -38,6 +38,11 @@ Preferred communication style: Simple, everyday language.
 - **Matches**: Fixtures with home/away teams, scores, status, goalserveRound for round/matchday tracking
   - API: `/api/matches/day?date=YYYY-MM-DD&status=all|live|scheduled|fulltime&competitionId=xxx`
   - Priority ordering: UK leagues first, then Big 5 Europe, then UEFA, then others
+- **Cup Progress**: FA Cup fixtures grouped by round
+  - API: `/api/cup/progress?competitionId=1198&season=2025/2026`
+  - Goalserve feed: `soccerfixtures/leagueid/{LEAGUE_ID}?json=true`
+  - Verify with: `curl -sS "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/soccerfixtures/leagueid/1198?json=true" | head -n 40`
+  - Round ordering: Qualifying rounds (-10 to -5) → 1/128..1/16-finals (-4 to -1) → Main rounds (1-8)
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
