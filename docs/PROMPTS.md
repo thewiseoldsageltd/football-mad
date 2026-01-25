@@ -5911,3 +5911,40 @@ After implementing, show me:
 
 ---
 
+Goal: On Tables → Cups → FA Cup, show ALL fixtures per round, with each round collapsible/expandable as an accordion.
+
+Context:
+We already have /api/cup/progress returning canonical FA Cup round names and matches grouped by round, ordered correctly.
+
+Requirements:
+1) Replace the current “+X more fixtures” pattern with a proper Accordion UI.
+2) Each round should be a collapsible/expandable section.
+3) When expanded, render ALL matches in that round (no slicing/limit).
+4) Default behaviour:
+   - Expand the first round that is not fully completed (i.e. has any match status not in FT/AET/PEN).
+   - If all rounds are completed, expand the latest round (highest order).
+5) Each accordion header should display:
+   - Round name (e.g. “Third Round”)
+   - A right-aligned pill summarising the round state:
+       - “Completed” if all matches are final
+       - “In progress” if any match is live/HT/ET/etc
+       - “Upcoming” if all matches are NS / Not Started
+   - A smaller subtext like “32 fixtures” (or match count)
+6) Inside the expanded panel:
+   - Show the existing match rows (home/away, score if present, kickoff date/time, status badge).
+   - Keep the current clean layout + spacing.
+7) Keep it performant:
+   - Use React state per round (or a single openRoundKey).
+   - Use stable keys (match.id).
+8) Use whatever UI kit is already in the repo (if shadcn/ui exists, use Accordion from it; otherwise implement a minimal accordion with button + conditional render).
+9) Make sure the page height grows normally (no container with fixed height / overflow hidden). If there is a wrapper causing truncation, remove the fixed height or change to overflow-visible.
+
+Deliverables:
+- Update the CupProgress component (client/src/components/tables/cup-progress.tsx or wherever it lives).
+- Ensure no match list is truncated.
+- Keep the current styling consistent with Tables page.
+
+After implementation, add a quick dev note in replit.md describing the accordion behaviour and default-open logic.
+
+---
+

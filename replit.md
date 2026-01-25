@@ -74,6 +74,12 @@ Preferred communication style: Simple, everyday language.
     - Fourth Round > 24 matches
   - **Rule**: Any round that doesn't map to canonical 14 is DISCARDED
   - Debug flag: `DEBUG_CUP_ROUNDS=true` logs discarded rounds
+  - **Accordion UI** (frontend):
+    - Each round is a collapsible/expandable section
+    - Default open: first non-completed round (has any match not FT/AET/PEN)
+    - If all rounds completed, opens the latest round (highest order)
+    - Header shows: round name, fixture count, status pill (Completed/In progress/Upcoming)
+    - Expanded view shows ALL matches (no slicing/truncation)
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
