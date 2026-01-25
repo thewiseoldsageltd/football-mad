@@ -23,26 +23,26 @@ const PLZones: StandingsZone[] = [
 
 const ChampionshipZones: StandingsZone[] = [
   { from: 1, to: 2, label: "Automatic Promotion", color: "emerald" },
-  { from: 3, to: 6, label: "Playoffs", color: "amber" },
+  { from: 3, to: 6, label: "Play Off", color: "amber" },
   { from: 22, to: 24, label: "Relegation", color: "red" },
 ];
 
 const LeagueOneZones: StandingsZone[] = [
   { from: 1, to: 2, label: "Automatic Promotion", color: "emerald" },
-  { from: 3, to: 6, label: "Playoffs", color: "amber" },
+  { from: 3, to: 6, label: "Play Off", color: "amber" },
   { from: 21, to: 24, label: "Relegation", color: "red" },
 ];
 
 const LeagueTwoZones: StandingsZone[] = [
   { from: 1, to: 3, label: "Automatic Promotion", color: "emerald" },
-  { from: 4, to: 7, label: "Playoffs", color: "amber" },
+  { from: 4, to: 7, label: "Play Off", color: "amber" },
   { from: 23, to: 24, label: "Relegation", color: "red" },
 ];
 
 const NationalLeagueZones: StandingsZone[] = [
   { from: 1, to: 1, label: "Promoted", color: "emerald" },
-  { from: 2, to: 3, label: "Playoff Semi-final", color: "amber" },
-  { from: 4, to: 7, label: "Playoff Quarter-final", color: "orange" },
+  { from: 2, to: 3, label: "Play Off SF", color: "amber" },
+  { from: 4, to: 7, label: "Play Off QF", color: "orange" },
   { from: 21, to: 24, label: "Relegation", color: "red" },
 ];
 

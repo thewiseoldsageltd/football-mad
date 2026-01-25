@@ -5390,3 +5390,46 @@ Output: short summary of changes only.
 
 ---
 
+TASK: Standardise standings legend labels across the site for playoff wording + mobile friendliness.
+
+CONTEXT:
+Our league tables legend is config-driven via `standingsZones` in `client/src/lib/league-config.ts` and rendered dynamically in `client/src/components/tables/league-table.tsx`.
+
+GOAL:
+1) Use “Play Off” (two words) everywhere (instead of “Playoff” / “Playoffs”).
+2) Shorten “Semi-final” to “SF” and “Quarter-final” to “QF” in legend labels (to keep the legend on one line on mobile).
+
+CHANGES:
+1) Open `client/src/lib/league-config.ts`.
+2) For ALL zone labels that currently include:
+   - “Playoff” or “Playoffs”  → replace with “Play Off”
+   - “Semi-final” or “Semi-finals” → replace with “SF”
+   - “Quarter-final” or “Quarter-finals” → replace with “QF”
+
+EXAMPLES (apply this pattern everywhere relevant):
+- "Playoff Semi-final"   → "Play Off SF"
+- "Playoff Quarter-final" → "Play Off QF"
+- "Playoffs Semi-finals"  → "Play Off SF"
+- "Playoffs Quarter-finals" → "Play Off QF"
+
+IMPORTANT:
+- Do NOT change any zone position ranges or colours.
+- This is label-only standardisation.
+- Ensure National League zones end up as:
+  - Promoted (1)
+  - Play Off SF (2–3)
+  - Play Off QF (4–7)
+  - Relegation (bottom 4)
+
+VERIFICATION:
+- Load `/tables` and check:
+  - National League legend shows: “Promoted”, “Play Off SF”, “Play Off QF”, “Relegation”
+  - Mobile view legend is more compact (ideally one line, minimal wrapping)
+- Sanity check Championship/League One/League Two legends for consistent “Play Off” wording.
+
+DELIVERABLE:
+Commit the change with a short message like:
+“Standardise Play Off legend labels (SF/QF)”
+
+---
+
