@@ -5509,3 +5509,48 @@ Acceptance:
 
 ---
 
+You are working in the Football Mad codebase.
+
+Goal: Fix Ligue 1 (France) standings zones on /tables to match Goalserve/Soccerway logic.
+
+Context:
+We ingest Ligue 1 via Goalserve leagueId=1221. The standings feed indicates:
+- 1–3: "Promotion - Champions League (League phase)"
+- 4: "Promotion - Champions League (Qualification)" (this is the CL playoff/qualifier spot)
+- 5: "Promotion - Europa League (League phase)"
+- 6: "Promotion - Conference League (Qualification)"
+- 16: relegation playoff
+- 17–18: relegation
+
+Tasks:
+1) Update the Ligue 1 standings zone config in:
+   client/src/lib/league-config.ts
+
+2) Ensure the highlighted rows + legend reflect:
+   - Champions League: positions 1–3
+   - Champions League Qual/Playoff: position 4
+   - Europa League: position 5
+   - Conference League: position 6
+   - Relegation Play Off: position 16
+   - Relegation: positions 17–18
+
+Implementation detail:
+- Find the existing Ligue 1 zones (likely called Ligue1Zones or similar).
+- Change the ranges so CL is 1–3 (not 1–4), and create a separate single-position zone for 4 (CL qualification/playoff).
+- Keep EL=5 and ECL=6.
+- Keep relegation playoff=16 and relegation=17–18 as-is.
+
+Acceptance criteria:
+- On /tables > Ligue 1, the left-side zone markers/highlights match the rules above.
+- Legend labels look sensible (e.g. "Champions League", "Champions League Qual.", "Europa League", "Conference League", "Relegation Play Off", "Relegation").
+- No other leagues are affected.
+
+After changes:
+- Restart the dev server if needed.
+- You do NOT need to re-ingest standings because this is only UI zoning.
+
+Deliverable:
+- Provide the exact diff for client/src/lib/league-config.ts.
+
+---
+
