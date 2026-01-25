@@ -5371,3 +5371,22 @@ curl -sS "https://f04e3e83-5dee-4d43-ba21-fba6506a8e19-00-3rjffbqt7u6wn.spock.re
 
 ---
 
+Update National League standings config.
+
+File: client/src/lib/league-config.ts
+
+1) In the league config entry with slug: "national-league":
+   - Set goalserveLeagueId to "1203" (Goalserve calls it "Conference")
+
+2) Ensure standingsZones for National League match:
+   - Promoted: positions 1-1
+   - Playoff Semi-Final: positions 2-3
+   - Playoff Quarter-Final: positions 4-7
+   - Relegation: positions 21-24
+
+3) Do NOT change existing League One / League Two / Championship / Premier League zones.
+
+Output: short summary of changes only.
+
+---
+
