@@ -5566,3 +5566,68 @@ const Ligue1Zones: StandingsZone[] = [
 
 ---
 
+You are working in the Football Mad codebase (Replit). Goal: Add FA Cup (England) support to the Tables page under a new “Cups” tab, using Goalserve competitionId 1198, showing tournament progress grouped by round.
+
+REQUIREMENTS
+1) UI
+- On /tables, add a top-level segment/tab called “Cups” alongside “Leagues” and “Europe” (match existing styling).
+- Under Cups, add a selectable cup chip/tab: “FA Cup”.
+- When FA Cup is selected, render a “Cup progress” view (NOT league standings).
+- Cup progress view must show fixtures/results grouped by round (e.g., Third Round, Fourth Round, Fifth Round, Quarter-finals, Semi-finals, Final).
+- Each match row shows: Home team, Away team, score (if played), kick-off datetime (if scheduled), and status (FT/HT/NS etc if available).
+- Keep the UI responsive; on mobile, group headers + compact match rows.
+
+2) Data + API
+- Add a backend endpoint: GET /api/cup/progress?competitionId=1198&season=2025/2026
+- This endpoint should fetch Goalserve data and return normalized JSON grouped by round.
+- Use the existing Goalserve feed key env var + HTTP fetch pattern already used by standings ingestion.
+- IMPORTANT: Do not require ingestion jobs for MVP; fetch live from Goalserve for now (we’ll cache later).
+
+3) Goalserve feed
+- Use a Goalserve cup/fixtures feed appropriate for FA Cup based on existing patterns in the repo.
+- If the repo already has a “fixtures by league/competition” fetcher, reuse it.
+- If not, implement a minimal fetcher in server:
+  - Call Goalserve using competitionId=1198 and season when supported.
+  - Parse JSON structure to extract:
+    - round name (or stage/round label)
+    - match list
+    - teams
+    - score
+    - datetime
+    - status
+- Normalize round naming:
+  - “Quarter-finals” (not “Quarter Finals”)
+  - “Semi-finals”
+  - “Final”
+- Sort rounds in correct order (early rounds first, final last). Within a round, sort by datetime ascending.
+
+4) Config / Wiring
+- Add FA Cup to the client competition config:
+  - id/slug: "fa-cup"
+  - name: "FA Cup"
+  - country: "England"
+  - goalserveCompetitionId: "1198"
+  - type: "cup"
+- Ensure selecting “Cups → FA Cup” triggers the new endpoint and renders results.
+
+5) QA / Verification
+- Add a small dev helper curl in docs (or comment) to verify:
+  curl -sS "$DOMAIN/api/cup/progress?competitionId=1198&season=2025/2026" | head -n 80
+- Confirm /tables → Cups → FA Cup loads without errors and displays grouped rounds.
+
+CONSTRAINTS
+- Do NOT break existing Leagues tables.
+- Keep the code style consistent with existing fetch hooks/components.
+- Keep it MVP: no bracket graphics yet, no caching yet, no pagination yet.
+
+IMPLEMENTATION HINTS (use if helpful)
+- Create/extend a shared type like:
+  CupRound { name: string; order: number; matches: CupMatch[] }
+  CupMatch { home: { id? name }, away: { id? name }, score?: { home, away }, kickoff?: string, status?: string }
+- Frontend: a <CupProgress /> component rendered only when active competition.type === "cup".
+- Backend: place endpoint near other public API routes, and reuse existing Goalserve fetch util if present.
+
+Deliver: Code changes only. After implementation, provide a short summary of files changed and how to test.
+
+---
+

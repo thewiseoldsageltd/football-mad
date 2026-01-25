@@ -572,3 +572,47 @@ Added support for 4 major European leagues on the Tables page.
 - **Ligue 1**: CL 1-3, EL 4, ECL 5, Relegation PO 16, Relegation 17-18
 
 ---
+
+## FA Cup Support (Cups Tab)
+
+Added FA Cup support under the "Cups" tab on `/tables`.
+
+### Configuration
+
+- Cup slug: `fa-cup`
+- Goalserve Competition ID: `1198`
+- Country: England
+
+### API Endpoint
+
+`GET /api/cup/progress?competitionId=1198&season=2025/2026`
+
+Returns fixtures grouped by round:
+```json
+{
+  "competitionId": "1198",
+  "rounds": [
+    {
+      "name": "Third Round",
+      "order": 3,
+      "matches": [
+        {
+          "id": "...",
+          "home": { "name": "Arsenal" },
+          "away": { "name": "Bolton" },
+          "score": { "home": 3, "away": 0 },
+          "status": "FT"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Verification
+
+```bash
+curl -sS "$DOMAIN/api/cup/progress?competitionId=1198&season=2025/2026" | head -n 80
+```
+
+---

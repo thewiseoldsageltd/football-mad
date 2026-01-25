@@ -6,6 +6,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Loader2 } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { RoundsList } from "@/components/tables/rounds-list";
+import { CupProgress } from "@/components/tables/cup-progress";
 import { GroupSelector } from "@/components/tables/group-selector";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
@@ -305,7 +306,8 @@ export default function TablesPage() {
   };
 
   const renderCupsContent = () => {
-    return <RoundsList rounds={currentCupRounds} />;
+    const normalizedSeason = normalizeSeason(season) || "2025/2026";
+    return <CupProgress cupSlug={cupCompetition} season={normalizedSeason} />;
   };
 
   const renderContent = () => {

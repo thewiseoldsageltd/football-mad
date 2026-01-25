@@ -2086,6 +2086,218 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ========== CUP PROGRESS ENDPOINT ==========
+  // Fetches cup fixtures grouped by round from Goalserve
+  app.get("/api/cup/progress", async (req, res) => {
+    try {
+      const competitionId = req.query.competitionId as string;
+      if (!competitionId) {
+        return res.status(400).json({ error: "competitionId query param required" });
+      }
+
+      const feedKey = process.env.GOALSERVE_FEED_KEY;
+      if (!feedKey) {
+        return res.status(500).json({ error: "GOALSERVE_FEED_KEY not configured" });
+      }
+
+      // Season param is optional - Goalserve may use it for filtering
+      const season = req.query.season as string | undefined;
+
+      // Use goalserveFetch helper for consistent handling
+      const { goalserveFetch } = await import("./integrations/goalserve/client");
+      // Build the endpoint - note: Goalserve cup feeds may not support season filtering,
+      // but we pass it if provided for future compatibility
+      const endpoint = season 
+        ? `soccerfixtures/league/${competitionId}?season=${encodeURIComponent(season)}`
+        : `soccerfixtures/league/${competitionId}`;
+      const data = await goalserveFetch(endpoint);
+
+      // Parse the Goalserve structure: res.fixtures.tournament.stage[].round[].match[]
+      // or similar nested structure
+      interface CupMatch {
+        id: string;
+        home: { id?: string; name: string };
+        away: { id?: string; name: string };
+        score?: { home: number; away: number } | null;
+        kickoff?: string;
+        status: string;
+      }
+      interface CupRound {
+        name: string;
+        order: number;
+        matches: CupMatch[];
+      }
+
+      const roundsMap = new Map<string, CupMatch[]>();
+
+      // Goalserve cup feed typically has: res.fixtures.tournament (array or object)
+      const fixtures = data?.res?.fixtures;
+      if (!fixtures) {
+        return res.json({ competitionId, rounds: [] });
+      }
+
+      // Tournament can be single object or array
+      const tournaments = Array.isArray(fixtures.tournament) 
+        ? fixtures.tournament 
+        : fixtures.tournament 
+          ? [fixtures.tournament] 
+          : [];
+
+      for (const tournament of tournaments) {
+        // Stage can be single or array
+        const stages = Array.isArray(tournament.stage) 
+          ? tournament.stage 
+          : tournament.stage 
+            ? [tournament.stage] 
+            : [];
+
+        for (const stage of stages) {
+          // Round can be single or array
+          const rounds = Array.isArray(stage.round) 
+            ? stage.round 
+            : stage.round 
+              ? [stage.round] 
+              : [];
+
+          for (const round of rounds) {
+            const roundName = round["@name"] || round.name || "Unknown Round";
+            
+            // Matches can be single or array
+            const matchList = Array.isArray(round.match) 
+              ? round.match 
+              : round.match 
+                ? [round.match] 
+                : [];
+
+            for (const m of matchList) {
+              const homeTeam = m.hometeam || m.localteam || {};
+              const awayTeam = m.awayteam || m.visitorteam || {};
+              
+              const homeScore = m.hometeam?.["@score"] ?? m.localteam?.["@score"] ?? m["@homescore"];
+              const awayScore = m.awayteam?.["@score"] ?? m.visitorteam?.["@score"] ?? m["@awayscore"];
+              
+              const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
+
+              const match: CupMatch = {
+                id: m["@id"] || m.id || String(Math.random()),
+                home: {
+                  id: homeTeam["@id"] || homeTeam.id,
+                  name: homeTeam["@name"] || homeTeam.name || "TBD",
+                },
+                away: {
+                  id: awayTeam["@id"] || awayTeam.id,
+                  name: awayTeam["@name"] || awayTeam.name || "TBD",
+                },
+                score: hasScore ? {
+                  home: parseInt(String(homeScore), 10),
+                  away: parseInt(String(awayScore), 10),
+                } : null,
+                kickoff: m["@formatted_date"] || m["@date"] || m.date || undefined,
+                status: m["@status"] || m.status || "NS",
+              };
+
+              if (!roundsMap.has(roundName)) {
+                roundsMap.set(roundName, []);
+              }
+              roundsMap.get(roundName)!.push(match);
+            }
+          }
+        }
+      }
+
+      // Normalize round names and assign order
+      // FA Cup order: Extra Preliminary -> Preliminary -> 1st Qualifying -> 2nd Q -> 3rd Q -> 4th Q 
+      // -> First Round -> Second Round -> Third Round -> Fourth Round -> Fifth Round
+      // -> Quarter-finals -> Semi-finals -> Final
+      const roundOrder: Record<string, number> = {
+        "Extra Preliminary Round": -5,
+        "Preliminary Round": -4,
+        "First Qualifying Round": -3,
+        "Second Qualifying Round": -2,
+        "Third Qualifying Round": -1,
+        "Fourth Qualifying Round": 0,
+        "Round of 64": 0.5,
+        "Round of 32": 0.75,
+        "First Round": 1,
+        "First Round Proper": 1,
+        "Second Round": 2,
+        "Second Round Proper": 2,
+        "Third Round": 3,
+        "Third Round Proper": 3,
+        "Fourth Round": 4,
+        "Fourth Round Proper": 4,
+        "Fifth Round": 5,
+        "Fifth Round Proper": 5,
+        "Round of 16": 5.5,
+        "Quarter-finals": 6,
+        "Semi-finals": 7,
+        "Final": 8,
+      };
+
+      const normalizeRoundName = (name: string): string => {
+        const lower = name.toLowerCase().trim();
+        // Handle quarter/semi/final variations
+        if (lower.includes("quarter") && !lower.includes("qualifying")) return "Quarter-finals";
+        if (lower.includes("semi") && !lower.includes("qualifying")) return "Semi-finals";
+        if ((lower === "final" || lower === "finals") && !lower.includes("qualifying")) return "Final";
+        // Handle qualifying rounds
+        if (lower.includes("extra") && lower.includes("prelim")) return "Extra Preliminary Round";
+        if (lower.includes("prelim") && !lower.includes("extra")) return "Preliminary Round";
+        if ((lower.includes("1st") || lower.includes("first")) && lower.includes("qual")) return "First Qualifying Round";
+        if ((lower.includes("2nd") || lower.includes("second")) && lower.includes("qual")) return "Second Qualifying Round";
+        if ((lower.includes("3rd") || lower.includes("third")) && lower.includes("qual")) return "Third Qualifying Round";
+        if ((lower.includes("4th") || lower.includes("fourth")) && lower.includes("qual")) return "Fourth Qualifying Round";
+        // Handle "Round of XX"
+        if (lower.includes("round of 64") || lower.includes("last 64")) return "Round of 64";
+        if (lower.includes("round of 32") || lower.includes("last 32")) return "Round of 32";
+        if (lower.includes("round of 16") || lower.includes("last 16")) return "Round of 16";
+        // Handle "1st Round", "Round 1", etc.
+        const ordinalMatch = lower.match(/^(1st|first|round\s*1)\s*(round)?$/);
+        if (ordinalMatch) return "First Round";
+        const secondMatch = lower.match(/^(2nd|second|round\s*2)\s*(round)?$/);
+        if (secondMatch) return "Second Round";
+        const thirdMatch = lower.match(/^(3rd|third|round\s*3)\s*(round)?$/);
+        if (thirdMatch) return "Third Round";
+        const fourthMatch = lower.match(/^(4th|fourth|round\s*4)\s*(round)?$/);
+        if (fourthMatch) return "Fourth Round";
+        const fifthMatch = lower.match(/^(5th|fifth|round\s*5)\s*(round)?$/);
+        if (fifthMatch) return "Fifth Round";
+        // Strip "proper" suffix for cleaner display
+        if (lower.includes("proper")) {
+          return name.replace(/\s*proper\s*/i, "").trim();
+        }
+        return name;
+      };
+
+      const cupRounds: CupRound[] = [];
+      const roundEntries = Array.from(roundsMap.entries());
+      for (const [rawName, matchList] of roundEntries) {
+        const normalizedName = normalizeRoundName(rawName);
+        // Sort matches by kickoff
+        matchList.sort((a: CupMatch, b: CupMatch) => {
+          if (!a.kickoff && !b.kickoff) return 0;
+          if (!a.kickoff) return 1;
+          if (!b.kickoff) return -1;
+          return a.kickoff.localeCompare(b.kickoff);
+        });
+        
+        cupRounds.push({
+          name: normalizedName,
+          order: roundOrder[normalizedName] || 99,
+          matches: matchList,
+        });
+      }
+
+      // Sort rounds by order (early rounds first)
+      cupRounds.sort((a, b) => a.order - b.order);
+
+      res.json({ competitionId, rounds: cupRounds });
+    } catch (error) {
+      console.error("Error fetching cup progress:", error);
+      res.status(500).json({ error: "Failed to fetch cup progress" });
+    }
+  });
+
   // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
   app.get("/api/teams/:teamSlug/availability", async (req, res) => {
     try {
