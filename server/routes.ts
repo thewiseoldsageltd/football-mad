@@ -2322,10 +2322,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return lower;
       };
 
+      // Sanity guard: match count thresholds for main rounds
+      // If a round has more matches than expected, it's likely a qualifying sub-stage
+      // FA Cup proper rounds have fixed max matches based on tournament structure
+      const MAIN_ROUND_LIMITS: Record<string, number> = {
+        // Main knockout rounds
+        "quarter-finals": 8,
+        "semi-finals": 4,
+        "final": 2,
+        // Fractional notation rounds (FA Cup proper should have reasonable counts)
+        // 1/128 = 64 matches max (FA Cup First Round has 40 ties)
+        "1/128-finals": 64,
+        // 1/64 = 32 matches max (Second Round)
+        "1/64-finals": 32,
+        // 1/32 = 16 matches max (Third Round) - but FA Cup has 32 teams entering = 32 matches
+        "1/32-finals": 40,
+        // 1/16 = 8 matches max (Fourth Round)
+        "1/16-finals": 24,
+        // 1/8 = 4 matches max (Fifth Round) - NOT 135!
+        "1/8-finals": 16,
+      };
+
+      // Debug flag for logging sanity guard failures
+      const DEBUG_CUP_ROUNDS = process.env.DEBUG_CUP_ROUNDS === "true";
+
       const cupRounds: CupRound[] = [];
       const roundEntries = Array.from(roundsMap.entries());
+      
       for (const [rawName, matchList] of roundEntries) {
-        const normalizedName = normalizeRoundName(rawName);
+        let normalizedName = normalizeRoundName(rawName);
+        
+        // Sanity guard: check if this round exceeds main round match limits
+        const matchLimit = MAIN_ROUND_LIMITS[normalizedName];
+        const isAmbiguousRound = ["quarter-finals", "semi-finals", "final"].includes(normalizedName);
+        const isFractionalRound = /^1\/\d+-finals$/.test(normalizedName);
+        
+        if (matchLimit && matchList.length > matchLimit) {
+          // This round has too many matches - either it's a qualifying sub-stage
+          // or Goalserve is lumping multiple stages together
+          if (DEBUG_CUP_ROUNDS) {
+            console.log(`[Cup] Sanity guard: "${normalizedName}" has ${matchList.length} matches (limit ${matchLimit}), treating as qualifying`);
+          }
+          
+          if (isAmbiguousRound) {
+            normalizedName = `qualifying ${normalizedName}`;
+          } else if (isFractionalRound) {
+            // For fractional notation exceeding limits, mark as "all [round]" to indicate combined data
+            normalizedName = `all ${normalizedName}`;
+          }
+        }
+        
         // Sort matches by kickoff
         matchList.sort((a: CupMatch, b: CupMatch) => {
           if (!a.kickoff && !b.kickoff) return 0;
@@ -2334,9 +2380,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return a.kickoff.localeCompare(b.kickoff);
         });
         
+        // Determine order: qualifying sub-rounds get negative order to appear earlier
+        // "all X" rounds also get separate order to not collide with main rounds
+        let order = roundOrder[normalizedName] ?? 99;
+        if (normalizedName.startsWith("qualifying ")) {
+          // Assign order for qualifying sub-rounds (before main rounds but separate bucket)
+          if (normalizedName === "qualifying quarter-finals") order = -12;
+          else if (normalizedName === "qualifying semi-finals") order = -11;
+          else if (normalizedName === "qualifying final") order = -10;
+        } else if (normalizedName.startsWith("all ")) {
+          // For "all X" rounds (combined data), use very early order
+          const baseRound = normalizedName.replace("all ", "");
+          const baseOrder = roundOrder[baseRound] ?? 50;
+          order = baseOrder - 20; // e.g., "all 1/8-finals" gets order 0-20 = -20
+        }
+        
         cupRounds.push({
           name: normalizedName,
-          order: roundOrder[normalizedName] ?? 99,
+          order,
           matches: matchList,
         });
       }

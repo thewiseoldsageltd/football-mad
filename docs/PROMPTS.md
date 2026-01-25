@@ -5791,3 +5791,43 @@ Commit with message: "Fix FA Cup round ordering (use ??, restore First–Fifth R
 
 ---
 
+We have spurious FA Cup data showing under late rounds (e.g. “quarter-finals” has 80+ fixtures with non-league teams). This is caused by Goalserve using “Quarter-finals/Semi-finals/Final” labels inside qualifying sub-stages, and our normalizeRoundName() collapses them into the same key as the main competition rounds.
+
+Please fix /api/cup/progress round grouping + naming as follows:
+
+1) While parsing Goalserve data, preserve stage context:
+   - capture stageName (stage.name if available, else stage_id) for each match group.
+   - capture rawRoundName from week.name / round.name / match.round where available.
+
+2) Update normalizeRoundName so it returns a LOWERCASED normalizedRound.
+   - keep current mappings for fractional rounds (1/128-finals, 1/64-finals, 1/32-finals, 1/16-finals, 1/8-finals) and First–Fifth Round, etc.
+   - BUT for ambiguous labels ["quarter-finals","semi-finals","final"]:
+        a) only return exactly those names when we’re confident it’s the main tournament round.
+        b) otherwise return a disambiguated name that includes stage, e.g.:
+           `${slug(stageName)} ${normalizedRound}`
+           OR `qualifying ${normalizedRound}` when stageName indicates qualifying/preliminary.
+
+3) Add a sanity guard using match counts:
+   - If normalizedRound is "quarter-finals" and matchesInThatGroup > 8 => treat as non-main: rename to `qualifying quarter-finals` (or stage-prefixed).
+   - If "semi-finals" and matches > 4 => treat as non-main.
+   - If "final" and matches > 2 => treat as non-main.
+
+4) Ensure ordering still works:
+   - keep fractional order mapping: -4,-3,-2,-1,0
+   - main quarter/semi/final orders: 1,2,3
+   - any qualifying-stage “quarter-finals/semi-finals/final” should NOT share the same order bucket as the main ones; give them an order derived from stage (e.g. 50+) so they appear earlier or grouped separately, but never collide with main QF/SF/Final.
+
+5) Frontend display:
+   - Keep internal keys lowercase, but display labels nicely:
+     - title case for “quarter-finals/semi-finals”
+     - keep “1/128-finals” style as-is (or title-case it without breaking).
+   - Result: the Cups tab should show realistic late-round sections (QF=~4 matches, SF=~2, Final=1), and qualifying sub-stage “quarter-finals” should no longer pollute them.
+
+Add a small dev log (behind a DEBUG flag) that prints any round groups failing the sanity thresholds so we can confirm.
+
+After changes, restart and verify by hitting:
+  /api/cup/progress?competitionId=1198&season=2025/2026
+and confirm “quarter-finals” is not huge and contains sensible teams.
+
+---
+

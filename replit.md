@@ -58,6 +58,12 @@ Preferred communication style: Simple, everyday language.
     - Quarter-finals: 1
     - Semi-finals: 2
     - Final: 3
+  - **Sanity guards** (to detect qualifying sub-stages):
+    - Quarter-finals > 8 matches → "qualifying quarter-finals"
+    - Semi-finals > 4 matches → "qualifying semi-finals"
+    - Final > 2 matches → "qualifying final"
+    - 1/8-finals > 16 matches → "all 1/8-finals" (combined data)
+    - Debug flag: `DEBUG_CUP_ROUNDS=true` logs sanity guard triggers
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds

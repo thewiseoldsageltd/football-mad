@@ -66,6 +66,24 @@ const statusConfig = {
   },
 };
 
+function formatRoundName(name: string): string {
+  if (/^1\/\d+-finals$/.test(name)) {
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+  if (name.startsWith("all ")) {
+    const base = name.replace("all ", "");
+    return `All ${formatRoundName(base)}`;
+  }
+  if (name.startsWith("qualifying ")) {
+    const base = name.replace("qualifying ", "");
+    return `Qualifying ${formatRoundName(base)}`;
+  }
+  return name
+    .split(/[\s-]+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(name.includes("-") ? "-" : " ");
+}
+
 function MatchRow({ match }: { match: CupMatch }) {
   const matchStatus = getMatchStatus(match.status);
   const hasScore = match.score != null;
@@ -127,7 +145,7 @@ function RoundCard({ round }: { round: CupRound }) {
     <Card className="hover-elevate" data-testid={`card-round-${round.name.replace(/\s+/g, "-").toLowerCase()}`}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between gap-3 mb-3">
-          <h4 className="font-semibold text-base">{round.name}</h4>
+          <h4 className="font-semibold text-base">{formatRoundName(round.name)}</h4>
           <Badge variant="outline" className={`${config.badgeClass} shrink-0 text-xs`}>
             <StatusIcon className="h-3 w-3 mr-1" />
             {config.label}
