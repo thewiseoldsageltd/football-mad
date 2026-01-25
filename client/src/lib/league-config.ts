@@ -46,16 +46,46 @@ const NationalLeagueZones: StandingsZone[] = [
   { from: 21, to: 24, label: "Relegation", color: "red" },
 ];
 
+const LaLigaZones: StandingsZone[] = [
+  { from: 1, to: 4, label: "Champions League", color: "emerald" },
+  { from: 5, to: 5, label: "Europa League", color: "amber" },
+  { from: 6, to: 6, label: "Conference League", color: "orange" },
+  { from: 18, to: 20, label: "Relegation", color: "red" },
+];
+
+const SerieAZones: StandingsZone[] = [
+  { from: 1, to: 4, label: "Champions League", color: "emerald" },
+  { from: 5, to: 5, label: "Europa League", color: "amber" },
+  { from: 6, to: 6, label: "Conference League", color: "orange" },
+  { from: 18, to: 20, label: "Relegation", color: "red" },
+];
+
+const BundesligaZones: StandingsZone[] = [
+  { from: 1, to: 4, label: "Champions League", color: "emerald" },
+  { from: 5, to: 5, label: "Europa League", color: "amber" },
+  { from: 6, to: 6, label: "Conference League", color: "orange" },
+  { from: 16, to: 16, label: "Relegation Play Off", color: "orange" },
+  { from: 17, to: 18, label: "Relegation", color: "red" },
+];
+
+const Ligue1Zones: StandingsZone[] = [
+  { from: 1, to: 3, label: "Champions League", color: "emerald" },
+  { from: 4, to: 4, label: "Europa League", color: "amber" },
+  { from: 5, to: 5, label: "Conference League", color: "orange" },
+  { from: 16, to: 16, label: "Relegation Play Off", color: "orange" },
+  { from: 17, to: 18, label: "Relegation", color: "red" },
+];
+
 export const leagueConfigs: LeagueConfig[] = [
   { slug: "premier-league", name: "Premier League", shortName: "PL", goalserveLeagueId: "1204", standingsZones: PLZones },
   { slug: "championship", name: "Championship", shortName: "CH", goalserveLeagueId: "1205", standingsZones: ChampionshipZones },
   { slug: "league-one", name: "League One", shortName: "L1", goalserveLeagueId: "1206", standingsZones: LeagueOneZones },
   { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1197", standingsZones: LeagueTwoZones },
   { slug: "national-league", name: "National League", shortName: "NL", goalserveLeagueId: "1203", standingsZones: NationalLeagueZones },
-  { slug: "la-liga", name: "La Liga", shortName: "LL", goalserveLeagueId: "1399" },
-  { slug: "serie-a", name: "Serie A", shortName: "SA", goalserveLeagueId: "1229" },
-  { slug: "bundesliga", name: "Bundesliga", shortName: "BL", goalserveLeagueId: "1269" },
-  { slug: "ligue-1", name: "Ligue 1", shortName: "L1", goalserveLeagueId: "1221" },
+  { slug: "la-liga", name: "La Liga", shortName: "LL", goalserveLeagueId: "1399", standingsZones: LaLigaZones },
+  { slug: "serie-a", name: "Serie A", shortName: "SA", goalserveLeagueId: "1269", standingsZones: SerieAZones },
+  { slug: "bundesliga", name: "Bundesliga", shortName: "BUN", goalserveLeagueId: "1229", standingsZones: BundesligaZones },
+  { slug: "ligue-1", name: "Ligue 1", shortName: "L1", goalserveLeagueId: "1221", standingsZones: Ligue1Zones },
 ];
 
 export function getGoalserveLeagueId(slug: string): string | null {

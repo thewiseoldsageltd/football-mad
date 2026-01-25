@@ -29,7 +29,7 @@ export const leagueCompetitions: Competition[] = [
   { id: "national-league", name: "National League", shortName: "NL", type: "league" },
   { id: "la-liga", name: "La Liga", shortName: "LL", type: "league" },
   { id: "serie-a", name: "Serie A", shortName: "SA", type: "league" },
-  { id: "bundesliga", name: "Bundesliga", shortName: "BL", type: "league" },
+  { id: "bundesliga", name: "Bundesliga", shortName: "BUN", type: "league" },
   { id: "ligue-1", name: "Ligue 1", shortName: "L1", type: "league" },
 ];
 

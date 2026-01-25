@@ -551,3 +551,24 @@ curl -sS "https://football-mad.replit.app/api/dev/competitions/search?country=en
 ```
 
 ---
+
+## Big Euro Leagues Standings
+
+Added support for 4 major European leagues on the Tables page.
+
+### Goalserve IDs Discovered
+
+| League | Goalserve ID | Source Name |
+|--------|--------------|-------------|
+| La Liga | 1399 | Primera (Spain) |
+| Serie A | 1269 | Serie A (Italy) |
+| Bundesliga | 1229 | Bundesliga (Germany) |
+| Ligue 1 | 1221 | Ligue 1 (France) |
+
+### Zone Configurations
+
+- **La Liga / Serie A**: CL 1-4, EL 5, ECL 6, Relegation 18-20
+- **Bundesliga**: CL 1-4, EL 5, ECL 6, Relegation PO 16, Relegation 17-18
+- **Ligue 1**: CL 1-3, EL 4, ECL 5, Relegation PO 16, Relegation 17-18
+
+---

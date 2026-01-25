@@ -1,0 +1,73 @@
+You are working in the Football Mad codebase.
+
+Goal: Add standings support for 4 “Big Euro” leagues on the Tables page:
+- La Liga (Spain)
+- Serie A (Italy)
+- Bundesliga (Germany)
+- Ligue 1 (France)
+
+IMPORTANT:
+- Do NOT guess Goalserve league IDs.
+- Use the existing competitions search endpoint to discover IDs:
+  GET /api/dev/competitions/search?q=<query>&country=<country>
+- Then update client/src/lib/league-config.ts with the discovered goalserveLeagueId for each league.
+
+Domain to use in verification commands:
+https://f04e3e83-5dee-4d43-ba21-fba6506a8e19-00-3rjffbqt7u6wn.spock.replit.dev
+
+Tasks:
+
+1) Find the correct Goalserve IDs (do this first)
+Run curl calls (or use server code knowledge) against:
+  - /api/dev/competitions/search?q=la%20liga&country=spain
+  - /api/dev/competitions/search?q=primera&country=spain
+  - /api/dev/competitions/search?q=serie%20a&country=italy
+  - /api/dev/competitions/search?q=bundesliga&country=germany
+  - /api/dev/competitions/search?q=ligue%201&country=france
+Pick the top-level main leagues (not cups, not B teams, not youth, not women).
+
+2) Update league config
+File: client/src/lib/league-config.ts
+- Ensure these leagues exist as configs (slug/name/shortName):
+  - la-liga / La Liga / LL
+  - serie-a / Serie A / SA
+  - bundesliga / Bundesliga / BUN
+  - ligue-1 / Ligue 1 / L1
+- Set goalserveLeagueId to the discovered value for each.
+- Add standingsZones for each league (config-driven highlighting):
+  Use “Euro default” zones for now (easy to tweak later):
+    - Champions League: positions 1-4
+    - Europa League: position 5
+    - Conference League: position 6
+    - Relegation: bottom 3 (or bottom 2 for Bundesliga if appropriate)
+  NOTE: If you’re unsure for a league, set Relegation conservatively (bottom 3) and add a TODO comment.
+  Zone objects should match the existing StandingsZone type and render cleanly in the legend.
+
+3) Ensure the Tables UI shows them
+File: client/src/data/tables-mock.ts
+- Make sure these tabs exist (id must match slug):
+  - la-liga
+  - serie-a
+  - bundesliga
+  - ligue-1
+
+4) Build log
+File: docs/BUILD_LOG.md
+- Add a short section: “Big Euro Leagues Standings”
+- Record the final Goalserve IDs discovered.
+
+5) Verification commands (print these at the end)
+Provide commands for each league using the domain above:
+A) Purge
+POST /api/jobs/purge-standings?leagueId=<ID>&season=2025/2026
+B) Force ingest
+POST /api/jobs/upsert-goalserve-standings?leagueId=<ID>&force=1
+C) Fetch snapshot
+GET /api/standings?leagueId=<ID>&season=2025/2026
+
+Use GOALSERVE_SYNC_SECRET header where required.
+
+Acceptance:
+- Each league appears on /tables and loads data after ingest.
+- No team names render as numeric IDs.
+- Legends render from standingsZones with short labels (keep them compact where possible).
