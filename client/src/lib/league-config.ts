@@ -1,4 +1,4 @@
-export type ZoneColor = "emerald" | "amber" | "orange" | "red";
+export type ZoneColor = "emerald" | "cyan" | "amber" | "orange" | "red";
 
 export interface StandingsZone {
   from: number;
@@ -70,7 +70,7 @@ const BundesligaZones: StandingsZone[] = [
 
 const Ligue1Zones: StandingsZone[] = [
   { from: 1, to: 3, label: "Champions League", color: "emerald" },
-  { from: 4, to: 4, label: "CL Qual.", color: "emerald" },
+  { from: 4, to: 4, label: "UCL Qual.", color: "cyan" },
   { from: 5, to: 5, label: "Europa League", color: "amber" },
   { from: 6, to: 6, label: "Conference League", color: "orange" },
   { from: 16, to: 16, label: "Relegation Play Off", color: "orange" },
