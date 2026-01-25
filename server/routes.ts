@@ -2242,137 +2242,143 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      // Normalize round names and assign order
-      // FA Cup order: Extra Preliminary -> Preliminary -> 1st Qualifying -> 2nd Q -> 3rd Q -> 4th Q 
-      // -> First Round -> Second Round -> Third Round -> Fourth Round -> Fifth Round
-      // -> Quarter-finals -> Semi-finals -> Final
-      // FA Cup round ordering - unique values for each stage
-      // Expected order: -4 to 3 for main knockout stages
-      // Note: We use ?? not || because order can be 0 (for 1/8-finals or Fifth Round)
-      // Dev sanity check: 1/128(-4) → 1/64(-3) → 1/32(-2) → 1/16(-1) → 1/8(0) → QF(1) → SF(2) → F(3)
-      // All keys are lowercase to match normalizeRoundName() output
-      const roundOrder: Record<string, number> = {
-        // FA Cup qualifying stages
-        "extra preliminary round": -10,
-        "preliminary round": -9,
-        "first qualifying round": -8,
-        "second qualifying round": -7,
-        "third qualifying round": -6,
-        "fourth qualifying round": -5,
-        // Goalserve fractional round notation - unique orders
-        "1/128-finals": -4,
-        "1/64-finals": -3,
-        "1/32-finals": -2,
-        "1/16-finals": -1,
-        "1/8-finals": 0,
-        "quarter-finals": 1,
-        "semi-finals": 2,
-        "final": 3,
-        // Standard FA Cup main rounds (First–Fifth Round mappings)
-        "first round": -4,
-        "first round proper": -4,
-        "second round": -3,
-        "second round proper": -3,
-        "third round": -2,
-        "third round proper": -2,
-        "fourth round": -1,
-        "fourth round proper": -1,
-        "fifth round": 0,
-        "fifth round proper": 0,
-        "round of 64": -3,
-        "round of 32": -2,
-        "round of 16": -1,
+      // ============ FA CUP CANONICAL ROUND SYSTEM ============
+      // 14 canonical rounds ONLY - anything that doesn't map is discarded
+      // Qualifying (1-6): Extra Preliminary Round → Fourth Qualifying Round
+      // Proper (7-14): First Round → Final
+      
+      // Canonical round names and their display order (1-14)
+      const CANONICAL_ROUNDS: Record<string, number> = {
+        "Extra Preliminary Round": 1,
+        "Preliminary Round": 2,
+        "First Qualifying Round": 3,
+        "Second Qualifying Round": 4,
+        "Third Qualifying Round": 5,
+        "Fourth Qualifying Round": 6,
+        "First Round": 7,
+        "Second Round": 8,
+        "Third Round": 9,
+        "Fourth Round": 10,
+        "Fifth Round": 11,
+        "Quarter-finals": 12,
+        "Semi-finals": 13,
+        "Final": 14,
       };
 
-      // normalizeRoundName: always returns lowercase to match roundOrder keys
-      const normalizeRoundName = (name: string): string => {
+      // normalizeToCanonicalRound: returns canonical name or null (discard if null)
+      const normalizeToCanonicalRound = (name: string): string | null => {
         const lower = name.toLowerCase().trim();
-        // Keep Goalserve fractional notation as-is (already lowercase)
-        if (/^1\/\d+-finals$/.test(lower)) return lower;
-        // Handle quarter/semi/final variations
-        if (lower.includes("quarter") && !lower.includes("qualifying")) return "quarter-finals";
-        if (lower.includes("semi") && !lower.includes("qualifying")) return "semi-finals";
-        if ((lower === "final" || lower === "finals") && !lower.includes("qualifying")) return "final";
-        // Handle qualifying rounds
-        if (lower.includes("extra") && lower.includes("prelim")) return "extra preliminary round";
-        if (lower.includes("prelim") && !lower.includes("extra")) return "preliminary round";
-        if ((lower.includes("1st") || lower.includes("first")) && lower.includes("qual")) return "first qualifying round";
-        if ((lower.includes("2nd") || lower.includes("second")) && lower.includes("qual")) return "second qualifying round";
-        if ((lower.includes("3rd") || lower.includes("third")) && lower.includes("qual")) return "third qualifying round";
-        if ((lower.includes("4th") || lower.includes("fourth")) && lower.includes("qual")) return "fourth qualifying round";
-        // Handle "Round of XX"
-        if (lower.includes("round of 64") || lower.includes("last 64")) return "round of 64";
-        if (lower.includes("round of 32") || lower.includes("last 32")) return "round of 32";
-        if (lower.includes("round of 16") || lower.includes("last 16")) return "round of 16";
-        // Handle "1st Round", "Round 1", etc.
-        const ordinalMatch = lower.match(/^(1st|first|round\s*1)\s*(round)?$/);
-        if (ordinalMatch) return "first round";
-        const secondMatch = lower.match(/^(2nd|second|round\s*2)\s*(round)?$/);
-        if (secondMatch) return "second round";
-        const thirdMatch = lower.match(/^(3rd|third|round\s*3)\s*(round)?$/);
-        if (thirdMatch) return "third round";
-        const fourthMatch = lower.match(/^(4th|fourth|round\s*4)\s*(round)?$/);
-        if (fourthMatch) return "fourth round";
-        const fifthMatch = lower.match(/^(5th|fifth|round\s*5)\s*(round)?$/);
-        if (fifthMatch) return "fifth round";
-        // Strip "proper" suffix for cleaner display, return lowercase
-        if (lower.includes("proper")) {
-          return lower.replace(/\s*proper\s*/, " ").trim();
+        
+        // Map Goalserve fractional notation to proper round names
+        if (lower === "1/128-finals") return "First Round";
+        if (lower === "1/64-finals") return "Second Round";
+        if (lower === "1/32-finals") return "Third Round";
+        if (lower === "1/16-finals") return "Fourth Round";
+        if (lower === "1/8-finals") return "Fifth Round";
+        
+        // Map quarter/semi/final variations
+        if (lower.includes("quarter") && lower.includes("final") && !lower.includes("qualifying")) {
+          return "Quarter-finals";
         }
-        return lower;
+        if (lower.includes("semi") && lower.includes("final") && !lower.includes("qualifying")) {
+          return "Semi-finals";
+        }
+        if ((lower === "final" || lower === "finals" || lower === "the final") && !lower.includes("qualifying")) {
+          return "Final";
+        }
+        
+        // Map qualifying rounds (case-insensitive, tolerate "1st/first", hyphens, etc)
+        if (lower.includes("extra") && lower.includes("prelim")) return "Extra Preliminary Round";
+        if (lower.includes("prelim") && !lower.includes("extra")) return "Preliminary Round";
+        if ((lower.includes("1st") || lower.includes("first")) && lower.includes("qual")) return "First Qualifying Round";
+        if ((lower.includes("2nd") || lower.includes("second")) && lower.includes("qual")) return "Second Qualifying Round";
+        if ((lower.includes("3rd") || lower.includes("third")) && lower.includes("qual")) return "Third Qualifying Round";
+        if ((lower.includes("4th") || lower.includes("fourth")) && lower.includes("qual")) return "Fourth Qualifying Round";
+        
+        // Map "Round of XX" and "Last XX" to proper rounds
+        if (lower.includes("round of 64") || lower.includes("last 64")) return "Second Round";
+        if (lower.includes("round of 32") || lower.includes("last 32")) return "Third Round";
+        if (lower.includes("round of 16") || lower.includes("last 16")) return "Fourth Round";
+        if (lower.includes("round of 8") || lower.includes("last 8")) return "Quarter-finals";
+        if (lower.includes("round of 4") || lower.includes("last 4")) return "Semi-finals";
+        
+        // Map ordinal rounds: "1st Round", "First Round", "Round 1", etc.
+        if (/^(1st|first)\s*(round)?(\s*proper)?$/.test(lower) || /^round\s*1$/.test(lower)) return "First Round";
+        if (/^(2nd|second)\s*(round)?(\s*proper)?$/.test(lower) || /^round\s*2$/.test(lower)) return "Second Round";
+        if (/^(3rd|third)\s*(round)?(\s*proper)?$/.test(lower) || /^round\s*3$/.test(lower)) return "Third Round";
+        if (/^(4th|fourth)\s*(round)?(\s*proper)?$/.test(lower) || /^round\s*4$/.test(lower)) return "Fourth Round";
+        if (/^(5th|fifth)\s*(round)?(\s*proper)?$/.test(lower) || /^round\s*5$/.test(lower)) return "Fifth Round";
+        
+        // Handle explicit canonical names (already properly cased in feed)
+        for (const canonical of Object.keys(CANONICAL_ROUNDS)) {
+          if (lower === canonical.toLowerCase()) return canonical;
+        }
+        
+        // No match - discard this round (returns null)
+        return null;
       };
 
-      // Sanity guard: match count thresholds for main rounds
-      // If a round has more matches than expected, it's likely a qualifying sub-stage
-      // FA Cup proper rounds have fixed max matches based on tournament structure
-      const MAIN_ROUND_LIMITS: Record<string, number> = {
-        // Main knockout rounds
-        "quarter-finals": 8,
-        "semi-finals": 4,
-        "final": 2,
-        // Fractional notation rounds (FA Cup proper should have reasonable counts)
-        // 1/128 = 64 matches max (FA Cup First Round has 40 ties)
-        "1/128-finals": 64,
-        // 1/64 = 32 matches max (Second Round)
-        "1/64-finals": 32,
-        // 1/32 = 16 matches max (Third Round) - but FA Cup has 32 teams entering = 32 matches
-        "1/32-finals": 40,
-        // 1/16 = 8 matches max (Fourth Round)
-        "1/16-finals": 24,
-        // 1/8 = 4 matches max (Fifth Round) - NOT 135!
-        "1/8-finals": 16,
+      // Match count sanity guards - discard rounds with unrealistic match counts
+      const ROUND_MAX_MATCHES: Record<string, number> = {
+        "Quarter-finals": 8,
+        "Semi-finals": 4,
+        "Final": 2,
+        "Fifth Round": 16,
+        "Fourth Round": 24,
+        "Third Round": 40,
+        "Second Round": 40,
+        "First Round": 80,
       };
 
-      // Debug flag for logging sanity guard failures
+      // Debug flag for logging discarded rounds
       const DEBUG_CUP_ROUNDS = process.env.DEBUG_CUP_ROUNDS === "true";
 
-      const cupRounds: CupRound[] = [];
-      const roundEntries = Array.from(roundsMap.entries());
+      // Group matches by canonical round, deduping by match ID
+      const canonicalRoundsMap: Map<string, Map<string, CupMatch>> = new Map();
       
+      const roundEntries = Array.from(roundsMap.entries());
       for (const [rawName, matchList] of roundEntries) {
-        let normalizedName = normalizeRoundName(rawName);
+        const canonicalName = normalizeToCanonicalRound(rawName);
         
-        // Sanity guard: check if this round exceeds main round match limits
-        const matchLimit = MAIN_ROUND_LIMITS[normalizedName];
-        const isAmbiguousRound = ["quarter-finals", "semi-finals", "final"].includes(normalizedName);
-        const isFractionalRound = /^1\/\d+-finals$/.test(normalizedName);
-        
-        if (matchLimit && matchList.length > matchLimit) {
-          // This round has too many matches - either it's a qualifying sub-stage
-          // or Goalserve is lumping multiple stages together
+        if (!canonicalName) {
+          // Round doesn't map to any canonical name - discard
           if (DEBUG_CUP_ROUNDS) {
-            console.log(`[Cup] Sanity guard: "${normalizedName}" has ${matchList.length} matches (limit ${matchLimit}), treating as qualifying`);
+            console.log(`[Cup] Discarding non-canonical round: "${rawName}" (${matchList.length} matches)`);
           }
-          
-          if (isAmbiguousRound) {
-            normalizedName = `qualifying ${normalizedName}`;
-          } else if (isFractionalRound) {
-            // For fractional notation exceeding limits, mark as "all [round]" to indicate combined data
-            normalizedName = `all ${normalizedName}`;
-          }
+          continue;
         }
         
-        // Sort matches by kickoff
+        // Initialize map for this canonical round if needed
+        if (!canonicalRoundsMap.has(canonicalName)) {
+          canonicalRoundsMap.set(canonicalName, new Map());
+        }
+        const matchMap = canonicalRoundsMap.get(canonicalName)!;
+        
+        // Add matches, deduping by ID
+        for (const match of matchList) {
+          if (!matchMap.has(match.id)) {
+            matchMap.set(match.id, match);
+          }
+        }
+      }
+
+      // Build final rounds array, applying sanity guards
+      const cupRounds: CupRound[] = [];
+      
+      const canonicalEntries = Array.from(canonicalRoundsMap.entries());
+      for (const [canonicalName, matchMap] of canonicalEntries) {
+        const matchList: CupMatch[] = Array.from(matchMap.values());
+        
+        // Sanity guard: check match count
+        const maxMatches = ROUND_MAX_MATCHES[canonicalName];
+        if (maxMatches && matchList.length > maxMatches) {
+          if (DEBUG_CUP_ROUNDS) {
+            console.log(`[Cup] Sanity guard: "${canonicalName}" has ${matchList.length} matches (limit ${maxMatches}), discarding`);
+          }
+          continue; // Discard rounds with too many matches (likely combined qualifying data)
+        }
+        
+        // Sort matches by kickoff datetime
         matchList.sort((a: CupMatch, b: CupMatch) => {
           if (!a.kickoff && !b.kickoff) return 0;
           if (!a.kickoff) return 1;
@@ -2380,23 +2386,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return a.kickoff.localeCompare(b.kickoff);
         });
         
-        // Determine order: qualifying sub-rounds get negative order to appear earlier
-        // "all X" rounds also get separate order to not collide with main rounds
-        let order = roundOrder[normalizedName] ?? 99;
-        if (normalizedName.startsWith("qualifying ")) {
-          // Assign order for qualifying sub-rounds (before main rounds but separate bucket)
-          if (normalizedName === "qualifying quarter-finals") order = -12;
-          else if (normalizedName === "qualifying semi-finals") order = -11;
-          else if (normalizedName === "qualifying final") order = -10;
-        } else if (normalizedName.startsWith("all ")) {
-          // For "all X" rounds (combined data), use very early order
-          const baseRound = normalizedName.replace("all ", "");
-          const baseOrder = roundOrder[baseRound] ?? 50;
-          order = baseOrder - 20; // e.g., "all 1/8-finals" gets order 0-20 = -20
-        }
+        const order = CANONICAL_ROUNDS[canonicalName] ?? 99;
         
         cupRounds.push({
-          name: normalizedName,
+          name: canonicalName,
           order,
           matches: matchList,
         });

@@ -5831,3 +5831,83 @@ and confirm “quarter-finals” is not huge and contains sensible teams.
 
 ---
 
+You are working in my repo (Replit). Please update the FA Cup Cups feature so the UI uses my canonical 14-round naming and only shows valid FA Cup rounds.
+
+GOAL
+Fix /api/cup/progress (FA Cup: competitionId=1198) so rounds are grouped and displayed using ONLY these canonical round names, in this exact order:
+
+Qualifying (6):
+1) Extra Preliminary Round
+2) Preliminary Round
+3) First Qualifying Round
+4) Second Qualifying Round
+5) Third Qualifying Round
+6) Fourth Qualifying Round
+
+Proper (8):
+7) First Round
+8) Second Round
+9) Third Round
+10) Fourth Round
+11) Fifth Round
+12) Quarter-finals
+13) Semi-finals
+14) Final
+
+KEY RULES
+1) Round normalization must return one of the 14 canonical names above, or null (meaning discard).
+2) Any stage/round name that does NOT map must be ignored (this prevents spurious “team names as rounds” and polluting knockout rounds).
+3) Keep season support (?season=2025/2026) and the current working Goalserve endpoint logic that returns JSON (and keep the HTML detection guard).
+4) Ensure ordering is stable by mapping canonical names to an explicit order 1..14.
+
+MAPPING REQUIREMENTS
+- Goalserve fractional rounds must map like this:
+  - "1/128-finals" => "First Round"
+  - "1/64-finals"  => "Second Round"
+  - "1/32-finals"  => "Third Round"
+  - "1/16-finals"  => "Fourth Round"
+  - "1/8-finals"   => "Fifth Round"
+  - "quarter-finals" => "Quarter-finals"
+  - "semi-finals" => "Semi-finals"
+  - "final" => "Final"
+- Goalserve qualifying text mapping (case-insensitive, tolerate “1st/first”, hyphens, etc):
+  - contains "extra preliminary" => "Extra Preliminary Round"
+  - contains "preliminary" (but not "extra") => "Preliminary Round"
+  - contains "first qualifying" or "1st qualifying" => "First Qualifying Round"
+  - contains "second qualifying" or "2nd qualifying" => "Second Qualifying Round"
+  - contains "third qualifying" or "3rd qualifying" => "Third Qualifying Round"
+  - contains "fourth qualifying" or "4th qualifying" => "Fourth Qualifying Round"
+
+IMPLEMENTATION NOTES
+- Locate the code for /api/cup/progress in the server (likely server/routes.ts or similar).
+- The parser currently iterates Goalserve shapes like:
+  results.tournament.stage[].week[].match[]
+  results.tournament.stage[].round[].match[]
+  results.tournament.stage[].match[]
+  Ensure we do NOT double-count matches if the same matches appear in more than one structure. Prefer a single canonical extraction path and dedupe by match id if needed.
+- Build a dictionary keyed by canonicalRoundName -> matches[].
+- For each match, decide the round name using the stage/round naming available in the feed; pass it through normalizeToCanonicalRound(name). If null, skip.
+- Return JSON:
+  { competitionId, season?, rounds: [{ name, order, matches: [...] }] }
+  where name is the canonical display name and order is 1..14.
+- Frontend: ensure the Cups tab displays the round name exactly as returned (these are already display-ready).
+- Keep existing match sorting inside each round by kickoff datetime.
+
+ADD A QUICK DEV NOTE
+- Update docs/BUILD_LOG.md (or relevant doc) with:
+  - the canonical round list
+  - the mapping table for fractional rounds
+  - the rule: “discard anything that doesn’t map”
+
+ACCEPTANCE CHECKS (do these yourself after changes)
+- Hitting /api/cup/progress?competitionId=1198&season=2025/2026 returns rounds ONLY from the canonical list above.
+- No massive “Quarter-finals” buckets with 80+ matches.
+- Fractional rounds appear under the correct “First Round / Second Round / …” naming.
+
+After implementing, show me:
+1) the files changed
+2) the new normalize function (or relevant snippet)
+3) a sample response (first 1-2 rounds) from /api/cup/progress for FA Cup
+
+---
+

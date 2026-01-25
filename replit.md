@@ -43,27 +43,37 @@ Preferred communication style: Simple, everyday language.
   - Goalserve feed: `soccerfixtures/leagueid/{LEAGUE_ID}?json=true`
   - Verify with: `curl -sS "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/soccerfixtures/leagueid/1198?json=true" | head -n 40`
   - **JavaScript gotcha**: Use `??` instead of `||` when 0 is a valid value (0 is falsy in JavaScript)
-  - Round ordering (all keys lowercase for consistent lookup):
-    - Extra Preliminary Round: -10
-    - Preliminary Round: -9
-    - First Qualifying Round: -8
-    - Second Qualifying Round: -7
-    - Third Qualifying Round: -6
-    - Fourth Qualifying Round: -5
-    - 1/128-finals / First Round: -4
-    - 1/64-finals / Second Round: -3
-    - 1/32-finals / Third Round: -2
-    - 1/16-finals / Fourth Round: -1
-    - 1/8-finals / Fifth Round: 0
-    - Quarter-finals: 1
-    - Semi-finals: 2
-    - Final: 3
-  - **Sanity guards** (to detect qualifying sub-stages):
-    - Quarter-finals > 8 matches → "qualifying quarter-finals"
-    - Semi-finals > 4 matches → "qualifying semi-finals"
-    - Final > 2 matches → "qualifying final"
-    - 1/8-finals > 16 matches → "all 1/8-finals" (combined data)
-    - Debug flag: `DEBUG_CUP_ROUNDS=true` logs sanity guard triggers
+  - **Canonical 14-Round System** (order 1-14, anything else discarded):
+    - Qualifying (1-6):
+      1. Extra Preliminary Round
+      2. Preliminary Round
+      3. First Qualifying Round
+      4. Second Qualifying Round
+      5. Third Qualifying Round
+      6. Fourth Qualifying Round
+    - Proper (7-14):
+      7. First Round
+      8. Second Round
+      9. Third Round
+      10. Fourth Round
+      11. Fifth Round
+      12. Quarter-finals
+      13. Semi-finals
+      14. Final
+  - **Fractional Round Mapping** (Goalserve → Canonical):
+    - "1/128-finals" → First Round
+    - "1/64-finals" → Second Round
+    - "1/32-finals" → Third Round
+    - "1/16-finals" → Fourth Round
+    - "1/8-finals" → Fifth Round
+  - **Sanity guards** (discard if over limit):
+    - Quarter-finals > 8 matches
+    - Semi-finals > 4 matches
+    - Final > 2 matches
+    - Fifth Round > 16 matches
+    - Fourth Round > 24 matches
+  - **Rule**: Any round that doesn't map to canonical 14 is DISCARDED
+  - Debug flag: `DEBUG_CUP_ROUNDS=true` logs discarded rounds
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds

@@ -66,22 +66,10 @@ const statusConfig = {
   },
 };
 
+// Round names from API are already display-ready canonical names
+// This function is kept for backwards compatibility but just returns the name as-is
 function formatRoundName(name: string): string {
-  if (/^1\/\d+-finals$/.test(name)) {
-    return name.charAt(0).toUpperCase() + name.slice(1);
-  }
-  if (name.startsWith("all ")) {
-    const base = name.replace("all ", "");
-    return `All ${formatRoundName(base)}`;
-  }
-  if (name.startsWith("qualifying ")) {
-    const base = name.replace("qualifying ", "");
-    return `Qualifying ${formatRoundName(base)}`;
-  }
-  return name
-    .split(/[\s-]+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(name.includes("-") ? "-" : " ");
+  return name;
 }
 
 function MatchRow({ match }: { match: CupMatch }) {
