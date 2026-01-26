@@ -6336,3 +6336,45 @@ No explanations outside the code block.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour.
+
+CURRENT STATE:
+
+• Copa del Rey (competitionId = 1397) now shows: First Round, Round of 32, Round of 16, Semi-finals, Final
+• Quarter-finals is missing from the canonical round output (and therefore missing from the UI)
+
+TASK:
+
+Backend only: ensure Copa del Rey canonical rounds ALWAYS include "Quarter-finals" in the correct order between "Round of 16" and "Semi-finals", even when it has 0 fixtures.
+
+Also ensure any Goalserve labels containing "quarter" (case-insensitive), including:
+- "Quarter-finals"
+- "Quarterfinals"
+- "Quarter Final"
+- "QF"
+normalize to the EXACT canonical round name:
+"Quarter-finals"
+
+Do NOT modify:
+• UI code
+• Canonical round system for other competitions
+• FA Cup logic
+• EFL Cup logic
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
+
+---
+

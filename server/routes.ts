@@ -2399,8 +2399,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (lower === "1/16-finals") return "Round of 16";
         if (lower === "1/8-finals") return "Quarter-finals";
         
-        // Quarter-finals variants
-        if (lower.includes("quarter") && lower.includes("final")) return "Quarter-finals";
+        // Quarter-finals variants (quarterfinals, quarter-final, quarter final, qf)
+        if (lower.includes("quarter") || lower === "qf") return "Quarter-finals";
         
         // Semi-finals variants (including "semifinal", "semi-final 1st leg", etc.)
         if (lower.includes("semi")) return "Semi-finals";
