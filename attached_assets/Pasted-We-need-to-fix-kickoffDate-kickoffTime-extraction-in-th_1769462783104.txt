@@ -1,0 +1,66 @@
+We need to fix kickoffDate/kickoffTime extraction in the cup progress endpoint across ALL cup competitions.
+
+CONSTRAINTS:
+- Backend only (server/routes.ts)
+- Do NOT change UI
+- Keep changes minimal and localized to cup progress parsing
+- No logging, no refactors outside this block
+
+PROBLEM:
+kickoffDate only shows for upcoming fixtures, and kickoffTime is null for all matches. This indicates our parsed Goalserve match objects are not using a single consistent attribute prefix. Attributes may appear as:
+- node[key]
+- node["@"+key]
+- node["@_"+key]
+- node["@"]?.[key]
+- node["$"]?.[key]
+
+FIX:
+In server/routes.ts inside the cup progress handler, directly above parseMatch, add a small helper:
+
+function getAttr(node: any, key: string): string | null {
+  if (!node || typeof node !== "object") return null;
+  const direct = node[key];
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+  const at = node[`@${key}`];
+  if (typeof at === "string" && at.trim()) return at.trim();
+
+  const atUnderscore = node[`@_${key}`];
+  if (typeof atUnderscore === "string" && atUnderscore.trim()) return atUnderscore.trim();
+
+  const atObj = node["@"]?.[key];
+  if (typeof atObj === "string" && atObj.trim()) return atObj.trim();
+
+  const dollarObj = node["$"]?.[key];
+  if (typeof dollarObj === "string" && dollarObj.trim()) return dollarObj.trim();
+
+  return null;
+}
+
+Also add helper:
+function toIsoFromDotDate(d: string | null): string | null {
+  if (!d) return null;
+  const s = d.trim();
+  const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s);
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+Then update parseMatch to use getAttr() for date/time (and only date/time if you want to keep minimal):
+- rawDate = getAttr(m, "date")  (string or null)
+- rawTime = getAttr(m, "time")  (string or null)
+- formattedDate = getAttr(m, "formatted_date")
+- formattedTime = getAttr(m, "formatted_time")
+
+Set:
+- kickoffDate = toIsoFromDotDate(rawDate) ?? toIsoFromDotDate(formattedDate) ?? null
+- kickoffTime = (rawTime && rawTime.includes(":") ? rawTime : (formattedTime && formattedTime.includes(":") ? formattedTime : null))
+
+Also fix kickoff field so it never becomes time-only:
+kickoff: formattedDate || rawDate || undefined
+
+Leave the existing kickoff field in place (backward compatible), but ensure it is always a date string when present.
+
+Do not change anything else.
+Return one backend code update.

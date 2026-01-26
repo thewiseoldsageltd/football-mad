@@ -2166,6 +2166,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ? [results.tournament] 
           : [];
 
+      // Helper to robustly extract attributes from Goalserve match nodes
+      // Handles: node[key], node["@"+key], node["@_"+key], node["@"]?.[key], node["$"]?.[key]
+      const getAttr = (node: any, key: string): string | null => {
+        if (!node || typeof node !== "object") return null;
+        const direct = node[key];
+        if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+        const at = node[`@${key}`];
+        if (typeof at === "string" && at.trim()) return at.trim();
+
+        const atUnderscore = node[`@_${key}`];
+        if (typeof atUnderscore === "string" && atUnderscore.trim()) return atUnderscore.trim();
+
+        const atObj = node["@"]?.[key];
+        if (typeof atObj === "string" && atObj.trim()) return atObj.trim();
+
+        const dollarObj = node["$"]?.[key];
+        if (typeof dollarObj === "string" && dollarObj.trim()) return dollarObj.trim();
+
+        return null;
+      };
+
+      // Convert DD.MM.YYYY → YYYY-MM-DD
+      const toIsoFromDotDate = (d: string | null): string | null => {
+        if (!d) return null;
+        const s = d.trim();
+        const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s);
+        if (!m) return null;
+        const [, dd, mm, yyyy] = m;
+        return `${yyyy}-${mm}-${dd}`;
+      };
+
       // Helper to parse a single match object
       const parseMatch = (m: any, roundName: string) => {
         const homeTeam = m.hometeam || m.localteam || {};
@@ -2176,42 +2208,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
 
-        // Extract date and time from Goalserve format
-        // Goalserve XML attributes are exposed with "@_" prefix (underscore)
-        const rawDate = m["@_date"] || m["@date"] || m.date || "";
-        const rawTime = m["@_time"] || m["@time"] || m.time || "";
+        // Extract date and time using robust attribute helper
+        const rawDate = getAttr(m, "date");
+        const rawTime = getAttr(m, "time");
+        const formattedDate = getAttr(m, "formatted_date");
+        const formattedTime = getAttr(m, "formatted_time");
         
-        // Convert DD.MM.YYYY → YYYY-MM-DD
-        let kickoffDate: string | null = null;
-        if (rawDate) {
-          const dateParts = rawDate.split(".");
-          if (dateParts.length === 3) {
-            const [day, month, year] = dateParts;
-            kickoffDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-          }
-        }
+        // Convert to ISO date format (YYYY-MM-DD)
+        const kickoffDate = toIsoFromDotDate(rawDate) ?? toIsoFromDotDate(formattedDate) ?? null;
         
         // Extract HH:mm (24-hour format), null if missing
-        const kickoffTime: string | null = rawTime && rawTime.includes(":") ? rawTime : null;
+        const kickoffTime = (rawTime && rawTime.includes(":")) 
+          ? rawTime 
+          : (formattedTime && formattedTime.includes(":") ? formattedTime : null);
 
         const match: CupMatch = {
-          id: m["@_id"] || m["@id"] || m.id || String(Math.random()),
+          id: getAttr(m, "id") || String(Math.random()),
           home: {
-            id: homeTeam["@_id"] || homeTeam["@id"] || homeTeam.id,
-            name: homeTeam["@_name"] || homeTeam["@name"] || homeTeam.name || "TBD",
+            id: getAttr(homeTeam, "id") || undefined,
+            name: getAttr(homeTeam, "name") || "TBD",
           },
           away: {
-            id: awayTeam["@_id"] || awayTeam["@id"] || awayTeam.id,
-            name: awayTeam["@_name"] || awayTeam["@name"] || awayTeam.name || "TBD",
+            id: getAttr(awayTeam, "id") || undefined,
+            name: getAttr(awayTeam, "name") || "TBD",
           },
           score: hasScore ? {
             home: parseInt(String(homeScore), 10),
             away: parseInt(String(awayScore), 10),
           } : null,
-          kickoff: m["@_formatted_date"] || m["@formatted_date"] || m["@_date"] || m["@date"] || m.date || undefined,
+          kickoff: formattedDate || rawDate || undefined,
           kickoffDate,
           kickoffTime,
-          status: m["@_status"] || m["@status"] || m.status || "NS",
+          status: getAttr(m, "status") || "NS",
         };
 
         if (!roundsMap.has(roundName)) {
