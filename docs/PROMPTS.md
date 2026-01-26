@@ -6534,3 +6534,50 @@ No explanations outside the code block.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour or components.
+
+CURRENT ISSUE:
+
+We added a Copa del Rey display-name override that renames "Round of 32" -> "1/16-finals" etc.
+This is misleading because the underlying buckets are not a 1:1 match to Goalserve stages and fixture counts don’t align.
+Goalserve for competitionId=1397 provides explicit stage names:
+1/128-finals, 1/64-finals, 1/32-finals, 1/16-finals, 1/8-finals, Quarter-finals (+ later)
+
+TASK (Copa del Rey 1397 only):
+
+1) REMOVE the Copa del Rey display-name override that renames Round of 32/16 into fractional labels.
+
+2) Instead, define a Copa-del-Rey-specific canonical round list that mirrors Goalserve stage names EXACTLY, in this order:
+- "1/128-finals"
+- "1/64-finals"
+- "1/32-finals"
+- "1/16-finals"
+- "1/8-finals"
+- "Quarter-finals"
+- "Semi-finals"
+- "Final"
+
+3) Update the Copa del Rey normalization/mapping so that stage/round/week labels map 1:1 onto those canonical names:
+- exact/contains "1/128" -> "1/128-finals"
+- exact/contains "1/64"  -> "1/64-finals"
+- exact/contains "1/32"  -> "1/32-finals"
+- exact/contains "1/16"  -> "1/16-finals"
+- exact/contains "1/8"   -> "1/8-finals"
+- contains "quarter" or "1/4" -> "Quarter-finals"
+- contains "semi" -> "Semi-finals"
+- contains "final" but not semi/quarter -> "Final"
+
+4) Keep the existing “empty rounds are allowed and displa
+
+---
+

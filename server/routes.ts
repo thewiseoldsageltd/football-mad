@@ -2273,15 +2273,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Final": 7,
       };
       
-      // COPA DEL REY (Spain Cup): 7 canonical rounds
+      // COPA DEL REY (Spain Cup): 8 canonical rounds (mirror Goalserve stage names)
       const COPA_DEL_REY_CANONICAL_ROUNDS: Record<string, number> = {
-        "First Round": 1,
-        "Second Round": 2,
-        "Round of 32": 3,
-        "Round of 16": 4,
-        "Quarter-finals": 5,
-        "Semi-finals": 6,
-        "Final": 7,
+        "1/128-finals": 1,
+        "1/64-finals": 2,
+        "1/32-finals": 3,
+        "1/16-finals": 4,
+        "1/8-finals": 5,
+        "Quarter-finals": 6,
+        "Semi-finals": 7,
+        "Final": 8,
       };
       
       // Select canonical rounds based on competition
@@ -2389,17 +2390,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
       
       // Copa del Rey normalizer: returns canonical name or "Unknown: {name}" for safety
+      // Maps 1:1 to Goalserve stage names
       const normalizeToCanonicalRound_COPA_DEL_REY = (name: string): string => {
         const lower = name.toLowerCase().trim();
         
-        // Fractional notation mappings (Copa del Rey specific)
-        // Fractional refers to number of ties: 1/16 = 16 ties = 32 teams = Round of 32
-        if (lower === "1/128-finals") return "First Round";
-        if (lower === "1/64-finals") return "Second Round";
-        if (lower === "1/32-finals") return "Round of 32";
-        if (lower === "1/16-finals") return "Round of 32";
-        if (lower === "1/8-finals") return "Round of 16";
-        if (lower === "1/4-finals") return "Quarter-finals";
+        // Fractional notation mappings (1:1 to Goalserve stages)
+        if (lower.includes("1/128")) return "1/128-finals";
+        if (lower.includes("1/64")) return "1/64-finals";
+        if (lower.includes("1/32")) return "1/32-finals";
+        if (lower.includes("1/16")) return "1/16-finals";
+        if (lower.includes("1/8")) return "1/8-finals";
+        if (lower.includes("1/4")) return "Quarter-finals";
         
         // Quarter-finals variants (quarterfinals, quarter-final, quarter final, qf)
         if (lower.includes("quarter") || lower === "qf") return "Quarter-finals";
@@ -2529,21 +2530,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Sort rounds by order (early rounds first)
       cupRounds.sort((a, b) => a.order - b.order);
-
-      // Copa del Rey display name override (mirror Goalserve/Soccerway labels)
-      if (isCopaDelRey) {
-        const copaDisplayNames: Record<string, string> = {
-          "First Round": "1/128-finals",
-          "Second Round": "1/64-finals",
-          "Round of 32": "1/16-finals",
-          "Round of 16": "1/8-finals",
-        };
-        for (const round of cupRounds) {
-          if (copaDisplayNames[round.name]) {
-            round.name = copaDisplayNames[round.name];
-          }
-        }
-      }
 
       res.json({ competitionId, rounds: cupRounds });
     } catch (error) {
