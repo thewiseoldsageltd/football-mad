@@ -2138,6 +2138,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         away: { id?: string; name: string };
         score?: { home: number; away: number } | null;
         kickoff?: string;
+        kickoffDate?: string | null;  // YYYY-MM-DD format
+        kickoffTime?: string | null;  // HH:mm format (24-hour)
         status: string;
       }
       interface CupRound {
@@ -2174,6 +2176,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
 
+        // Extract date and time from Goalserve format
+        // Goalserve uses: date="27.01.2026" time="20:00"
+        const rawDate = m["@date"] || m.date || "";
+        const rawTime = m["@time"] || m.time || "";
+        
+        // Convert DD.MM.YYYY → YYYY-MM-DD
+        let kickoffDate: string | null = null;
+        if (rawDate) {
+          const dateParts = rawDate.split(".");
+          if (dateParts.length === 3) {
+            const [day, month, year] = dateParts;
+            kickoffDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+          }
+        }
+        
+        // Extract HH:mm (24-hour format), null if missing
+        const kickoffTime: string | null = rawTime && rawTime.includes(":") ? rawTime : null;
+
         const match: CupMatch = {
           id: m["@id"] || m.id || String(Math.random()),
           home: {
@@ -2189,6 +2209,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             away: parseInt(String(awayScore), 10),
           } : null,
           kickoff: m["@formatted_date"] || m["@date"] || m.date || m.time || undefined,
+          kickoffDate,
+          kickoffTime,
           status: m["@status"] || m.status || "NS",
         };
 

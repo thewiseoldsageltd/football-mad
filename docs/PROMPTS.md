@@ -6722,3 +6722,55 @@ Return ONE backend+config code update prompt only. No explanations outside this 
 
 ---
 
+We are enhancing cup fixtures to include kick-off time.
+
+RULES:
+• Backend only
+• Do NOT change UI
+• Do NOT modify round mapping logic
+• Apply to ALL competitions
+
+TASK:
+
+In /api/cup/progress match parsing:
+
+Currently we store:
+  kickoff: match.date
+
+Goalserve match nodes contain:
+  date="27.01.2026"
+  time="20:00"
+
+Update the match mapping so we return:
+
+kickoffDate: ISO formatted date (YYYY-MM-DD)
+kickoffTime: HH:mm (24-hour)
+
+Implementation details:
+
+1. When reading a match node, extract:
+   const rawDate = match.date
+   const rawTime = match.time
+
+2. Convert date from DD.MM.YYYY → YYYY-MM-DD
+
+3. Return in the match object:
+
+{
+  id,
+  home,
+  away,
+  score,
+  kickoffDate,
+  kickoffTime,
+  status
+}
+
+4. If time is missing, set kickoffTime to null.
+5. Do NOT remove existing fields yet.
+6. Do NOT touch other endpoints.
+
+Return a single backend code update.
+
+---
+
