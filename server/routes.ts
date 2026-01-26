@@ -2137,6 +2137,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         home: { id?: string; name: string };
         away: { id?: string; name: string };
         score?: { home: number; away: number } | null;
+        penalties?: { home: number; away: number } | null;  // shootout score
         kickoff?: string;
         kickoffDate?: string | null;  // YYYY-MM-DD format
         kickoffTime?: string | null;  // HH:mm format (24-hour)
@@ -2198,6 +2199,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `${yyyy}-${mm}-${dd}`;
       };
 
+      // Helper to extract penalty shootout score
+      const getPenaltyScore = (node: any, side: "home" | "away"): number | null => {
+        const keys = side === "home"
+          ? ["pen_home", "homepen", "penalty_home", "ps_home", "pen_score_home"]
+          : ["pen_away", "awaypen", "penalty_away", "ps_away", "pen_score_away"];
+        
+        for (const k of keys) {
+          const val = getAttr(node, k);
+          if (val != null && val !== "") {
+            const parsed = parseInt(val, 10);
+            if (!isNaN(parsed)) return parsed;
+          }
+        }
+        return null;
+      };
+
       // Helper to parse a single match object
       const parseMatch = (m: any, roundName: string) => {
         const homeTeam = m.hometeam || m.localteam || {};
@@ -2207,6 +2224,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const awayScore = awayTeam["@score"] ?? m["@awayscore"] ?? m.awayscore;
         
         const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
+
+        // Extract penalty shootout scores (separate from main score)
+        const penHome = getPenaltyScore(m, "home");
+        const penAway = getPenaltyScore(m, "away");
+        const penalties = (penHome != null && penAway != null)
+          ? { home: penHome, away: penAway }
+          : null;
 
         // Extract date and time using robust attribute helper
         const rawDate = getAttr(m, "date");
@@ -2236,6 +2260,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             home: parseInt(String(homeScore), 10),
             away: parseInt(String(awayScore), 10),
           } : null,
+          penalties,
           kickoff: formattedDate || rawDate || undefined,
           kickoffDate,
           kickoffTime,

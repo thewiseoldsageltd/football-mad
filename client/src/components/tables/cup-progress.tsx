@@ -11,6 +11,7 @@ interface CupMatch {
   home: { id?: string; name: string };
   away: { id?: string; name: string };
   score?: { home: number; away: number } | null;
+  penalties?: { home: number; away: number } | null;  // shootout score
   kickoff?: string;
   kickoffDate?: string | null;  // YYYY-MM-DD
   kickoffTime?: string | null;  // HH:mm
@@ -157,6 +158,11 @@ function MatchRow({ match }: { match: CupMatch }) {
           </Badge>
         )}
         {kickoffDisplay && <span className="text-[10px] text-muted-foreground text-center">{kickoffDisplay}</span>}
+        {match.penalties && (
+          <span className="text-[10px] text-muted-foreground text-center">
+            Pens: {match.penalties.home}–{match.penalties.away}
+          </span>
+        )}
       </div>
     </div>
   );

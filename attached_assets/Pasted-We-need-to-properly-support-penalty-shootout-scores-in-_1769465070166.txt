@@ -1,0 +1,133 @@
+We need to properly support penalty shootout scores in the cup match UI and API.
+
+Right now, matches that go to penalties are showing the shootout score as the main match score. We want to:
+
+1) Keep the normal football score (after 90 mins or after extra time) as the main score
+2) Store penalty shootout scores separately
+3) Show penalty scores in the UI as a small secondary line like: "Pens: 3–2"
+
+-----------------------------------
+BACKEND CHANGES (API / parsing)
+-----------------------------------
+
+Update the CupMatch type to include penalties:
+
+type CupMatch = {
+  id: string;
+  home: { id?: string; name: string };
+  away: { id?: string; name: string };
+  score: { home: number; away: number } | null;        // 90/ET score ONLY
+  penalties?: { home: number; away: number } | null;   // shootout score
+  kickoff?: string;
+  kickoffDate?: string | null;
+  kickoffTime?: string | null;
+  status: string;
+};
+
+-----------------------------------
+PARSING LOGIC (Goalserve feed)
+-----------------------------------
+
+Inside parseMatch, we already extract normal scores into:
+
+const homeScore = ...
+const awayScore = ...
+
+These must ALWAYS represent the match score (after 90 or ET).
+
+Now add penalty parsing WITHOUT overwriting score.
+
+Look for penalty-related attributes on the match node (m) such as:
+- pen_home, pen_away
+- homepen, awaypen
+- pscore, pen_score
+- or similar variants
+
+Implement a helper:
+
+const getPenaltyScore = (m: any, side: "home" | "away"): number | null => {
+  const keys = side === "home"
+    ? ["@pen_home", "@homepen", "@penalty_home", "@ps_home"]
+    : ["@pen_away", "@awaypen", "@penalty_away", "@ps_away"];
+
+  for (const k of keys) {
+    if (m[k] != null && m[k] !== "") return parseInt(String(m[k]), 10);
+  }
+  return null;
+};
+
+Then inside parseMatch:
+
+const penHome = getPenaltyScore(m, "home");
+const penAway = getPenaltyScore(m, "away");
+
+const penalties =
+  penHome != null && penAway != null
+    ? { home: penHome, away: penAway }
+    : null;
+
+When building the match object:
+
+const match: CupMatch = {
+  id: ...,
+  home: ...,
+  away: ...,
+  score: hasScore ? {
+    home: parseInt(String(homeScore), 10),
+    away: parseInt(String(awayScore), 10),
+  } : null,
+  penalties,   // <-- NEW FIELD
+  kickoff,
+  kickoffDate,
+  kickoffTime,
+  status,
+};
+
+IMPORTANT:
+Do NOT ever replace score with penalties. Score is always the football score.
+
+-----------------------------------
+FRONTEND CHANGES (Tables / Cup UI)
+-----------------------------------
+
+In the match row component where we render score and date/time:
+
+1) Keep rendering the normal score exactly as now:
+   Home Team   X
+   Away Team   Y
+
+2) If match.penalties exists, render a small secondary line on the right under the date/time:
+
+Example:
+
+09.01.2026 • 19:30
+Pens: 3–2
+
+Implementation idea (React/TSX style):
+
+{match.penalties && (
+  <div className="text-xs text-gray-500 mt-1">
+    Pens: {match.penalties.home}–{match.penalties.away}
+  </div>
+)}
+
+Style it smaller than the main date/time and aligned with that block.
+
+-----------------------------------
+RESULT
+-----------------------------------
+
+For a penalties match like:
+Wigan vs Barrow
+2–2 after ET
+Wigan win 3–2 on pens
+
+UI should show:
+
+Wigan      2
+Barrow     2
+
+[status pill: Penalties]
+
+09.01.2026 • 19:30
+Pens: 3–2
