@@ -19,6 +19,7 @@ interface CupRound {
   name: string;
   order: number;
   matches: CupMatch[];
+  status?: "completed" | "in_progress" | "upcoming";
 }
 
 interface CupProgressResponse {
@@ -40,7 +41,11 @@ function getMatchStatus(status: string): "completed" | "live" | "upcoming" {
   return "upcoming";
 }
 
-function getRoundStatus(matches: CupMatch[]): RoundStatusType {
+function getRoundStatus(matches: CupMatch[], backendStatus?: "completed" | "in_progress" | "upcoming"): RoundStatusType {
+  // Use backend-computed status if available (handles empty rounds correctly)
+  if (backendStatus) return backendStatus;
+  
+  // Fallback to client-side computation
   const allCompleted = matches.every((m) => getMatchStatus(m.status) === "completed");
   const anyLive = matches.some((m) => getMatchStatus(m.status) === "live");
   
@@ -132,7 +137,7 @@ interface RoundAccordionProps {
 }
 
 function RoundAccordion({ round, isOpen, onToggle }: RoundAccordionProps) {
-  const roundStatus = getRoundStatus(round.matches);
+  const roundStatus = getRoundStatus(round.matches, round.status);
   const config = roundStatusConfig[roundStatus];
   const StatusIcon = config.icon;
   const matchCount = round.matches.length;
@@ -180,7 +185,7 @@ function RoundAccordion({ round, isOpen, onToggle }: RoundAccordionProps) {
 function getDefaultOpenRound(rounds: CupRound[]): string | null {
   if (rounds.length === 0) return null;
   
-  const firstNonCompleted = rounds.find((r) => getRoundStatus(r.matches) !== "completed");
+  const firstNonCompleted = rounds.find((r) => getRoundStatus(r.matches, r.status) !== "completed");
   if (firstNonCompleted) {
     return firstNonCompleted.name;
   }

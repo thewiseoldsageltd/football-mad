@@ -6581,3 +6581,32 @@ TASK (Copa del Rey 1397 only):
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor existing cup parsing or canonical systems.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour/components.
+
+ISSUE:
+
+In Cups → Copa del Rey (and potentially other cups), seeded rounds with 0 fixtures (e.g., Semi-finals, Final) are being marked as "Completed" in the UI. This is wrong — empty rounds should NOT be completed.
+
+TASK (backend only):
+
+In /api/cup/progress response generation, update the round status computation so that:
+
+1) If a round has 0 matches, it MUST NOT be marked completed.
+   - Treat it as "Upcoming" (or whatever non-completed state the API already supports),
+   - But do not alter the UI; just ensure the API flags/state make the pill not show as Completed.
+
+2) Keep existing behaviour for rounds that have matches:
+   - Completed only when ALL matches are finished (FT, AET, Pe
+
+---
+

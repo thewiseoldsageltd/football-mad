@@ -2144,6 +2144,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         name: string;
         order: number;
         matches: CupMatch[];
+        status: "completed" | "in_progress" | "upcoming";
       }
 
       const roundsMap = new Map<string, CupMatch[]>();
@@ -2521,10 +2522,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         const order = CANONICAL_ROUNDS[canonicalName] ?? 99;
         
+        // Compute round status: empty rounds are always "upcoming"
+        let roundStatus: "completed" | "in_progress" | "upcoming" = "upcoming";
+        if (matchList.length > 0) {
+          const completedStatuses = ["ft", "aet", "pen", "awarded", "cancelled", "postponed"];
+          const liveIndicators = ["ht", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+          
+          const allCompleted = matchList.every((m) => {
+            const s = m.status.toLowerCase();
+            return completedStatuses.some(cs => s.includes(cs));
+          });
+          
+          const anyLive = matchList.some((m) => {
+            const s = m.status.toLowerCase();
+            if (s === "ht") return true;
+            if (/^\d+$/.test(s)) return true; // minute markers like "45", "90"
+            return liveIndicators.some(li => s === li);
+          });
+          
+          if (anyLive) {
+            roundStatus = "in_progress";
+          } else if (allCompleted) {
+            roundStatus = "completed";
+          }
+        }
+        
         cupRounds.push({
           name: canonicalName,
           order,
           matches: matchList,
+          status: roundStatus,
         });
       }
 
