@@ -8,6 +8,7 @@ export interface CupConfig {
 
 export const cupConfigs: CupConfig[] = [
   { slug: "fa-cup", name: "FA Cup", shortName: "FAC", goalserveCompetitionId: "1198", country: "England" },
+  { slug: "efl-cup", name: "EFL Cup", shortName: "EFL", goalserveCompetitionId: "1199", country: "England" },
 ];
 
 export function getCupBySlug(slug: string): CupConfig | undefined {

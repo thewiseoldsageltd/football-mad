@@ -80,6 +80,18 @@ Preferred communication style: Simple, everyday language.
     - If all rounds completed, opens the latest round (highest order)
     - Header shows: round name, fixture count, status pill (Completed/In progress/Upcoming)
     - Expanded view shows ALL matches (no slicing/truncation)
+- **EFL Cup (Carabao Cup)**: Goalserve competitionId 1199
+  - API: `/api/cup/progress?competitionId=1199&season=2025/2026`
+  - **Canonical 7-Round System** (order 1-7):
+    1. First Round
+    2. Second Round
+    3. Third Round
+    4. Fourth Round
+    5. Quarter-finals
+    6. Semi-finals
+    7. Final
+  - Same accordion UI and deduplication as FA Cup
+  - Validation: `curl -sS "$DOMAIN/api/cup/progress?competitionId=1199&season=2025/2026" | node -e 'const d=require("/dev/stdin"); console.log("Rounds:", d.rounds.length); d.rounds.forEach(r=>console.log(r.order, r.name, r.matches.length));'`
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds

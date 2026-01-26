@@ -1,0 +1,75 @@
+We already have FA Cup working via /api/cup/progress and the Cups UI accordion on /tables.
+Now add the EFL Cup (Carabao Cup) using Goalserve competitionId=1199.
+
+GOALS:
+1) Add EFL Cup as an additional Cup tab/option next to FA Cup on the Tables page (Cups section).
+   - Display name in UI: "EFL Cup" (optionally subtitle "Carabao Cup" in small text if you want, but keep it simple).
+   - competitionId for API calls: 1199
+   - season default: 2025/2026
+
+2) Update the backend round canonicalization used inside /api/cup/progress so it supports BOTH:
+   - FA Cup (1198) canonical 14-round naming (already implemented)
+   - EFL Cup (1199) canonical 7-round naming:
+     First Round
+     Second Round
+     Third Round
+     Fourth Round
+     Quarter-finals
+     Semi-finals
+     Final
+
+3) IMPORTANT: keep FA Cup behaviour unchanged.
+   - Only extend logic to support EFL Cup.
+   - Reuse the existing endpoint shape:
+     { competitionId, rounds: [{ name, order, matches: [...] }] }
+
+BACKEND IMPLEMENTATION DETAILS:
+- In server/routes.ts (or wherever /api/cup/progress is implemented):
+  a) Detect competitionId:
+     const competitionId = String(req.query.competitionId || "")
+  b) Use a competition-specific normalizer:
+     - normalizeToCanonicalRound_FA_CUP(name) -> existing
+     - normalizeToCanonicalRound_EFL_CUP(name) -> new
+  c) For EFL Cup mapping, handle Goalserve round/stage names likely to appear, case-insensitively, e.g.:
+     "First Round", "1st Round", "Round 1" => "First Round"
+     "Second Round", "2nd Round", "Round 2" => "Second Round"
+     "Third Round", "3rd Round", "Round 3" => "Third Round"
+     "Fourth Round", "4th Round", "Round 4" => "Fourth Round"
+     "Quarter-finals", "Quarterfinals", "Quarter Finals", "QF" => "Quarter-finals"
+     "Semi-finals", "Semifinals", "Semi Finals", "SF" => "Semi-finals"
+     "Final" => "Final"
+  d) Assign stable ordering for EFL Cup:
+     First Round = 1
+     Second Round = 2
+     Third Round = 3
+     Fourth Round = 4
+     Quarter-finals = 5
+     Semi-finals = 6
+     Final = 7
+
+- Ensure deduping remains (by match id) and that we do NOT double-parse stage.match and stage.round[].match duplicates.
+- Keep the HTML-detection guard and season parameter support.
+
+FRONTEND IMPLEMENTATION DETAILS:
+- In client/src/components/tables/cup-progress.tsx (or current Cups component):
+  a) Add a selector / tabs to switch between cups:
+     - FA Cup (competitionId=1198)
+     - EFL Cup (competitionId=1199)
+  b) When selected, call /api/cup/progress?competitionId=...&season=2025/2026
+  c) Keep the accordion UI behaviour: each round collapsible; show all fixtures per round when expanded.
+  d) The API now returns display-ready canonical names, so don’t over-format beyond existing.
+
+DOCS:
+- Update replit.md:
+  - Add EFL Cup support summary (id 1199)
+  - Add EFL Cup canonical round list + ordering table.
+
+VALIDATION:
+- Add (or update) quick shell verification commands in replit.md:
+  export DOMAIN=...
+  curl -sS "$DOMAIN/api/cup/progress?competitionId=1199&season=2025/2026" > /tmp/eflcup.json
+  node -e 'const d=require("/tmp/eflcup.json"); console.log("Rounds:", d.rounds.length); d.rounds.forEach(r=>console.log(r.order, r.name, r.matches.length));'
+
+- Make sure /tables shows both cups and switching works.
+
+Please implement all changes and keep them minimal and robust.
