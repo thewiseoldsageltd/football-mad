@@ -6891,3 +6891,41 @@ Example display: "12.08.2025 • 18:45" (time optional if null)
 
 ---
 
+Update the cup progress UI status pills to use human-friendly labels (Full-Time, Half-Time, etc.) instead of short Goalserve codes, while preserving the underlying status code for logic.
+
+Scope: UI only (do NOT change the backend API response shape).
+
+Where:
+- Find the component that renders each cup fixture row + the small status pill on the right.
+- It’s likely in: client/src/components/tables/cup-progress.tsx (or a child component it uses).
+
+Requirements:
+1) Create a small pure function (or const map) near the pill rendering code:
+   - Input: rawStatus: string | null | undefined
+   - Output: { label: string; variant: "completed" | "upcoming" | "live" | "neutral" } (variant can be optional if you already have styling)
+
+2) Map these statuses to full words (case-insensitive, trim spaces):
+   - "FT" => "Full-Time"
+   - "HT" => "Half-Time"
+   - "AET" => "After Extra Time"
+   - "PEN." or "PEN" or "Pen." => "Penalties"
+   - Keep "LIVE" as "LIVE"
+   - Keep minute values like "23'" or "90+2'" unchanged (detect with regex like /^\d{1,3}(\+\d{1,2})?'\s*$/)
+
+3) Do NOT change:
+   - the existing logic that determines whether the round is Completed vs Upcoming
+   - the date/time formatting line (kickoffDate/kickoffTime display)
+   - any backend fields
+
+4) Styling:
+   - Slightly increase the pill horizontal padding ONLY if needed so “Full-Time” and “Half-Time” don’t feel cramped (e.g. px-3 instead of px-2), but keep height consistent.
+
+5) Add a safe fallback:
+   - If status is missing/empty, show "Not Started" (or keep existing “NOT STARTED” label if you already render that separately)
+   - If status is unknown, show it as-is.
+
+Deliverable:
+- Make the change, run the app, and confirm the status pills now show “Full-Time”, “Half-Time”, “After Extra Time”, and “Penalties” where applicable.
+
+---
+

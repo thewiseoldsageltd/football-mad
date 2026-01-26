@@ -57,12 +57,33 @@ function getRoundStatus(matches: CupMatch[], backendStatus?: "completed" | "in_p
 }
 
 function formatStatusText(status: string): string {
-  const s = status.toUpperCase();
-  if (s === "FT" || s === "AET" || s.includes("PEN")) return s;
-  if (s === "HT") return "HT";
-  if (/^\d+$/.test(s)) return `${s}'`;
-  if (s === "NS" || s === "") return "NS";
-  return s;
+  const s = (status || "").trim().toUpperCase();
+  
+  // Full-Time
+  if (s === "FT") return "Full-Time";
+  
+  // Half-Time
+  if (s === "HT") return "Half-Time";
+  
+  // After Extra Time
+  if (s === "AET") return "After Extra Time";
+  
+  // Penalties (various formats)
+  if (s === "PEN" || s === "PEN." || s.includes("PEN")) return "Penalties";
+  
+  // Live minute values (e.g., "23'", "45+2'", "90+3'") - keep as-is
+  if (/^\d{1,3}(\+\d{1,2})?'?\s*$/.test(s)) {
+    return s.includes("'") ? s : `${s}'`;
+  }
+  
+  // LIVE stays as LIVE
+  if (s === "LIVE") return "LIVE";
+  
+  // Not started / empty
+  if (s === "NS" || s === "") return "Not Started";
+  
+  // Unknown status - return as-is
+  return status;
 }
 
 const roundStatusConfig = {
@@ -121,17 +142,17 @@ function MatchRow({ match }: { match: CupMatch }) {
       </div>
       <div className="text-right text-xs text-muted-foreground shrink-0 ml-2 flex flex-col items-end gap-1">
         {matchStatus === "completed" && (
-          <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+          <Badge variant="outline" className="text-xs px-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
             {statusText}
           </Badge>
         )}
         {matchStatus === "live" && (
-          <Badge variant="outline" className="text-xs bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 animate-pulse">
+          <Badge variant="outline" className="text-xs px-2.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 animate-pulse">
             {statusText}
           </Badge>
         )}
         {matchStatus === "upcoming" && (
-          <Badge variant="outline" className="text-xs bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30">
+          <Badge variant="outline" className="text-xs px-2.5 bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30">
             {statusText}
           </Badge>
         )}
