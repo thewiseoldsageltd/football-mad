@@ -6999,3 +6999,60 @@ Clean, centered, compact, and balanced.
 
 ---
 
+Goal: Update the match status pill text in the UI so “After Extra Time” is shortened to “AET”.
+
+This is a FRONTEND TEXT CHANGE ONLY.
+
+Steps:
+
+1. Find the function or mapping that converts match status codes into display labels for the status pill.
+   Likely files/folders:
+   - client/src/components/tables/
+   - client/src/components/matches/
+   - client/src/lib/
+   Look for names like:
+   - getMatchStatusLabel
+   - formatMatchStatus
+   - renderStatusPill
+   - statusMap
+
+2. Locate the rule that currently maps the status "AET" to the label "After Extra Time".
+
+   It may look like:
+   case "AET":
+     return "After Extra Time";
+
+   OR
+
+   if (status === "AET") {
+     label = "After Extra Time";
+   }
+
+3. Change ONLY the display label so it returns "AET" instead:
+
+   case "AET":
+     return "AET";
+
+   OR
+
+   if (status === "AET") {
+     label = "AET";
+   }
+
+IMPORTANT CONSTRAINTS:
+- Do NOT change backend status values
+- Do NOT change API responses
+- Do NOT change any logic that checks for status === "AET"
+- Do NOT modify pill styling (colour, size, spacing)
+- This is strictly a UI text change
+
+Expected result:
+Status pills should display:
+- Full-Time
+- Half-Time
+- Penalties
+- AET
+instead of “After Extra Time”
+
+---
+

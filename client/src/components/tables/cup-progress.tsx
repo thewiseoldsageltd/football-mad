@@ -66,7 +66,7 @@ function formatStatusText(status: string): string {
   if (s === "HT") return "Half-Time";
   
   // After Extra Time
-  if (s === "AET") return "After Extra Time";
+  if (s === "AET") return "AET";
   
   // Penalties (various formats)
   if (s === "PEN" || s === "PEN." || s.includes("PEN")) return "Penalties";
