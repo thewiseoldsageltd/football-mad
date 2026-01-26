@@ -7350,3 +7350,115 @@ Make the change minimal/localised and keep existing UI layout/spacing unless req
 
 ---
 
+We need to fix penalty shootout parsing for /api/cup/progress.
+
+Problem:
+- Matches with status "Pen." / "Penalties" are currently showing the shootout score as the main match score (e.g. Wigan 3–2 Barrow).
+- We want the main score to be the FT/AET score (e.g. 2–2), and show shootout score in brackets (e.g. (3) and (2)) beside each team score.
+- Right now penalties are not being returned (match.penalties is null/undefined), so UI can’t show brackets.
+
+Goal:
+1) Add TEMP debug logging to capture the parsed match object for ONE penalties match (so we can see exact fields Goalserve provides).
+2) Implement robust extraction using the REAL fields we observe:
+   - normalScore: FT/AET (90/120) score
+   - penaltyScore: shootout score
+3) Return both:
+   - score = normalScore
+   - penalties = penaltyScore
+4) Frontend: show penalties in brackets next to each team’s score, not in the date/time area.
+
+---------------------------------------
+BACKEND CHANGES (server/routes.ts)
+---------------------------------------
+
+A) Add helpers near parseMatch:
+
+- toIntOrNull(v)
+- parseScorePair(str) -> {home, away} | null
+   - Accept formats like "2-2", "2 : 2", "2–2"
+- getAllKeysDeep(obj) (optional) for debugging
+- safeJson(obj) with truncation to avoid enormous logs
+
+B) In parseMatch(m, roundName):
+
+1) Identify penalties matches:
+   const status = getAttr(m,"status") || ...
+   const isPens = /pen/i.test(status) || status === "Pen." || status === "PEN";
+
+2) TEMP DEBUG:
+   If isPens, log:
+   - match id
+   - status
+   - Object.keys(m)
+   - any obvious score-ish fields (keys containing "score", "pen", "result", "ft", "aet")
+   - stringify a trimmed version of m (max 4kb)
+   Make it conditional so we don’t spam:
+   - only log the FIRST penalties match per request (use a local boolean loggedPenMatch)
+
+3) Extract penalty shootout score:
+   Try in this order:
+   - If there is any field (attr or prop) that looks like a penalties score string (keys include "pen", "ps", "shootout"):
+       parseScorePair(value)
+   - If there is a child node like m.penalty or m.penalties or m.shootout with home/away fields:
+       extract ints from there
+   If found, set:
+     penalties = {home, away}
+
+4) Extract NORMAL score (FT/AET):
+   For penalties matches, do NOT trust the existing homescore/awayscore because those may be the shootout score.
+   Try in this order:
+   - any explicit FT/AET score string fields (keys include "ft", "aet", "final", "result" but NOT "pen")
+       parseScorePair(value)
+   - team score fields if they look plausible (homeTeam/@score etc)
+   - fallback to existing homescore/awayscore only if nothing else exists
+
+5) Return CupMatch with:
+   score: {home, away} (normal FT/AET)
+   penalties: {home, away} (shootout) OR null
+
+Also ensure CupMatch interface includes:
+  penalties?: { home: number; away: number } | null;
+
+C) Once confirmed working, remove or gate the debug logging behind an env flag like DEBUG_CUP_PENALTIES=true.
+
+---------------------------------------
+FRONTEND CHANGES (client/src/components/tables/cup-progress.tsx)
+---------------------------------------
+
+Where each team score is rendered:
+- Continue showing match.score.home and match.score.away as the main score
+- If match.penalties exists, show bracket value beside the team score:
+
+Home: 2 (3)
+Away: 2 (2)
+
+IMPORTANT:
+- Do NOT show penalty info under the date/time block anymore.
+- Date/time block remains date + kickoff time.
+
+Example rendering:
+{homeScore}
+{penHome != null && <span className="ml-1 text-xs text-muted-foreground">({penHome})</span>}
+
+Do similarly for away.
+
+---------------------------------------
+VERIFY
+---------------------------------------
+
+1) Hit:
+  /api/cup/progress?competitionId=1199
+Find a penalties match and confirm JSON includes:
+  "score": {"home":2,"away":2}
+  "penalties": {"home":3,"away":2}
+  "status":"Pen."
+
+2) UI shows:
+Wigan 2 (3)
+Barrow 2 (2)
+and the pill shows "Penalties".
+
+Proceed with clean commit and remove debug logs or guard them behind env flag.
+
+---
+
