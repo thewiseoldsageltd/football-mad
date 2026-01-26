@@ -6774,3 +6774,33 @@ Return a single backend code update.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+• Single backend-only change
+• Do NOT change UI
+• Do NOT refactor cup logic
+• No extra endpoints/logs/tests
+
+TASK:
+Fix kickoffDate/kickoffTime parsing for cup matches. Goalserve XML attributes are exposed by our parser using "@_date", "@_time", "@_formatted_date", and "@_id" (underscore), not "@date"/"@time".
+
+In server/routes.ts inside the existing parseMatch function (around line ~2170):
+
+1) Update rawDate/rawTime extraction to check BOTH underscore and non-underscore keys, in this priority:
+   rawDate: m["@_date"] || m["@date"] || m.date || ""
+   rawTime: m["@_time"] || m["@time"] || m.time || ""
+
+2) Update kickoff field so it never incorrectly falls back to time-only:
+   kickoff: m["@_formatted_date"] || m["@formatted_date"] || m["@_date"] || m["@date"] || m.date || undefined
+
+3) Keep the existing DD.MM.YYYY -> YYYY-MM-DD conversion, but ensure it uses the fixed rawDate.
+
+4) kickoffTime should be set from rawTime when it contains ":"; else null.
+
+Do not change anything else.
+
+Return a single code update.
+
+---
+

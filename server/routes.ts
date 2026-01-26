@@ -2177,9 +2177,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
 
         // Extract date and time from Goalserve format
-        // Goalserve uses: date="27.01.2026" time="20:00"
-        const rawDate = m["@date"] || m.date || "";
-        const rawTime = m["@time"] || m.time || "";
+        // Goalserve XML attributes are exposed with "@_" prefix (underscore)
+        const rawDate = m["@_date"] || m["@date"] || m.date || "";
+        const rawTime = m["@_time"] || m["@time"] || m.time || "";
         
         // Convert DD.MM.YYYY → YYYY-MM-DD
         let kickoffDate: string | null = null;
@@ -2195,23 +2195,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const kickoffTime: string | null = rawTime && rawTime.includes(":") ? rawTime : null;
 
         const match: CupMatch = {
-          id: m["@id"] || m.id || String(Math.random()),
+          id: m["@_id"] || m["@id"] || m.id || String(Math.random()),
           home: {
-            id: homeTeam["@id"] || homeTeam.id,
-            name: homeTeam["@name"] || homeTeam.name || "TBD",
+            id: homeTeam["@_id"] || homeTeam["@id"] || homeTeam.id,
+            name: homeTeam["@_name"] || homeTeam["@name"] || homeTeam.name || "TBD",
           },
           away: {
-            id: awayTeam["@id"] || awayTeam.id,
-            name: awayTeam["@name"] || awayTeam.name || "TBD",
+            id: awayTeam["@_id"] || awayTeam["@id"] || awayTeam.id,
+            name: awayTeam["@_name"] || awayTeam["@name"] || awayTeam.name || "TBD",
           },
           score: hasScore ? {
             home: parseInt(String(homeScore), 10),
             away: parseInt(String(awayScore), 10),
           } : null,
-          kickoff: m["@formatted_date"] || m["@date"] || m.date || m.time || undefined,
+          kickoff: m["@_formatted_date"] || m["@formatted_date"] || m["@_date"] || m["@date"] || m.date || undefined,
           kickoffDate,
           kickoffTime,
-          status: m["@status"] || m.status || "NS",
+          status: m["@_status"] || m["@status"] || m.status || "NS",
         };
 
         if (!roundsMap.has(roundName)) {
