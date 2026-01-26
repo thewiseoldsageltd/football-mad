@@ -6210,14 +6210,3 @@ Manual check only:
 
 ---
 
-Update /api/cup/progress to optionally “pad” missing canonical rounds with empty match arrays.
-
-For Copa del Rey (competitionId=1397), after normalizing matches into canonical rounds, ensure the response includes ALL canonical rounds in order:
-First Round, Second Round, Round of 32, Round of 16, Quarter-finals, Semi-finals, Final.
-
-If any of those rounds are missing from Goalserve data, include them anyway with matches: [].
-
-Do NOT run full regression tests. Do NOT run npm/pnpm test. Only make the code changes and provide the diff + the exact curl commands I can run to verify.
-
----
-

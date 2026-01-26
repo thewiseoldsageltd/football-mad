@@ -2516,20 +2516,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      // For Copa del Rey, pad missing canonical rounds with empty match arrays
-      if (isCopaDelRey) {
-        const existingRoundNames = new Set(cupRounds.map(r => r.name));
-        for (const [roundName, order] of Object.entries(COPA_DEL_REY_CANONICAL_ROUNDS)) {
-          if (!existingRoundNames.has(roundName)) {
-            cupRounds.push({
-              name: roundName,
-              order,
-              matches: [],
-            });
-          }
-        }
-      }
-
       // Sort rounds by order (early rounds first)
       cupRounds.sort((a, b) => a.order - b.order);
 
