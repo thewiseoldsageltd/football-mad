@@ -6084,3 +6084,103 @@ node -e 'const d=require("/tmp/eflcup.json"); console.log("Rounds:", d.rounds.le
 
 ---
 
+Update /api/cup/progress to support Spain Cup (Goalserve competitionId=1397) by mapping Goalserve fractional round names into Copa del Rey canonical rounds.
+
+Context: Goalserve Spain Cup currently returns stage names:
+- 1/128-finals (21 matches)
+- 1/64-finals  (57 matches)
+- 1/32-finals  (29 matches)
+- 1/16-finals  (17 matches)
+- 1/8-finals    (9 matches)
+- Quarter-finals (5 matches)
+
+Required changes:
+1) Add a Spain Cup / Copa del Rey canonical round mapping inside normalizeToCanonicalRound() (or equivalent), activated when competitionId === "1397".
+   Use these canonical display names + ordering:
+   1 First Round
+   2 Second Round
+   3 Round of 32
+   4 Round of 16
+   5 Quarter-finals
+   6 Semi-finals
+   7 Final
+
+2) Implement these exact mappings for competitionId 1397 (case-insensitive compare on the stage name, trim, toLowerCase):
+   - "1/128-finals" => "First Round"
+   - "1/64-finals"  => "Second Round"
+   - "1/32-finals"  => "Round of 32"
+   - "1/16-finals"  => "Round of 16"
+   - "1/8-finals"   => "Quarter-finals"   (Copa del Rey: last 8)
+   - any "quarter" + "final" => "Quarter-finals"
+   - any "semi" + "final" => "Semi-finals"
+   - "final" => "Final"
+
+3) Keep existing FA Cup (1198) and EFL Cup (1199) mappings unchanged.
+
+4) Unknown stages should remain as "Unknown: <OriginalName>" with order 99 (do not discard).
+
+5) Keep match dedupe by match id across all parsed branches (stage.match, stage.round.match, stage.week.match) as it is now.
+
+After changes:
+- /api/cup/progress?competitionId=1397&season=2025/2026 should return 5 canonical rounds now (First Round, Second Round, Round of 32, Round of 16, Quarter-finals) and later will show Semi-finals/Final when they exist.
+- Regression: FA Cup and EFL Cup outputs unchanged.
+Restart the app after implementing.
+
+---
+
+TASK: Add Spain Cup (Copa del Rey, Goalserve competitionId=1397) round mapping to the existing /api/cup/progress endpoint.
+
+⚠️ SCOPE RULES — DO NOT IGNORE
+- ONLY modify the round normalization / canonical mapping logic used inside /api/cup/progress
+- DO NOT refactor unrelated code
+- DO NOT touch FA Cup logic
+- DO NOT touch EFL Cup logic
+- DO NOT add tests
+- DO NOT run broad regression checks
+- DO NOT change frontend files
+- DO NOT rename functions
+- DO NOT reorganize files
+This is a small, surgical mapping addition only.
+
+CONTEXT
+Goalserve Spain Cup stages currently return names:
+- 1/128-finals
+- 1/64-finals
+- 1/32-finals
+- 1/16-finals
+- 1/8-finals
+- Quarter-finals (later Semi-finals, Final will appear)
+
+REQUIRED: When competitionId === "1397", map these to canonical Copa del Rey rounds:
+
+Order  Name
+1      First Round
+2      Second Round
+3      Round of 32
+4      Round of 16
+5      Quarter-finals
+6      Semi-finals
+7      Final
+
+MAPPINGS (case-insensitive):
+"1/128-finals" → "First Round"
+"1/64-finals"  → "Second Round"
+"1/32-finals"  → "Round of 32"
+"1/16-finals"  → "Round of 16"
+"1/8-finals"   → "Quarter-finals"
+contains "quarter" + "final" → "Quarter-finals"
+contains "semi" + "final"    → "Semi-finals"
+"final" exactly              → "Final"
+
+Anything else:
+Return "Unknown: <original name>" with order 99 (do not discard).
+
+IMPORTANT:
+- Keep existing FA Cup (1198) and EFL Cup (1199) logic exactly as-is
+- Keep match deduplication logic unchanged
+- Do not alter ordering logic for other competitions
+
+After implementing, just save. Do not perform extra analysis or testing.
+
+---
+

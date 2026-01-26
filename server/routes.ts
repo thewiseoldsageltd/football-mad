@@ -2273,9 +2273,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Final": 7,
       };
       
+      // COPA DEL REY (Spain Cup): 7 canonical rounds
+      const COPA_DEL_REY_CANONICAL_ROUNDS: Record<string, number> = {
+        "First Round": 1,
+        "Second Round": 2,
+        "Round of 32": 3,
+        "Round of 16": 4,
+        "Quarter-finals": 5,
+        "Semi-finals": 6,
+        "Final": 7,
+      };
+      
       // Select canonical rounds based on competition
       const isEflCup = competitionId === "1199";
-      const CANONICAL_ROUNDS = isEflCup ? EFL_CUP_CANONICAL_ROUNDS : FA_CUP_CANONICAL_ROUNDS;
+      const isCopaDelRey = competitionId === "1397";
+      const CANONICAL_ROUNDS = isCopaDelRey 
+        ? COPA_DEL_REY_CANONICAL_ROUNDS 
+        : isEflCup 
+          ? EFL_CUP_CANONICAL_ROUNDS 
+          : FA_CUP_CANONICAL_ROUNDS;
 
       // FA Cup normalizer: returns canonical name or null (discard if null)
       const normalizeToCanonicalRound_FA_CUP = (name: string): string | null => {
@@ -2372,12 +2388,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `Unknown: ${name}`;
       };
       
+      // Copa del Rey normalizer: returns canonical name or "Unknown: {name}" for safety
+      const normalizeToCanonicalRound_COPA_DEL_REY = (name: string): string => {
+        const lower = name.toLowerCase().trim();
+        
+        // Fractional notation mappings
+        if (lower === "1/128-finals") return "First Round";
+        if (lower === "1/64-finals") return "Second Round";
+        if (lower === "1/32-finals") return "Round of 32";
+        if (lower === "1/16-finals") return "Round of 16";
+        if (lower === "1/8-finals") return "Quarter-finals";
+        
+        // Quarter-finals variants
+        if (lower.includes("quarter") && lower.includes("final")) return "Quarter-finals";
+        
+        // Semi-finals variants
+        if (lower.includes("semi") && lower.includes("final")) return "Semi-finals";
+        
+        // Final (exact match)
+        if (lower === "final") return "Final";
+        
+        // Handle explicit canonical names
+        for (const canonical of Object.keys(COPA_DEL_REY_CANONICAL_ROUNDS)) {
+          if (lower === canonical.toLowerCase()) return canonical;
+        }
+        
+        // TEMPORARY SAFETY: preserve unknown rounds for debugging
+        console.log(`[Copa del Rey] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
+      };
+      
       // Select normalizer based on competition
       // FA Cup normalizer returns null for unknown rounds (discard them)
-      // EFL Cup normalizer returns "Unknown: {name}" for unknown rounds (preserve for debugging)
-      const normalizeToCanonicalRound = isEflCup 
-        ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
-        : normalizeToCanonicalRound_FA_CUP;
+      // EFL Cup / Copa del Rey normalizers return "Unknown: {name}" for unknown rounds (preserve for debugging)
+      const normalizeToCanonicalRound = isCopaDelRey
+        ? (name: string): string | null => normalizeToCanonicalRound_COPA_DEL_REY(name)
+        : isEflCup 
+          ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
+          : normalizeToCanonicalRound_FA_CUP;
 
       // Match count sanity guards - discard rounds with unrealistic match counts
       const FA_CUP_MAX_MATCHES: Record<string, number> = {
