@@ -2392,12 +2392,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const normalizeToCanonicalRound_COPA_DEL_REY = (name: string): string => {
         const lower = name.toLowerCase().trim();
         
-        // Fractional notation mappings
+        // Fractional notation mappings (Copa del Rey specific)
+        // 1/8-finals is the last-16 stage in Copa del Rey (per Soccerway)
         if (lower === "1/128-finals") return "First Round";
         if (lower === "1/64-finals") return "Second Round";
         if (lower === "1/32-finals") return "Round of 32";
         if (lower === "1/16-finals") return "Round of 16";
-        if (lower === "1/8-finals") return "Quarter-finals";
+        if (lower === "1/8-finals") return "Round of 16";
+        if (lower === "1/4-finals") return "Quarter-finals";
         
         // Quarter-finals variants (quarterfinals, quarter-final, quarter final, qf)
         if (lower.includes("quarter") || lower === "qf") return "Quarter-finals";
@@ -2405,8 +2407,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Semi-finals variants (including "semifinal", "semi-final 1st leg", etc.)
         if (lower.includes("semi")) return "Semi-finals";
         
-        // Final (exact match, but not if it's part of semi-final/quarter-final)
-        if (lower === "final" || lower === "finals" || lower === "the final") return "Final";
+        // Final (anything containing "final" but NOT semi-final or quarter-final)
+        if (lower.includes("final") && !lower.includes("semi") && !lower.includes("quarter")) return "Final";
         
         // Handle explicit canonical names
         for (const canonical of Object.keys(COPA_DEL_REY_CANONICAL_ROUNDS)) {

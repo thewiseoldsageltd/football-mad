@@ -1,0 +1,58 @@
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour.
+
+CONTEXT / EVIDENCE (Goalserve Copa del Rey 1397 stage names):
+
+Goalserve soccerfixtures/leagueid/1397 contains stages:
+- 1/128-finals
+- 1/64-finals
+- 1/32-finals
+- 1/16-finals
+- 1/8-finals
+- Quarter-finals
+(and later likely Semi-finals, Final)
+
+TASK (backend only, /api/cup/progress only):
+
+For competitionId = 1397 (Copa del Rey), update ONLY the round/stage label normalisation so these Goalserve stage names map to our canonical rounds:
+
+Mappings (case-insensitive, ignore whitespace/punctuation):
+
+- "1/128-finals"  -> "First Round"
+- "1/64-finals"   -> "Second Round"   (if your Copa canonical list does not include Second Round, add it ONLY for Copa 1397 seeding)
+- "1/32-finals"   -> "Round of 32"
+- "1/16-finals"   -> "Round of 16"
+- "1/8-finals"    -> "Round of 16"    (Copa’s 1/8-finals is the last-16 stage shown on Soccerway)
+- Anything containing "quarter" OR exact "1/4-finals" -> "Quarter-finals"
+- Anything containing "semi" -> "Semi-finals"
+- Anything containing "final" but NOT semi-final -> "Final"
+
+Important: this mapping must apply whether the label comes from:
+- stage.name
+- round.name
+- week.name
+(or any equivalent label field you currently use for cup round naming)
+
+Also ensure Copa del Rey canonical seeding list includes at least:
+First Round, Round of 32, Round of 16, Quarter-finals, Semi-finals, Final
+(and include Second Round ONLY if you are mapping 1/64-finals to it; otherwise map 1/64-finals to First Round and keep the canonical list unchanged).
+
+CONSTRAINTS:
+
+• Do NOT modify UI.
+• Do NOT modify FA Cup/EFL Cup logic.
+• Keep changes scoped to competitionId 1397 normalisation / seeding only.
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
