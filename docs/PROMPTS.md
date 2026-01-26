@@ -6184,3 +6184,12 @@ After implementing, just save. Do not perform extra analysis or testing.
 
 ---
 
+const GOALSERVE_CUP_IDS: Record<string, string> = {
+  "fa-cup": "1198",
+  "efl-cup": "1199",
+  "copa-del-rey": "1397",
+  // or "spain-cup": "1397" depending on your slug
+};
+
+---
+
