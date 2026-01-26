@@ -6193,3 +6193,20 @@ const GOALSERVE_CUP_IDS: Record<string, string> = {
 
 ---
 
+Do NOT run full regression tests. Do NOT add new tests. Keep changes minimal.
+
+Bug: /tables → Cups → Copa del Rey shows “Cup data not available for this competition.”
+CupProgress only shows that when competitionId is missing. It calls:
+const competitionId = getGoalserveCupId(cupSlug);
+
+Task:
+- Update client/src/lib/cup-config.ts so getGoalserveCupId() returns the Goalserve ID "1397" for the Copa del Rey tab’s slug.
+- Ensure the slug used by the Cups tab (e.g. "copa-del-rey" or "spain-cup") is mapped to "1397".
+- No backend changes.
+
+Manual check only:
+- Refresh /tables → Cups → Copa del Rey
+- Confirm it now fetches /api/cup/progress?competitionId=1397&season=2025/2026 and renders rounds.
+
+---
+
