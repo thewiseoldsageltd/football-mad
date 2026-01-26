@@ -6439,3 +6439,52 @@ No explanations outside the code block.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour.
+
+CURRENT ISSUE (Copa del Rey 1397 only):
+
+Spain/Goalserve use fractional labels that refer to NUMBER OF TIES:
+- "1/16-finals" = 16 matches = 32 teams = Round of 32
+- "1/8-finals"  = 8 matches  = 16 teams = Round of 16
+
+Our current normaliser is incorrectly mapping these such that 1/16-finals and 1/8-finals are being merged into "Round of 16" (API shows Round of 16 has 24 fixtures).
+
+TASK (backend only, /api/cup/progress only):
+
+For competitionId = 1397 ONLY, update round/stage name normalization to the following exact mappings (case-insensitive, ignore punctuation/whitespace):
+
+- "1/16-finals"  -> "Round of 32"
+- "1/8-finals"   -> "Round of 16"
+- "1/4-finals" or anything containing "quarter" -> "Quarter-finals"
+- anything containing "semi" -> "Semi-finals"
+- anything containing "final" but NOT semi-final/quarter-final -> "Final"
+
+Also ensure:
+- "1/32-finals" continues to map to "Round of 32" ONLY if your system already uses that as the earliest displayed stage; otherwise do NOT force it into Round of 32 if it would create duplicates. (Keep existing behaviour for earlier rounds; the key fix is splitting 1/16 and 1/8 correctly.)
+
+Important:
+Apply these mappings no matter whether the label comes from stage.name, round.name, or week.name.
+
+CONSTRAINTS:
+
+• Do NOT modify UI.
+• Do NOT modify FA Cup/EFL Cup logic.
+• Keep changes scoped to competitionId 1397 normalization only.
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
+
+---
+

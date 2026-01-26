@@ -2393,11 +2393,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const lower = name.toLowerCase().trim();
         
         // Fractional notation mappings (Copa del Rey specific)
-        // 1/8-finals is the last-16 stage in Copa del Rey (per Soccerway)
+        // Fractional refers to number of ties: 1/16 = 16 ties = 32 teams = Round of 32
         if (lower === "1/128-finals") return "First Round";
         if (lower === "1/64-finals") return "Second Round";
         if (lower === "1/32-finals") return "Round of 32";
-        if (lower === "1/16-finals") return "Round of 16";
+        if (lower === "1/16-finals") return "Round of 32";
         if (lower === "1/8-finals") return "Round of 16";
         if (lower === "1/4-finals") return "Quarter-finals";
         
