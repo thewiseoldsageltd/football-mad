@@ -6667,3 +6667,58 @@ No explanations outside the code block.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform full regression testing.
+• DO NOT refactor existing FA Cup / EFL Cup / Copa del Rey logic.
+• DO NOT touch unrelated competitions.
+• DO NOT modify UI components or styling.
+• Keep changes minimal and localized.
+
+TASK:
+Add Coppa Italia (Goalserve competitionId = 1264) to the existing system.
+
+1) client/src/lib/cup-config.ts
+- Add a new cup config entry for Coppa Italia:
+  slug: "coppa-italia"
+  name: "Coppa Italia"
+  shortName: "CI"
+  goalserveCompetitionId: "1264"
+  country: "Italy"
+- Do NOT change existing entries.
+
+2) server/routes.ts (the /api/cup/progress handler)
+- Add a new flag:
+  const isCoppaItalia = competitionId === "1264";
+- Add COPPA_ITALIA_CANONICAL_ROUNDS that mirrors Goalserve-native stage names and ordering:
+  1/64-finals (order 1)
+  1/32-finals (order 2)
+  1/16-finals (order 3)
+  1/8-finals  (order 4)
+  Quarter-finals (order 5)
+  Semi-finals (order 6)
+  Final (order 7)
+
+- Add a Coppa Italia round normalizer used only when isCoppaItalia === true:
+  Rules:
+   • if name contains "1/64" -> "1/64-finals"
+   • if name contains "1/32" -> "1/32-finals"
+   • if name contains "1/16" -> "1/16-finals"
+   • if name contains "1/8"  -> "1/8-finals"
+   • if name contains "quarter" or equals "qf" -> "Quarter-finals"
+   • if name contains "semi" -> "Semi-finals"
+   • if name contains "final" (but NOT semi) -> "Final"
+  Keep case-insensitive matching and preserve existing behavior for unknown rounds (do not remove unknown rounds).
+
+- Ensure the canonical seeding logic for Coppa Italia includes all canonical rounds even if there are 0 fixtures (Semi-finals and Final will likely be empty right now because Goalserve hasn’t provided them yet).
+
+- Do NOT alter the canonical systems for FA Cup, EFL Cup, or Copa del Rey.
+
+OUTPUT REQUIREMENT:
+Return ONE backend+config code update prompt only. No explanations outside this block.
+
+---
+

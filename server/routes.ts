@@ -2286,14 +2286,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Final": 8,
       };
       
+      // COPPA ITALIA (Italy Cup): 7 canonical rounds (mirror Goalserve stage names)
+      const COPPA_ITALIA_CANONICAL_ROUNDS: Record<string, number> = {
+        "1/64-finals": 1,
+        "1/32-finals": 2,
+        "1/16-finals": 3,
+        "1/8-finals": 4,
+        "Quarter-finals": 5,
+        "Semi-finals": 6,
+        "Final": 7,
+      };
+      
       // Select canonical rounds based on competition
       const isEflCup = competitionId === "1199";
       const isCopaDelRey = competitionId === "1397";
-      const CANONICAL_ROUNDS = isCopaDelRey 
-        ? COPA_DEL_REY_CANONICAL_ROUNDS 
-        : isEflCup 
-          ? EFL_CUP_CANONICAL_ROUNDS 
-          : FA_CUP_CANONICAL_ROUNDS;
+      const isCoppaItalia = competitionId === "1264";
+      const CANONICAL_ROUNDS = isCoppaItalia
+        ? COPPA_ITALIA_CANONICAL_ROUNDS
+        : isCopaDelRey 
+          ? COPA_DEL_REY_CANONICAL_ROUNDS 
+          : isEflCup 
+            ? EFL_CUP_CANONICAL_ROUNDS 
+            : FA_CUP_CANONICAL_ROUNDS;
 
       // FA Cup normalizer: returns canonical name or null (discard if null)
       const normalizeToCanonicalRound_FA_CUP = (name: string): string | null => {
@@ -2422,14 +2436,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `Unknown: ${name}`;
       };
       
+      // Coppa Italia normalizer: returns canonical name or "Unknown: {name}" for safety
+      // Maps 1:1 to Goalserve stage names
+      const normalizeToCanonicalRound_COPPA_ITALIA = (name: string): string => {
+        const lower = name.toLowerCase().trim();
+        
+        // Fractional notation mappings (1:1 to Goalserve stages)
+        if (lower.includes("1/64")) return "1/64-finals";
+        if (lower.includes("1/32")) return "1/32-finals";
+        if (lower.includes("1/16")) return "1/16-finals";
+        if (lower.includes("1/8")) return "1/8-finals";
+        
+        // Quarter-finals variants
+        if (lower.includes("quarter") || lower === "qf") return "Quarter-finals";
+        
+        // Semi-finals variants
+        if (lower.includes("semi")) return "Semi-finals";
+        
+        // Final (anything containing "final" but NOT semi-final or quarter-final)
+        if (lower.includes("final") && !lower.includes("semi") && !lower.includes("quarter")) return "Final";
+        
+        // Handle explicit canonical names
+        for (const canonical of Object.keys(COPPA_ITALIA_CANONICAL_ROUNDS)) {
+          if (lower === canonical.toLowerCase()) return canonical;
+        }
+        
+        // TEMPORARY SAFETY: preserve unknown rounds for debugging
+        console.log(`[Coppa Italia] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
+      };
+      
       // Select normalizer based on competition
       // FA Cup normalizer returns null for unknown rounds (discard them)
-      // EFL Cup / Copa del Rey normalizers return "Unknown: {name}" for unknown rounds (preserve for debugging)
-      const normalizeToCanonicalRound = isCopaDelRey
-        ? (name: string): string | null => normalizeToCanonicalRound_COPA_DEL_REY(name)
-        : isEflCup 
-          ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
-          : normalizeToCanonicalRound_FA_CUP;
+      // EFL Cup / Copa del Rey / Coppa Italia normalizers return "Unknown: {name}" for unknown rounds (preserve for debugging)
+      const normalizeToCanonicalRound = isCoppaItalia
+        ? (name: string): string | null => normalizeToCanonicalRound_COPPA_ITALIA(name)
+        : isCopaDelRey
+          ? (name: string): string | null => normalizeToCanonicalRound_COPA_DEL_REY(name)
+          : isEflCup 
+            ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
+            : normalizeToCanonicalRound_FA_CUP;
 
       // Match count sanity guards - discard rounds with unrealistic match counts
       const FA_CUP_MAX_MATCHES: Record<string, number> = {
@@ -2493,6 +2539,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Seed all canonical rounds for Copa del Rey (like FA Cup) so empty rounds appear in UI
       if (isCopaDelRey) {
         for (const [roundName, order] of Object.entries(COPA_DEL_REY_CANONICAL_ROUNDS)) {
+          if (!canonicalRoundsMap.has(roundName)) {
+            canonicalRoundsMap.set(roundName, new Map());
+          }
+        }
+      }
+      
+      // Seed all canonical rounds for Coppa Italia so empty rounds appear in UI
+      if (isCoppaItalia) {
+        for (const [roundName, order] of Object.entries(COPPA_ITALIA_CANONICAL_ROUNDS)) {
           if (!canonicalRoundsMap.has(roundName)) {
             canonicalRoundsMap.set(roundName, new Map());
           }
