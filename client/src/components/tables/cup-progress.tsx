@@ -140,23 +140,23 @@ function MatchRow({ match }: { match: CupMatch }) {
           )}
         </div>
       </div>
-      <div className="text-right text-xs text-muted-foreground shrink-0 ml-2 flex flex-col items-end gap-1">
+      <div className="flex flex-col items-end md:items-center gap-1 shrink-0 ml-2">
         {matchStatus === "completed" && (
-          <Badge variant="outline" className="text-xs px-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+          <Badge variant="outline" className="self-center text-[10px] sm:text-xs px-2 py-0.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
             {statusText}
           </Badge>
         )}
         {matchStatus === "live" && (
-          <Badge variant="outline" className="text-xs px-2.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 animate-pulse">
+          <Badge variant="outline" className="self-center text-[10px] sm:text-xs px-2 py-0.5 bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30 animate-pulse">
             {statusText}
           </Badge>
         )}
         {matchStatus === "upcoming" && (
-          <Badge variant="outline" className="text-xs px-2.5 bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30">
+          <Badge variant="outline" className="self-center text-[10px] sm:text-xs px-2 py-0.5 bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30">
             {statusText}
           </Badge>
         )}
-        {kickoffDisplay && <span className="text-[10px]">{kickoffDisplay}</span>}
+        {kickoffDisplay && <span className="text-[10px] text-muted-foreground text-center">{kickoffDisplay}</span>}
       </div>
     </div>
   );

@@ -6929,3 +6929,73 @@ Deliverable:
 
 ---
 
+We are refining the match card UI in the cup progress tables.
+
+GOAL:
+Improve alignment and spacing of the match status pill and kickoff info on the right-hand side of each fixture row.
+
+FILES TO EDIT:
+The component that renders each match row inside the Cup Progress table (look for where status, kickoffDate, and kickoffTime are displayed together).
+
+CHANGES REQUIRED:
+
+1️⃣ STACK STATUS + DATE/TIME VERTICALLY
+
+Currently the layout is side-by-side. 
+Change the right-hand container to a vertical flex layout so it becomes:
+
+[ Status Pill ]
+[ Date • Time ]
+
+Implementation:
+- Wrap the status pill and kickoff text in a parent div
+- Apply: flex flex-col items-center text-right (desktop)
+- On mobile keep items-end if needed, but ensure vertical stacking
+
+Example container classes:
+`flex flex-col items-end md:items-center gap-1`
+
+2️⃣ CENTER THE STATUS PILL ABOVE THE DATE/TIME
+
+The pill should sit visually centered over the date/time block.
+
+Implementation:
+- Remove any `ml-auto` or side alignment on the pill
+- Add `self-center` to the pill element
+- Ensure the parent container uses `items-center`
+
+3️⃣ SLIGHTLY REDUCE PILL SIZE (ESPECIALLY MOBILE)
+
+We want the pill to feel lighter now that it says:
+Full-Time / Half-Time / Penalties
+
+Adjust:
+- Reduce horizontal padding: from `px-3` → `px-2.5`
+- Reduce vertical padding slightly: from `py-1.5` → `py-1`
+- On small screens use slightly smaller text:
+
+Add responsive sizing:
+`text-xs sm:text-sm`
+
+So final pill classes should look like:
+`px-2.5 py-1 rounded-full text-xs sm:text-sm font-medium`
+
+4️⃣ DO NOT CHANGE COLORS OR LOGIC
+
+Do NOT modify:
+- Status mapping logic (Full-Time, Half-Time, Penalties etc)
+- Backend data
+- Date/time formatting
+
+This is purely a layout + spacing refinement.
+
+RESULT:
+Each match row right side should visually look like:
+
+        [ Full-Time ]
+        09.01.2026 • 19:30
+
+Clean, centered, compact, and balanced.
+
+---
+
