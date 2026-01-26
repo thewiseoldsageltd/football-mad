@@ -6026,3 +6026,61 @@ Please implement all changes and keep them minimal and robust.
 
 ---
 
+EFL Cup (competitionId=1199) is only returning Quarter-finals + Semi-finals.
+This means earlier rounds are being discarded because normalizeToCanonicalRound_EFL_CUP is returning null.
+
+Please update server/routes.ts (the /api/cup/progress endpoint) as follows:
+
+1) Extend normalizeToCanonicalRound_EFL_CUP(name: string):
+   - Always lowercase+trim once.
+   - Map these variants (case-insensitive):
+
+   FIRST ROUND:
+   - "first round", "1st round", "round 1", "round1"
+   - "1/64-finals", "1/64 final", "1/64-finals"
+   - "round of 64", "last 64"
+
+   SECOND ROUND:
+   - "second round", "2nd round", "round 2", "round2"
+   - "1/32-finals", "round of 32", "last 32"
+
+   THIRD ROUND:
+   - "third round", "3rd round", "round 3", "round3"
+   - "1/16-finals", "round of 16", "last 16"
+
+   FOURTH ROUND:
+   - "fourth round", "4th round", "round 4", "round4"
+   - "1/8-finals"
+
+   QUARTER-FINALS:
+   - contains "quarter" and "final" OR equals "qf"
+
+   SEMI-FINALS:
+   - contains "semi" and "final" OR equals "sf"
+
+   FINAL:
+   - equals "final"
+
+2) Ordering for EFL Cup canonical rounds:
+   1 First Round
+   2 Second Round
+   3 Third Round
+   4 Fourth Round
+   5 Quarter-finals
+   6 Semi-finals
+   7 Final
+
+3) TEMPORARY SAFETY: Do not discard unknown EFL round names.
+   - If competitionId===1199 and the round name doesn’t match any mapping:
+     return "Unknown: " + originalName (preserve original as-is).
+   - Give these unknown rounds a high order like 99 so they appear at the bottom.
+   - This is just to surface what Goalserve is sending so we don’t lose matches.
+
+4) Keep FA Cup (1198) behaviour unchanged.
+
+After changes, restart and verify:
+curl -sS "$DOMAIN/api/cup/progress?competitionId=1199&season=2025/2026" > /tmp/eflcup.json
+node -e 'const d=require("/tmp/eflcup.json"); console.log("Rounds:", d.rounds.length); d.rounds.forEach(r=>console.log(r.order, r.name, r.matches.length));'
+
+---
+

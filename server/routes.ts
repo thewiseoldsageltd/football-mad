@@ -2330,34 +2330,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return null;
       };
       
-      // EFL Cup normalizer: returns canonical name or null (discard if null)
-      const normalizeToCanonicalRound_EFL_CUP = (name: string): string | null => {
+      // EFL Cup normalizer: returns canonical name or "Unknown: {name}" for safety
+      const normalizeToCanonicalRound_EFL_CUP = (name: string): string => {
         const lower = name.toLowerCase().trim();
         
-        // Map quarter/semi/final variations
-        if (lower.includes("quarter") && lower.includes("final")) return "Quarter-finals";
-        if (lower === "qf" || lower === "quarterfinals") return "Quarter-finals";
-        if (lower.includes("semi") && lower.includes("final")) return "Semi-finals";
-        if (lower === "sf" || lower === "semifinals") return "Semi-finals";
-        if (lower === "final" || lower === "finals" || lower === "the final") return "Final";
+        // FIRST ROUND variants
+        if (lower === "first round" || lower === "1st round" || lower === "round 1" || lower === "round1") return "First Round";
+        if (lower === "1/64-finals" || lower === "1/64 final" || lower === "1/64 finals") return "First Round";
+        if (lower.includes("round of 64") || lower.includes("last 64")) return "First Round";
         
-        // Map ordinal rounds: "1st Round", "First Round", "Round 1", etc.
-        if (/^(1st|first)\s*round$/.test(lower) || /^round\s*1$/.test(lower)) return "First Round";
-        if (/^(2nd|second)\s*round$/.test(lower) || /^round\s*2$/.test(lower)) return "Second Round";
-        if (/^(3rd|third)\s*round$/.test(lower) || /^round\s*3$/.test(lower)) return "Third Round";
-        if (/^(4th|fourth)\s*round$/.test(lower) || /^round\s*4$/.test(lower)) return "Fourth Round";
+        // SECOND ROUND variants
+        if (lower === "second round" || lower === "2nd round" || lower === "round 2" || lower === "round2") return "Second Round";
+        if (lower === "1/32-finals" || lower === "1/32 final" || lower === "1/32 finals") return "Second Round";
+        if (lower.includes("round of 32") || lower.includes("last 32")) return "Second Round";
+        
+        // THIRD ROUND variants
+        if (lower === "third round" || lower === "3rd round" || lower === "round 3" || lower === "round3") return "Third Round";
+        if (lower === "1/16-finals" || lower === "1/16 final" || lower === "1/16 finals") return "Third Round";
+        if (lower.includes("round of 16") || lower.includes("last 16")) return "Third Round";
+        
+        // FOURTH ROUND variants
+        if (lower === "fourth round" || lower === "4th round" || lower === "round 4" || lower === "round4") return "Fourth Round";
+        if (lower === "1/8-finals" || lower === "1/8 final" || lower === "1/8 finals") return "Fourth Round";
+        
+        // QUARTER-FINALS variants
+        if ((lower.includes("quarter") && lower.includes("final")) || lower === "qf" || lower === "quarterfinals") return "Quarter-finals";
+        
+        // SEMI-FINALS variants
+        if ((lower.includes("semi") && lower.includes("final")) || lower === "sf" || lower === "semifinals") return "Semi-finals";
+        
+        // FINAL variants
+        if (lower === "final" || lower === "finals" || lower === "the final") return "Final";
         
         // Handle explicit canonical names (already properly cased in feed)
         for (const canonical of Object.keys(EFL_CUP_CANONICAL_ROUNDS)) {
           if (lower === canonical.toLowerCase()) return canonical;
         }
         
-        // No match - discard this round (returns null)
-        return null;
+        // TEMPORARY SAFETY: preserve unknown rounds for debugging instead of discarding
+        console.log(`[EFL Cup] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
       };
       
       // Select normalizer based on competition
-      const normalizeToCanonicalRound = isEflCup ? normalizeToCanonicalRound_EFL_CUP : normalizeToCanonicalRound_FA_CUP;
+      // FA Cup normalizer returns null for unknown rounds (discard them)
+      // EFL Cup normalizer returns "Unknown: {name}" for unknown rounds (preserve for debugging)
+      const normalizeToCanonicalRound = isEflCup 
+        ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
+        : normalizeToCanonicalRound_FA_CUP;
 
       // Match count sanity guards - discard rounds with unrealistic match counts
       const FA_CUP_MAX_MATCHES: Record<string, number> = {
