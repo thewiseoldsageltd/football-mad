@@ -6488,3 +6488,49 @@ No explanations outside the code block.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour or components.
+
+GOAL:
+
+For Copa del Rey ONLY (competitionId = 1397), mirror Goalserve/Soccerway stage naming in the UI labels by overriding the round "name" returned by /api/cup/progress — while keeping the existing canonical round ordering + mapping logic intact.
+
+REQUIREMENTS:
+
+1) Do NOT change how matches are extracted or grouped.
+2) Do NOT change canonical ordering logic.
+3) ONLY change the display label for Copa del Rey in the API response.
+
+IMPLEMENTATION:
+
+After the backend has built the final `rounds` array for /api/cup/progress, and ONLY when competitionId === "1397" (or 1397), override `round.name` using this mapping:
+
+- "First Round"      -> "1/128-finals"
+- "Second Round"     -> "1/64-finals"
+- "Round of 32"      -> "1/16-finals"
+- "Round of 16"      -> "1/8-finals"
+- "Quarter-finals"   -> "Quarter-finals"  (leave as-is)
+- "Semi-finals"      -> "Semi-finals"     (leave as-is)
+- "Final"            -> "Final"           (leave as-is)
+
+Notes:
+- Apply the override only if the round exists in the output (do not create new rounds here).
+- Keep the `order` field unchanged so the accordion order stays correct.
+- Keep the `matches` arrays unchanged.
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
+
+---
+

@@ -2530,6 +2530,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Sort rounds by order (early rounds first)
       cupRounds.sort((a, b) => a.order - b.order);
 
+      // Copa del Rey display name override (mirror Goalserve/Soccerway labels)
+      if (isCopaDelRey) {
+        const copaDisplayNames: Record<string, string> = {
+          "First Round": "1/128-finals",
+          "Second Round": "1/64-finals",
+          "Round of 32": "1/16-finals",
+          "Round of 16": "1/8-finals",
+        };
+        for (const round of cupRounds) {
+          if (copaDisplayNames[round.name]) {
+            round.name = copaDisplayNames[round.name];
+          }
+        }
+      }
+
       res.json({ competitionId, rounds: cupRounds });
     } catch (error) {
       console.error("Error fetching cup progress:", error);
