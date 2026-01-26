@@ -2402,11 +2402,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Quarter-finals variants
         if (lower.includes("quarter") && lower.includes("final")) return "Quarter-finals";
         
-        // Semi-finals variants
-        if (lower.includes("semi") && lower.includes("final")) return "Semi-finals";
+        // Semi-finals variants (including "semifinal", "semi-final 1st leg", etc.)
+        if (lower.includes("semi")) return "Semi-finals";
         
-        // Final (exact match)
-        if (lower === "final") return "Final";
+        // Final (exact match, but not if it's part of semi-final/quarter-final)
+        if (lower === "final" || lower === "finals" || lower === "the final") return "Final";
         
         // Handle explicit canonical names
         for (const canonical of Object.keys(COPA_DEL_REY_CANONICAL_ROUNDS)) {

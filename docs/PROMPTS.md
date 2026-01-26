@@ -6210,3 +6210,78 @@ Manual check only:
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform full regression testing.
+• DO NOT refactor existing FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add debugging frameworks, logging systems, or extra endpoints.
+• Frontend testing will be done manually by the user.
+
+CURRENT STATE:
+
+• FA Cup working
+• EFL Cup working
+• Copa del Rey (competitionId = 1397) is ingested and displays rounds
+• Semi-final fixtures are not appearing yet
+• Canonical round system and accordion UI already implemented
+• Empty canonical rounds are already supported and must remain
+
+TASK:
+
+Focus ONLY on Copa del Rey parsing inside the existing /api/cup/progress backend logic.
+
+We need to ensure that when Goalserve provides semi-final fixtures, they are correctly captured and assigned to the canonical "Semi-finals" round.
+
+STEPS:
+
+1. Within the Goalserve cup parsing logic, add support for ALL of the following structures when competitionId === 1397:
+
+   • stage.match[]
+   • stage.round[].match[]
+   • stage.week[].match[]
+
+   Ensure matches from any of these nesting patterns are collected and passed into the existing round-mapping pipeline.
+
+2. Stage Name Normalisation
+
+   When deriving the round name from Goalserve stage/round/week labels, ensure that any label containing:
+
+   • "semi"
+   • "semi-final"
+   • "semi finals"
+   • "semifinal"
+   • "semi-final 1st leg"
+   • "semi-final 2nd leg"
+
+   (case insensitive)
+
+   is normalised to the EXACT canonical round name:
+
+   "Semi-finals"
+
+   This must plug into the EXISTING canonical round mapping system (do not rewrite it).
+
+3. Do NOT change:
+
+   • UI code
+   • Canonical round definitions
+   • FA Cup logic
+   • EFL Cup logic
+   • Any other competition parsing
+   • Existing handling of empty rounds
+
+4. Do NOT remove or filter out unknown rounds. Only improve match extraction and semi-final name normalisation.
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+Do not include explanations outside the code block.
+```}
+
+---
+
