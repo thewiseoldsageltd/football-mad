@@ -1,0 +1,155 @@
+We need to fix penalty-shootout handling in Cup Progress.
+
+CURRENT PROBLEM
+- Penalties matches are not parsing/displaying correctly.
+- UI should show the normal match score like every other fixture, and then show the penalty shootout score in brackets to the RIGHT of each team’s score (not under the date/time).
+
+TARGET UI (example)
+Wigan        2 (3)
+Barrow       2 (2)
+[status pill: Penalties]
+
+Non-penalty matches remain unchanged:
+Wigan        2
+Barrow       2
+
+--------------------------------------------
+1) BACKEND: parse + return penalty scores WITHOUT overwriting match score
+--------------------------------------------
+
+In server/routes.ts (the /api/cup/progress route), update CupMatch:
+
+type CupMatch = {
+  id: string;
+  home: { id?: string; name: string };
+  away: { id?: string; name: string };
+  score: { home: number; away: number } | null;               // normal (90/ET) score
+  penalties?: { home: number; away: number } | null;          // shootout score
+  kickoff?: string;
+  kickoffDate?: string | null;
+  kickoffTime?: string | null;
+  status: string;
+};
+
+In parseMatch, implement robust extraction for BOTH:
+- normal score
+- penalty score
+
+Create helpers near parseMatch:
+
+function toIntOrNull(v: any): number | null {
+  if (v == null) return null;
+  const s = String(v).trim();
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function getAny(m: any, keys: string[]): any {
+  for (const k of keys) {
+    const v =
+      m?.[k] ??
+      m?.[`@_${k}`] ??
+      m?.[`@${k}`] ??
+      m?.["@"]?.[k] ??
+      m?.["$"]?.[k];
+    if (v != null && String(v).trim() !== "") return v;
+  }
+  return null;
+}
+
+Then inside parseMatch:
+
+// Detect shootout via status OR presence of penalty fields
+const rawStatus = String(getAny(m, ["status"]) ?? m?.["@status"] ?? m?.status ?? "").trim();
+const isPensStatus =
+  /pen/i.test(rawStatus) || rawStatus === "Pen." || rawStatus === "PEN" || rawStatus === "Pen";
+
+// Penalty shootout scores (try many likely key variants)
+const penHome = toIntOrNull(getAny(m, ["pen_home", "homepen", "penalty_home", "ps_home", "pens_home", "penalties_home"]));
+const penAway = toIntOrNull(getAny(m, ["pen_away", "awaypen", "penalty_away", "ps_away", "pens_away", "penalties_away"]));
+
+const hasPens = penHome != null && penAway != null;
+
+// Normal match scores:
+// IMPORTANT: in some feeds, the main score fields get overwritten by shootout scores when status is penalties.
+// So: if penalties are present OR status indicates penalties, try "full time / after extra time" fields FIRST.
+const normalHomeScore = toIntOrNull(getAny(m, [
+  "ft_homescore", "ft_home_score", "home_score_ft", "score_home_ft",
+  "aet_homescore", "aet_home_score", "home_score_aet",
+  "homescore", "home_score"
+]));
+const normalAwayScore = toIntOrNull(getAny(m, [
+  "ft_awayscore", "ft_away_score", "away_score_ft", "score_away_ft",
+  "aet_awayscore", "aet_away_score", "away_score_aet",
+  "awayscore", "away_score"
+]));
+
+// Existing team-level scores (current behaviour)
+const homeTeam = m.hometeam || m.localteam || {};
+const awayTeam = m.awayteam || m.visitorteam || {};
+
+const teamHomeScore = toIntOrNull(homeTeam["@score"] ?? homeTeam["@_score"] ?? homeTeam.score ?? m["@homescore"] ?? m["@_homescore"] ?? m.homescore);
+const teamAwayScore = toIntOrNull(awayTeam["@score"] ?? awayTeam["@_score"] ?? awayTeam.score ?? m["@awayscore"] ?? m["@_awayscore"] ?? m.awayscore);
+
+// Choose final "score" values:
+// If penalties detected, prefer normalHomeScore/normalAwayScore if present; otherwise fall back to team scores.
+// Never set score to penalty scores.
+const finalHome = (isPensStatus || hasPens) ? (normalHomeScore ?? teamHomeScore) : teamHomeScore;
+const finalAway = (isPensStatus || hasPens) ? (normalAwayScore ?? teamAwayScore) : teamAwayScore;
+
+const hasScore = finalHome != null && finalAway != null;
+
+const penalties = (hasPens ? { home: penHome!, away: penAway! } : null);
+
+Then build match:
+
+score: hasScore ? { home: finalHome!, away: finalAway! } : null,
+penalties,
+
+Also: DO NOT change any FA Cup / EFL Cup canonical mapping logic.
+
+Finally, add a tiny temporary debug only for Penalties matches (remove once confirmed):
+If (isPensStatus && !hasPens) log the match id + Object.keys(m) so we can see what the feed calls the penalty fields.
+
+--------------------------------------------
+2) FRONTEND: show penalty score in brackets beside each team score (NOT under date/time)
+--------------------------------------------
+
+Find the cup match row renderer (likely in client/src/components/tables/cup-progress.tsx or a child component it uses).
+
+Where the score is displayed for each team, change the score rendering to:
+
+- Main score: match.score?.home / match.score?.away (unchanged)
+- If match.penalties exists, render bracket values next to the score for each team:
+  Home:  {homeScore} <span className="text-xs text-gray-500 ml-1">({penHome})</span>
+  Away:  {awayScore} <span className="text-xs text-gray-500 ml-1">({penAway})</span>
+
+Example TSX snippet:
+
+const homeScore = match.score?.home;
+const awayScore = match.score?.away;
+const penHome = match.penalties?.home ?? null;
+const penAway = match.penalties?.away ?? null;
+
+Then in UI:
+
+<div className="...">
+  <span className="...">{homeScore ?? ""}</span>
+  {penHome != null && <span className="text-xs text-gray-500 ml-1">({penHome})</span>}
+</div>
+
+and similarly for away.
+
+Do NOT move/duplicate penalties into the right-hand date/time block anymore.
+Date/time block stays just date + kickoff time.
+
+--------------------------------------------
+3) EXPECTED RESULT
+--------------------------------------------
+
+- For normal matches: no brackets.
+- For penalties matches: normal score shown as the main score, penalties shown in brackets next to each score.
+- Status pill remains “Penalties”.
+
+Make the change minimal/localised and keep existing UI layout/spacing unless required for the bracket display.

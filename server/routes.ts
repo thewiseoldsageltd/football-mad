@@ -2199,18 +2199,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `${yyyy}-${mm}-${dd}`;
       };
 
-      // Helper to extract penalty shootout score
-      const getPenaltyScore = (node: any, side: "home" | "away"): number | null => {
-        const keys = side === "home"
-          ? ["pen_home", "homepen", "penalty_home", "ps_home", "pen_score_home"]
-          : ["pen_away", "awaypen", "penalty_away", "ps_away", "pen_score_away"];
-        
+      // Helper to safely parse int or return null
+      const toIntOrNull = (v: any): number | null => {
+        if (v == null) return null;
+        const s = String(v).trim();
+        if (!s) return null;
+        const n = parseInt(s, 10);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      // Helper to get any matching attribute from multiple keys
+      const getAny = (node: any, keys: string[]): any => {
         for (const k of keys) {
-          const val = getAttr(node, k);
-          if (val != null && val !== "") {
-            const parsed = parseInt(val, 10);
-            if (!isNaN(parsed)) return parsed;
-          }
+          const v = 
+            node?.[k] ??
+            node?.[`@_${k}`] ??
+            node?.[`@${k}`] ??
+            node?.["@"]?.[k] ??
+            node?.["$"]?.[k];
+          if (v != null && String(v).trim() !== "") return v;
         }
         return null;
       };
@@ -2220,17 +2227,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const homeTeam = m.hometeam || m.localteam || {};
         const awayTeam = m.awayteam || m.visitorteam || {};
         
-        const homeScore = homeTeam["@score"] ?? m["@homescore"] ?? m.homescore;
-        const awayScore = awayTeam["@score"] ?? m["@awayscore"] ?? m.awayscore;
-        
-        const hasScore = homeScore != null && awayScore != null && homeScore !== "" && awayScore !== "";
+        // Detect shootout via status OR presence of penalty fields
+        const rawStatus = String(getAny(m, ["status"]) ?? m?.["@status"] ?? m?.status ?? "").trim();
+        const isPensStatus = /pen/i.test(rawStatus) || rawStatus === "Pen." || rawStatus === "PEN";
 
-        // Extract penalty shootout scores (separate from main score)
-        const penHome = getPenaltyScore(m, "home");
-        const penAway = getPenaltyScore(m, "away");
-        const penalties = (penHome != null && penAway != null)
-          ? { home: penHome, away: penAway }
-          : null;
+        // Penalty shootout scores (try many likely key variants)
+        const penHome = toIntOrNull(getAny(m, ["pen_home", "homepen", "penalty_home", "ps_home", "pens_home", "penalties_home"]));
+        const penAway = toIntOrNull(getAny(m, ["pen_away", "awaypen", "penalty_away", "ps_away", "pens_away", "penalties_away"]));
+        const hasPens = penHome != null && penAway != null;
+
+        // Normal match scores - prefer FT/AET fields when penalties are present
+        const normalHomeScore = toIntOrNull(getAny(m, [
+          "ft_homescore", "ft_home_score", "home_score_ft", "score_home_ft",
+          "aet_homescore", "aet_home_score", "home_score_aet",
+          "homescore", "home_score"
+        ]));
+        const normalAwayScore = toIntOrNull(getAny(m, [
+          "ft_awayscore", "ft_away_score", "away_score_ft", "score_away_ft",
+          "aet_awayscore", "aet_away_score", "away_score_aet",
+          "awayscore", "away_score"
+        ]));
+
+        // Team-level scores (current behavior)
+        const teamHomeScore = toIntOrNull(homeTeam["@score"] ?? homeTeam["@_score"] ?? homeTeam.score ?? m["@homescore"] ?? m["@_homescore"] ?? m.homescore);
+        const teamAwayScore = toIntOrNull(awayTeam["@score"] ?? awayTeam["@_score"] ?? awayTeam.score ?? m["@awayscore"] ?? m["@_awayscore"] ?? m.awayscore);
+
+        // Choose final score: if penalties detected, prefer FT/AET scores if present; otherwise fall back to team scores
+        const finalHome = (isPensStatus || hasPens) ? (normalHomeScore ?? teamHomeScore) : teamHomeScore;
+        const finalAway = (isPensStatus || hasPens) ? (normalAwayScore ?? teamAwayScore) : teamAwayScore;
+        const hasScore = finalHome != null && finalAway != null;
+
+        const penalties = hasPens ? { home: penHome, away: penAway } : null;
+
+        // Debug: log penalty matches that don't have parsed penalty scores
+        if (isPensStatus && !hasPens) {
+          console.log(`[CupProgress Debug] Penalties match without parsed pens: id=${getAttr(m, "id")}, keys=${Object.keys(m).join(",")}`);
+        }
 
         // Extract date and time using robust attribute helper
         const rawDate = getAttr(m, "date");
@@ -2257,8 +2289,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             name: getAttr(awayTeam, "name") || "TBD",
           },
           score: hasScore ? {
-            home: parseInt(String(homeScore), 10),
-            away: parseInt(String(awayScore), 10),
+            home: finalHome!,
+            away: finalAway!,
           } : null,
           penalties,
           kickoff: formattedDate || rawDate || undefined,

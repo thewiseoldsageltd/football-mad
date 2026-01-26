@@ -120,6 +120,8 @@ function MatchRow({ match }: { match: CupMatch }) {
   const hasScore = match.score != null;
   const statusText = formatStatusText(match.status);
   const kickoffDisplay = formatKickoffDisplay(match.kickoffDate, match.kickoffTime);
+  const penHome = match.penalties?.home ?? null;
+  const penAway = match.penalties?.away ?? null;
 
   return (
     <div className="flex items-center justify-between py-2 text-sm border-b border-border/50 last:border-0" data-testid={`match-row-${match.id}`}>
@@ -129,6 +131,7 @@ function MatchRow({ match }: { match: CupMatch }) {
           {hasScore && (
             <span className="text-muted-foreground font-semibold">
               {match.score!.home}
+              {penHome != null && <span className="text-xs text-gray-500 ml-1">({penHome})</span>}
             </span>
           )}
         </div>
@@ -137,6 +140,7 @@ function MatchRow({ match }: { match: CupMatch }) {
           {hasScore && (
             <span className="text-muted-foreground font-semibold">
               {match.score!.away}
+              {penAway != null && <span className="text-xs text-gray-500 ml-1">({penAway})</span>}
             </span>
           )}
         </div>
@@ -158,11 +162,6 @@ function MatchRow({ match }: { match: CupMatch }) {
           </Badge>
         )}
         {kickoffDisplay && <span className="text-[10px] text-muted-foreground text-center">{kickoffDisplay}</span>}
-        {match.penalties && (
-          <span className="text-[10px] text-muted-foreground text-center">
-            Pens: {match.penalties.home}–{match.penalties.away}
-          </span>
-        )}
       </div>
     </div>
   );
