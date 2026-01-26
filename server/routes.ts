@@ -2503,6 +2503,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const [canonicalName, matchMap] of canonicalEntries) {
         const matchList: CupMatch[] = Array.from(matchMap.values());
         
+        // EFL Cup specific: drop unknown rounds containing qualifying/preliminary keywords
+        if (isEflCup && canonicalName.startsWith("Unknown: ")) {
+          const rawLabel = canonicalName.replace("Unknown: ", "").toLowerCase();
+          const dropKeywords = ["prelim", "preliminary", "qualifying", "qualification"];
+          if (dropKeywords.some(kw => rawLabel.includes(kw))) {
+            continue; // Drop this round for EFL Cup
+          }
+        }
+        
         // Sanity guard: check match count
         const maxMatches = ROUND_MAX_MATCHES[canonicalName];
         if (maxMatches && matchList.length > maxMatches) {

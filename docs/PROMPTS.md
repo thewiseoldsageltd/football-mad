@@ -6606,7 +6606,64 @@ In /api/cup/progress response generation, update the round status computation so
    - But do not alter the UI; just ensure the API flags/state make the pill not show as Completed.
 
 2) Keep existing behaviour for rounds that have matches:
-   - Completed only when ALL matches are finished (FT, AET, Pe
+   - Completed only when ALL matches are finished (FT, AET, Pen., etc.)
+   - Upcoming/In progress as currently implemented.
+
+CONSTRAINTS:
+
+• Make this change minimal and safe.
+• Do NOT change match extraction or round naming logic.
+• Ideally implement as a single guard in the existing “round isCompleted / status” logic:
+   - if matches.length === 0 => isCompleted = false (and status = "Upcoming" if applicable)
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
+
+---
+
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor existing FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+• Do NOT change UI behaviour/components.
+
+ISSUE:
+
+In EFL Cup view, an extra bucket appears at the bottom: "Unknown: Preliminary" with fixtures.
+This is coming from Goalserve round/stage labels that are not part of the EFL Cup canonical rounds, and our system currently allows unknown rounds.
+
+TASK (backend only, surgical, EFL Cup only):
+
+In /api/cup/progress (or the helper that builds rounds), add an EFL Cup specific filter:
+
+- Determine the competitionId used for EFL Cup in this endpoint (use the existing constant / mapping already in code; do NOT guess a new id).
+- ONLY when competitionId matches EFL Cup:
+    - If a round name is unknown (i.e., would be labeled "Unknown: ...") AND the raw label contains any of:
+      "prelim", "preliminary", "qualifying", "qualification"
+      (case-insensitive),
+      then DROP that round entirely (do not include it in the response).
+    - Do not drop any canonical rounds.
+    - Do not drop other unknown rounds unless they match those keywords.
+- For all other competitions, keep existing behaviour (unknown rounds allowed).
+
+CONSTRAINTS:
+
+• Keep this minimal and localized.
+• Do NOT change canonical mappings for FA Cup / EFL Cup.
+• Do NOT change UI.
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
 
 ---
 
