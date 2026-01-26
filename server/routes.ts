@@ -2486,6 +2486,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Build final rounds array, applying sanity guards
       const cupRounds: CupRound[] = [];
       
+      // Seed all canonical rounds for Copa del Rey (like FA Cup) so empty rounds appear in UI
+      if (isCopaDelRey) {
+        for (const [roundName, order] of Object.entries(COPA_DEL_REY_CANONICAL_ROUNDS)) {
+          if (!canonicalRoundsMap.has(roundName)) {
+            canonicalRoundsMap.set(roundName, new Map());
+          }
+        }
+      }
+      
       const canonicalEntries = Array.from(canonicalRoundsMap.entries());
       for (const [canonicalName, matchMap] of canonicalEntries) {
         const matchList: CupMatch[] = Array.from(matchMap.values());

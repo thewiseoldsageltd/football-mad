@@ -6285,3 +6285,54 @@ Do not include explanations outside the code block.
 
 ---
 
+We are continuing work on the Football Mad cup progress system.
+
+IMPORTANT WORKING RULES:
+
+• The user is NOT editing files directly.
+• Return ALL code updates as ONE Replit AI prompt in a single copy-paste code block.
+• DO NOT perform regression testing.
+• DO NOT refactor FA Cup or EFL Cup logic.
+• DO NOT touch unrelated competitions.
+• DO NOT add logging, debug endpoints, or test scripts.
+
+CURRENT STATE:
+
+• FA Cup working correctly with full canonical rounds
+• EFL Cup working correctly
+• Copa del Rey (competitionId = 1397) only shows early rounds
+• Later rounds (Quarter-finals, Semi-finals, Final) are missing entirely
+• Empty canonical rounds must still be displayed in the UI accordion
+
+TASK:
+
+Ensure Copa del Rey uses the SAME canonical round seeding behaviour as FA Cup so that ALL expected knockout rounds exist even if they have zero matches yet.
+
+Specifically for competitionId = 1397:
+
+The following canonical rounds MUST always be present in the output:
+
+• First Round
+• Round of 32
+• Round of 16
+• Quarter-finals
+• Semi-finals
+• Final
+
+These rounds should be created even if no matches are assigned yet.
+
+DO NOT modify:
+• UI code
+• Existing FA Cup logic
+• Existing EFL Cup logic
+• Canonical round definitions
+
+Only ensure Copa del Rey passes through the same canonical round creation path as FA Cup inside /api/cup/progress.
+
+OUTPUT REQUIREMENT:
+
+Return ONE backend code update prompt only.
+No explanations outside the code block.
+
+---
+
