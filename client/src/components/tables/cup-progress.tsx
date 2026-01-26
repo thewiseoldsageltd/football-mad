@@ -12,6 +12,8 @@ interface CupMatch {
   away: { id?: string; name: string };
   score?: { home: number; away: number } | null;
   kickoff?: string;
+  kickoffDate?: string | null;  // YYYY-MM-DD
+  kickoffTime?: string | null;  // HH:mm
   status: string;
 }
 
@@ -81,10 +83,21 @@ const roundStatusConfig = {
   },
 };
 
+function formatKickoffDisplay(kickoffDate?: string | null, kickoffTime?: string | null): string | null {
+  if (!kickoffDate) return null;
+  // Convert YYYY-MM-DD to DD.MM.YYYY
+  const parts = kickoffDate.split("-");
+  if (parts.length !== 3) return null;
+  const [year, month, day] = parts;
+  const dateStr = `${day}.${month}.${year}`;
+  return kickoffTime ? `${dateStr} • ${kickoffTime}` : dateStr;
+}
+
 function MatchRow({ match }: { match: CupMatch }) {
   const matchStatus = getMatchStatus(match.status);
   const hasScore = match.score != null;
   const statusText = formatStatusText(match.status);
+  const kickoffDisplay = formatKickoffDisplay(match.kickoffDate, match.kickoffTime);
 
   return (
     <div className="flex items-center justify-between py-2 text-sm border-b border-border/50 last:border-0" data-testid={`match-row-${match.id}`}>
@@ -118,13 +131,11 @@ function MatchRow({ match }: { match: CupMatch }) {
           </Badge>
         )}
         {matchStatus === "upcoming" && (
-          <>
-            <Badge variant="outline" className="text-xs bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30">
-              {statusText}
-            </Badge>
-            {match.kickoff && <span className="text-[10px]">{match.kickoff}</span>}
-          </>
+          <Badge variant="outline" className="text-xs bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30">
+            {statusText}
+          </Badge>
         )}
+        {kickoffDisplay && <span className="text-[10px]">{kickoffDisplay}</span>}
       </div>
     </div>
   );

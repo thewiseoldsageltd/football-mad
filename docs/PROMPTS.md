@@ -6873,3 +6873,21 @@ Return one backend code update.
 
 ---
 
+Frontend only. Update the cup progress UI to display kickoff date + time for EVERY match row (completed and upcoming).
+
+File: client/src/components/tables/cup-progress.tsx
+
+1) Find where a match row is rendered (where home/away names + score/status are shown).
+
+2) Add a small right-aligned meta line that always renders, using:
+- match.kickoffDate (YYYY-MM-DD) -> display as DD.MM.YYYY (or keep YYYY-MM-DD if you prefer minimal)
+- match.kickoffTime (HH:mm)
+
+Example display: "12.08.2025 • 18:45" (time optional if null)
+
+3) Do NOT only show this meta line for Not Started/upcoming. It must appear for FT/AET/PEN as well.
+
+4) Do not change the backend. Do not change other pages. Keep styling subtle (same style as existing date on upcoming rows).
+
+---
+
