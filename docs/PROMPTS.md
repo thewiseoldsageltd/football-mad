@@ -8487,3 +8487,49 @@ Deliverable:
 
 ---
 
+Replit AI — fix the “Scheduled” fixture layout regression in Champions League fixtures list (Tables > Europe > Champions League) WITHOUT changing the new score alignment for completed matches.
+
+Issue:
+- For upcoming fixtures (latest matchday), we used to render:
+  - A “Scheduled” (or “Not Started”) pill on the RIGHT
+  - And directly UNDER it (same right alignment), the date + kick-off time
+  - The pill + date/time were vertically stacked and visually centred as a unit.
+- After the score alignment changes, the date/time block is no longer appearing in that stacked right-aligned position (and may be missing/misaligned).
+
+Goal:
+- Restore the previous upcoming-fixture right column layout:
+  - Right column = a vertical stack aligned right:
+    1) Status pill (Scheduled/Not Started/Upcoming)
+    2) Date + KO time (e.g. “16 Sep 19:00”) underneath
+  - Both items aligned to the right edge, and the date/time centred under the pill (as before).
+
+Constraints:
+- Keep the new scoreline alignment for finished matches (scores right-aligned near the Full-Time/AET pill).
+- Only affect fixtures that are NOT finished (i.e. scheduled / not started / in future).
+- No backend changes.
+
+Where:
+- client/src/components/tables/europe-progress.tsx
+  - Find the fixture row renderer (MatchRow or equivalent) used in the right-hand “Fixtures” list.
+
+Implementation detail:
+1) Detect “upcoming” fixtures (no final score to show) using the same conditions already used to decide displayScore:
+   - If match.status is Scheduled/Not Started/Upcoming (or if displayScore is false), treat as upcoming.
+2) For upcoming fixtures, render the right side as:
+   - <div className="flex flex-col items-end gap-1 text-right">
+       <StatusPill ... />
+       <div className="text-xs text-muted-foreground">
+         {formattedDateTime}
+       </div>
+     </div>
+   - Ensure formattedDateTime uses the same formatter function as before (don’t change formatting).
+3) For finished fixtures, keep the current right side layout that includes:
+   - score column (right aligned) and the status pill (Full-Time/AET etc).
+
+Acceptance:
+- Upcoming matchday fixtures show NO scores.
+- Upcoming fixtures show pill + date/time stacked on right, date/time underneath pill.
+- Finished fixtures remain unchanged with the new score alignment.
+
+---
+

@@ -174,7 +174,7 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
         </div>
       </div>
       
-      {/* COL 2 — Score column (fixed width, right-aligned) */}
+      {/* COL 2 — Score column (only for finished matches) */}
       <div className="w-8 text-right font-semibold tabular-nums leading-tight">
         {displayScore && (
           <>
@@ -194,18 +194,18 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
             <div className="text-muted-foreground mt-1" data-testid={`text-away-score-${match.id}`}>–</div>
           </>
         )}
-        {showUpcoming && (
-          <div className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
-            {formatKickoff(match.kickoffDate, match.kickoffTime)}
-          </div>
-        )}
       </div>
       
-      {/* COL 3 — Status pill */}
-      <div className="flex items-center">
+      {/* COL 3 — Status pill + date/time for upcoming */}
+      <div className="flex flex-col items-end gap-1 text-right">
         <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
           {statusLabel}
         </Badge>
+        {showUpcoming && (
+          <div className="text-xs text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
+            {formatKickoff(match.kickoffDate, match.kickoffTime)}
+          </div>
+        )}
       </div>
     </div>
   );
