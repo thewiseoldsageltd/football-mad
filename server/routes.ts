@@ -3032,6 +3032,435 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ========== EUROPE COMPETITIONS (UCL, UEL, UECL) ==========
+  // Competition IDs: UCL=1005, UEL=1007, UECL=18853
+  const EUROPE_COMPETITIONS: Record<string, { id: string; name: string; format: "league_phase" | "group_stage" }> = {
+    "champions-league": { id: "1005", name: "UEFA Champions League", format: "league_phase" },
+    "europa-league": { id: "1007", name: "UEFA Europa League", format: "league_phase" },
+    "conference-league": { id: "18853", name: "UEFA Europa Conference League", format: "league_phase" },
+  };
+
+  // UCL knockout round mapping (Goalserve labels -> canonical names)
+  const UCL_KNOCKOUT_ROUNDS: Record<string, { name: string; order: number }> = {
+    "knockout round play-offs": { name: "Knockout Play-offs", order: 1 },
+    "knockout play-offs": { name: "Knockout Play-offs", order: 1 },
+    "play-offs": { name: "Knockout Play-offs", order: 1 },
+    "1/8-finals": { name: "Round of 16", order: 2 },
+    "round of 16": { name: "Round of 16", order: 2 },
+    "1/4-finals": { name: "Quarter-finals", order: 3 },
+    "quarter-finals": { name: "Quarter-finals", order: 3 },
+    "quarterfinals": { name: "Quarter-finals", order: 3 },
+    "1/2-finals": { name: "Semi-finals", order: 4 },
+    "semi-finals": { name: "Semi-finals", order: 4 },
+    "semifinals": { name: "Semi-finals", order: 4 },
+    "final": { name: "Final", order: 5 },
+  };
+
+  app.get("/api/europe/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const competition = EUROPE_COMPETITIONS[slug];
+      
+      if (!competition) {
+        return res.status(404).json({ error: `Unknown competition: ${slug}` });
+      }
+
+      const feedKey = process.env.GOALSERVE_FEED_KEY;
+      if (!feedKey) {
+        return res.status(500).json({ error: "GOALSERVE_FEED_KEY not configured" });
+      }
+
+      const season = (req.query.season as string) || "2025/2026";
+      const { goalserveFetch } = await import("./integrations/goalserve/client");
+
+      // Fetch fixtures and standings in parallel
+      const fixturesEndpoint = `soccerfixtures/leagueid/${competition.id}?season=${encodeURIComponent(season)}`;
+      const standingsEndpoint = `standings/${competition.id}.xml`;
+
+      let fixturesData: any = null;
+      let standingsData: any = null;
+
+      try {
+        [fixturesData, standingsData] = await Promise.all([
+          goalserveFetch(fixturesEndpoint).catch((e: any) => {
+            console.log(`[Europe] Fixtures fetch error for ${slug}:`, e?.message?.slice(0, 200));
+            return null;
+          }),
+          goalserveFetch(standingsEndpoint).catch((e: any) => {
+            console.log(`[Europe] Standings fetch error for ${slug}:`, e?.message?.slice(0, 200));
+            return null;
+          }),
+        ]);
+      } catch (fetchError: any) {
+        console.error(`[Europe] Parallel fetch error:`, fetchError?.message);
+      }
+
+      // Helper to extract attributes from Goalserve nodes
+      const getAttr = (node: any, key: string): string | null => {
+        if (!node || typeof node !== "object") return null;
+        const direct = node[key];
+        if (typeof direct === "string" && direct.trim()) return direct.trim();
+        const at = node[`@${key}`];
+        if (typeof at === "string" && at.trim()) return at.trim();
+        const atUnderscore = node[`@_${key}`];
+        if (typeof atUnderscore === "string" && atUnderscore.trim()) return atUnderscore.trim();
+        const atObj = node["@"]?.[key];
+        if (typeof atObj === "string" && atObj.trim()) return atObj.trim();
+        const dollarObj = node["$"]?.[key];
+        if (typeof dollarObj === "string" && dollarObj.trim()) return dollarObj.trim();
+        return null;
+      };
+
+      // Parse match from Goalserve node
+      interface EuropeMatch {
+        id: string;
+        home: { id?: string; name: string };
+        away: { id?: string; name: string };
+        score?: { home: number; away: number } | null;
+        penalties?: { home: number; away: number } | null;
+        kickoff?: string;
+        kickoffDate?: string | null;
+        kickoffTime?: string | null;
+        status: string;
+        venue?: string;
+      }
+
+      const parseMatch = (m: any): EuropeMatch | null => {
+        const id = getAttr(m, "id") || getAttr(m, "static_id");
+        if (!id) return null;
+
+        const home = m.localteam || m.home || {};
+        const away = m.visitorteam || m.visitor || m.away || {};
+        
+        const homeName = getAttr(home, "name") || "TBD";
+        const awayName = getAttr(away, "name") || "TBD";
+        const homeId = getAttr(home, "id");
+        const awayId = getAttr(away, "id");
+
+        // Parse score (ft_score has final score, score might be live)
+        const ftScore = getAttr(home, "ft_score") || getAttr(m, "ft_score");
+        const homeScore = ftScore ? parseInt(ftScore.split("-")[0]?.trim() || "", 10) : null;
+        const awayScoreStr = ftScore?.split("-")[1]?.trim() || "";
+        const awayScore = awayScoreStr ? parseInt(awayScoreStr, 10) : null;
+
+        // Penalties
+        const penScore = getAttr(home, "pen_score") || getAttr(m, "pen_score");
+        let penalties: { home: number; away: number } | null = null;
+        if (penScore && penScore.includes("-")) {
+          const [ph, pa] = penScore.split("-").map(s => parseInt(s.trim(), 10));
+          if (!isNaN(ph) && !isNaN(pa)) {
+            penalties = { home: ph, away: pa };
+          }
+        }
+
+        // Date/time parsing
+        const rawDate = getAttr(m, "date") || "";
+        const rawTime = getAttr(m, "time") || "";
+        let kickoffDate: string | null = null;
+        let kickoffTime: string | null = null;
+
+        if (rawDate) {
+          const parts = rawDate.split(".");
+          if (parts.length === 3) {
+            kickoffDate = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          }
+        }
+        if (rawTime && /^\d{1,2}:\d{2}$/.test(rawTime)) {
+          kickoffTime = rawTime.length === 4 ? "0" + rawTime : rawTime;
+        }
+
+        const kickoff = kickoffDate && kickoffTime ? `${kickoffDate} ${kickoffTime}` : kickoffDate || "";
+
+        // Status mapping
+        const rawStatus = getAttr(m, "status") || "";
+        let status = rawStatus;
+        if (rawStatus.toLowerCase() === "not started" || rawStatus === "NS") status = "Not Started";
+        else if (rawStatus === "FT" || rawStatus.toLowerCase() === "finished") status = "Full-Time";
+        else if (rawStatus === "HT") status = "Half-Time";
+        else if (rawStatus === "AET") status = "AET";
+        else if (rawStatus === "PEN" || rawStatus.toLowerCase().includes("penalty")) status = "Penalties";
+
+        const venue = getAttr(m, "venue") || undefined;
+
+        return {
+          id,
+          home: { id: homeId || undefined, name: homeName },
+          away: { id: awayId || undefined, name: awayName },
+          score: homeScore !== null && awayScore !== null ? { home: homeScore, away: awayScore } : null,
+          penalties,
+          kickoff,
+          kickoffDate,
+          kickoffTime,
+          status,
+          venue,
+        };
+      };
+
+      // Parse standings
+      interface StandingTeam {
+        position: number;
+        name: string;
+        teamId?: string;
+        played: number;
+        won: number;
+        drawn: number;
+        lost: number;
+        goalsFor: number;
+        goalsAgainst: number;
+        goalDifference: number;
+        points: number;
+        recentForm?: string;
+        description?: string;
+      }
+
+      const standings: StandingTeam[] = [];
+      
+      if (standingsData) {
+        const standingsRoot = standingsData?.standings || standingsData;
+        const tournaments = Array.isArray(standingsRoot?.tournament) 
+          ? standingsRoot.tournament 
+          : standingsRoot?.tournament 
+            ? [standingsRoot.tournament] 
+            : [];
+
+        for (const tournament of tournaments) {
+          const teams = Array.isArray(tournament?.team) ? tournament.team : tournament?.team ? [tournament.team] : [];
+          
+          for (const team of teams) {
+            const position = parseInt(getAttr(team, "position") || "0", 10);
+            const name = getAttr(team, "name") || "Unknown";
+            const teamId = getAttr(team, "id") || undefined;
+            const recentForm = getAttr(team, "recent_form") || undefined;
+            
+            const overall = team.overall || {};
+            const total = team.total || {};
+            const description = team.description || {};
+            
+            const played = parseInt(getAttr(overall, "gp") || "0", 10);
+            const won = parseInt(getAttr(overall, "w") || "0", 10);
+            const drawn = parseInt(getAttr(overall, "d") || "0", 10);
+            const lost = parseInt(getAttr(overall, "l") || "0", 10);
+            const goalsFor = parseInt(getAttr(overall, "gs") || "0", 10);
+            const goalsAgainst = parseInt(getAttr(overall, "ga") || "0", 10);
+            const goalDifference = parseInt(getAttr(total, "gd") || "0", 10);
+            const points = parseInt(getAttr(total, "p") || "0", 10);
+            const descValue = getAttr(description, "value") || undefined;
+
+            standings.push({
+              position,
+              name,
+              teamId,
+              played,
+              won,
+              drawn,
+              lost,
+              goalsFor,
+              goalsAgainst,
+              goalDifference,
+              points,
+              recentForm,
+              description: descValue,
+            });
+          }
+        }
+
+        // Sort by position
+        standings.sort((a, b) => a.position - b.position);
+      }
+
+      // Parse fixtures into matchdays and knockout rounds
+      interface Matchday {
+        matchday: number;
+        matches: EuropeMatch[];
+      }
+
+      interface KnockoutRound {
+        name: string;
+        order: number;
+        matches: EuropeMatch[];
+        status: "completed" | "in_progress" | "upcoming";
+      }
+
+      const matchdays: Matchday[] = [];
+      const knockoutRoundsMap = new Map<string, EuropeMatch[]>();
+      const seenMatchIds = new Set<string>();
+
+      if (fixturesData) {
+        const results = fixturesData?.results || fixturesData;
+        const tournaments = Array.isArray(results?.tournament)
+          ? results.tournament
+          : results?.tournament
+            ? [results.tournament]
+            : [];
+
+        for (const tournament of tournaments) {
+          const stages = Array.isArray(tournament?.stage)
+            ? tournament.stage
+            : tournament?.stage
+              ? [tournament.stage]
+              : [];
+
+          for (const stage of stages) {
+            const stageName = (getAttr(stage, "name") || "").toLowerCase();
+            const stageRound = (getAttr(stage, "round") || "").toLowerCase();
+
+            // Check if this is League Phase (has weeks/matchdays)
+            const isLeaguePhase = stageName.includes("league phase") || 
+                                  stageName.includes("group") || 
+                                  stageRound.includes("group");
+
+            if (isLeaguePhase) {
+              // Parse weeks/matchdays
+              const weeks = Array.isArray(stage?.week)
+                ? stage.week
+                : stage?.week
+                  ? [stage.week]
+                  : [];
+
+              for (const week of weeks) {
+                const weekNumber = parseInt(getAttr(week, "number") || "0", 10);
+                if (weekNumber <= 0) continue;
+
+                const matches = Array.isArray(week?.match)
+                  ? week.match
+                  : week?.match
+                    ? [week.match]
+                    : [];
+
+                const parsedMatches: EuropeMatch[] = [];
+                for (const m of matches) {
+                  const parsed = parseMatch(m);
+                  if (parsed && !seenMatchIds.has(parsed.id)) {
+                    seenMatchIds.add(parsed.id);
+                    parsedMatches.push(parsed);
+                  }
+                }
+
+                if (parsedMatches.length > 0) {
+                  // Sort matches by kickoff
+                  parsedMatches.sort((a, b) => (a.kickoff || "").localeCompare(b.kickoff || ""));
+
+                  const existing = matchdays.find(md => md.matchday === weekNumber);
+                  if (existing) {
+                    existing.matches.push(...parsedMatches);
+                  } else {
+                    matchdays.push({ matchday: weekNumber, matches: parsedMatches });
+                  }
+                }
+              }
+            } else if (!stageName.includes("qualifying")) {
+              // Knockout stage - map to canonical round names
+              const roundKey = stageName || stageRound;
+              const roundMapping = UCL_KNOCKOUT_ROUNDS[roundKey];
+
+              if (roundMapping) {
+                const matches = Array.isArray(stage?.match)
+                  ? stage.match
+                  : stage?.match
+                    ? [stage.match]
+                    : [];
+
+                // Also check for weeks in knockout (two-legged ties)
+                const weeks = Array.isArray(stage?.week)
+                  ? stage.week
+                  : stage?.week
+                    ? [stage.week]
+                    : [];
+
+                const allMatches: any[] = [...matches];
+                for (const week of weeks) {
+                  const weekMatches = Array.isArray(week?.match)
+                    ? week.match
+                    : week?.match
+                      ? [week.match]
+                      : [];
+                  allMatches.push(...weekMatches);
+                }
+
+                for (const m of allMatches) {
+                  const parsed = parseMatch(m);
+                  if (parsed && !seenMatchIds.has(parsed.id)) {
+                    seenMatchIds.add(parsed.id);
+                    const existing = knockoutRoundsMap.get(roundMapping.name) || [];
+                    existing.push(parsed);
+                    knockoutRoundsMap.set(roundMapping.name, existing);
+                  }
+                }
+              } else {
+                console.log(`[Europe] Unknown knockout stage: "${stageName}" / "${stageRound}" for ${slug}`);
+              }
+            }
+          }
+        }
+      }
+
+      // Sort matchdays
+      matchdays.sort((a, b) => a.matchday - b.matchday);
+
+      // Build knockout rounds array with status
+      const knockoutRounds: KnockoutRound[] = [];
+      for (const [name, matches] of knockoutRoundsMap.entries()) {
+        const mapping = Object.values(UCL_KNOCKOUT_ROUNDS).find(m => m.name === name);
+        if (!mapping) continue;
+
+        // Sort matches by kickoff
+        matches.sort((a, b) => (a.kickoff || "").localeCompare(b.kickoff || ""));
+
+        // Determine status
+        const allCompleted = matches.every(m => 
+          m.status === "Full-Time" || m.status === "AET" || m.status === "Penalties"
+        );
+        const anyLive = matches.some(m => 
+          m.status !== "Not Started" && m.status !== "Full-Time" && 
+          m.status !== "AET" && m.status !== "Penalties"
+        );
+
+        let status: "completed" | "in_progress" | "upcoming" = "upcoming";
+        if (allCompleted && matches.length > 0) status = "completed";
+        else if (anyLive) status = "in_progress";
+
+        knockoutRounds.push({
+          name,
+          order: mapping.order,
+          matches,
+          status,
+        });
+      }
+
+      // Sort knockout rounds by order
+      knockoutRounds.sort((a, b) => a.order - b.order);
+
+      // Build response
+      const response = {
+        competition: {
+          slug,
+          name: competition.name,
+          country: "Europe",
+          goalserveCompetitionId: competition.id,
+        },
+        season,
+        phases: [
+          {
+            type: "league_phase" as const,
+            name: "League Phase",
+            standings,
+            matchdays,
+          },
+          {
+            type: "knockout" as const,
+            name: "Knockout Stage",
+            rounds: knockoutRounds,
+          },
+        ],
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching Europe competition:", error);
+      res.status(500).json({ error: "Failed to fetch Europe competition" });
+    }
+  });
+
   // ========== FPL AVAILABILITY (Team Hub Injuries) ==========
   app.get("/api/teams/:teamSlug/availability", async (req, res) => {
     try {

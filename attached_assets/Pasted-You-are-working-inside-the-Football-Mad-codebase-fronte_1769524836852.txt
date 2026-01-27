@@ -1,0 +1,105 @@
+You are working inside the Football Mad codebase (frontend + backend) that currently supports “Tables > Cups” with Goalserve soccerfixtures feeds and round normalizers.
+
+We are now implementing the “Tables > Europe” tab for:
+- Champions League (UCL)
+- Europa League (UEL)
+- Conference League (UECL)
+
+IMPORTANT: Do this ONE competition at a time. Start with Champions League only.
+Also IMPORTANT: UCL uses the NEW FORMAT (league phase), so the frontend UI must change vs the old group-stage layout.
+
+Use Goalserve feeds. Prefer JSON output by adding ?json=1 where supported.
+
+Reference endpoints patterns:
+- Mapping list: /soccerfixtures/data/mapping
+- Fixtures by league: /soccerfixtures/leagueid/{ID}
+- Standings: /standings/{leagueId}.xml (if json is supported, use ?json=1; if not, parse XML server-side)
+(These are consistent with the provided Goalserve endpoints sheet.)
+
+PHASE 1 (Backend) — Champions League support
+1) Add competition IDs:
+   - Locate UCL / UEL / UECL IDs using the mapping feed and store them in config. (Do NOT hardcode guesses; fetch mapping and search for “Champions League”, “Europa League”, “Europa Conference League”.)
+   - Add these IDs to the backend competition registry similarly to cups.
+
+2) Create a Europe API endpoint:
+   - New route: GET /api/europe/:slug?season=YYYY%2FYYYY (or same season selector format used by cups)
+   - Response should include:
+     {
+       competition: { slug, name, country: "Europe", goalserveCompetitionId },
+       season: "2025/2026",
+       phases: [
+         {
+           type: "league_phase",
+           name: "League Phase",
+           standings: [...],
+           matchdays: [
+             { matchday: 1, matches: [...] },
+             ...
+           ]
+         },
+         {
+           type: "knockout",
+           rounds: [
+             { name: "Knockout Play-offs", matches: [...] },
+             { name: "Round of 16", matches: [...] },
+             { name: "Quarter-finals", matches: [...] },
+             { name: "Semi-finals", matches: [...] },
+             { name: "Final", matches: [...] }
+           ]
+         }
+       ]
+     }
+
+3) Parsing rules (UCL):
+   - UCL “League Phase”:
+     - Standings: fetch from Goalserve standings endpoint for that competition ID.
+     - Fixtures: from soccerfixtures/leagueid/{ID}; group by matchday (often “Round”, “Matchday”, or “stage/round” attributes — inspect the feed and implement robust parsing).
+   - Knockout:
+     - Detect and group by stage names from Goalserve (“Knockout Round Play-offs”, “Round of 16”, etc. — implement a mapping table if Goalserve labels differ).
+   - Reuse existing match parsing logic (score, ft_score/et_score/pen_score, status chips like FT/AET/Penalties) — this must work exactly like cups.
+
+4) Sanity guards:
+   - Avoid duplicate matches across phases.
+   - Sort matchdays numerically; sort matches by date/time.
+   - If standings are missing, still return fixtures (and vice-versa), but include empty arrays.
+   - Log useful debug info for stage/round label discovery (only in dev).
+
+PHASE 2 (Frontend) — New Europe UI (UCL only)
+1) Add “Europe” tab next to “Leagues” and “Cups” in Tables page.
+2) Under “Europe” show sub-tabs:
+   - Champions League (only for now; keep config ready for UEL/UECL later but hidden behind a feature flag or TODO)
+3) UCL page layout:
+   - Section A: “League Phase”
+     - Left/Top: Standings table (rank, team, played, W/D/L, GF, GA, GD, points)
+     - Right/Below: Matchday selector (Matchday 1..N) + list of matches for selected matchday
+   - Section B: “Knockout”
+     - Simple MVP: collapsible round cards (like cups) for each knockout round, listing matches
+     - (Do NOT attempt a full bracket visual yet; just clean round cards)
+
+4) UX requirements:
+   - Must be responsive (mobile friendly): standings scrolls horizontally if needed.
+   - Match lists reuse existing match row UI (home/away, score, penalty brackets).
+   - Keep the existing season dropdown working.
+
+PHASE 3 (Follow-ups AFTER UCL works)
+- Add Europa League and Conference League using the same Europe UI and backend structures.
+- If their formats mirror the league-phase system, reuse; otherwise adjust.
+
+DELIVERABLES
+- Code changes in backend + frontend.
+- Update docs (BUILD_LOG.md / DECISIONS.md / PROMPTS.md) with:
+  - competition IDs discovered
+  - parsing assumptions about labels (matchday/stage)
+  - any mapping tables added
+- Provide a quick checklist for manual testing:
+  - League phase standings render
+  - Matchday switching works
+  - Knockout rounds show when present
+  - Penalties/AET chips still correct
+
+START NOW:
+- Step 1: Identify the UCL ID from mapping feed and add it to config.
+- Step 2: Build backend endpoint returning league_phase + knockout structure.
+- Step 3: Build frontend Europe tab and UCL layout.
+
+Do not change existing Cups behavior.
