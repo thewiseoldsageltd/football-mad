@@ -1,16 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 interface EuropeMatch {
   id: string;
@@ -115,9 +109,29 @@ function getStatusBadgeVariant(status: string): "default" | "secondary" | "outli
   }
 }
 
-function MatchRow({ match }: { match: EuropeMatch }) {
+interface MatchRowProps {
+  match: EuropeMatch;
+  showResults?: boolean; // If true, prioritize showing score; if false, show kickoff time
+}
+
+function formatStatusLabel(status: string): string {
+  // Map raw status to user-friendly label
+  if (status === "Finished" || status === "FT") return "Full-Time";
+  if (status === "After Extra Time" || status === "AET") return "AET";
+  if (status === "After Pen." || status === "Penalties") return "Penalties";
+  if (status === "HT" || status === "Half-Time") return "Half-Time";
+  if (status === "Not Started" || status === "NS") return "Scheduled";
+  return status;
+}
+
+function MatchRow({ match, showResults = true }: MatchRowProps) {
   const hasScore = match.score !== null && match.score !== undefined;
   const hasPenalties = match.penalties !== null && match.penalties !== undefined;
+  const statusLabel = formatStatusLabel(match.status);
+  
+  // Determine whether to display scores or kickoff time
+  // If showResults is true and we have scores, show them; otherwise show kickoff
+  const displayScore = showResults && hasScore;
   
   return (
     <div 
@@ -129,34 +143,41 @@ function MatchRow({ match }: { match: EuropeMatch }) {
           <span className="font-medium truncate" data-testid={`text-home-${match.id}`}>
             {match.home.name}
           </span>
+          {displayScore && (
+            <span className="font-bold" data-testid={`text-home-score-${match.id}`}>
+              {match.score!.home}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({match.penalties!.home})</span>}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 mt-1">
           <span className="font-medium truncate" data-testid={`text-away-${match.id}`}>
             {match.away.name}
           </span>
+          {displayScore && (
+            <span className="font-bold" data-testid={`text-away-score-${match.id}`}>
+              {match.score!.away}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({match.penalties!.away})</span>}
+            </span>
+          )}
         </div>
       </div>
       
       <div className="flex flex-col items-end gap-1 ml-4">
-        {hasScore ? (
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-lg" data-testid={`text-score-${match.id}`}>
-              {match.score!.home} - {match.score!.away}
-            </span>
-            {hasPenalties && (
-              <span className="text-sm text-muted-foreground" data-testid={`text-penalties-${match.id}`}>
-                ({match.penalties!.home}-{match.penalties!.away} pen)
-              </span>
-            )}
-          </div>
+        {displayScore ? (
+          <Badge variant={getStatusBadgeVariant(statusLabel)} className="text-xs" data-testid={`badge-status-${match.id}`}>
+            {statusLabel}
+          </Badge>
         ) : (
-          <span className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
-            {formatKickoff(match.kickoffDate, match.kickoffTime)}
-          </span>
+          <>
+            <span className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
+              {formatKickoff(match.kickoffDate, match.kickoffTime)}
+            </span>
+            <Badge variant="outline" className="text-xs" data-testid={`badge-status-${match.id}`}>
+              {statusLabel}
+            </Badge>
+          </>
         )}
-        <Badge variant={getStatusBadgeVariant(match.status)} className="text-xs">
-          {match.status}
-        </Badge>
       </div>
     </div>
   );
@@ -263,95 +284,102 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
   );
 }
 
-function MatchdaySelector({ 
-  matchdays, 
-  selectedMatchday, 
-  onSelect 
+// Stage-aware matchday/round selection options
+type StageOption = 
+  | { key: string; label: string; type: "league"; md: number }
+  | { key: string; label: string; type: "ko"; round: string; isFinalPill?: boolean };
+
+const STAGE_OPTIONS: StageOption[] = [
+  { key: "MD1", label: "MD 1", type: "league", md: 1 },
+  { key: "MD2", label: "MD 2", type: "league", md: 2 },
+  { key: "MD3", label: "MD 3", type: "league", md: 3 },
+  { key: "MD4", label: "MD 4", type: "league", md: 4 },
+  { key: "MD5", label: "MD 5", type: "league", md: 5 },
+  { key: "MD6", label: "MD 6", type: "league", md: 6 },
+  { key: "MD7", label: "MD 7", type: "league", md: 7 },
+  { key: "MD8", label: "MD 8", type: "league", md: 8 },
+  { key: "PO", label: "PO", type: "ko", round: "Knockout Play-offs" },
+  { key: "L16", label: "L16", type: "ko", round: "Round of 16" },
+  { key: "QF", label: "QF", type: "ko", round: "Quarter-finals" },
+  { key: "SF", label: "SF", type: "ko", round: "Semi-finals" },
+  { key: "F", label: "Final", type: "ko", round: "Final", isFinalPill: true },
+];
+
+function computeCurrentMatchday(matchdays: Matchday[]): number {
+  // Find highest matchday with at least one match that has started (has score or non "Not Started" status)
+  let current = 1;
+  for (const md of matchdays) {
+    const hasStarted = md.matches.some(m => 
+      m.score !== null && m.score !== undefined || 
+      (m.status && m.status !== "Not Started")
+    );
+    if (hasStarted) {
+      current = Math.max(current, md.matchday);
+    }
+  }
+  return current;
+}
+
+function StageSelector({ 
+  selectedStage, 
+  onSelect,
+  knockoutRounds
 }: { 
-  matchdays: Matchday[];
-  selectedMatchday: number;
-  onSelect: (md: number) => void;
+  selectedStage: string;
+  onSelect: (stage: string) => void;
+  knockoutRounds: KnockoutRound[];
 }) {
+  // Group: first 12 items (MD1-8 + PO, L16, QF, SF) in grid, Final spans full row
+  const gridOptions = STAGE_OPTIONS.filter(opt => !("isFinalPill" in opt && opt.isFinalPill));
+  const finalOption = STAGE_OPTIONS.find(opt => "isFinalPill" in opt && opt.isFinalPill);
+
+  const isKnockoutAvailable = (roundName: string) => {
+    return knockoutRounds.some(r => r.name === roundName);
+  };
+
   return (
-    <div className="flex gap-1 flex-wrap" data-testid="matchday-selector">
-      {matchdays.map((md) => (
+    <div className="space-y-2" data-testid="stage-selector">
+      <div className="grid grid-cols-4 sm:grid-cols-6 gap-1">
+        {gridOptions.map((opt) => {
+          const isKO = opt.type === "ko";
+          const disabled = isKO && !isKnockoutAvailable((opt as { round: string }).round);
+          
+          return (
+            <Button
+              key={opt.key}
+              onClick={() => onSelect(opt.key)}
+              variant={selectedStage === opt.key ? "default" : "secondary"}
+              size="sm"
+              disabled={disabled}
+              className={cn(disabled && "opacity-50")}
+              data-testid={`button-stage-${opt.key}`}
+            >
+              {opt.label}
+            </Button>
+          );
+        })}
+      </div>
+      {finalOption && (
         <Button
-          key={md.matchday}
-          onClick={() => onSelect(md.matchday)}
-          variant={selectedMatchday === md.matchday ? "default" : "secondary"}
+          onClick={() => onSelect(finalOption.key)}
+          variant={selectedStage === finalOption.key ? "default" : "secondary"}
           size="sm"
-          data-testid={`button-matchday-${md.matchday}`}
+          disabled={!isKnockoutAvailable((finalOption as { round: string }).round)}
+          className={cn(
+            "w-full",
+            !isKnockoutAvailable((finalOption as { round: string }).round) && "opacity-50"
+          )}
+          data-testid="button-stage-Final"
         >
-          MD {md.matchday}
+          {finalOption.label}
         </Button>
-      ))}
+      )}
     </div>
   );
 }
 
-function KnockoutRoundCard({ round }: { round: KnockoutRound }) {
-  const [isOpen, setIsOpen] = useState(round.status !== "completed");
-  
-  const statusLabel = round.status === "completed" 
-    ? "Completed" 
-    : round.status === "in_progress" 
-      ? "In Progress" 
-      : "Upcoming";
-  
-  const statusVariant = round.status === "completed" 
-    ? "secondary" 
-    : round.status === "in_progress" 
-      ? "destructive" 
-      : "outline";
-
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Card>
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            className="w-full p-4 h-auto justify-between gap-4 hover-elevate rounded-md"
-            data-testid={`button-round-${round.order}`}
-          >
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="font-semibold" data-testid={`text-round-name-${round.order}`}>
-                {round.name}
-              </span>
-              <Badge variant={statusVariant} className="text-xs">
-                {statusLabel}
-              </Badge>
-              <span className="text-sm text-muted-foreground">
-                {round.matches.length} {round.matches.length === 1 ? "match" : "matches"}
-              </span>
-            </div>
-            {isOpen ? (
-              <ChevronUp className="h-5 w-5 text-muted-foreground shrink-0" />
-            ) : (
-              <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
-            )}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CardContent className="p-0 border-t">
-            {round.matches.length === 0 ? (
-              <div className="text-center text-muted-foreground py-6">
-                No matches scheduled yet
-              </div>
-            ) : (
-              round.matches.map((match) => (
-                <MatchRow key={match.id} match={match} />
-              ))
-            )}
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
-  );
-}
-
 export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps) {
-  const [view, setView] = useState<"league" | "knockout">("league");
-  const [selectedMatchday, setSelectedMatchday] = useState(1);
+  const [selectedStage, setSelectedStage] = useState("MD1");
   
   const europeUrl = `/api/europe/${competitionSlug}?season=${encodeURIComponent(season)}`;
   
@@ -384,87 +412,90 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
 
   const leaguePhase = data.phases.find((p): p is LeaguePhase => p.type === "league_phase");
   const knockoutPhase = data.phases.find((p): p is KnockoutPhase => p.type === "knockout");
+  const knockoutRounds = knockoutPhase?.rounds ?? [];
   
-  const currentMatchday = leaguePhase?.matchdays.find(md => md.matchday === selectedMatchday);
-  const hasKnockoutRounds = knockoutPhase && knockoutPhase.rounds.length > 0;
+  // Compute current matchday (highest MD with started matches)
+  const currentMD = leaguePhase ? computeCurrentMatchday(leaguePhase.matchdays) : 1;
+  
+  // Parse selected stage
+  const selectedOption = STAGE_OPTIONS.find(opt => opt.key === selectedStage);
+  const isLeagueStage = selectedOption?.type === "league";
+  const selectedMdNumber = isLeagueStage ? (selectedOption as { md: number }).md : 0;
+  const selectedKORound = !isLeagueStage ? (selectedOption as { round: string }).round : "";
+  
+  // Determine if selected stage is past (for showing results)
+  const isPastMatchday = isLeagueStage && selectedMdNumber < currentMD;
+  
+  // Get matches to display
+  let displayMatches: EuropeMatch[] = [];
+  let displayTitle = "";
+  
+  if (isLeagueStage && leaguePhase) {
+    const md = leaguePhase.matchdays.find(m => m.matchday === selectedMdNumber);
+    displayMatches = md?.matches ?? [];
+    displayTitle = `Matchday ${selectedMdNumber}`;
+  } else if (!isLeagueStage && knockoutPhase) {
+    const round = knockoutRounds.find(r => r.name === selectedKORound);
+    displayMatches = round?.matches ?? [];
+    displayTitle = selectedKORound;
+  }
 
   return (
     <div className="space-y-4">
-      <Tabs value={view} onValueChange={(v) => setView(v as "league" | "knockout")} className="w-auto">
-        <TabsList className="h-auto gap-1" data-testid="tabs-europe-view">
-          <TabsTrigger value="league" data-testid="tab-league-phase">
-            League Phase
-          </TabsTrigger>
-          <TabsTrigger 
-            value="knockout" 
-            data-testid="tab-knockout"
-            disabled={!hasKnockoutRounds}
-          >
-            Knockout Stage
-            {!hasKnockoutRounds && (
-              <span className="ml-1 text-xs text-muted-foreground">(TBA)</span>
+      <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-semibold mb-4">Standings</h3>
+            {leaguePhase ? (
+              <StandingsTable standings={leaguePhase.standings} />
+            ) : (
+              <div className="text-center text-muted-foreground py-8">
+                No standings data available
+              </div>
             )}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      {view === "league" && leaguePhase && (
-        <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
+          </CardContent>
+        </Card>
+        
+        <div className="space-y-4">
           <Card>
             <CardContent className="p-4">
-              <h3 className="font-semibold mb-4">Standings</h3>
-              <StandingsTable standings={leaguePhase.standings} />
+              <h3 className="font-semibold mb-4">Fixtures</h3>
+              <StageSelector 
+                selectedStage={selectedStage}
+                onSelect={setSelectedStage}
+                knockoutRounds={knockoutRounds}
+              />
             </CardContent>
           </Card>
           
-          <div className="space-y-4">
-            <Card>
-              <CardContent className="p-4">
-                <h3 className="font-semibold mb-4">Matchdays</h3>
-                <MatchdaySelector 
-                  matchdays={leaguePhase.matchdays}
-                  selectedMatchday={selectedMatchday}
-                  onSelect={setSelectedMatchday}
-                />
-              </CardContent>
-            </Card>
-            
-            {currentMatchday && (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="p-4 border-b">
-                    <h4 className="font-semibold">Matchday {selectedMatchday}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {currentMatchday.matches.length} matches
-                    </p>
+          <Card>
+            <CardContent className="p-0">
+              <div className="p-4 border-b">
+                <h4 className="font-semibold" data-testid="text-display-title">{displayTitle}</h4>
+                <p className="text-sm text-muted-foreground">
+                  {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
+                  {isPastMatchday && " (Results)"}
+                </p>
+              </div>
+              <div className="max-h-[500px] overflow-y-auto">
+                {displayMatches.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
+                    No fixtures yet
                   </div>
-                  <div className="max-h-[500px] overflow-y-auto">
-                    {currentMatchday.matches.map((match) => (
-                      <MatchRow key={match.id} match={match} />
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                ) : (
+                  displayMatches.map((match) => (
+                    <MatchRow 
+                      key={match.id} 
+                      match={match} 
+                      showResults={isPastMatchday || !isLeagueStage}
+                    />
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      )}
-
-      {view === "knockout" && knockoutPhase && (
-        <div className="space-y-4">
-          {knockoutPhase.rounds.length === 0 ? (
-            <Card>
-              <CardContent className="p-6 text-center text-muted-foreground">
-                Knockout stage matches will be displayed here once the league phase is complete.
-              </CardContent>
-            </Card>
-          ) : (
-            knockoutPhase.rounds.map((round) => (
-              <KnockoutRoundCard key={round.order} round={round} />
-            ))
-          )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,73 @@
+You are working in the Football Mad Replit project.
+
+Goal: Improve Tables > Europe > Champions League matchday UX:
+1) Extend the Matchday selector beyond MD1–MD8 to include knockout stages:
+   - MD1–MD8
+   - PO (Knockout Play-offs)
+   - L16 (Round of 16)
+   - QF (Quarter-finals)
+   - SF (Semi-finals)
+   - Final (one long pill that spans the full row width on desktop)
+   Keep the “rows of 6” layout for desktop.
+
+2) In the fixture list on the right:
+   - For past matchdays (anything before the current matchday), show RESULTS (scores + status pill like Full-Time / AET / Penalties).
+   - For the current/upcoming matchday, keep date + kickoff time as it is now.
+   - If a past match is missing scores, fall back to showing date/time.
+
+Implementation details (do this without adding regression video testing):
+A) Identify the Europe UI component (likely something like `client/src/components/tables/europe-progress.tsx` or similar) that renders:
+   - the Matchday selector buttons
+   - the right-hand “Matchday X” fixture list
+
+B) Add stage-aware matchday options:
+   - Introduce an array like:
+     [
+       { key: "MD1", label: "MD 1", type: "league", md: 1 },
+       ...
+       { key: "MD8", label: "MD 8", type: "league", md: 8 },
+       { key: "PO",  label: "PO",   type: "ko",  round: "Knockout Play-offs" },
+       { key: "L16", label: "L16",  type: "ko",  round: "Round of 16" },
+       { key: "QF",  label: "QF",   type: "ko",  round: "Quarter-finals" },
+       { key: "SF",  label: "SF",   type: "ko",  round: "Semi-finals" },
+       { key: "F",   label: "Final",type: "ko",  round: "Final", isFinalPill: true }
+     ]
+   - Render them in the existing grid (6 columns on desktop).
+   - For the Final button, make it span all 6 columns (e.g. `col-span-6`) and render label “Final”.
+
+C) Wire selector state:
+   - When a league MD is selected: show fixtures for that matchday from the league-phase matchday data (same as today).
+   - When a KO option is selected: show fixtures from the knockout data for that round (you already parse and expose knockout rounds from the backend endpoint).
+   - If a KO round has multiple legs/dates, just list all matches in that round in the same right-hand list.
+
+D) Determine “current matchday”:
+   - Compute `currentMatchday` as the highest MD that has at least one match with status NOT “Not Started” (or has a FT/AET/PEN status / a score present).
+   - If none started, currentMatchday = 1.
+
+E) Past MD results display:
+   - In the right-hand match list item component:
+     - If `selected` is a league MD and `selectedMd < currentMatchday`, render:
+       - Home team + away team (as now)
+       - Scoreline: `homeScore - awayScore` (use FT score; if penalties present show brackets like you implemented in cups: `2 (4)` / `2 (3)` and status pill “Penalties”)
+       - Status pill: Full-Time / AET / Penalties / Half-Time where applicable (reuse existing status-to-label mapping from cups if possible).
+     - Else (selectedMd >= currentMatchday): keep date + kickoff time display.
+     - If score fields are missing, fall back to date/time.
+
+F) Keep styling consistent:
+   - Reuse existing shadcn Button styling used for the current MatchdaySelector.
+   - Don’t change the overall layout: left standings, right matchday selector + match list.
+
+G) Add a tiny sanity check:
+   - Ensure selecting PO/L16/QF/SF/Final does not break when knockout data is empty (show “No fixtures yet” message).
+
+H) Update docs (short):
+   - Add a note to docs/BUILD_LOG.md and docs/DECISIONS.md describing:
+     - added KO stage pills to the matchday selector
+     - past matchdays now show results
+     - Final pill spans full row
+
+After changes, quickly manual test:
+- MD1 shows results (if started) or date/time if not
+- MD8 shows upcoming fixtures with date/time
+- PO/L16/QF/SF/Final tabs render and don’t crash even if empty
+- Past MDs show scores + status pill when available
