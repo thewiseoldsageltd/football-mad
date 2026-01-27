@@ -197,16 +197,24 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
       </div>
       
       {/* COL 3 — Status pill + date/time for upcoming */}
-      <div className="flex flex-col items-end gap-1 text-right">
-        <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
-          {statusLabel}
-        </Badge>
-        {showUpcoming && (
-          <div className="text-xs text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
-            {formatKickoff(match.kickoffDate, match.kickoffTime)}
+      {showUpcoming ? (
+        <div className="flex justify-end">
+          <div className="inline-flex flex-col items-center gap-1">
+            <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
+              {statusLabel}
+            </Badge>
+            <div className="text-xs text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
+              {formatKickoff(match.kickoffDate, match.kickoffTime)}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex items-center">
+          <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
+            {statusLabel}
+          </Badge>
+        </div>
+      )}
     </div>
   );
 }

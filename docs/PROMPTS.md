@@ -8533,3 +8533,50 @@ Acceptance:
 
 ---
 
+Replit AI — tiny UI tweak: centre the “Scheduled” pill over the date/time in the right-hand Fixtures list (UCL Europe tab)
+
+Context:
+- Tables > Europe > Champions League
+- In the right-hand “Fixtures” list, for upcoming matches we render:
+  - a “Scheduled” pill
+  - date + kick-off time beneath (e.g. “28 Jan 20:00”)
+- This is now right-aligned correctly, but the pill should be visually centred above the date/time (not flush-right).
+
+Goal:
+- Keep the whole upcoming “meta” block anchored to the right edge of the row.
+- Within that block, centre the pill horizontally relative to the date/time width.
+
+Where:
+- client/src/components/tables/europe-progress.tsx
+  - In the upcoming fixture branch (where we show Scheduled + date/time), update the right-side container.
+
+Change:
+1) Keep the outer wrapper right-aligned in the row (do NOT change overall row layout):
+   - It should still sit at the far right of the fixture row.
+
+2) Inside that wrapper, make an inner container that:
+   - sizes to its content (shrink-to-fit)
+   - centres children (pill and date/time) within that content width
+
+Example structure:
+
+<div className="flex justify-end">
+  <div className="inline-flex flex-col items-center gap-1 text-right">
+    <StatusPill ... />
+    <div className="text-xs text-muted-foreground">
+      {formattedDateTime}
+    </div>
+  </div>
+</div>
+
+Notes:
+- The key is the outer `flex justify-end` (anchors to right),
+  plus inner `inline-flex ... items-center` (centres pill over date/time).
+- Do not affect finished matches (scores + Full-Time/AET layout stays exactly as-is).
+
+Acceptance:
+- Upcoming fixtures: pill appears centred over the date/time while the whole block remains right-aligned in the row.
+- Finished fixtures unchanged.
+
+---
+
