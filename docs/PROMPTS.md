@@ -8354,3 +8354,42 @@ Scores form a clean vertical line aligned with the status pills across all fixtu
 
 ---
 
+GOAL
+In the Champions League “Fixtures” list (Tables > Europe), right-align the score numbers so they sit in a neat vertical line close to the status pill (Full-Time/AET/Penalties/etc). Keep everything else as-is.
+
+WHERE
+client/src/components/tables/europe-progress.tsx
+Look for the fixture list row component (likely MatchRow) and the section rendering:
+- home/away team names
+- the score numbers (currently rendering as separate stacked numbers)
+- the status pill on the far right
+
+WHAT TO CHANGE
+1) Restructure the row layout into 3 clear columns:
+   - Left: team names (stacked)
+   - Middle: score column (stacked), RIGHT-ALIGNED, fixed/min width so all scores line up
+   - Right: status pill (and date/time if present)
+
+2) The score column should:
+   - use text-right
+   - have a fixed width (e.g. w-6 / w-8 / min-w-[24px]) so single digits don’t wobble
+   - be positioned immediately to the left of the status pill with a small gap (e.g. gap-3)
+   - remain vertically centered relative to the team names block
+
+3) Implementation suggestion (choose one):
+   A) Use a grid wrapper for the right-hand side:
+      grid grid-cols-[1fr_auto_auto] items-center gap-3
+      where col2 is scores (text-right w-8) and col3 is pill.
+   B) Or use flex:
+      a parent flex items-center justify-between
+      with a right-side flex items-center gap-3 containing:
+        - score block (text-right w-8)
+        - status pill
+
+4) Ensure the score column only renders when scores exist, but DOES NOT break alignment:
+   - If score missing, render “–” or keep the space with an empty placeholder in the score column so the pill column stays aligned.
+
+DONE WHEN
+- On desktop and mobile, the score numbers form a straight vertical line down the list.
+- The status pill column is aligned consistently.
+- No other layout regressions in the EuropeProgress view.

@@ -155,13 +155,16 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
   const isFinished = matchCompleted;
   const showScoreFallback = showResults && isFinished && !hasScore;
   
+  // Determine what to show in score column
+  const showUpcoming = !displayScore && !showScoreFallback;
+  
   return (
     <div 
-      className="flex items-center justify-between py-3 px-4 border-b last:border-b-0 hover-elevate"
+      className="grid grid-cols-[1fr_auto_auto] items-center gap-3 py-3 px-4 border-b last:border-b-0 hover-elevate"
       data-testid={`match-row-${match.id}`}
     >
-      {/* LEFT — Team names stacked */}
-      <div className="flex-1 min-w-0">
+      {/* COL 1 — Team names stacked */}
+      <div className="min-w-0">
         <div className="text-sm font-normal truncate" data-testid={`text-home-${match.id}`}>
           {match.home.name}
         </div>
@@ -170,47 +173,38 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
         </div>
       </div>
       
-      {/* RIGHT — Score column + Status pill */}
-      <div className="flex items-center gap-3 ml-4">
-        {/* Score column with fixed width for alignment */}
-        <div className="flex items-center justify-end min-w-[64px] text-right">
-          {displayScore && (
-            <div className="flex flex-col items-end leading-tight font-semibold tabular-nums">
-              <span data-testid={`text-home-score-${match.id}`}>
-                {homeScore}
-                {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
-              </span>
-              <span data-testid={`text-away-score-${match.id}`}>
-                {awayScore}
-                {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
-              </span>
+      {/* COL 2 — Score column (fixed width, right-aligned) */}
+      <div className="w-8 text-right font-semibold tabular-nums leading-tight">
+        {displayScore && (
+          <>
+            <div data-testid={`text-home-score-${match.id}`}>
+              {homeScore}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-0.5">({homePen})</span>}
             </div>
-          )}
-          {showScoreFallback && (
-            <div className="flex flex-col items-end leading-tight font-semibold text-muted-foreground tabular-nums">
-              <span data-testid={`text-home-score-${match.id}`}>–</span>
-              <span data-testid={`text-away-score-${match.id}`}>–</span>
+            <div className="mt-1" data-testid={`text-away-score-${match.id}`}>
+              {awayScore}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-0.5">({awayPen})</span>}
             </div>
-          )}
-        </div>
-        
-        {/* Status pill or kickoff time */}
-        <div className="flex flex-col items-end gap-1">
-          {(displayScore || showScoreFallback) ? (
-            <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
-              {statusLabel}
-            </Badge>
-          ) : (
-            <>
-              <span className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
-                {formatKickoff(match.kickoffDate, match.kickoffTime)}
-              </span>
-              <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
-                {statusLabel}
-              </Badge>
-            </>
-          )}
-        </div>
+          </>
+        )}
+        {showScoreFallback && (
+          <>
+            <div className="text-muted-foreground" data-testid={`text-home-score-${match.id}`}>–</div>
+            <div className="text-muted-foreground mt-1" data-testid={`text-away-score-${match.id}`}>–</div>
+          </>
+        )}
+        {showUpcoming && (
+          <div className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
+            {formatKickoff(match.kickoffDate, match.kickoffTime)}
+          </div>
+        )}
+      </div>
+      
+      {/* COL 3 — Status pill */}
+      <div className="flex items-center">
+        <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
+          {statusLabel}
+        </Badge>
       </div>
     </div>
   );
