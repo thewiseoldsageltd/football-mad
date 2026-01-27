@@ -9,6 +9,7 @@ import { EuropeProgress } from "@/components/tables/europe-progress";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
+import { RoundToggle, pickDefaultRound, type RoundInfo } from "@/components/shared/round-toggle";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
 
@@ -57,6 +58,16 @@ interface StandingsApiRow {
   recentForm?: string | null;
 }
 
+interface LeagueMatchInfo {
+  id: string;
+  home: { id?: string; name: string };
+  away: { id?: string; name: string };
+  score: { home: number; away: number } | null;
+  kickoffDate: string | null;
+  kickoffTime: string | null;
+  status: string;
+}
+
 interface StandingsApiResponse {
   snapshot: {
     leagueId: string;
@@ -64,6 +75,9 @@ interface StandingsApiResponse {
     fetchedAt: string;
   };
   table: StandingsApiRow[];
+  rounds?: RoundInfo[];
+  matchesByRound?: Record<string, LeagueMatchInfo[]>;
+  latestRoundKey?: string;
 }
 
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
@@ -84,6 +98,60 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
   };
 }
 
+function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
+  const isCompleted = match.status === "fulltime" || match.status === "FT" || match.status === "finished";
+  const isLive = match.status === "live" || match.status.match(/^\d+$/) || match.status === "HT";
+  
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "";
+    try {
+      const date = new Date(dateStr + "T00:00:00");
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    } catch {
+      return "";
+    }
+  };
+  
+  return (
+    <div 
+      className="flex items-center justify-between px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
+      data-testid={`match-row-${match.id}`}
+    >
+      <div className="flex-1 text-right pr-2 text-sm truncate">
+        {match.home.name}
+      </div>
+      
+      <div className="flex flex-col items-center min-w-[70px] justify-center">
+        {isCompleted || isLive ? (
+          <div className="flex items-center gap-1 text-sm font-semibold">
+            <span>{match.score?.home ?? 0}</span>
+            <span className="text-muted-foreground">-</span>
+            <span>{match.score?.away ?? 0}</span>
+            {isLive && (
+              <span className="ml-1 text-xs text-emerald-500 font-medium">
+                {match.status === "HT" ? "HT" : `${match.status}'`}
+              </span>
+            )}
+          </div>
+        ) : (
+          <>
+            <span className="text-xs text-muted-foreground">
+              {formatDate(match.kickoffDate)}
+            </span>
+            <span className="text-xs font-medium">
+              {match.kickoffTime ?? "TBD"}
+            </span>
+          </>
+        )}
+      </div>
+      
+      <div className="flex-1 pl-2 text-sm truncate">
+        {match.away.name}
+      </div>
+    </div>
+  );
+}
+
 type TopTab = "leagues" | "cups" | "europe";
 
 export default function TablesPage() {
@@ -93,6 +161,8 @@ export default function TablesPage() {
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
   const [season, setSeason] = useState("2025/26");
   const [tableView, setTableView] = useState("overall");
+  const [selectedRound, setSelectedRound] = useState("");
+  const [hasInitializedRound, setHasInitializedRound] = useState(false);
 
   const topScrollRef = useRef<HTMLDivElement>(null);
   const competitionScrollRef = useRef<HTMLDivElement>(null);
@@ -196,6 +266,25 @@ export default function TablesPage() {
     return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
 
+  const leagueRounds = standingsData?.rounds ?? [];
+  const leagueMatchesByRound = standingsData?.matchesByRound ?? {};
+  const leagueLatestRoundKey = standingsData?.latestRoundKey ?? "";
+
+  // Initialize selected round when data loads or competition changes
+  useEffect(() => {
+    if (leagueRounds.length > 0 && (!hasInitializedRound || selectedRound === "")) {
+      const defaultRound = pickDefaultRound(leagueRounds, leagueLatestRoundKey);
+      setSelectedRound(defaultRound);
+      setHasInitializedRound(true);
+    }
+  }, [leagueRounds, leagueLatestRoundKey, hasInitializedRound, selectedRound]);
+
+  // Reset round selection when competition changes
+  useEffect(() => {
+    setSelectedRound("");
+    setHasInitializedRound(false);
+  }, [leagueCompetition]);
+
   const currentLeagueConfig = getLeagueBySlug(leagueCompetition);
 
   const renderLeaguesContent = () => {
@@ -240,12 +329,58 @@ export default function TablesPage() {
       );
     }
 
+    const displayMatches = leagueMatchesByRound[selectedRound] ?? [];
+    const currentRoundInfo = leagueRounds.find((r) => r.key === selectedRound);
+    const displayLabel = currentRoundInfo?.label ?? selectedRound;
+
     return (
-      <Card>
-        <CardContent className="p-4 sm:p-6">
-          <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
-        </CardContent>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
+        <Card className="h-fit">
+          <CardContent className="p-4 sm:p-6">
+            <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="p-4">
+              <h3 className="font-semibold mb-4">Fixtures</h3>
+              {leagueRounds.length > 0 && (
+                <RoundToggle
+                  labelType="Matchweek"
+                  rounds={leagueRounds}
+                  value={selectedRound}
+                  onChange={setSelectedRound}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-0">
+              <div className="p-4 border-b flex items-center justify-between gap-2">
+                <h4 className="font-semibold" data-testid="text-matchweek-title">
+                  {/^\d+$/.test(displayLabel) ? `Matchweek ${displayLabel}` : displayLabel}
+                </h4>
+                <span className="text-sm text-muted-foreground">
+                  {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
+                </span>
+              </div>
+              <div>
+                {displayMatches.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
+                    No fixtures yet
+                  </div>
+                ) : (
+                  displayMatches.map((match) => (
+                    <LeagueMatchRow key={match.id} match={match} />
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     );
   };
 

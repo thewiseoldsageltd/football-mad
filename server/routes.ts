@@ -2071,6 +2071,114 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       }));
 
+      // Fetch fixtures for this league to compute rounds
+      const leagueMatches = await db
+        .select({
+          id: matches.id,
+          homeTeamId: matches.homeTeamId,
+          awayTeamId: matches.awayTeamId,
+          homeTeamName: aliasedTable(teams, "homeTeam").name,
+          awayTeamName: aliasedTable(teams, "awayTeam").name,
+          homeScore: matches.homeScore,
+          awayScore: matches.awayScore,
+          status: matches.status,
+          kickoffTime: matches.kickoffTime,
+          goalserveRound: matches.goalserveRound,
+        })
+        .from(matches)
+        .leftJoin(aliasedTable(teams, "homeTeam"), eq(matches.homeTeamId, aliasedTable(teams, "homeTeam").id))
+        .leftJoin(aliasedTable(teams, "awayTeam"), eq(matches.awayTeamId, aliasedTable(teams, "awayTeam").id))
+        .where(eq(matches.goalserveCompetitionId, leagueId))
+        .orderBy(asc(matches.kickoffTime));
+
+      // Group matches by matchweek (round)
+      interface RoundInfo {
+        key: string;
+        index: number;
+        label: string;
+        startDate: string | null;
+        endDate: string | null;
+        matchesCount: number;
+        hasAnyMatches: boolean;
+      }
+
+      interface MatchInfo {
+        id: string;
+        home: { id?: string; name: string };
+        away: { id?: string; name: string };
+        score: { home: number; away: number } | null;
+        kickoffDate: string | null;
+        kickoffTime: string | null;
+        status: string;
+      }
+
+      const matchesByRound: Record<string, MatchInfo[]> = {};
+      const roundsMap = new Map<string, { startDate: Date | null; endDate: Date | null; matches: MatchInfo[] }>();
+
+      for (const m of leagueMatches) {
+        const roundKey = m.goalserveRound || "0";
+        
+        const matchInfo: MatchInfo = {
+          id: m.id,
+          home: { id: m.homeTeamId ?? undefined, name: m.homeTeamName || "TBD" },
+          away: { id: m.awayTeamId ?? undefined, name: m.awayTeamName || "TBD" },
+          score: m.homeScore != null && m.awayScore != null 
+            ? { home: m.homeScore, away: m.awayScore } 
+            : null,
+          kickoffDate: m.kickoffTime ? m.kickoffTime.toISOString().split("T")[0] : null,
+          kickoffTime: m.kickoffTime ? m.kickoffTime.toISOString().split("T")[1].slice(0, 5) : null,
+          status: m.status || "scheduled",
+        };
+
+        if (!roundsMap.has(roundKey)) {
+          roundsMap.set(roundKey, { startDate: null, endDate: null, matches: [] });
+        }
+        const roundData = roundsMap.get(roundKey)!;
+        roundData.matches.push(matchInfo);
+
+        if (m.kickoffTime) {
+          if (!roundData.startDate || m.kickoffTime < roundData.startDate) {
+            roundData.startDate = m.kickoffTime;
+          }
+          if (!roundData.endDate || m.kickoffTime > roundData.endDate) {
+            roundData.endDate = m.kickoffTime;
+          }
+        }
+      }
+
+      // Convert to arrays and sort
+      const roundKeys = Array.from(roundsMap.keys()).sort((a, b) => {
+        const numA = parseInt(a, 10);
+        const numB = parseInt(b, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.localeCompare(b);
+      });
+
+      const rounds: RoundInfo[] = [];
+      let latestRoundKey = roundKeys.length > 0 ? roundKeys[0] : "";
+      
+      for (let i = 0; i < roundKeys.length; i++) {
+        const key = roundKeys[i];
+        const data = roundsMap.get(key)!;
+        
+        matchesByRound[key] = data.matches;
+        
+        rounds.push({
+          key,
+          index: i,
+          label: key,
+          startDate: data.startDate?.toISOString().split("T")[0] ?? null,
+          endDate: data.endDate?.toISOString().split("T")[0] ?? null,
+          matchesCount: data.matches.length,
+          hasAnyMatches: data.matches.length > 0,
+        });
+
+        // Track the latest round with matches
+        if (data.matches.length > 0) {
+          latestRoundKey = key;
+        }
+      }
+
       res.json({
         snapshot: {
           leagueId: snapshot.leagueId,
@@ -2079,6 +2187,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           asOf: snapshot.asOf,
         },
         table,
+        rounds,
+        matchesByRound,
+        latestRoundKey,
       });
     } catch (error) {
       console.error("Error fetching standings:", error);
@@ -3463,6 +3574,108 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Sort matchdays
       matchdays.sort((a, b) => a.matchday - b.matchday);
 
+      // Helper to compute rounds from matches for unified navigation
+      interface RoundInfo {
+        key: string;
+        index: number;
+        label: string;
+        startDate: string | null;
+        endDate: string | null;
+        matchesCount: number;
+        hasAnyMatches: boolean;
+      }
+
+      const computeRounds = (
+        matchdays: Matchday[], 
+        knockoutRoundsMap: Map<string, EuropeMatch[]>
+      ): { rounds: RoundInfo[]; matchesByRound: Record<string, EuropeMatch[]>; latestRoundKey: string } => {
+        const rounds: RoundInfo[] = [];
+        const matchesByRound: Record<string, EuropeMatch[]> = {};
+        let latestRoundKey = "1";
+        let roundIndex = 0;
+
+        // Add league phase matchdays
+        for (const md of matchdays) {
+          const key = String(md.matchday);
+          matchesByRound[key] = md.matches;
+          
+          let startDate: string | null = null;
+          let endDate: string | null = null;
+          
+          if (md.matches.length > 0) {
+            const dates = md.matches
+              .map(m => m.kickoffDate)
+              .filter((d): d is string => !!d)
+              .sort();
+            if (dates.length > 0) {
+              startDate = dates[0];
+              endDate = dates[dates.length - 1];
+            }
+          }
+          
+          rounds.push({
+            key,
+            index: roundIndex++,
+            label: String(md.matchday),
+            startDate,
+            endDate,
+            matchesCount: md.matches.length,
+            hasAnyMatches: md.matches.length > 0,
+          });
+          
+          if (md.matches.length > 0) {
+            latestRoundKey = key;
+          }
+        }
+
+        // Add knockout rounds
+        const koOrder = ["Knockout Play-offs", "Round of 16", "Quarter-finals", "Semi-finals", "Final"];
+        const koKeyMap: Record<string, string> = {
+          "Knockout Play-offs": "PO",
+          "Round of 16": "L16",
+          "Quarter-finals": "QF",
+          "Semi-finals": "SF",
+          "Final": "F",
+        };
+        
+        for (const roundName of koOrder) {
+          const matches = knockoutRoundsMap.get(roundName) || [];
+          const key = koKeyMap[roundName];
+          
+          matchesByRound[key] = matches;
+          
+          let startDate: string | null = null;
+          let endDate: string | null = null;
+          
+          if (matches.length > 0) {
+            const dates = matches
+              .map(m => m.kickoffDate)
+              .filter((d): d is string => !!d)
+              .sort();
+            if (dates.length > 0) {
+              startDate = dates[0];
+              endDate = dates[dates.length - 1];
+            }
+          }
+          
+          rounds.push({
+            key,
+            index: roundIndex++,
+            label: roundName.replace("Knockout Play-offs", "Play-offs"),
+            startDate,
+            endDate,
+            matchesCount: matches.length,
+            hasAnyMatches: matches.length > 0,
+          });
+          
+          if (matches.length > 0) {
+            latestRoundKey = key;
+          }
+        }
+
+        return { rounds, matchesByRound, latestRoundKey };
+      }
+
       // Build knockout rounds array with status
       const knockoutRounds: KnockoutRound[] = [];
       const knockoutEntries = Array.from(knockoutRoundsMap.entries());
@@ -3497,6 +3710,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Sort knockout rounds by order
       knockoutRounds.sort((a, b) => a.order - b.order);
 
+      // Compute unified rounds data for navigation
+      const { rounds, matchesByRound, latestRoundKey } = computeRounds(matchdays, knockoutRoundsMap);
+
       // Build response
       const response = {
         competition: {
@@ -3506,6 +3722,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           goalserveCompetitionId: competition.id,
         },
         season,
+        standings,
+        rounds,
+        matchesByRound,
+        latestRoundKey,
         phases: [
           {
             type: "league_phase" as const,

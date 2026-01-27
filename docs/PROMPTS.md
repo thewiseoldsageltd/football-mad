@@ -8653,3 +8653,112 @@ Please implement this cleanly with minimal re-renders (useMemo for stageMatches 
 
 ---
 
+GOAL
+Unify round navigation across all competitions (Leagues + Europe) using ONE reusable “RoundToggle” (prev/next arrows + label + date range). Replace the current Europe MD button grid with the toggle. Add the same toggle to domestic league tables (Tables > Leagues) and show a right-hand fixtures/results sidebar in the same layout style as UCL. Default the selected round to the latest round that has any matches (FT/LIVE/SCHEDULED) for that competition/season.
+
+CONSTRAINTS
+- Keep existing styling conventions (shadcn Button, existing Card layouts, dark mode).
+- Do not reintroduce scroll-within-scroll for the fixtures list. The fixtures card should expand naturally down the page.
+- The label should vary by competition:
+  - Europe (UCL/UEL/UECL): “Matchday”
+  - Domestic leagues: “Matchweek”
+  - (Leave cups for later)
+- Use the same MatchRow rendering we already have (score alignment + status pill + scheduled date/time centred under pill).
+- Do not break existing Cups behaviour.
+
+BACKEND CHANGES
+1) Create a shared helper to compute “rounds” from matches:
+   - Input: array of matches (with date/time, status, round/matchday label)
+   - Output: rounds[] sorted ascending, where each round has:
+     { key: string, index: number, label: string, startDate?: string, endDate?: string, matchesCount: number, hasAnyMatches: boolean }
+   - Determine round key from existing fields used today for Europe (matchday/stage/round). Reuse the same parsing logic you used for UCL matchdays.
+   - startDate/endDate should be min/max of match kick-off times for that round (if available).
+   - hasAnyMatches true if matchesCount > 0.
+
+2) Europe endpoint:
+   - Update GET /api/europe/:slug to return:
+     {
+       competition, season,
+       standings,
+       rounds,               // computed
+       matchesByRound: { [roundKey]: Match[] },
+       latestRoundKey        // computed as last round with matchesCount>0, else last round
+       knockout (existing)
+     }
+   - Ensure matchesByRound includes league-phase MD1..MD8 and knockout buckets if present (PO, L16, QF, SF, Final) using existing logic.
+   - IMPORTANT: Some matches may have null scores. Avoid runtime errors (no non-null assertions like match.score!.home). Always guard score objects.
+
+3) League (domestic) tables endpoint:
+   - Extend the existing league tables endpoint used by Tables > Leagues (whatever route currently powers standings) to also return:
+     rounds, matchesByRound, latestRoundKey
+   - If the league tables endpoint currently only returns standings:
+     - Fetch that league’s fixtures/results feed for the season (same provider/Goalserve source you already use elsewhere).
+     - Group into rounds (matchweek) using the round label field available in the feed.
+   - Keep the existing response fields intact; only add new fields.
+
+FRONTEND CHANGES
+4) Create a reusable component:
+   - File: client/src/components/shared/round-toggle.tsx
+   - Props:
+     - labelType: "Matchday" | "Matchweek"
+     - rounds: Array<{ key,label,startDate?,endDate?,matchesCount }>
+     - value: string
+     - onChange: (key: string) => void
+   - UI:
+     - Row with left chevron button, centered label (“Matchday 8” / “Matchweek 23”), right chevron button
+     - Under the centered label, show date range if start/end exist (e.g. “28 Jan – 29 Jan”). If same day, show single date.
+     - Disable prev/next at ends.
+     - Keep it compact and consistent with the app styling.
+
+5) Update EuropeProgress:
+   - Replace the MD button grid entirely with RoundToggle.
+   - Use rounds + latestRoundKey from API.
+   - Default selection:
+     - If URL query param exists (e.g. ?round=MD8) use it if valid
+     - else default to latestRoundKey
+   - When selection changes, update URL query param (shallow) and render matches from matchesByRound[selectedKey].
+   - Keep the “Fixtures” header card.
+   - Ensure the fixtures list renders ALL matches without internal scrolling.
+   - Keep scheduled pill centred above date/time (vertical stack aligned center/right block like it was before). For FT/LIVE results, keep the new right-aligned score column close to the status pill.
+
+6) Update Tables > Leagues layout to mirror the Champions League page:
+   - Desktop (lg+):
+     - Two-column grid: Standings left, Fixtures right.
+     - Fixtures right has the RoundToggle at top, then the Matchday/Matchweek fixture list card below (same as Europe).
+   - Mobile:
+     - Keep the existing trimmed league table UI (Pos/Team/Pts with expandable row details).
+     - Under the table, render the fixtures section:
+       - RoundToggle
+       - Match list for selected round
+   - LabelType for leagues = “Matchweek”.
+
+7) Default selection logic (shared):
+   - Implement a helper on FE:
+     - pickDefaultRound(rounds, latestRoundKey) => latestRoundKey if present/valid else last round key else first.
+   - Use it for both Europe and Leagues.
+
+TESTING / QA
+8) Manual test checklist:
+   - Europe > Champions League:
+     - Lands on latestRoundKey by default (MD8 in current season)
+     - Prev/next navigates correctly
+     - Scheduled matches show pill centered above “28 Jan 20:00” (or whatever time) aligned right block
+     - Finished matches show score right aligned near status pill
+   - Tables > Leagues:
+     - Mobile view shows trimmed table + expandable details like Premier League already does
+     - Fixtures section shows Matchweek toggle + fixtures list
+   - No runtime errors when score is null.
+
+IMPLEMENTATION NOTE
+- Reuse the existing MatchRow rendering logic from europe-progress where possible; refactor into a shared MatchRow component if it helps, but avoid large rewrites.
+- Make the smallest, safest changes necessary.
+
+DELIVERABLES
+- Working RoundToggle component
+- EuropeProgress uses RoundToggle
+- League Tables page uses RoundToggle + fixtures sidebar on desktop, fixtures section on mobile
+- Backend returns rounds + matchesByRound + latestRoundKey for Europe and Leagues
+- No regressions to Cups
+
+---
+

@@ -2,10 +2,10 @@ import { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FormPills } from "./form-pills";
+import { RoundToggle, pickDefaultRound, type RoundInfo } from "@/components/shared/round-toggle";
 
 interface EuropeMatch {
   id: string;
@@ -61,6 +61,16 @@ interface KnockoutPhase {
   rounds: KnockoutRound[];
 }
 
+interface ApiRoundInfo {
+  key: string;
+  index: number;
+  label: string;
+  startDate: string | null;
+  endDate: string | null;
+  matchesCount: number;
+  hasAnyMatches: boolean;
+}
+
 interface EuropeResponse {
   competition: {
     slug: string;
@@ -69,6 +79,10 @@ interface EuropeResponse {
     goalserveCompetitionId: string;
   };
   season: string;
+  standings?: StandingTeam[];
+  rounds?: ApiRoundInfo[];
+  matchesByRound?: Record<string, EuropeMatch[]>;
+  latestRoundKey?: string;
   phases: (LeaguePhase | KnockoutPhase)[];
   error?: string;
 }
@@ -427,110 +441,19 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
   );
 }
 
-// Stage-aware matchday/round selection options
-type StageOption = 
-  | { key: string; label: string; type: "league"; md: number }
-  | { key: string; label: string; type: "ko"; round: string; isFinalPill?: boolean };
-
-const STAGE_OPTIONS: StageOption[] = [
-  { key: "MD1", label: "MD 1", type: "league", md: 1 },
-  { key: "MD2", label: "MD 2", type: "league", md: 2 },
-  { key: "MD3", label: "MD 3", type: "league", md: 3 },
-  { key: "MD4", label: "MD 4", type: "league", md: 4 },
-  { key: "MD5", label: "MD 5", type: "league", md: 5 },
-  { key: "MD6", label: "MD 6", type: "league", md: 6 },
-  { key: "MD7", label: "MD 7", type: "league", md: 7 },
-  { key: "MD8", label: "MD 8", type: "league", md: 8 },
-  { key: "PO", label: "PO", type: "ko", round: "Knockout Play-offs" },
-  { key: "L16", label: "L16", type: "ko", round: "Round of 16" },
-  { key: "QF", label: "QF", type: "ko", round: "Quarter-finals" },
-  { key: "SF", label: "SF", type: "ko", round: "Semi-finals" },
-  { key: "F", label: "Final", type: "ko", round: "Final", isFinalPill: true },
-];
-
-// Ordered list of stage keys for determining "latest"
-const STAGE_ORDER = ["MD1","MD2","MD3","MD4","MD5","MD6","MD7","MD8","PO","L16","QF","SF","F"];
-
-// Map knockout round names to stage keys
-const KNOCKOUT_TO_STAGE_KEY: Record<string, string> = {
-  "Knockout Play-offs": "PO",
-  "Round of 16": "L16",
-  "Quarter-finals": "QF",
-  "Semi-finals": "SF",
-  "Final": "F",
-};
-
-function getLatestAvailableStage(stageMatches: Record<string, EuropeMatch[] | undefined>): string {
-  // Find the last stage in STAGE_ORDER that has matches
-  for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
-    const key = STAGE_ORDER[i];
-    if ((stageMatches[key]?.length ?? 0) > 0) {
-      return key;
-    }
-  }
-  return "MD1"; // safe fallback
-}
-
-function StageSelector({ 
-  selectedStage, 
-  onSelect,
-  knockoutRounds
-}: { 
-  selectedStage: string;
-  onSelect: (stage: string) => void;
-  knockoutRounds: KnockoutRound[];
-}) {
-  // Group: first 12 items (MD1-8 + PO, L16, QF, SF) in grid, Final spans full row
-  const gridOptions = STAGE_OPTIONS.filter(opt => !("isFinalPill" in opt && opt.isFinalPill));
-  const finalOption = STAGE_OPTIONS.find(opt => "isFinalPill" in opt && opt.isFinalPill);
-
-  const isKnockoutAvailable = (roundName: string) => {
-    return knockoutRounds.some(r => r.name === roundName);
-  };
-
-  return (
-    <div className="space-y-2" data-testid="stage-selector">
-      <div className="grid grid-cols-4 sm:grid-cols-6 gap-1">
-        {gridOptions.map((opt) => {
-          const isKO = opt.type === "ko";
-          const disabled = isKO && !isKnockoutAvailable((opt as { round: string }).round);
-          
-          return (
-            <Button
-              key={opt.key}
-              onClick={() => onSelect(opt.key)}
-              variant={selectedStage === opt.key ? "default" : "secondary"}
-              size="sm"
-              disabled={disabled}
-              className={cn(disabled && "opacity-50")}
-              data-testid={`button-stage-${opt.key}`}
-            >
-              {opt.label}
-            </Button>
-          );
-        })}
-      </div>
-      {finalOption && (
-        <Button
-          onClick={() => onSelect(finalOption.key)}
-          variant={selectedStage === finalOption.key ? "default" : "secondary"}
-          size="sm"
-          disabled={!isKnockoutAvailable((finalOption as { round: string }).round)}
-          className={cn(
-            "w-full",
-            !isKnockoutAvailable((finalOption as { round: string }).round) && "opacity-50"
-          )}
-          data-testid="button-stage-Final"
-        >
-          {finalOption.label}
-        </Button>
-      )}
-    </div>
-  );
+// Helper to convert API rounds to RoundInfo for RoundToggle
+function mapApiRoundsToRoundInfo(rounds: ApiRoundInfo[]): RoundInfo[] {
+  return rounds.map(r => ({
+    key: r.key,
+    label: r.label,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    matchesCount: r.matchesCount,
+  }));
 }
 
 export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps) {
-  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [selectedRound, setSelectedRound] = useState<string | null>(null);
   const [hasInitialized, setHasInitialized] = useState(false);
   
   const europeUrl = `/api/europe/${competitionSlug}?season=${encodeURIComponent(season)}`;
@@ -541,45 +464,25 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
     refetchInterval: 120_000,
   });
 
-  // Extract phases after data is loaded
-  const leaguePhase = data?.phases.find((p): p is LeaguePhase => p.type === "league_phase");
-  const knockoutPhase = data?.phases.find((p): p is KnockoutPhase => p.type === "knockout");
-  const knockoutRounds = knockoutPhase?.rounds ?? [];
+  // Extract data from API response
+  const standings = data?.standings ?? [];
+  const apiRounds = data?.rounds ?? [];
+  const matchesByRound = data?.matchesByRound ?? {};
+  const latestRoundKey = data?.latestRoundKey;
   
-  // Build a map of stageKey -> matches for determining latest available stage
-  const stageMatches = useMemo(() => {
-    const map: Record<string, EuropeMatch[] | undefined> = {};
-    
-    // League phase matchdays
-    if (leaguePhase) {
-      for (const md of leaguePhase.matchdays) {
-        map[`MD${md.matchday}`] = md.matches;
-      }
-    }
-    
-    // Knockout rounds
-    if (knockoutPhase) {
-      for (const round of knockoutPhase.rounds) {
-        const stageKey = KNOCKOUT_TO_STAGE_KEY[round.name];
-        if (stageKey) {
-          map[stageKey] = round.matches;
-        }
-      }
-    }
-    
-    return map;
-  }, [leaguePhase, knockoutPhase]);
+  // Convert API rounds to RoundInfo for RoundToggle
+  const roundsForToggle = useMemo(() => mapApiRoundsToRoundInfo(apiRounds), [apiRounds]);
   
-  // Set initial selection to latest stage with matches once data loads
+  // Set initial selection to latest round with matches once data loads
   useEffect(() => {
-    if (data && !hasInitialized) {
-      const latestStage = getLatestAvailableStage(stageMatches);
-      setSelectedStage(latestStage);
+    if (data && !hasInitialized && roundsForToggle.length > 0) {
+      const defaultRound = pickDefaultRound(roundsForToggle, latestRoundKey);
+      setSelectedRound(defaultRound);
       setHasInitialized(true);
     }
-  }, [data, stageMatches, hasInitialized]);
+  }, [data, roundsForToggle, latestRoundKey, hasInitialized]);
 
-  if (isLoading || !selectedStage) {
+  if (isLoading) {
     return (
       <Card>
         <CardContent className="p-6 flex items-center justify-center gap-2 text-muted-foreground">
@@ -600,25 +503,14 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
     );
   }
   
-  // Parse selected stage
-  const selectedOption = STAGE_OPTIONS.find(opt => opt.key === selectedStage);
-  const isLeagueStage = selectedOption?.type === "league";
-  const selectedMdNumber = isLeagueStage ? (selectedOption as { md: number }).md : 0;
-  const selectedKORound = !isLeagueStage ? (selectedOption as { round: string }).round : "";
+  // Handle empty rounds
+  const hasRounds = roundsForToggle.length > 0;
+  const effectiveRound = selectedRound || (hasRounds ? roundsForToggle[0].key : "");
   
-  // Get matches to display
-  let displayMatches: EuropeMatch[] = [];
-  let displayTitle = "";
-  
-  if (isLeagueStage && leaguePhase) {
-    const md = leaguePhase.matchdays.find(m => m.matchday === selectedMdNumber);
-    displayMatches = md?.matches ?? [];
-    displayTitle = `Matchday ${selectedMdNumber}`;
-  } else if (!isLeagueStage && knockoutPhase) {
-    const round = knockoutRounds.find(r => r.name === selectedKORound);
-    displayMatches = round?.matches ?? [];
-    displayTitle = selectedKORound;
-  }
+  // Get matches for the selected round
+  const displayMatches: EuropeMatch[] = matchesByRound[effectiveRound] ?? [];
+  const currentRoundInfo = roundsForToggle.find(r => r.key === effectiveRound);
+  const displayLabel = currentRoundInfo?.label ?? effectiveRound;
 
   return (
     <div className="space-y-4">
@@ -626,8 +518,8 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
         <Card className="h-fit">
           <CardContent className="p-4">
             <h3 className="font-semibold mb-4">Standings</h3>
-            {leaguePhase ? (
-              <StandingsTable standings={leaguePhase.standings} />
+            {standings.length > 0 ? (
+              <StandingsTable standings={standings} />
             ) : (
               <div className="text-center text-muted-foreground py-8">
                 No standings data available
@@ -637,42 +529,55 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
         </Card>
         
         <div className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-semibold mb-4">Fixtures</h3>
-              <StageSelector 
-                selectedStage={selectedStage}
-                onSelect={setSelectedStage}
-                knockoutRounds={knockoutRounds}
-              />
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="p-0">
-              <div className="p-4 border-b flex items-center justify-between gap-2">
-                <h4 className="font-semibold" data-testid="text-display-title">{displayTitle}</h4>
-                <span className="text-sm text-muted-foreground">
-                  {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
-                </span>
-              </div>
-              <div>
-                {displayMatches.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
-                    No fixtures yet
+          {hasRounds ? (
+            <>
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="font-semibold mb-4">Fixtures</h3>
+                  <RoundToggle
+                    labelType="Matchday"
+                    rounds={roundsForToggle}
+                    value={effectiveRound}
+                    onChange={setSelectedRound}
+                  />
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardContent className="p-0">
+                  <div className="p-4 border-b flex items-center justify-between gap-2">
+                    <h4 className="font-semibold" data-testid="text-display-title">
+                      {/^\d+$/.test(effectiveRound) ? `Matchday ${displayLabel}` : displayLabel}
+                    </h4>
+                    <span className="text-sm text-muted-foreground">
+                      {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
+                    </span>
                   </div>
-                ) : (
-                  displayMatches.map((match) => (
-                    <MatchRow 
-                      key={match.id} 
-                      match={match} 
-                      showResults={true}
-                    />
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  <div>
+                    {displayMatches.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
+                        No fixtures yet
+                      </div>
+                    ) : (
+                      displayMatches.map((match) => (
+                        <MatchRow 
+                          key={match.id} 
+                          match={match} 
+                          showResults={true}
+                        />
+                      ))
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-center text-muted-foreground">
+                No fixtures available for this season.
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
