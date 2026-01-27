@@ -2100,6 +2100,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         endDate: string | null;
         matchesCount: number;
         hasAnyMatches: boolean;
+        hasScheduledMatches: boolean;
       }
 
       interface MatchInfo {
@@ -2112,11 +2113,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: string;
       }
 
-      const matchesByRound: Record<string, MatchInfo[]> = {};
-      const roundsMap = new Map<string, { startDate: Date | null; endDate: Date | null; matches: MatchInfo[] }>();
+      // Helper to check if a status means "scheduled"
+      const isScheduledStatus = (status: string): boolean => {
+        const s = status?.toLowerCase().trim() || "";
+        // Various Goalserve scheduled status values
+        return (
+          s === "scheduled" || 
+          s === "ns" || 
+          s === "notstarted" || 
+          s === "fixture" ||
+          s === "tbd" ||
+          s === "time tbd" ||
+          s === "timetbd" ||
+          /^\d{1,2}:\d{2}$/.test(s) // Time format like "15:00" or "3:00"
+        );
+      };
+      
+      // Helper to extract numeric round from various formats
+      const parseRoundNumber = (roundStr: string | null): number | null => {
+        if (!roundStr) return null;
+        const s = roundStr.trim();
+        
+        // Try direct parse if it's just a number
+        const directNum = parseInt(s, 10);
+        if (!isNaN(directNum)) return directNum;
+        
+        // Try to extract number from strings like "Matchweek 2", "Round 0", "MW5"
+        const numMatch = s.match(/(\d+)/);
+        if (numMatch) {
+          return parseInt(numMatch[1], 10);
+        }
+        
+        return null;
+      };
 
+      const matchesByRound: Record<string, MatchInfo[]> = {};
+      const rawRoundNums: number[] = [];
+      const roundsMap = new Map<number, { startDate: Date | null; endDate: Date | null; matches: MatchInfo[]; hasScheduled: boolean }>();
+
+      // First pass: collect all raw round numbers to detect if 0-indexed
       for (const m of leagueMatches) {
-        const roundKey = m.goalserveRound || "0";
+        const parsed = parseRoundNumber(m.goalserveRound);
+        if (parsed !== null) {
+          rawRoundNums.push(parsed);
+        }
+      }
+      
+      // Detect if rounds are 0-indexed (contains 0 and no negative numbers)
+      const minRound = rawRoundNums.length > 0 ? Math.min(...rawRoundNums) : 1;
+      const isZeroIndexed = minRound === 0;
+      
+      for (const m of leagueMatches) {
+        // Parse round number from various formats
+        let roundNum = parseRoundNumber(m.goalserveRound);
+        if (roundNum === null) roundNum = 1; // Default to 1 if unparseable
+        
+        // If rounds are 0-indexed, shift all by +1 to make 1-indexed
+        const displayNum = isZeroIndexed ? roundNum + 1 : (roundNum < 1 ? 1 : roundNum);
         
         const matchInfo: MatchInfo = {
           id: m.id,
@@ -2130,11 +2183,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           status: m.status || "scheduled",
         };
 
-        if (!roundsMap.has(roundKey)) {
-          roundsMap.set(roundKey, { startDate: null, endDate: null, matches: [] });
+        if (!roundsMap.has(displayNum)) {
+          roundsMap.set(displayNum, { startDate: null, endDate: null, matches: [], hasScheduled: false });
         }
-        const roundData = roundsMap.get(roundKey)!;
+        const roundData = roundsMap.get(displayNum)!;
         roundData.matches.push(matchInfo);
+
+        // Track if this round has scheduled matches
+        if (isScheduledStatus(matchInfo.status)) {
+          roundData.hasScheduled = true;
+        }
 
         if (m.kickoffTime) {
           if (!roundData.startDate || m.kickoffTime < roundData.startDate) {
@@ -2146,38 +2204,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      // Convert to arrays and sort
-      const roundKeys = Array.from(roundsMap.keys()).sort((a, b) => {
-        const numA = parseInt(a, 10);
-        const numB = parseInt(b, 10);
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        return a.localeCompare(b);
-      });
+      // Convert to arrays and sort numerically
+      const roundNums = Array.from(roundsMap.keys()).sort((a, b) => a - b);
 
       const rounds: RoundInfo[] = [];
-      let latestRoundKey = roundKeys.length > 0 ? roundKeys[0] : "";
+      let latestRoundKey = "";
+      let latestScheduledRoundKey = "";
+      let latestActiveRoundKey = "";
       
-      for (let i = 0; i < roundKeys.length; i++) {
-        const key = roundKeys[i];
-        const data = roundsMap.get(key)!;
+      for (let i = 0; i < roundNums.length; i++) {
+        const num = roundNums[i];
+        const data = roundsMap.get(num)!;
+        const key = `MW${num}`;
         
         matchesByRound[key] = data.matches;
         
         rounds.push({
           key,
           index: i,
-          label: key,
+          label: String(num), // Just the number, frontend will prefix "Matchweek"
           startDate: data.startDate?.toISOString().split("T")[0] ?? null,
           endDate: data.endDate?.toISOString().split("T")[0] ?? null,
           matchesCount: data.matches.length,
           hasAnyMatches: data.matches.length > 0,
+          hasScheduledMatches: data.hasScheduled,
         });
 
-        // Track the latest round with matches
+        // Track the latest round with any matches
         if (data.matches.length > 0) {
-          latestRoundKey = key;
+          latestActiveRoundKey = key;
+        }
+        
+        // Track the latest round with scheduled matches
+        if (data.hasScheduled) {
+          latestScheduledRoundKey = key;
         }
       }
+      
+      // Default to scheduled if available, otherwise active, otherwise first
+      latestRoundKey = latestScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
 
       res.json({
         snapshot: {
@@ -2190,6 +2255,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rounds,
         matchesByRound,
         latestRoundKey,
+        latestScheduledRoundKey,
+        latestActiveRoundKey,
       });
     } catch (error) {
       console.error("Error fetching standings:", error);

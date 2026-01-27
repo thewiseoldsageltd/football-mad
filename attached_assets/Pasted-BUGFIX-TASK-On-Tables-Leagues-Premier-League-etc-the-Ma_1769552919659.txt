@@ -1,0 +1,50 @@
+BUGFIX TASK
+On Tables > Leagues (Premier League etc) the Matchweek toggle UI renders but prev/next doesn’t change the fixtures list, and the label shows “Matchweek 0”. We also want the default selection to start at Matchweek 1 and auto-land on the latest matchweek that has SCHEDULED fixtures.
+
+PLEASE IMPLEMENT THE FOLLOWING CHANGES:
+
+1) FIX “MATCHWEEK 0” (BACKEND NORMALISATION)
+- Find the code that builds the league rounds / matchweeks (whatever creates rounds[] and matchesByRound for leagues).
+- Ensure matchweek numbering starts at 1.
+  - If the feed returns round numbers starting at 0, add +1 for display/label AND for the round key.
+  - If the feed returns strings like “Matchweek 0” or “Round 0”, normalise to 1.
+- Output keys must be stable and consistent. Use a key like `MW{n}` where n starts at 1.
+- Ensure rounds[] is sorted numerically by n.
+
+2) DEFAULT SELECTED MATCHWEEK (BACKEND)
+- In the league tables API response, add:
+  - latestScheduledRoundKey: the highest MW that contains at least one match with status SCHEDULED (or equivalent in our status enum)
+  - latestActiveRoundKey: fallback highest MW that contains any matches at all (FT/LIVE/SCHEDULED)
+- Keep existing latestRoundKey if you already have it, but ensure the new scheduled-first default is available.
+
+3) DEFAULT SELECTED MATCHWEEK (FRONTEND)
+- In the league tables page/component that renders the right-side Fixtures panel:
+  - selectedRound should initialise like:
+    a) if URL has ?round=... and it exists in rounds -> use it
+    b) else use latestScheduledRoundKey if valid
+    c) else use latestActiveRoundKey if valid
+    d) else use last round in rounds[]
+- After setting the default, write it to the URL query param (?round=MWxx) to keep state on refresh.
+
+4) MAKE TOGGLE BUTTONS ACTUALLY WORK (FRONTEND)
+- In RoundToggle component:
+  - Prev/Next must call onChange with the adjacent round key.
+  - Disable buttons correctly at ends.
+- In the parent component:
+  - onChange must update selectedRound state
+  - and update URL query param
+  - and the fixtures list must render from matchesByRound[selectedRound]
+- IMPORTANT: fix any memoisation bugs:
+  - If you’re using useMemo/useCallback, ensure dependencies include rounds and selectedRound.
+  - Ensure selectedRound is updated when the API data changes (e.g., season switch).
+
+5) QUICK QA
+- Premier League 2025/26:
+  - Toggle shows “Matchweek 1” minimum, never 0.
+  - Page defaults to the latest matchweek with scheduled fixtures.
+  - Prev/next updates the fixtures list and the “Matchweek X” title + match count.
+  - URL query updates and refresh preserves selection.
+
+DELIVERABLE
+- Commit all changes needed across backend + frontend.
+- Keep UI layout exactly as it is now; only fix the toggle behaviour and default selection logic.

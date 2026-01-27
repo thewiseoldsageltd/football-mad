@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Trophy, Loader2 } from "lucide-react";
@@ -9,7 +10,7 @@ import { EuropeProgress } from "@/components/tables/europe-progress";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
-import { RoundToggle, pickDefaultRound, type RoundInfo } from "@/components/shared/round-toggle";
+import { RoundToggle, type RoundInfo } from "@/components/shared/round-toggle";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
 
@@ -78,6 +79,8 @@ interface StandingsApiResponse {
   rounds?: RoundInfo[];
   matchesByRound?: Record<string, LeagueMatchInfo[]>;
   latestRoundKey?: string;
+  latestScheduledRoundKey?: string;
+  latestActiveRoundKey?: string;
 }
 
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
@@ -155,14 +158,35 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
 type TopTab = "leagues" | "cups" | "europe";
 
 export default function TablesPage() {
+  const [, setLocation] = useLocation();
+  const searchString = useSearch();
+  
   const [topTab, setTopTab] = useState<TopTab>("leagues");
   const [leagueCompetition, setLeagueCompetition] = useState("premier-league");
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
   const [season, setSeason] = useState("2025/26");
   const [tableView, setTableView] = useState("overall");
-  const [selectedRound, setSelectedRound] = useState("");
+  const [selectedRound, setSelectedRoundState] = useState("");
   const [hasInitializedRound, setHasInitializedRound] = useState(false);
+  
+  // Helper to get current URL params
+  const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
+  const urlRound = urlParams.get("round") ?? "";
+  
+  // Wrapper to update selectedRound and sync to URL
+  const setSelectedRound = useCallback((newRound: string) => {
+    setSelectedRoundState(newRound);
+    // Update URL without full navigation
+    const params = new URLSearchParams(searchString);
+    if (newRound) {
+      params.set("round", newRound);
+    } else {
+      params.delete("round");
+    }
+    const newSearch = params.toString();
+    setLocation(`/tables${newSearch ? `?${newSearch}` : ""}`, { replace: true });
+  }, [searchString, setLocation]);
 
   const topScrollRef = useRef<HTMLDivElement>(null);
   const competitionScrollRef = useRef<HTMLDivElement>(null);
@@ -268,20 +292,45 @@ export default function TablesPage() {
 
   const leagueRounds = standingsData?.rounds ?? [];
   const leagueMatchesByRound = standingsData?.matchesByRound ?? {};
-  const leagueLatestRoundKey = standingsData?.latestRoundKey ?? "";
+  const leagueLatestScheduledRoundKey = standingsData?.latestScheduledRoundKey ?? "";
+  const leagueLatestActiveRoundKey = standingsData?.latestActiveRoundKey ?? "";
 
   // Initialize selected round when data loads or competition changes
+  // Priority: URL param > scheduled round > active round > last round
   useEffect(() => {
-    if (leagueRounds.length > 0 && (!hasInitializedRound || selectedRound === "")) {
-      const defaultRound = pickDefaultRound(leagueRounds, leagueLatestRoundKey);
-      setSelectedRound(defaultRound);
-      setHasInitializedRound(true);
+    if (leagueRounds.length > 0 && !hasInitializedRound) {
+      // Check if URL has a valid round
+      if (urlRound && leagueRounds.some(r => r.key === urlRound)) {
+        setSelectedRoundState(urlRound);
+        setHasInitializedRound(true);
+        return;
+      }
+      
+      // Use scheduled round if available
+      if (leagueLatestScheduledRoundKey && leagueRounds.some(r => r.key === leagueLatestScheduledRoundKey)) {
+        setSelectedRound(leagueLatestScheduledRoundKey);
+        setHasInitializedRound(true);
+        return;
+      }
+      
+      // Fallback to active round
+      if (leagueLatestActiveRoundKey && leagueRounds.some(r => r.key === leagueLatestActiveRoundKey)) {
+        setSelectedRound(leagueLatestActiveRoundKey);
+        setHasInitializedRound(true);
+        return;
+      }
+      
+      // Fallback to last round (most recent)
+      if (leagueRounds.length > 0) {
+        setSelectedRound(leagueRounds[leagueRounds.length - 1].key);
+        setHasInitializedRound(true);
+      }
     }
-  }, [leagueRounds, leagueLatestRoundKey, hasInitializedRound, selectedRound]);
+  }, [leagueRounds, leagueLatestScheduledRoundKey, leagueLatestActiveRoundKey, hasInitializedRound, urlRound, setSelectedRound]);
 
   // Reset round selection when competition changes
   useEffect(() => {
-    setSelectedRound("");
+    setSelectedRoundState("");
     setHasInitializedRound(false);
   }, [leagueCompetition]);
 
