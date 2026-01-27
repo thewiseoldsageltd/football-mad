@@ -92,6 +92,17 @@ Preferred communication style: Simple, everyday language.
     7. Final
   - Same accordion UI and deduplication as FA Cup
   - Validation: `curl -sS "$DOMAIN/api/cup/progress?competitionId=1199&season=2025/2026" | node -e 'const d=require("/dev/stdin"); console.log("Rounds:", d.rounds.length); d.rounds.forEach(r=>console.log(r.order, r.name, r.matches.length));'`
+- **DFB Pokal (Germany Cup)**: Goalserve competitionId 1226
+  - API: `/api/cup/progress?competitionId=1226&season=2025/2026`
+  - **Canonical 6-Round System** (user-friendly labels, order 1-6):
+    1. First Round (mapped from "1/32-finals")
+    2. Second Round (mapped from "1/16-finals")
+    3. Round of 16 (mapped from "1/8-finals")
+    4. Quarter-finals
+    5. Semi-finals
+    6. Final
+  - **Design**: Goalserve uses fraction-style labels, we map to user-friendly names
+  - Same accordion UI, deduplication, and empty round seeding as other cups
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds

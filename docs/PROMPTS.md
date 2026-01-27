@@ -7462,3 +7462,29 @@ Proceed with clean commit and remove debug logs or guard them behind env flag.
 
 ---
 
+Update DFB Pokal (Goalserve competitionId 1226, "Germany Cup") round naming to mirror Goalserve labels exactly (end-user friendly), not fraction-style labels.
+
+Background:
+We previously mapped Copa del Rey style to fraction labels (1/32-finals etc.) and it looked wrong. For DFB Pokal we want the UI round headers to be whatever Goalserve provides (e.g. "First Round", "Second Round", "Round of 16", "Quarter-finals", "Semi-finals", "Final").
+
+Changes required:
+1) In server/routes.ts (cup progress endpoint), remove/disable any DFB Pokal-specific mapping that converts round names into "1/32-finals", "1/16-finals", "1/8-finals", etc.
+2) Keep only a minimal normalization function for display (safe + generic):
+   - Trim whitespace
+   - Convert common variants to one canonical Goalserve-style label ONLY when they are clearly the same meaning:
+     * "Quarterfinals" -> "Quarter-finals"
+     * "Semifinals" -> "Semi-finals"
+   - Otherwise preserve the raw stage/round name from Goalserve.
+3) Ensure ordering still works:
+   - If we have a canonical ordering system for cups, add a DFB Pokal order map that uses Goalserve round labels:
+     "First Round", "Second Round", "Round of 16", "Quarter-finals", "Semi-finals", "Final"
+   - If a round label is unknown, place it after known rounds but preserve relative order.
+4) Do not impact other competitions (FA Cup, EFL Cup, Coppa Italia, Copa del Rey). Scope changes to competitionId 1226 (or slug "dfb-pokal"/"germany-cup" depending on our config).
+5) Verify by calling /api/cup/progress?competitionId=1226 and confirm round group headers returned by the API match Goalserve labels (not fraction labels).
+
+Deliverables:
+- Code changes only (server side).
+- No UI changes needed unless the UI had hardcoded fraction labels; if so, remove that and render the API-provided roundName.
+
+---
+
