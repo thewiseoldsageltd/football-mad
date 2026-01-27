@@ -173,7 +173,7 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
       {/* RIGHT — Score column + Status pill */}
       <div className="flex items-center gap-3 ml-4">
         {/* Score column with fixed width for alignment */}
-        <div className="flex items-center justify-end min-w-[32px] text-right">
+        <div className="flex items-center justify-end min-w-[64px] text-right">
           {displayScore && (
             <div className="flex flex-col items-end leading-tight font-semibold tabular-nums">
               <span data-testid={`text-home-score-${match.id}`}>

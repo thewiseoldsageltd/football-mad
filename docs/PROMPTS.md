@@ -8294,3 +8294,63 @@ Scores form a clean vertical line aligned with the status pills across
 
 ---
 
+UI polish update for Europe fixtures list.
+
+FILE:
+client/src/components/tables/europe-progress.tsx
+
+GOAL:
+Right-align the score numbers in each fixture row so they form a clean vertical column next to the status pill (Full-Time / AET / etc).
+
+CHANGES:
+
+1. Locate the match row layout inside the fixtures/matchday list. It currently has:
+   - Left side: Home team / Away team (stacked)
+   - Right side: Scores + status pill
+
+2. Wrap the score block in a fixed-width, right-aligned container.
+
+Replace the current score rendering block with:
+
+<div className="flex items-center justify-end gap-3 min-w-[64px] text-right">
+  {displayScore && (
+    <div className="flex flex-col items-end leading-tight font-semibold tabular-nums">
+      <span data-testid={`text-home-score-${match.id}`}>
+        {match.score?.home ?? "–"}
+      </span>
+      <span data-testid={`text-away-score-${match.id}`}>
+        {match.score?.away ?? "–"}
+      </span>
+    </div>
+  )}
+</div>
+
+3. Ensure the outer row uses `justify-between` so:
+   - Teams stay left
+   - Score block + status pill stay right
+
+Example row structure:
+
+<div className="flex items-center justify-between gap-4">
+  {/* LEFT: Teams */}
+  <div className="flex flex-col text-sm">
+    <span>{match.homeTeam}</span>
+    <span>{match.awayTeam}</span>
+  </div>
+
+  {/* RIGHT: Score + Status */}
+  <div className="flex items-center gap-3">
+    [SCORE BLOCK HERE]
+    <StatusPill ... />
+  </div>
+</div>
+
+4. Add `tabular-nums` to the score container for perfect vertical number alignment.
+
+5. Do NOT change any data logic — layout only.
+
+RESULT:
+Scores form a clean vertical line aligned with the status pills across all fixtures.
+
+---
+
