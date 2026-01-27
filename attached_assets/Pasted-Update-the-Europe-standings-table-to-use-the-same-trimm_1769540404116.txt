@@ -1,0 +1,25 @@
+Update the Europe standings table to use the same “trimmed on mobile” layout as the Premier League league table.
+
+Context:
+- Current issue: Tables > Europe > Champions League shows the full wide table on mobile, causing horizontal overflow and hiding the Points column.
+- Desired behaviour: On mobile, show a trimmed table like Premier League (Pos, Team, Pts always visible). Other columns should be hidden on small screens and only appear on larger breakpoints.
+
+Tasks:
+1) Find the existing league table component/layout used for Premier League mobile (search for the table headers/cells that show “Pos”, “Team”, “Pts” and hide other columns using responsive classes like `hidden md:table-cell` / `hidden lg:table-cell`).
+2) Apply the SAME responsive approach to the Europe standings table in:
+   - `client/src/components/tables/europe-progress.tsx`
+3) Implementation detail (acceptable approaches):
+   A) Best: reuse the same shared table component used by Premier League if it exists (preferred for consistency).
+   B) Otherwise: update the Europe standings table markup to match Premier League’s responsive column visibility:
+      - Always visible: Pos (#), Team, Pts
+      - Hidden on mobile (show from md or lg upwards): P, W, D, L, GF, GA, GD (and any other stats columns)
+      - Ensure header cells and row cells use the same breakpoint rules so alignment stays correct.
+4) Ensure there is no horizontal overflow on mobile:
+   - Remove/avoid forcing min-width wide tables on small screens
+   - If a wrapper uses `overflow-x-auto`, keep it only if necessary, but the goal is to not require horizontal scroll for Europe standings.
+5) Don’t change the desktop/tablet layout beyond matching the existing breakpoints pattern already used in Premier League tables.
+6) After change: verify on mobile viewport that “Pts” is visible and team names aren’t unnecessarily forced to two lines due to overflow.
+
+Output:
+- Only modify the relevant Europe standings table code (and optionally import/reuse the shared league table component if found).
+- Keep everything else (matchday fixtures UI, tabs, colours) unchanged.

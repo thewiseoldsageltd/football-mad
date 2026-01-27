@@ -220,21 +220,21 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div>
       <table className="w-full text-sm" data-testid="table-standings">
         <thead>
           <tr className="border-b">
             <th className="text-left py-2 px-2 font-medium text-muted-foreground w-8">#</th>
             <th className="text-left py-2 px-2 font-medium text-muted-foreground">Team</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-8">P</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-8">W</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-8">D</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-8">L</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10">GF</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10">GA</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10">GD</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10">Pts</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground hidden sm:table-cell">Form</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">P</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">W</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">D</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">L</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">GF</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">GA</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">GD</th>
+            <th className="text-right py-2 px-2 font-semibold text-muted-foreground w-12 md:text-center">Pts</th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground hidden md:table-cell">Form</th>
           </tr>
         </thead>
         <tbody>
@@ -260,15 +260,15 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
                     {team.name}
                   </span>
                 </td>
-                <td className="text-center py-2 px-2">{team.played}</td>
-                <td className="text-center py-2 px-2">{team.won}</td>
-                <td className="text-center py-2 px-2">{team.drawn}</td>
-                <td className="text-center py-2 px-2">{team.lost}</td>
-                <td className="text-center py-2 px-2">{team.goalsFor}</td>
-                <td className="text-center py-2 px-2">{team.goalsAgainst}</td>
-                <td className="text-center py-2 px-2">{team.goalDifference > 0 ? `+${team.goalDifference}` : team.goalDifference}</td>
-                <td className="text-center py-2 px-2 font-bold">{team.points}</td>
-                <td className="text-center py-2 px-2 hidden sm:table-cell">
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.played}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.won}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.drawn}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.lost}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.goalsFor}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.goalsAgainst}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">{team.goalDifference > 0 ? `+${team.goalDifference}` : team.goalDifference}</td>
+                <td className="text-right py-2 px-2 font-bold md:text-center">{team.points}</td>
+                <td className="text-center py-2 px-2 hidden md:table-cell">
                   {team.recentForm && (
                     <div className="flex justify-center gap-0.5">
                       {team.recentForm.split("").slice(0, 5).map((result, i) => (
