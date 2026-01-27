@@ -136,15 +136,24 @@ function isMatchCompleted(status: string): boolean {
 }
 
 function MatchRow({ match, showResults = true }: MatchRowProps) {
-  const hasScore = match.score !== null && match.score !== undefined;
-  const hasPenalties = match.penalties !== null && match.penalties !== undefined;
-  const statusLabel = formatStatusLabel(match.status);
-  const rawStatus = match.status; // Keep raw status for badge variant
+  // Safe extraction of scores and penalties
+  const homeScore = match.score?.home;
+  const awayScore = match.score?.away;
+  const homePen = match.penalties?.home;
+  const awayPen = match.penalties?.away;
   
-  // Display score when: showResults is true AND (has score OR match is completed)
-  // This ensures we show results per-match when available, not just based on matchday
+  const hasScore = Number.isFinite(homeScore) && Number.isFinite(awayScore);
+  const hasPenalties = Number.isFinite(homePen) && Number.isFinite(awayPen);
+  const statusLabel = formatStatusLabel(match.status);
+  const rawStatus = match.status;
+  
+  // Only display score section when we actually have scores
   const matchCompleted = isMatchCompleted(rawStatus);
-  const displayScore = showResults && (hasScore || matchCompleted);
+  const displayScore = showResults && hasScore;
+  
+  // For finished matches without scores, show a dash placeholder
+  const isFinished = matchCompleted;
+  const showScoreFallback = showResults && isFinished && !hasScore;
   
   return (
     <div 
@@ -158,9 +167,12 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
           </span>
           {displayScore && (
             <span className="font-bold" data-testid={`text-home-score-${match.id}`}>
-              {match.score!.home}
-              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({match.penalties!.home})</span>}
+              {homeScore}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
             </span>
+          )}
+          {showScoreFallback && (
+            <span className="font-bold text-muted-foreground" data-testid={`text-home-score-${match.id}`}>–</span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-1">
@@ -169,15 +181,18 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
           </span>
           {displayScore && (
             <span className="font-bold" data-testid={`text-away-score-${match.id}`}>
-              {match.score!.away}
-              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({match.penalties!.away})</span>}
+              {awayScore}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
             </span>
+          )}
+          {showScoreFallback && (
+            <span className="font-bold text-muted-foreground" data-testid={`text-away-score-${match.id}`}>–</span>
           )}
         </div>
       </div>
       
       <div className="flex flex-col items-end gap-1 ml-4">
-        {displayScore ? (
+        {(displayScore || showScoreFallback) ? (
           <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
             {statusLabel}
           </Badge>

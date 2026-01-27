@@ -7913,3 +7913,66 @@ After changes, quickly manual test:
 
 ---
 
+Fix runtime crash in Europe > Champions League caused by null scores.
+
+Error:
+Cannot read properties of null (reading 'home')
+at client/src/components/tables/europe-progress.tsx around line ~161:
+{match.score!.home}
+
+Goal:
+- Never use non-null assertions on match.score or match.penalties.
+- Only render numeric scores when they exist.
+- For upcoming fixtures (no score), show no score (or a dash), but DO NOT crash.
+
+Steps:
+1) Open: client/src/components/tables/europe-progress.tsx
+2) Find the MatchRow component and the section that currently renders:
+   {match.score!.home}
+   {match.score!.away}
+   and penalties like:
+   match.penalties!.home / match.penalties!.away
+3) Replace score rendering with safe guards:
+
+Implementation details (do exactly this pattern):
+- Create safe local vars at top of MatchRow:
+  const homeScore = match.score?.home;
+  const awayScore = match.score?.away;
+  const homePen = match.penalties?.home;
+  const awayPen = match.penalties?.away;
+
+- Define:
+  const hasScore = Number.isFinite(homeScore) && Number.isFinite(awayScore);
+  const hasPenalties = Number.isFinite(homePen) && Number.isFinite(awayPen);
+
+- Wherever the UI currently renders the score, change it to:
+  {hasScore ? homeScore : null}
+  {hasScore ? awayScore : null}
+
+- Wherever penalties are rendered, change it to:
+  {hasPenalties ? ` (${homePen})` : null}
+  {hasPenalties ? ` (${awayPen})` : null}
+
+- Ensure "displayScore" logic (if present) uses `hasScore` instead of checking status alone.
+  Example:
+    const displayScore = hasScore || match.status === "Full-Time" || match.status === "AET" || match.status === "Penalties";
+  becomes:
+    const displayScore = hasScore;
+
+  (Optional, but preferred) If you still want to show a placeholder for finished matches with missing score, use:
+    const displayScore = hasScore;
+    const scoreFallback = "–";
+    and render fallback only when status indicates finished:
+    const isFinished = ["Full-Time","AET","Penalties"].includes(match.status ?? "");
+    show scoreFallback when isFinished && !hasScore.
+
+4) Save, let Vite reload, confirm:
+- Europe > Champions League loads without crashing
+- Upcoming fixtures show date/time and team names even if score is missing
+- Finished fixtures still show scores (and penalties in brackets when present)
+
+Do not add/enable regression video testing.
+Keep changes minimal to europe-progress.tsx only.
+
+---
+
