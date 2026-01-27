@@ -1,0 +1,60 @@
+Replit AI — please update the Champions League (Tables > Europe) standings on MOBILE to match the exact same “trimmed + expandable row” UI we already use for Tables > Leagues (e.g. Premier League).
+
+Goal:
+- On small screens, Champions League standings must NOT render the full desktop table.
+- It should render the SAME mobile standings component/pattern as Premier League:
+  - Collapsed row shows: Pos | Team | Pts | chevron
+  - Expanding reveals: P, W/D/L, GF/GA, GD, Form (exact same layout/typography as PL mobile)
+  - Preserve the existing zone colouring/indicator logic (Top 8 / 9–24 / 25+) in a way consistent with PL mobile (e.g. left border/stripe or row tint — whichever PL uses).
+
+Where to change:
+- client/src/components/tables/europe-progress.tsx (Champions League Europe tab UI)
+- DO NOT change the backend.
+
+Implementation steps:
+1) Find the exact mobile league table component currently used on Tables > Leagues (Premier League).
+   - Search in client/src/components (and client/src/pages if needed) for the Premier League standings render.
+   - Look for a component that renders the collapsed “Pos / Team / Pts” row with a chevron, and expands to show:
+     - P:
+     - W/D/L:
+     - GF/GA:
+     - GD:
+     - Form:
+   - This is the component/pattern we must reuse (or copy 1:1) so Europe behaves identically.
+
+2) Reuse that existing mobile component for Champions League standings.
+   - If the PL standings page uses a shared component like <MobileStandingsTable />, <StandingsMobile />, <LeagueTableMobile />, etc:
+     - Import it into europe-progress.tsx and pass Champions League standings data into it.
+   - If it’s not a reusable component and is embedded inline:
+     - Extract it into a shared component (preferred), then use it in BOTH places OR clone it into europe-progress.tsx without altering behaviour.
+
+3) Data mapping (very important):
+   - Map the UCL standings row fields into the exact shape the mobile component expects:
+     - pos / rank
+     - team name (and badge if the PL view shows it)
+     - points
+     - played
+     - won, drawn, lost
+     - goalsFor, goalsAgainst
+     - goalDiff
+     - form (whatever format the PL mobile uses; if it expects an array of W/D/L, convert accordingly)
+   - Ensure null safety: don’t assume any field exists without fallback.
+
+4) Responsive behaviour must match Premier League:
+   - On mobile (same breakpoint as PL), show ONLY the mobile trimmed table.
+   - On md+ (desktop/tablet), keep the existing full standings table that Europe currently shows.
+   - Implement with the same Tailwind approach used in PL (e.g. hidden md:block / md:hidden) so we don’t introduce a new breakpoint style.
+
+5) Keep the rest of the Europe page unchanged:
+   - Fixtures panel and matchday buttons remain exactly as-is.
+   - No layout regressions.
+
+Acceptance checks:
+- iPhone width: Champions League standings looks identical in structure to Premier League standings (collapsed rows + expand for details + form).
+- Points column is visible without horizontal scrolling.
+- Team names are less likely to wrap (because we’re no longer forcing the full desktop table).
+- Desktop remains unchanged.
+
+Deliverable:
+- Commit the changes with a clear message like:
+  “Europe UCL: use existing mobile standings UI (trimmed + expandable) like PL”
