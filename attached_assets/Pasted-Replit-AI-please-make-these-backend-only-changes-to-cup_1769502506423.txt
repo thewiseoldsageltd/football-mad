@@ -1,0 +1,45 @@
+Replit AI — please make these backend-only changes to cup round naming.
+
+Goal:
+1) Scottish Cup should follow the SAME round naming style as the FA Cup (First Round, Second Round, Third Round, Fourth Round, Quarter-finals, Semi-finals, Final).
+2) Scottish League Cup ONLY: rename the knockout start round so that Goalserve’s “1/8-finals” displays as “Second Round” (NOT “1/8-finals”). Quarter-finals / Semi-finals / Final stay as-is.
+
+Context:
+- Scottish Cup Goalserve competitionId = 1371
+- Scottish League Cup Goalserve competitionId = 1372
+- We already filter out “Regular season” for Scottish League Cup (keep that behaviour).
+
+What to change (Backend):
+A) Add a Scottish Cup normalizer that maps Goalserve fraction labels to FA-Cup style:
+- "1/128-finals" -> "First Round"
+- "1/64-finals"  -> "Second Round"
+- "1/32-finals"  -> "Third Round"
+- "1/16-finals"  -> "Fourth Round"
+- "1/8-finals"   -> "Quarter-finals"   (IMPORTANT: this is matches=8, i.e. round-of-16, but we want FA Cup style and you asked “same convention as FA Cup” — so treat it as the next named round. If you prefer “Fifth Round” instead, implement that instead and keep Quarter-finals as the next stage when it appears.)
+- If Goalserve ever returns "Quarter-finals", "Semi-finals", "Final", keep them as those exact labels.
+- If any other round label appears, pass it through unchanged.
+
+B) Ensure Scottish Cup round ordering uses the canonical FA Cup style order:
+First Round -> Second Round -> Third Round -> Fourth Round -> Quarter-finals -> Semi-finals -> Final
+Seed empty rounds (Semi-finals, Final) if needed so the UI is consistent even before fixtures exist.
+
+C) Add a Scottish League Cup specific normalizer:
+- "1/8-finals" -> "Second Round"
+- Keep "Quarter-finals" as "Quarter-finals"
+- Keep "Semi-finals" as "Semi-finals"
+- Keep "Final" as "Final" (seed if missing)
+- Continue to ignore/filter “Regular season” stages.
+
+D) Wire these normalizers into the normalizer selection logic:
+- If competitionId === 1371 use normalizeToCanonicalRound_SCOTTISH_CUP
+- If competitionId === 1372 use normalizeToCanonicalRound_SCOTTISH_LEAGUE_CUP
+
+E) Update any “canonical rounds” / “max matches” maps used for sanity guards for these two cups so they reflect the NEW labels (e.g., Scottish League Cup should expect “Second Round” instead of “1/8-finals”).
+
+Frontend:
+- No frontend changes required (it will just render the new round names returned by the API).
+
+Acceptance checks:
+1) Scottish Cup now shows “First Round / Second Round / Third Round / Fourth Round …” instead of fraction labels.
+2) Scottish League Cup shows “Second Round” instead of “1/8-finals”.
+3) Existing cups (FA Cup, EFL Cup, Copa del Rey, Coppa Italia, DFB-Pokal, Coupe de France) remain unchanged.

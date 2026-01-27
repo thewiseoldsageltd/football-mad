@@ -2417,25 +2417,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Final": 6,
       };
       
-      // SCOTTISH CUP: Uses Goalserve fraction labels as-is, ordered correctly
+      // SCOTTISH CUP: Uses FA Cup style naming (maps Goalserve fractions to named rounds)
       const SCOTTISH_CUP_CANONICAL_ROUNDS: Record<string, number> = {
-        "1/128-finals": 1,
-        "1/64-finals": 2,
-        "1/32-finals": 3,
-        "1/16-finals": 4,
-        "1/8-finals": 5,
+        "First Round": 1,
+        "Second Round": 2,
+        "Third Round": 3,
+        "Fourth Round": 4,
+        "Fifth Round": 5,
         "Quarter-finals": 6,
         "Semi-finals": 7,
         "Final": 8,
       };
       
-      // SCOTTISH LEAGUE CUP: Uses Goalserve labels, filter out "Regular season"
+      // SCOTTISH LEAGUE CUP: Named rounds, filter out "Regular season"
       const SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS: Record<string, number> = {
-        "1/16-finals": 1,
-        "1/8-finals": 2,
-        "Quarter-finals": 3,
-        "Semi-finals": 4,
-        "Final": 5,
+        "Second Round": 1,
+        "Quarter-finals": 2,
+        "Semi-finals": 3,
+        "Final": 4,
       };
       
       // COUPE DE FRANCE: Uses Goalserve fraction labels as-is, ordered correctly
@@ -2660,8 +2659,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `Unknown: ${name}`;
       };
       
+      // SCOTTISH CUP normalizer: Maps Goalserve fraction labels to FA Cup style names
+      const normalizeToCanonicalRound_SCOTTISH_CUP = (name: string): string | null => {
+        const lower = name.toLowerCase().trim();
+        
+        // Map Goalserve fractional notation to FA Cup style round names
+        if (lower === "1/128-finals") return "First Round";
+        if (lower === "1/64-finals") return "Second Round";
+        if (lower === "1/32-finals") return "Third Round";
+        if (lower === "1/16-finals") return "Fourth Round";
+        if (lower === "1/8-finals") return "Fifth Round";
+        
+        // Keep standard names as-is
+        if (lower === "quarterfinals" || lower === "quarter-finals" || lower === "quarter-final") return "Quarter-finals";
+        if (lower === "semifinals" || lower === "semi-finals" || lower === "semi-final") return "Semi-finals";
+        if (lower === "final" || lower === "finals" || lower === "the final") return "Final";
+        
+        // Check exact matches to canonical rounds
+        for (const canonical of Object.keys(SCOTTISH_CUP_CANONICAL_ROUNDS)) {
+          if (lower === canonical.toLowerCase()) return canonical;
+        }
+        
+        // Pass through unknown rounds for debugging
+        console.log(`[Scottish Cup] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
+      };
+      
+      // SCOTTISH LEAGUE CUP normalizer: Maps "1/8-finals" to "Second Round", filters Regular season
+      const normalizeToCanonicalRound_SCOTTISH_LEAGUE_CUP = (name: string): string | null => {
+        const lower = name.toLowerCase().trim();
+        
+        // Filter out non-knockout rounds
+        if (lower.includes("regular season") || lower.includes("group stage") || lower.includes("league")) {
+          return null;
+        }
+        
+        // Map "1/8-finals" to "Second Round" (the knockout start round)
+        if (lower === "1/8-finals") return "Second Round";
+        
+        // Keep standard names as-is
+        if (lower === "quarterfinals" || lower === "quarter-finals" || lower === "quarter-final") return "Quarter-finals";
+        if (lower === "semifinals" || lower === "semi-finals" || lower === "semi-final") return "Semi-finals";
+        if (lower === "final" || lower === "finals" || lower === "the final") return "Final";
+        
+        // Check exact matches to canonical rounds
+        for (const canonical of Object.keys(SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS)) {
+          if (lower === canonical.toLowerCase()) return canonical;
+        }
+        
+        // Pass through unknown rounds for debugging
+        console.log(`[Scottish League Cup] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
+      };
+      
       // Generic passthrough normalizer: preserves Goalserve labels with minimal normalization
-      // Used for Scottish Cup, Scottish League Cup, Coupe de France
+      // Used for Coupe de France only now
       const normalizeToCanonicalRound_PASSTHROUGH = (
         canonicalRounds: Record<string, number>,
         competitionName: string
@@ -2686,23 +2738,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
         }
         
-        // Filter out "Regular season" for league cups
-        if (lower.includes("regular season") || lower.includes("group stage") || lower.includes("league")) {
-          return null; // Discard non-knockout rounds
-        }
-        
         // Preserve unknown rounds for debugging
         console.log(`[${competitionName}] Unknown round name preserved: "${name}"`);
         return `Unknown: ${name}`;
       };
       
       // Select normalizer based on competition
-      // FA Cup normalizer returns null for unknown rounds (discard them)
-      // Other cup normalizers return "Unknown: {name}" for unknown rounds (preserve for debugging)
       const normalizeToCanonicalRound = isScottishCup
-        ? normalizeToCanonicalRound_PASSTHROUGH(SCOTTISH_CUP_CANONICAL_ROUNDS, "Scottish Cup")
+        ? normalizeToCanonicalRound_SCOTTISH_CUP
         : isScottishLeagueCup
-          ? normalizeToCanonicalRound_PASSTHROUGH(SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS, "Scottish League Cup")
+          ? normalizeToCanonicalRound_SCOTTISH_LEAGUE_CUP
           : isCoupeDeFrance
             ? normalizeToCanonicalRound_PASSTHROUGH(COUPE_DE_FRANCE_CANONICAL_ROUNDS, "Coupe de France")
             : isDfbPokal
@@ -2746,8 +2791,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "First Round": 64,
       };
       
-      // Generic max matches for cups using fraction labels (Scottish Cup, Coupe de France, etc.)
-      const FRACTION_CUPS_MAX_MATCHES: Record<string, number> = {
+      // Scottish Cup max matches (FA Cup style round names)
+      const SCOTTISH_CUP_MAX_MATCHES: Record<string, number> = {
+        "First Round": 128,
+        "Second Round": 64,
+        "Third Round": 32,
+        "Fourth Round": 24,
+        "Fifth Round": 16,
+        "Quarter-finals": 8,
+        "Semi-finals": 4,
+        "Final": 2,
+      };
+      
+      // Scottish League Cup max matches
+      const SCOTTISH_LEAGUE_CUP_MAX_MATCHES: Record<string, number> = {
+        "Second Round": 16,
+        "Quarter-finals": 8,
+        "Semi-finals": 4,
+        "Final": 2,
+      };
+      
+      // Coupe de France max matches (fraction labels)
+      const COUPE_DE_FRANCE_MAX_MATCHES: Record<string, number> = {
         "1/128-finals": 128,
         "1/64-finals": 64,
         "1/32-finals": 32,
@@ -2758,13 +2823,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Final": 2,
       };
       
-      const ROUND_MAX_MATCHES = (isScottishCup || isScottishLeagueCup || isCoupeDeFrance)
-        ? FRACTION_CUPS_MAX_MATCHES
-        : isDfbPokal 
-          ? DFB_POKAL_MAX_MATCHES 
-          : isEflCup 
-            ? EFL_CUP_MAX_MATCHES 
-            : FA_CUP_MAX_MATCHES;
+      const ROUND_MAX_MATCHES = isScottishCup
+        ? SCOTTISH_CUP_MAX_MATCHES
+        : isScottishLeagueCup
+          ? SCOTTISH_LEAGUE_CUP_MAX_MATCHES
+          : isCoupeDeFrance
+            ? COUPE_DE_FRANCE_MAX_MATCHES
+            : isDfbPokal 
+              ? DFB_POKAL_MAX_MATCHES 
+              : isEflCup 
+                ? EFL_CUP_MAX_MATCHES 
+                : FA_CUP_MAX_MATCHES;
 
       // Debug flag for logging discarded rounds
       const DEBUG_CUP_ROUNDS = process.env.DEBUG_CUP_ROUNDS === "true";
