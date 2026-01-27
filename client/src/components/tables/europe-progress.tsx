@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -92,21 +92,22 @@ function formatKickoff(kickoffDate?: string | null, kickoffTime?: string | null)
 }
 
 function getStatusBadgeVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
-  switch (status) {
-    case "Full-Time":
-    case "AET":
-    case "Penalties":
-      return "secondary";
-    case "Half-Time":
-      return "destructive";
-    case "Not Started":
-      return "outline";
-    default:
-      if (status.includes("'") || /^\d/.test(status)) {
-        return "destructive";
-      }
-      return "outline";
+  // Handle both raw Goalserve statuses and formatted labels
+  const normalizedStatus = status.toLowerCase();
+  
+  // Completed statuses
+  if (["full-time", "ft", "finished", "aet", "after extra time", "penalties", "after pen."].includes(normalizedStatus)) {
+    return "secondary";
   }
+  // Live statuses
+  if (["half-time", "ht"].includes(normalizedStatus) || status.includes("'") || /^\d/.test(status)) {
+    return "destructive";
+  }
+  // Scheduled / Not Started
+  if (["not started", "ns", "scheduled"].includes(normalizedStatus)) {
+    return "outline";
+  }
+  return "outline";
 }
 
 interface MatchRowProps {
@@ -124,14 +125,26 @@ function formatStatusLabel(status: string): string {
   return status;
 }
 
+function isMatchCompleted(status: string): boolean {
+  const normalizedStatus = status.toLowerCase();
+  const completedPatterns = [
+    "finished", "ft", "full-time", "full time", "match finished",
+    "aet", "after extra time", "extra time",
+    "penalties", "after pen", "pens"
+  ];
+  return completedPatterns.some(pattern => normalizedStatus.includes(pattern));
+}
+
 function MatchRow({ match, showResults = true }: MatchRowProps) {
   const hasScore = match.score !== null && match.score !== undefined;
   const hasPenalties = match.penalties !== null && match.penalties !== undefined;
   const statusLabel = formatStatusLabel(match.status);
+  const rawStatus = match.status; // Keep raw status for badge variant
   
-  // Determine whether to display scores or kickoff time
-  // If showResults is true and we have scores, show them; otherwise show kickoff
-  const displayScore = showResults && hasScore;
+  // Display score when: showResults is true AND (has score OR match is completed)
+  // This ensures we show results per-match when available, not just based on matchday
+  const matchCompleted = isMatchCompleted(rawStatus);
+  const displayScore = showResults && (hasScore || matchCompleted);
   
   return (
     <div 
@@ -165,7 +178,7 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
       
       <div className="flex flex-col items-end gap-1 ml-4">
         {displayScore ? (
-          <Badge variant={getStatusBadgeVariant(statusLabel)} className="text-xs" data-testid={`badge-status-${match.id}`}>
+          <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
             {statusLabel}
           </Badge>
         ) : (
@@ -173,7 +186,7 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
             <span className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
               {formatKickoff(match.kickoffDate, match.kickoffTime)}
             </span>
-            <Badge variant="outline" className="text-xs" data-testid={`badge-status-${match.id}`}>
+            <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
               {statusLabel}
             </Badge>
           </>
@@ -379,7 +392,8 @@ function StageSelector({
 }
 
 export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps) {
-  const [selectedStage, setSelectedStage] = useState("MD1");
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
   
   const europeUrl = `/api/europe/${competitionSlug}?season=${encodeURIComponent(season)}`;
   
@@ -389,7 +403,28 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
     refetchInterval: 120_000,
   });
 
-  if (isLoading) {
+  // Extract phases after data is loaded
+  const leaguePhase = data?.phases.find((p): p is LeaguePhase => p.type === "league_phase");
+  const knockoutPhase = data?.phases.find((p): p is KnockoutPhase => p.type === "knockout");
+  const knockoutRounds = knockoutPhase?.rounds ?? [];
+  
+  // Compute current matchday (highest MD with started matches)
+  const currentMD = leaguePhase ? computeCurrentMatchday(leaguePhase.matchdays) : 1;
+  
+  // Set initial selection to current matchday once data loads
+  useEffect(() => {
+    if (data && !hasInitialized) {
+      // Ensure currentMD is within valid bounds (1-8 for league phase)
+      const validMD = Math.max(1, Math.min(8, currentMD));
+      const stageKey = `MD${validMD}`;
+      // Verify stage exists in options
+      const stageExists = STAGE_OPTIONS.some(opt => opt.key === stageKey);
+      setSelectedStage(stageExists ? stageKey : "MD1");
+      setHasInitialized(true);
+    }
+  }, [data, currentMD, hasInitialized]);
+
+  if (isLoading || !selectedStage) {
     return (
       <Card>
         <CardContent className="p-6 flex items-center justify-center gap-2 text-muted-foreground">
@@ -409,22 +444,12 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
       </Card>
     );
   }
-
-  const leaguePhase = data.phases.find((p): p is LeaguePhase => p.type === "league_phase");
-  const knockoutPhase = data.phases.find((p): p is KnockoutPhase => p.type === "knockout");
-  const knockoutRounds = knockoutPhase?.rounds ?? [];
-  
-  // Compute current matchday (highest MD with started matches)
-  const currentMD = leaguePhase ? computeCurrentMatchday(leaguePhase.matchdays) : 1;
   
   // Parse selected stage
   const selectedOption = STAGE_OPTIONS.find(opt => opt.key === selectedStage);
   const isLeagueStage = selectedOption?.type === "league";
   const selectedMdNumber = isLeagueStage ? (selectedOption as { md: number }).md : 0;
   const selectedKORound = !isLeagueStage ? (selectedOption as { round: string }).round : "";
-  
-  // Determine if selected stage is past (for showing results)
-  const isPastMatchday = isLeagueStage && selectedMdNumber < currentMD;
   
   // Get matches to display
   let displayMatches: EuropeMatch[] = [];
@@ -474,7 +499,6 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
                 <h4 className="font-semibold" data-testid="text-display-title">{displayTitle}</h4>
                 <p className="text-sm text-muted-foreground">
                   {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
-                  {isPastMatchday && " (Results)"}
                 </p>
               </div>
               <div className="max-h-[500px] overflow-y-auto">
@@ -487,7 +511,7 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
                     <MatchRow 
                       key={match.id} 
                       match={match} 
-                      showResults={isPastMatchday || !isLeagueStage}
+                      showResults={true}
                     />
                   ))
                 )}
