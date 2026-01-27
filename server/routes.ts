@@ -2897,6 +2897,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       
+      // Seed all canonical rounds for Scottish League Cup so empty rounds appear in UI
+      if (isScottishLeagueCup) {
+        for (const [roundName, order] of Object.entries(SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS)) {
+          if (!canonicalRoundsMap.has(roundName)) {
+            canonicalRoundsMap.set(roundName, new Map());
+          }
+        }
+      }
+      
+      // Seed all canonical rounds for Scottish Cup so empty rounds appear in UI
+      if (isScottishCup) {
+        for (const [roundName, order] of Object.entries(SCOTTISH_CUP_CANONICAL_ROUNDS)) {
+          if (!canonicalRoundsMap.has(roundName)) {
+            canonicalRoundsMap.set(roundName, new Map());
+          }
+        }
+      }
+      
+      // Scottish League Cup fix: Move mislabelled Final from Semi-finals
+      // Goalserve sometimes labels the Final as "Semi-finals", resulting in 3+ matches
+      if (isScottishLeagueCup) {
+        const semisMap = canonicalRoundsMap.get("Semi-finals");
+        const finalMap = canonicalRoundsMap.get("Final");
+        
+        if (semisMap && semisMap.size >= 3 && (!finalMap || finalMap.size === 0)) {
+          // Find the match with the latest kickoff datetime
+          const semisMatches = Array.from(semisMap.values()) as CupMatch[];
+          
+          let latestMatch: CupMatch | null = null;
+          let latestKickoff = "";
+          
+          for (const match of semisMatches) {
+            // Build kickoff datetime string for comparison
+            let kickoff = match.kickoff || "";
+            if (!kickoff && match.kickoffDate) {
+              kickoff = match.kickoffDate + (match.kickoffTime ? " " + match.kickoffTime : "");
+            }
+            
+            if (kickoff > latestKickoff) {
+              latestKickoff = kickoff;
+              latestMatch = match;
+            }
+          }
+          
+          if (latestMatch) {
+            // Remove from Semi-finals
+            semisMap.delete(latestMatch.id);
+            
+            // Add to Final
+            if (!canonicalRoundsMap.has("Final")) {
+              canonicalRoundsMap.set("Final", new Map());
+            }
+            const newFinalMap = canonicalRoundsMap.get("Final")!;
+            newFinalMap.set(latestMatch.id, latestMatch);
+            
+            console.log(`[Scottish League Cup] Moved match ${latestMatch.id} from Semi-finals to Final (kickoff: ${latestKickoff})`);
+          }
+        }
+      }
+      
       const canonicalEntries = Array.from(canonicalRoundsMap.entries());
       for (const [canonicalName, matchMap] of canonicalEntries) {
         const matchList: CupMatch[] = Array.from(matchMap.values());

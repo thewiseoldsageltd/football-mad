@@ -7695,4 +7695,38 @@ Acceptance checks:
 
 ---
 
+Replit AI — please fix Scottish League Cup “Final mislabelled as Semi-finals” edge case in the backend.
+
+Problem:
+In Scottish League Cup (competitionId 1372), Goalserve sometimes labels the Final match as stage/round “Semi-finals”, resulting in 3 matches under “Semi-finals” and no “Final” card.
+
+Goal:
+If competitionId === 1372 AND after normalisation/grouping:
+- There is a “Semi-finals” round containing 3+ matches
+- AND there is NO “Final” round (or Final is empty)
+Then:
+- Move exactly ONE match (the latest by kick-off datetime) from “Semi-finals” into a new “Final” round.
+- Keep the remaining two matches in “Semi-finals”.
+- Ensure the “Final” round is included in the canonical ordering for Scottish League Cup (Second Round, Quarter-finals, Semi-finals, Final) and appears even if seeded empty.
+
+Implementation detail:
+1) Find the place in the cup endpoint where matches are already parsed and grouped into rounds (after normalizeToCanonicalRound_SCOTTISH_LEAGUE_CUP runs).
+2) Add a post-processing step ONLY for competitionId 1372:
+   - let semis = rounds["Semi-finals"] (array)
+   - let final = rounds["Final"] (array)
+   - if (semis?.length >= 3 && (!final || final.length === 0)):
+       - pick the match with the greatest kickoff datetime:
+         - use match.datetime if available
+         - else combine match.date + match.time
+       - remove it from semis
+       - push it into rounds["Final"]
+3) Keep everything else unchanged (don’t affect other cups).
+
+Acceptance checks:
+- Scottish League Cup shows Semi-finals with 2 fixtures, plus a Final card containing the moved fixture.
+- Other competitions unaffected.
+- If Goalserve later starts returning a proper Final stage, do nothing (no duplicate moving).
+
+---
+
 
