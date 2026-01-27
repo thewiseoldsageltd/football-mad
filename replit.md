@@ -129,9 +129,15 @@ Preferred communication style: Simple, everyday language.
     - Data-testid: `round-toggle`, `button-round-prev`, `button-round-next`, `text-round-label`
 - **League Tables (Tables > Leagues tab)**:
   - API: `/api/league/:slug?season=YYYY/YYYY`
-  - Returns: `{ standings, rounds, matchesByRound, latestRoundKey }`
+  - Returns: `{ standings, rounds, matchesByRound, latestRoundKey, latestScheduledRoundKey, latestActiveRoundKey }`
   - Rounds grouped by `goalserveRound` field from matches
   - Uses same RoundToggle component for matchweek navigation
+  - **Matchweek numbering**: Always 1-indexed (MW1, MW2, etc., never MW0)
+    - Backend detects 0-indexed feeds and shifts all rounds by +1
+    - Round parsing handles various formats: "2", "Matchweek 2", "Round 0", "MW5"
+  - **Default selection priority**: URL param > latestScheduledRoundKey > latestActiveRoundKey > last round
+  - **URL sync**: Round changes update `?round=MWX` query parameter
+  - **Scheduled status detection**: includes "scheduled", "ns", "notstarted", "fixture", "tbd", "time tbd", time formats
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
