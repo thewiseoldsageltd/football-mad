@@ -121,6 +121,17 @@ Preferred communication style: Simple, everyday language.
     - "1/2-finals" / "semi-finals" → "Semi-finals" (order 4)
     - "final" → "Final" (order 5)
   - **UX**: Removed nested scroll on matchday fixtures panel; fixtures now use page scroll
+  - **RoundToggle navigation**: Unified prev/next controls for matchday/round navigation
+    - Component: `client/src/components/shared/round-toggle.tsx`
+    - Interface: `RoundInfo { key, label, startDate?, endDate?, matchesCount }`
+    - Props: `labelType` ("Matchday" or "Matchweek"), `rounds`, `value`, `onChange`
+    - Helper: `pickDefaultRound(rounds, latestRoundKey)` - prioritizes latestRoundKey, falls back to last round
+    - Data-testid: `round-toggle`, `button-round-prev`, `button-round-next`, `text-round-label`
+- **League Tables (Tables > Leagues tab)**:
+  - API: `/api/league/:slug?season=YYYY/YYYY`
+  - Returns: `{ standings, rounds, matchesByRound, latestRoundKey }`
+  - Rounds grouped by `goalserveRound` field from matches
+  - Uses same RoundToggle component for matchweek navigation
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
