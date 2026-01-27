@@ -162,31 +162,31 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="font-medium truncate" data-testid={`text-home-${match.id}`}>
+          <span className="text-sm font-normal truncate" data-testid={`text-home-${match.id}`}>
             {match.home.name}
           </span>
           {displayScore && (
-            <span className="font-bold" data-testid={`text-home-score-${match.id}`}>
+            <span className="text-sm font-semibold" data-testid={`text-home-score-${match.id}`}>
               {homeScore}
               {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
             </span>
           )}
           {showScoreFallback && (
-            <span className="font-bold text-muted-foreground" data-testid={`text-home-score-${match.id}`}>–</span>
+            <span className="text-sm font-semibold text-muted-foreground" data-testid={`text-home-score-${match.id}`}>–</span>
           )}
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <span className="font-medium truncate" data-testid={`text-away-${match.id}`}>
+          <span className="text-sm font-normal truncate" data-testid={`text-away-${match.id}`}>
             {match.away.name}
           </span>
           {displayScore && (
-            <span className="font-bold" data-testid={`text-away-score-${match.id}`}>
+            <span className="text-sm font-semibold" data-testid={`text-away-score-${match.id}`}>
               {awayScore}
               {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
             </span>
           )}
           {showScoreFallback && (
-            <span className="font-bold text-muted-foreground" data-testid={`text-away-score-${match.id}`}>–</span>
+            <span className="text-sm font-semibold text-muted-foreground" data-testid={`text-away-score-${match.id}`}>–</span>
           )}
         </div>
       </div>

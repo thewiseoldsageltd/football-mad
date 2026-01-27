@@ -8136,3 +8136,53 @@ Do not change any logic or data fetching — layout only.
 
 ---
 
+UI density tweak for Europe > Champions League fixtures list.
+
+GOAL
+Reduce the font size of the team names in the matchday fixtures list so they match the standings table text size.
+
+This makes the right column feel more like a compact results panel and less oversized.
+
+FILE
+client/src/components/tables/europe-progress.tsx
+
+WHAT TO CHANGE
+
+1) Find the component rendering each fixture row.
+You will see two team names per match, something like:
+
+  <div className="flex justify-between">
+    <div className="flex flex-col">
+      <span className="font-medium">{match.homeTeam}</span>
+      <span className="font-medium">{match.awayTeam}</span>
+    </div>
+
+2) Reduce the text size to match the standings table.
+
+Replace `font-medium` only with a smaller text size + normal weight:
+
+  <span className="text-sm font-normal">{match.homeTeam}</span>
+  <span className="text-sm font-normal">{match.awayTeam}</span>
+
+3) If the score is styled similarly (like bold + large), slightly reduce that too for balance:
+
+Before:
+  <span className="font-bold">{match.score.home}</span>
+
+After:
+  <span className="text-sm font-semibold">{match.score.home}</span>
+
+Do the same for away score.
+
+4) Do NOT change spacing between rows or the Full-Time badge — only typography.
+
+RESULT
+
+Before:
+Large team names dominating the right panel.
+
+After:
+Team names visually match the density of the standings table on the left, making the two columns feel like one unified layout.
+
+---
+
