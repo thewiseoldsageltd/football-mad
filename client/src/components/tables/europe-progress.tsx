@@ -172,25 +172,27 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
       
       {/* RIGHT — Score column + Status pill */}
       <div className="flex items-center gap-3 ml-4">
-        {/* Score column */}
-        {displayScore && (
-          <div className="flex flex-col items-end text-sm font-semibold tabular-nums leading-5">
-            <span className="w-6 text-right" data-testid={`text-home-score-${match.id}`}>
-              {homeScore}
-              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
-            </span>
-            <span className="w-6 text-right" data-testid={`text-away-score-${match.id}`}>
-              {awayScore}
-              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
-            </span>
-          </div>
-        )}
-        {showScoreFallback && (
-          <div className="flex flex-col items-end text-sm font-semibold text-muted-foreground tabular-nums leading-5">
-            <span className="w-6 text-right" data-testid={`text-home-score-${match.id}`}>–</span>
-            <span className="w-6 text-right" data-testid={`text-away-score-${match.id}`}>–</span>
-          </div>
-        )}
+        {/* Score column with fixed width for alignment */}
+        <div className="flex items-center justify-end min-w-[32px] text-right">
+          {displayScore && (
+            <div className="flex flex-col items-end leading-tight font-semibold tabular-nums">
+              <span data-testid={`text-home-score-${match.id}`}>
+                {homeScore}
+                {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
+              </span>
+              <span data-testid={`text-away-score-${match.id}`}>
+                {awayScore}
+                {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
+              </span>
+            </div>
+          )}
+          {showScoreFallback && (
+            <div className="flex flex-col items-end leading-tight font-semibold text-muted-foreground tabular-nums">
+              <span data-testid={`text-home-score-${match.id}`}>–</span>
+              <span data-testid={`text-away-score-${match.id}`}>–</span>
+            </div>
+          )}
+        </div>
         
         {/* Status pill or kickoff time */}
         <div className="flex flex-col items-end gap-1">
