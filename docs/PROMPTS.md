@@ -7976,3 +7976,34 @@ Keep changes minimal to europe-progress.tsx only.
 
 ---
 
+You are working in the Football Mad Replit project.
+
+Add ONE more UX improvement to Tables > Europe > Champions League:
+
+I) Remove “scroll within a scroll” on the right-hand Matchday fixtures/results panel.
+Goal: The matchday fixtures block on the right should extend down the page so all fixtures are visible via normal page scroll (no internal overflow scrolling).
+
+Implementation:
+1) Find the container that renders the right-hand column (Matchdays selector + Matchday fixtures list) in the Europe tab component (likely `client/src/components/tables/europe-progress.tsx` or similar).
+2) Identify where the fixtures list is constrained (common culprits):
+   - `max-h-*`
+   - `h-*`
+   - `overflow-y-auto` / `overflow-auto`
+   - a parent `flex` container with `min-h-0` + `overflow-y-auto`
+3) Remove the internal scroll behavior:
+   - Remove any `max-h-*` / fixed `h-*` on the fixtures list container.
+   - Remove `overflow-y-auto` / `overflow-auto` on the fixtures list container (and any parent wrapper causing it).
+   - Ensure the fixtures list container uses natural height: `h-auto` and no overflow rules.
+4) Keep layout stable:
+   - The right-hand column should still sit beside the standings on desktop.
+   - On smaller screens, it can stack as it does today.
+5) Sanity check:
+   - With “Matchday 1” selected (18 matches), you should be able to scroll the PAGE and see the entire list without a nested scroll area.
+   - Ensure the card borders/padding remain consistent.
+
+Please implement this alongside the earlier changes (KO pills, past MD results display, Final full-width button), without adding regression video testing.
+
+Update docs briefly (BUILD_LOG.md / DECISIONS.md): “Removed nested scroll on Europe matchday fixtures panel; fixtures now use page scroll.”
+
+---
+

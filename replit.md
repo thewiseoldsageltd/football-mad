@@ -120,6 +120,7 @@ Preferred communication style: Simple, everyday language.
     - "1/4-finals" / "quarter-finals" → "Quarter-finals" (order 3)
     - "1/2-finals" / "semi-finals" → "Semi-finals" (order 4)
     - "final" → "Final" (order 5)
+  - **UX**: Removed nested scroll on matchday fixtures panel; fixtures now use page scroll
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds

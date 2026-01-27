@@ -516,7 +516,7 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
                   {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
                 </p>
               </div>
-              <div className="max-h-[500px] overflow-y-auto">
+              <div>
                 {displayMatches.length === 0 ? (
                   <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
                     No fixtures yet
