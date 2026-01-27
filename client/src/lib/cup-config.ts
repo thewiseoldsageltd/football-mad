@@ -11,6 +11,7 @@ export const cupConfigs: CupConfig[] = [
   { slug: "efl-cup", name: "EFL Cup", shortName: "EFL", goalserveCompetitionId: "1199", country: "England" },
   { slug: "copa-del-rey", name: "Copa del Rey", shortName: "CDR", goalserveCompetitionId: "1397", country: "Spain" },
   { slug: "coppa-italia", name: "Coppa Italia", shortName: "CI", goalserveCompetitionId: "1264", country: "Italy" },
+  { slug: "dfb-pokal", name: "DFB-Pokal", shortName: "DFB", goalserveCompetitionId: "1226", country: "Germany" },
 ];
 
 export function getCupBySlug(slug: string): CupConfig | undefined {

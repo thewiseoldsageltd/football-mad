@@ -1,0 +1,55 @@
+Fix DFB-Pokal cup progress showing "Cup data not available" and implement correct round naming.
+
+Goal:
+- DFB-Pokal tab should show fixtures grouped by rounds.
+- Use Soccerway-style round names (First Round, Second Round, Round of 16, Quarter-finals, Semi-finals, Final).
+- Goalserve feed for DFB Pokal is "Germany Cup" competitionId = 1226.
+
+Steps:
+
+1) client/src/lib/cup-config.ts
+- Add/verify a config entry for DFB-Pokal:
+  - slug: "dfb-pokal"
+  - name: "DFB-Pokal"
+  - shortName: "DFB"
+  - country: "Germany"
+  - goalserveCompetitionId: "1226"
+- Ensure it is included in the Cups list used by the Tables page tabs (same as FA Cup / EFL Cup / Copa del Rey / Coppa Italia).
+
+2) server/routes.ts
+- Ensure the /api/cup/progress endpoint recognises competitionId 1226 as a supported cup.
+  - Add an isDfbPokal flag (similar to isCoppaItalia / isCopaDelRey etc) OR include 1226 in the existing cup allow-list.
+  - Make sure the handler does NOT return the "Cup data not available" response for 1226.
+
+3) Round name normalisation for DFB-Pokal (1226)
+Goalserve provides fraction labels for early rounds. Map them to user friendly names:
+  - "1/32-finals" -> "First Round"
+  - "1/16-finals" -> "Second Round"
+  - "1/8-finals"  -> "Round of 16"
+  - Preserve "Quarter-finals", "Semi-finals", "Final" (normalise minor variants: "Quarterfinals" -> "Quarter-finals", "Semifinals" -> "Semi-finals")
+Implement:
+  - DFB_POKAL_CANONICAL_ROUNDS order map:
+      First Round: 1
+      Second Round: 2
+      Round of 16: 3
+      Quarter-finals: 4
+      Semi-finals: 5
+      Final: 6
+  - normalizeToCanonicalRound_DFB_POKAL(rawRoundName: string): string
+  - Only apply this normaliser when competitionId === "1226" (don’t affect other competitions).
+
+4) Round seeding / “show empty rounds”
+- Ensure Semi-finals and Final appear even if Goalserve hasn’t populated matches yet (same approach as Coppa Italia):
+  - Seed all canonical rounds in the response with an empty array if missing.
+
+5) Validate
+- Add a quick log or temporary debug output to confirm that the parsed stages/round names exist for 1226.
+- Run:
+  - curl /api/cup/progress?competitionId=1226
+  - Confirm response contains 6 rounds with correct names and match counts (First Round 32, Second Round 16, Round of 16 8, Quarter-finals 4, and seeded empty for Semi-finals + Final if not yet available).
+
+6) Frontend
+- Confirm DFB-Pokal tab uses competitionId 1226 from cup-config.
+- No special UI changes required beyond showing returned round titles.
+
+Deliverable: commit the changes in the above files and confirm DFB-Pokal no longer shows "Cup data not available".
