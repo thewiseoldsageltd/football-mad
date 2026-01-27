@@ -1,0 +1,70 @@
+MATCHWEEK TOGGLE STILL BROKEN — FIX + INSTRUMENT
+
+Context:
+Tables > Leagues (Premier League etc) has a “Fixtures” sidebar with a Matchweek toggle (prev/next). The UI renders, but clicking prev/next does NOTHING (no change in the list, no title change). We need it fully wired.
+
+Please do the following in the client:
+
+1) ADD TEMP DEBUG LOGGING (remove once fixed)
+- In the Matchweek toggle component, add a console.log when:
+  - prev is clicked
+  - next is clicked
+  - onChange is called
+  Log: { action: 'prev'|'next'|'select', currentKey, nextKey, roundsLength }
+- In the parent component that owns state (Tables league page / league-progress component), add console.log when:
+  - selectedRound changes
+  - data (rounds/matchesByRound) changes
+  Log: { selectedRound, availableRoundKeys: rounds.map(r=>r.key), hasMatches: !!matchesByRound[selectedRound] }
+
+2) ENSURE THERE IS A SINGLE SOURCE OF TRUTH FOR SELECTED ROUND
+- In the parent component, implement:
+  const [selectedRound, setSelectedRound] = useState<string | null>(null)
+- Only this state controls:
+  - the highlighted matchweek in the toggle
+  - the “Matchweek X” heading
+  - the fixtures list data source
+
+3) WIRE PREV/NEXT CORRECTLY
+- In the toggle, accept props:
+  - rounds: Array<{ key: string; label: string; dateRange?: string }>
+  - selectedKey: string
+  - onChange: (key: string) => void
+- Implement prev/next by finding current index:
+  const idx = rounds.findIndex(r => r.key === selectedKey)
+  prev -> if idx > 0 call onChange(rounds[idx-1].key)
+  next -> if idx < rounds.length-1 call onChange(rounds[idx+1].key)
+- Disable prev/next at ends.
+
+4) FIX THE “KEY MISMATCH” BUG (MOST LIKELY CAUSE)
+- Right now the UI displays “Matchweek 0” and the rounds probably use numbers while matchesByRound uses strings (or vice versa).
+- Standardise the key format in the CLIENT before rendering:
+  Create a helper:
+    const normaliseRoundKey = (k: unknown) => String(k).startsWith('MW') ? String(k) : `MW${String(k)}`
+  Ensure:
+    - rounds keys are normalised (e.g. MW1, MW2...)
+    - selectedRound always stores a normalised key
+    - matchesByRound is accessed with the normalised key
+  If matchesByRound is keyed by numbers (0,1,2) instead, then do the opposite:
+    - create normaliseRoundIndex = (key: string) => parseInt(key.replace('MW',''),10)
+    - access matchesByRound[roundIndex]
+  IMPORTANT: pick ONE and make rounds + selection + lookup consistent.
+
+5) REMOVE STALE MEMO ISSUES
+- If fixtures list is computed with useMemo, ensure dependencies include:
+  [selectedRound, matchesByRound, rounds]
+- If you do derivedSelectedRound in useMemo, ensure it reruns when query params OR data changes.
+
+6) URL SYNC (OPTIONAL BUT NICE)
+- When onChange fires, update URL query param ?mw=MWxx
+- On first load, initialise from URL if present and valid.
+
+7) ACCEPTANCE TEST
+- Clicking prev/next must change:
+  - the toggle highlight
+  - the “Matchweek X” heading
+  - the fixtures list rows
+- Console logs should show correct keys and that matchesByRound[selectedRound] resolves.
+- After confirmed, remove or gate console logs behind a dev flag.
+
+Deliverable:
+- Commit working toggle behaviour. Keep layout unchanged.
