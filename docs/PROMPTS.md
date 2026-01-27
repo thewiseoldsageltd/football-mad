@@ -8888,3 +8888,67 @@ Deliverable:
 
 ---
 
+Fix Tables > Leagues sidebar matchweek label + toggle logic.
+
+IMPORTANT:
+DO NOT run tests, scripts, browsers, or automated verification.
+DO NOT add testing code.
+ONLY modify application source code related to matchweek navigation and display.
+I will test manually.
+
+Bug:
+Sidebar header shows “Matchweek 1” but the fixtures shown are clearly from a later week (e.g. MW23).
+This means the UI label is using array index instead of the real matchweek key, and/or matchesByRound keys are being grouped incorrectly so only one round appears.
+
+Scope:
+Find the component that renders the right-hand “Fixtures” sidebar on the Tables page for domestic leagues (Premier League etc). It contains:
+- Prev/Next chevrons
+- “Matchweek X” title
+- Date range
+- Fixtures list
+
+Fix requirements:
+
+1) Build rounds from REAL DATA KEYS
+- Use: const roundKeys = Object.keys(matchesByRound ?? {})
+- Treat matchweek keys like "MW23"
+- Extract number: const n = parseInt(String(key).match(/(\d+)/)?.[1] ?? "", 10)
+- Ignore invalid numbers
+- Sort ascending by n
+- Create:
+  normalizedKey = `MW${n}`
+  originalKey = key
+- Build map: normalizedKey -> originalKey
+
+2) Selected round state must store NORMALIZED KEY (e.g. "MW23")
+- When fetching matches, resolve originalKey from the map
+- NEVER use array index as the matchweek id
+
+3) Matchweek label must come from the key, NOT index
+- Display: Matchweek ${number extracted from selectedRound}
+- Never show “Matchweek 0”
+- Never use index+1
+
+4) Default selection must be the latest real matchweek
+- On load or when data changes:
+  - Find highest week number that has matches
+  - Fallback: highest week number
+- If URL param exists (?mw=MWxx), validate it first
+
+5) Prev/Next navigation must move through the sorted normalized keys
+- Find current index using normalized key
+- Prev = index - 1
+- Next = index + 1
+- Disable correctly at boundaries
+
+6) Keep layout and styling exactly the same
+Only fix data handling, key normalization, label logic, and toggle behaviour.
+
+Optional debug logs are allowed ONLY if wrapped in a condition like:
+if (new URLSearchParams(window.location.search).get("debug") === "1")
+
+Deliverable:
+Working matchweek toggle using real matchweek numbers (e.g. MW23 shows “Matchweek 23”), correct default to latest week, and proper prev/next behaviour.
+
+---
+

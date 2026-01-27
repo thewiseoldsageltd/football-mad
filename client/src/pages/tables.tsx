@@ -290,13 +290,119 @@ export default function TablesPage() {
     return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
 
-  const leagueRounds = standingsData?.rounds ?? [];
-  const leagueMatchesByRound = standingsData?.matchesByRound ?? {};
-  const leagueLatestScheduledRoundKey = standingsData?.latestScheduledRoundKey ?? "";
-  const leagueLatestActiveRoundKey = standingsData?.latestActiveRoundKey ?? "";
+  const rawMatchesByRound = standingsData?.matchesByRound ?? {};
+  
+  // Helper to check if a status means "scheduled"
+  const isScheduledStatus = (status: string): boolean => {
+    const s = status?.toLowerCase().trim() || "";
+    return (
+      s === "scheduled" || 
+      s === "ns" || 
+      s === "notstarted" || 
+      s === "fixture" ||
+      s === "tbd" ||
+      s === "time tbd" ||
+      s === "timetbd" ||
+      /^\d{1,2}:\d{2}$/.test(s)
+    );
+  };
+
+  // Build rounds from REAL DATA KEYS in matchesByRound
+  // This ensures the UI shows the actual matchweek numbers from the data
+  const { leagueRounds, leagueMatchesByRound, normalizedKeyToOriginal } = useMemo(() => {
+    const rawKeys = Object.keys(rawMatchesByRound);
+    
+    // Debug logging (only when ?debug=1)
+    const debugMode = typeof window !== "undefined" && 
+      new URLSearchParams(window.location.search).get("debug") === "1";
+    
+    if (debugMode) {
+      console.log("[Tables] Building rounds from matchesByRound keys:", rawKeys);
+    }
+    
+    // Extract round numbers and build mapping
+    const roundEntries: { num: number; originalKey: string; normalizedKey: string }[] = [];
+    
+    for (const key of rawKeys) {
+      // Extract number from keys like "MW23", "23", "Matchweek 23", etc.
+      const numMatch = String(key).match(/(\d+)/);
+      if (!numMatch) continue;
+      
+      const num = parseInt(numMatch[1], 10);
+      if (isNaN(num) || num < 1) continue;
+      
+      const normalizedKey = `MW${num}`;
+      roundEntries.push({ num, originalKey: key, normalizedKey });
+    }
+    
+    // Sort by number ascending
+    roundEntries.sort((a, b) => a.num - b.num);
+    
+    // Build normalized mapping and rounds array
+    const keyMap = new Map<string, string>(); // normalizedKey -> originalKey
+    const rounds: RoundInfo[] = [];
+    const normalizedMatchesByRound: Record<string, LeagueMatchInfo[]> = {};
+    
+    for (const entry of roundEntries) {
+      keyMap.set(entry.normalizedKey, entry.originalKey);
+      const matches = rawMatchesByRound[entry.originalKey] ?? [];
+      normalizedMatchesByRound[entry.normalizedKey] = matches;
+      
+      // Compute date range from matches
+      let startDate: string | null = null;
+      let endDate: string | null = null;
+      let hasScheduledMatches = false;
+      
+      for (const m of matches) {
+        if (m.kickoffDate) {
+          if (!startDate || m.kickoffDate < startDate) startDate = m.kickoffDate;
+          if (!endDate || m.kickoffDate > endDate) endDate = m.kickoffDate;
+        }
+        if (isScheduledStatus(m.status)) {
+          hasScheduledMatches = true;
+        }
+      }
+      
+      rounds.push({
+        key: entry.normalizedKey,
+        label: String(entry.num), // Just the number, display will add "Matchweek"
+        startDate,
+        endDate,
+        matchesCount: matches.length,
+      });
+    }
+    
+    if (debugMode) {
+      console.log("[Tables] Built rounds:", rounds.map(r => r.key));
+    }
+    
+    return { 
+      leagueRounds: rounds, 
+      leagueMatchesByRound: normalizedMatchesByRound,
+      normalizedKeyToOriginal: keyMap 
+    };
+  }, [rawMatchesByRound]);
+
+  // Find the latest round with scheduled matches, and the latest with any matches
+  const { latestScheduledRoundKey, latestActiveRoundKey } = useMemo(() => {
+    let scheduled = "";
+    let active = "";
+    
+    for (const round of leagueRounds) {
+      const matches = leagueMatchesByRound[round.key] ?? [];
+      if (matches.length > 0) {
+        active = round.key;
+      }
+      if (matches.some(m => isScheduledStatus(m.status))) {
+        scheduled = round.key;
+      }
+    }
+    
+    return { latestScheduledRoundKey: scheduled, latestActiveRoundKey: active };
+  }, [leagueRounds, leagueMatchesByRound]);
 
   // Initialize selected round when data loads or competition changes
-  // Priority: URL param > scheduled round > active round > last round
+  // Priority: URL param > scheduled round > active round > last round (highest number)
   useEffect(() => {
     if (leagueRounds.length > 0 && !hasInitializedRound) {
       // Check if URL has a valid round
@@ -307,26 +413,26 @@ export default function TablesPage() {
       }
       
       // Use scheduled round if available
-      if (leagueLatestScheduledRoundKey && leagueRounds.some(r => r.key === leagueLatestScheduledRoundKey)) {
-        setSelectedRound(leagueLatestScheduledRoundKey);
+      if (latestScheduledRoundKey && leagueRounds.some(r => r.key === latestScheduledRoundKey)) {
+        setSelectedRound(latestScheduledRoundKey);
         setHasInitializedRound(true);
         return;
       }
       
       // Fallback to active round
-      if (leagueLatestActiveRoundKey && leagueRounds.some(r => r.key === leagueLatestActiveRoundKey)) {
-        setSelectedRound(leagueLatestActiveRoundKey);
+      if (latestActiveRoundKey && leagueRounds.some(r => r.key === latestActiveRoundKey)) {
+        setSelectedRound(latestActiveRoundKey);
         setHasInitializedRound(true);
         return;
       }
       
-      // Fallback to last round (most recent)
+      // Fallback to last round (highest matchweek number)
       if (leagueRounds.length > 0) {
         setSelectedRound(leagueRounds[leagueRounds.length - 1].key);
         setHasInitializedRound(true);
       }
     }
-  }, [leagueRounds, leagueLatestScheduledRoundKey, leagueLatestActiveRoundKey, hasInitializedRound, urlRound, setSelectedRound]);
+  }, [leagueRounds, latestScheduledRoundKey, latestActiveRoundKey, hasInitializedRound, urlRound, setSelectedRound]);
 
   // Reset round selection when competition changes
   useEffect(() => {
@@ -380,7 +486,21 @@ export default function TablesPage() {
 
     const displayMatches = leagueMatchesByRound[selectedRound] ?? [];
     const currentRoundInfo = leagueRounds.find((r) => r.key === selectedRound);
-    const displayLabel = currentRoundInfo?.label ?? selectedRound;
+    
+    // Extract matchweek number from the key (e.g., "MW23" -> 23)
+    // Never use array index, always use the real number from the key
+    const matchweekNum = (() => {
+      const match = selectedRound.match(/(\d+)/);
+      if (match) return parseInt(match[1], 10);
+      // Fallback to label if available
+      if (currentRoundInfo?.label) {
+        const labelMatch = currentRoundInfo.label.match(/(\d+)/);
+        if (labelMatch) return parseInt(labelMatch[1], 10);
+      }
+      return null;
+    })();
+    
+    const matchweekTitle = matchweekNum !== null ? `Matchweek ${matchweekNum}` : selectedRound;
 
     return (
       <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
@@ -409,7 +529,7 @@ export default function TablesPage() {
             <CardContent className="p-0">
               <div className="p-4 border-b flex items-center justify-between gap-2">
                 <h4 className="font-semibold" data-testid="text-matchweek-title">
-                  {/^\d+$/.test(displayLabel) ? `Matchweek ${displayLabel}` : displayLabel}
+                  {matchweekTitle}
                 </h4>
                 <span className="text-sm text-muted-foreground">
                   {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
