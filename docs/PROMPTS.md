@@ -8186,3 +8186,51 @@ Team names visually match the density of the standings table on the left, making
 
 ---
 
+We need a small layout improvement in the Champions League fixtures list.
+
+FILE:
+client/src/components/tables/europe-progress.tsx
+
+GOAL:
+Right-align the score column so the numbers form a clean vertical line next to the "Full-Time / AET / Live" status pill.
+
+Currently the team names and scores are stacked, but the scores are left-aligned and visually drift.
+
+CHANGES:
+
+Inside the MatchRow component, find the layout that renders:
+
+- Home team name
+- Away team name
+- Score
+- Status pill
+
+Update the row layout to use a two-column flex layout:
+
+LEFT SIDE (unchanged)
+• Team names stacked vertically
+
+RIGHT SIDE (new alignment)
+• A right-aligned vertical score column
+• Status pill to the right of the scores
+
+IMPLEMENTATION:
+
+Wrap the right side in a flex container aligned to the end:
+
+<div className="flex items-center justify-between">
+  {/* LEFT — Teams */}
+  <div className="flex flex-col text-sm">
+    <span>{match.homeTeam}</span>
+    <span>{match.awayTeam}</span>
+  </div>
+
+  {/* RIGHT — Score + Status */}
+  <div className="flex items-center gap-3">
+    {hasScore && (
+      <div className="flex flex-col items-end text-sm tabular-nums leading-5">
+        <span className="w-6 text-right">{homeScore}</span>
+        <span c
+
+---
+

@@ -160,52 +160,55 @@ function MatchRow({ match, showResults = true }: MatchRowProps) {
       className="flex items-center justify-between py-3 px-4 border-b last:border-b-0 hover-elevate"
       data-testid={`match-row-${match.id}`}
     >
+      {/* LEFT — Team names stacked */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-normal truncate" data-testid={`text-home-${match.id}`}>
-            {match.home.name}
-          </span>
-          {displayScore && (
-            <span className="text-sm font-semibold" data-testid={`text-home-score-${match.id}`}>
-              {homeScore}
-              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
-            </span>
-          )}
-          {showScoreFallback && (
-            <span className="text-sm font-semibold text-muted-foreground" data-testid={`text-home-score-${match.id}`}>–</span>
-          )}
+        <div className="text-sm font-normal truncate" data-testid={`text-home-${match.id}`}>
+          {match.home.name}
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-sm font-normal truncate" data-testid={`text-away-${match.id}`}>
-            {match.away.name}
-          </span>
-          {displayScore && (
-            <span className="text-sm font-semibold" data-testid={`text-away-score-${match.id}`}>
-              {awayScore}
-              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
-            </span>
-          )}
-          {showScoreFallback && (
-            <span className="text-sm font-semibold text-muted-foreground" data-testid={`text-away-score-${match.id}`}>–</span>
-          )}
+        <div className="text-sm font-normal truncate mt-1" data-testid={`text-away-${match.id}`}>
+          {match.away.name}
         </div>
       </div>
       
-      <div className="flex flex-col items-end gap-1 ml-4">
-        {(displayScore || showScoreFallback) ? (
-          <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
-            {statusLabel}
-          </Badge>
-        ) : (
-          <>
-            <span className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
-              {formatKickoff(match.kickoffDate, match.kickoffTime)}
+      {/* RIGHT — Score column + Status pill */}
+      <div className="flex items-center gap-3 ml-4">
+        {/* Score column */}
+        {displayScore && (
+          <div className="flex flex-col items-end text-sm font-semibold tabular-nums leading-5">
+            <span className="w-6 text-right" data-testid={`text-home-score-${match.id}`}>
+              {homeScore}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({homePen})</span>}
             </span>
+            <span className="w-6 text-right" data-testid={`text-away-score-${match.id}`}>
+              {awayScore}
+              {hasPenalties && <span className="text-xs text-muted-foreground ml-1">({awayPen})</span>}
+            </span>
+          </div>
+        )}
+        {showScoreFallback && (
+          <div className="flex flex-col items-end text-sm font-semibold text-muted-foreground tabular-nums leading-5">
+            <span className="w-6 text-right" data-testid={`text-home-score-${match.id}`}>–</span>
+            <span className="w-6 text-right" data-testid={`text-away-score-${match.id}`}>–</span>
+          </div>
+        )}
+        
+        {/* Status pill or kickoff time */}
+        <div className="flex flex-col items-end gap-1">
+          {(displayScore || showScoreFallback) ? (
             <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
               {statusLabel}
             </Badge>
-          </>
-        )}
+          ) : (
+            <>
+              <span className="text-sm text-muted-foreground" data-testid={`text-kickoff-${match.id}`}>
+                {formatKickoff(match.kickoffDate, match.kickoffTime)}
+              </span>
+              <Badge variant={getStatusBadgeVariant(rawStatus)} className="text-xs" data-testid={`badge-status-${match.id}`}>
+                {statusLabel}
+              </Badge>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
