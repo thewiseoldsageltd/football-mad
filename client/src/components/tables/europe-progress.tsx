@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, memo, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -448,19 +448,27 @@ const STAGE_OPTIONS: StageOption[] = [
   { key: "F", label: "Final", type: "ko", round: "Final", isFinalPill: true },
 ];
 
-function computeCurrentMatchday(matchdays: Matchday[]): number {
-  // Find highest matchday with at least one match that has started (has score or non "Not Started" status)
-  let current = 1;
-  for (const md of matchdays) {
-    const hasStarted = md.matches.some(m => 
-      m.score !== null && m.score !== undefined || 
-      (m.status && m.status !== "Not Started")
-    );
-    if (hasStarted) {
-      current = Math.max(current, md.matchday);
+// Ordered list of stage keys for determining "latest"
+const STAGE_ORDER = ["MD1","MD2","MD3","MD4","MD5","MD6","MD7","MD8","PO","L16","QF","SF","F"];
+
+// Map knockout round names to stage keys
+const KNOCKOUT_TO_STAGE_KEY: Record<string, string> = {
+  "Knockout Play-offs": "PO",
+  "Round of 16": "L16",
+  "Quarter-finals": "QF",
+  "Semi-finals": "SF",
+  "Final": "F",
+};
+
+function getLatestAvailableStage(stageMatches: Record<string, EuropeMatch[] | undefined>): string {
+  // Find the last stage in STAGE_ORDER that has matches
+  for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
+    const key = STAGE_ORDER[i];
+    if ((stageMatches[key]?.length ?? 0) > 0) {
+      return key;
     }
   }
-  return current;
+  return "MD1"; // safe fallback
 }
 
 function StageSelector({ 
@@ -538,21 +546,38 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
   const knockoutPhase = data?.phases.find((p): p is KnockoutPhase => p.type === "knockout");
   const knockoutRounds = knockoutPhase?.rounds ?? [];
   
-  // Compute current matchday (highest MD with started matches)
-  const currentMD = leaguePhase ? computeCurrentMatchday(leaguePhase.matchdays) : 1;
+  // Build a map of stageKey -> matches for determining latest available stage
+  const stageMatches = useMemo(() => {
+    const map: Record<string, EuropeMatch[] | undefined> = {};
+    
+    // League phase matchdays
+    if (leaguePhase) {
+      for (const md of leaguePhase.matchdays) {
+        map[`MD${md.matchday}`] = md.matches;
+      }
+    }
+    
+    // Knockout rounds
+    if (knockoutPhase) {
+      for (const round of knockoutPhase.rounds) {
+        const stageKey = KNOCKOUT_TO_STAGE_KEY[round.name];
+        if (stageKey) {
+          map[stageKey] = round.matches;
+        }
+      }
+    }
+    
+    return map;
+  }, [leaguePhase, knockoutPhase]);
   
-  // Set initial selection to current matchday once data loads
+  // Set initial selection to latest stage with matches once data loads
   useEffect(() => {
     if (data && !hasInitialized) {
-      // Ensure currentMD is within valid bounds (1-8 for league phase)
-      const validMD = Math.max(1, Math.min(8, currentMD));
-      const stageKey = `MD${validMD}`;
-      // Verify stage exists in options
-      const stageExists = STAGE_OPTIONS.some(opt => opt.key === stageKey);
-      setSelectedStage(stageExists ? stageKey : "MD1");
+      const latestStage = getLatestAvailableStage(stageMatches);
+      setSelectedStage(latestStage);
       setHasInitialized(true);
     }
-  }, [data, currentMD, hasInitialized]);
+  }, [data, stageMatches, hasInitialized]);
 
   if (isLoading || !selectedStage) {
     return (

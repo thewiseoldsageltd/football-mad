@@ -8580,3 +8580,76 @@ Acceptance:
 
 ---
 
+Replit AI — Set Europe (UCL) default “Fixtures” view to the latest stage that actually has matches
+
+Goal
+- On Tables > Europe > Champions League, when the page loads (or when season/competition changes), the right-hand Fixtures panel should default to the **latest** stage that has any matches (results or scheduled fixtures).
+- “Latest” should respect the existing stage order:
+  MD1 → MD2 → … → MD8 → PO → L16 → QF → SF → Final
+- If a URL/query selection already exists (e.g. ?stage=MD7), DO NOT override it.
+
+Where
+- client/src/components/tables/europe-progress.tsx
+
+What to change
+1) Identify where the selected stage/matchday is stored (likely something like `selectedStage`, `selectedMatchday`, `selectedKey`, etc.) and where it’s initialised (probably defaulting to "MD1").
+
+2) After data loads successfully, compute the “latest available stage”:
+   - Build an ordered list of stage keys:
+     const STAGE_ORDER = ["MD1","MD2","MD3","MD4","MD5","MD6","MD7","MD8","PO","L16","QF","SF","Final"];
+   - Build a map of stageKey -> matches[] from the API response you already have in this component.
+     - League phase matchdays: MD1..MD8 (whatever exists in data)
+     - Knockout: PO, L16, QF, SF, Final (only if present)
+   - Find the last stage in STAGE_ORDER where `matches?.length > 0`.
+
+3) Set default selection ONLY when:
+   - data is loaded
+   - and there is NO stage in the URL (or whatever “controlled by query param” mechanism you have)
+   - and the user hasn’t already manually selected something this render cycle
+
+Implementation pattern (adapt names to your code)
+- Add a helper:
+
+const STAGE_ORDER = ["MD1","MD2","MD3","MD4","MD5","MD6","MD7","MD8","PO","L16","QF","SF","Final"];
+
+function getLatestAvailableStage(stageMatches: Record<string, any[] | undefined>) {
+  for (let i = STAGE_ORDER.length - 1; i >= 0; i--) {
+    const key = STAGE_ORDER[i];
+    if ((stageMatches[key]?.length ?? 0) > 0) return key;
+  }
+  return "MD1"; // safe fallback
+}
+
+- In the component, after you have `data`:
+  - construct `stageMatches` (whatever structure your data already provides)
+  - compute `latestStage = getLatestAvailableStage(stageMatches)`
+
+- Then in a `useEffect`:
+
+useEffect(() => {
+  if (!data) return;
+
+  const stageFromUrl = /* read from query param if you have it, e.g. searchParams.get("stage") */;
+  if (stageFromUrl) return;
+
+  const latestStage = getLatestAvailableStage(stageMatches);
+
+  // only set if current selection is empty / default OR if it’s not a valid stage with matches
+  setSelectedStage(latestStage);
+
+  // if you keep the selection in the URL, update it here too:
+  // setSearchParams(prev => { prev.set("stage", latestStage); return prev; });
+
+}, [data /* plus anything needed like season/slug */, /* stageMatches dependency if memoised */]);
+
+Notes / Acceptance
+- On load, if MD8 has matches, it should land on MD8.
+- If MD8 has no matches but MD7 does, land on MD7.
+- If matchdays have no matches but PO/L16/etc do, land on the latest knockout stage with matches.
+- If the user deep-links with ?stage=MD3, keep MD3.
+- No behaviour changes for other tabs/cups.
+
+Please implement this cleanly with minimal re-renders (useMemo for stageMatches if needed), and keep existing UI/URL patterns consistent with the component.
+
+---
+
