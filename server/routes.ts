@@ -2417,20 +2417,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Final": 6,
       };
       
+      // SCOTTISH CUP: Uses Goalserve fraction labels as-is, ordered correctly
+      const SCOTTISH_CUP_CANONICAL_ROUNDS: Record<string, number> = {
+        "1/128-finals": 1,
+        "1/64-finals": 2,
+        "1/32-finals": 3,
+        "1/16-finals": 4,
+        "1/8-finals": 5,
+        "Quarter-finals": 6,
+        "Semi-finals": 7,
+        "Final": 8,
+      };
+      
+      // SCOTTISH LEAGUE CUP: Uses Goalserve labels, filter out "Regular season"
+      const SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS: Record<string, number> = {
+        "1/16-finals": 1,
+        "1/8-finals": 2,
+        "Quarter-finals": 3,
+        "Semi-finals": 4,
+        "Final": 5,
+      };
+      
+      // COUPE DE FRANCE: Uses Goalserve fraction labels as-is, ordered correctly
+      const COUPE_DE_FRANCE_CANONICAL_ROUNDS: Record<string, number> = {
+        "1/128-finals": 1,
+        "1/64-finals": 2,
+        "1/32-finals": 3,
+        "1/16-finals": 4,
+        "1/8-finals": 5,
+        "Quarter-finals": 6,
+        "Semi-finals": 7,
+        "Final": 8,
+      };
+      
       // Select canonical rounds based on competition
       const isEflCup = competitionId === "1199";
       const isCopaDelRey = competitionId === "1397";
       const isCoppaItalia = competitionId === "1264";
       const isDfbPokal = competitionId === "1226";
-      const CANONICAL_ROUNDS = isDfbPokal
-        ? DFB_POKAL_CANONICAL_ROUNDS
-        : isCoppaItalia
-          ? COPPA_ITALIA_CANONICAL_ROUNDS
-          : isCopaDelRey 
-            ? COPA_DEL_REY_CANONICAL_ROUNDS 
-            : isEflCup 
-              ? EFL_CUP_CANONICAL_ROUNDS 
-              : FA_CUP_CANONICAL_ROUNDS;
+      const isScottishCup = competitionId === "1371";
+      const isScottishLeagueCup = competitionId === "1372";
+      const isCoupeDeFrance = competitionId === "1218";
+      
+      const CANONICAL_ROUNDS = isScottishCup
+        ? SCOTTISH_CUP_CANONICAL_ROUNDS
+        : isScottishLeagueCup
+          ? SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS
+          : isCoupeDeFrance
+            ? COUPE_DE_FRANCE_CANONICAL_ROUNDS
+            : isDfbPokal
+              ? DFB_POKAL_CANONICAL_ROUNDS
+              : isCoppaItalia
+                ? COPPA_ITALIA_CANONICAL_ROUNDS
+                : isCopaDelRey 
+                  ? COPA_DEL_REY_CANONICAL_ROUNDS 
+                  : isEflCup 
+                    ? EFL_CUP_CANONICAL_ROUNDS 
+                    : FA_CUP_CANONICAL_ROUNDS;
 
       // FA Cup normalizer: returns canonical name or null (discard if null)
       const normalizeToCanonicalRound_FA_CUP = (name: string): string | null => {
@@ -2617,18 +2660,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return `Unknown: ${name}`;
       };
       
+      // Generic passthrough normalizer: preserves Goalserve labels with minimal normalization
+      // Used for Scottish Cup, Scottish League Cup, Coupe de France
+      const normalizeToCanonicalRound_PASSTHROUGH = (
+        canonicalRounds: Record<string, number>,
+        competitionName: string
+      ) => (name: string): string | null => {
+        const trimmed = name.trim();
+        const lower = trimmed.toLowerCase();
+        
+        // Normalize common variants
+        let normalized = trimmed;
+        if (lower === "quarterfinals" || lower === "quarter-final" || lower === "quarter final") {
+          normalized = "Quarter-finals";
+        } else if (lower === "semifinals" || lower === "semi-final" || lower === "semi final") {
+          normalized = "Semi-finals";
+        } else if (lower === "final" || lower === "finals" || lower === "the final") {
+          normalized = "Final";
+        }
+        
+        // Check if it matches a canonical round (case-insensitive)
+        for (const canonical of Object.keys(canonicalRounds)) {
+          if (lower === canonical.toLowerCase() || normalized === canonical) {
+            return canonical;
+          }
+        }
+        
+        // Filter out "Regular season" for league cups
+        if (lower.includes("regular season") || lower.includes("group stage") || lower.includes("league")) {
+          return null; // Discard non-knockout rounds
+        }
+        
+        // Preserve unknown rounds for debugging
+        console.log(`[${competitionName}] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
+      };
+      
       // Select normalizer based on competition
       // FA Cup normalizer returns null for unknown rounds (discard them)
       // Other cup normalizers return "Unknown: {name}" for unknown rounds (preserve for debugging)
-      const normalizeToCanonicalRound = isDfbPokal
-        ? (name: string): string | null => normalizeToCanonicalRound_DFB_POKAL(name)
-        : isCoppaItalia
-          ? (name: string): string | null => normalizeToCanonicalRound_COPPA_ITALIA(name)
-          : isCopaDelRey
-            ? (name: string): string | null => normalizeToCanonicalRound_COPA_DEL_REY(name)
-            : isEflCup 
-              ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
-              : normalizeToCanonicalRound_FA_CUP;
+      const normalizeToCanonicalRound = isScottishCup
+        ? normalizeToCanonicalRound_PASSTHROUGH(SCOTTISH_CUP_CANONICAL_ROUNDS, "Scottish Cup")
+        : isScottishLeagueCup
+          ? normalizeToCanonicalRound_PASSTHROUGH(SCOTTISH_LEAGUE_CUP_CANONICAL_ROUNDS, "Scottish League Cup")
+          : isCoupeDeFrance
+            ? normalizeToCanonicalRound_PASSTHROUGH(COUPE_DE_FRANCE_CANONICAL_ROUNDS, "Coupe de France")
+            : isDfbPokal
+              ? (name: string): string | null => normalizeToCanonicalRound_DFB_POKAL(name)
+              : isCoppaItalia
+                ? (name: string): string | null => normalizeToCanonicalRound_COPPA_ITALIA(name)
+                : isCopaDelRey
+                  ? (name: string): string | null => normalizeToCanonicalRound_COPA_DEL_REY(name)
+                  : isEflCup 
+                    ? (name: string): string | null => normalizeToCanonicalRound_EFL_CUP(name)
+                    : normalizeToCanonicalRound_FA_CUP;
 
       // Match count sanity guards - discard rounds with unrealistic match counts
       const FA_CUP_MAX_MATCHES: Record<string, number> = {
@@ -2661,11 +2746,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "First Round": 64,
       };
       
-      const ROUND_MAX_MATCHES = isDfbPokal 
-        ? DFB_POKAL_MAX_MATCHES 
-        : isEflCup 
-          ? EFL_CUP_MAX_MATCHES 
-          : FA_CUP_MAX_MATCHES;
+      // Generic max matches for cups using fraction labels (Scottish Cup, Coupe de France, etc.)
+      const FRACTION_CUPS_MAX_MATCHES: Record<string, number> = {
+        "1/128-finals": 128,
+        "1/64-finals": 64,
+        "1/32-finals": 32,
+        "1/16-finals": 16,
+        "1/8-finals": 8,
+        "Quarter-finals": 8,
+        "Semi-finals": 4,
+        "Final": 2,
+      };
+      
+      const ROUND_MAX_MATCHES = (isScottishCup || isScottishLeagueCup || isCoupeDeFrance)
+        ? FRACTION_CUPS_MAX_MATCHES
+        : isDfbPokal 
+          ? DFB_POKAL_MAX_MATCHES 
+          : isEflCup 
+            ? EFL_CUP_MAX_MATCHES 
+            : FA_CUP_MAX_MATCHES;
 
       // Debug flag for logging discarded rounds
       const DEBUG_CUP_ROUNDS = process.env.DEBUG_CUP_ROUNDS === "true";

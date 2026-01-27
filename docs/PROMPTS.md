@@ -7545,4 +7545,66 @@ Implement:
 Deliverable: commit the changes in the above files and confirm DFB-Pokal no longer shows "Cup data not available".
 
 ---
+Add MVP support for 3 new domestic cups in Football Mad:
+
+- Scottish Cup (Goalserve: Scotland “FA Cup”) => competitionId 1371
+- Scottish League Cup (Goalserve: Scotland “League Cup”) => competitionId 1372
+- Coupe de France (Goalserve: France “France Cup”) => competitionId 1218
+
+GOALS
+1) Backend: /api/cup/progress?competitionId={1371|1372|1218} returns cup rounds + matches (kickoffDate/kickoffTime/status + penalties logic already in place).
+2) Frontend: add these cups to Tables → Cups tabs so users can switch between them.
+3) Round naming: do NOT “prettify” fraction labels into “Round of 64” etc. Mirror Goalserve labels by default. Only introduce a canonical ordering map if the round order is wrong.
+
+BACKEND (server/routes.ts)
+A) Add competition flags similar to other cups:
+- isScottishCup: competitionId == "1371"
+- isScottishLeagueCup: competitionId == "1372"
+- isCoupeDeFrance: competitionId == "1218"
+
+B) Ensure these competitions are treated as cups by the existing cup progress endpoint (same code path as FA Cup / Copa etc).
+- If the endpoint currently only allows a fixed set of competitionIds, extend the allowlist to include 1371, 1372, 1218.
+
+C) Ordering / seeding:
+- First try with no new canonical mapping: keep Goalserve roundName strings as-is and sort using existing logic.
+- If Coupe de France / Scottish cups come back in a weird order (e.g. 1/8-finals above 1/16-finals), add canonical round ordering that PRESERVES the label text:
+  Example mapping keys like "1/64-finals", "1/32-finals", "1/16-finals", "1/8-finals", "Quarter-finals", "Semi-finals", "Final" etc, with numeric order values.
+- Only seed empty rounds if the UI needs them (optional). Do not change other competitions.
+
+FRONTEND (cup-config)
+D) Add 3 cup entries where FA Cup / EFL Cup / DFB-Pokal etc are defined:
+- Scottish Cup:
+  slug: "scottish-cup"
+  name: "Scottish Cup"
+  shortName: "SCO"
+  goalserveCompetitionId: "1371"
+  country: "Scotland"
+- Scottish League Cup:
+  slug: "scottish-league-cup"
+  name: "Scottish League Cup"
+  shortName: "SLC"
+  goalserveCompetitionId: "1372"
+  country: "Scotland"
+- Coupe de France:
+  slug: "coupe-de-france"
+  name: "Coupe de France"
+  shortName: "CDF"
+  goalserveCompetitionId: "1218"
+  country: "France"
+
+E) Make sure the Cups tab UI renders these alongside the existing cups and that selecting each triggers the correct API call using goalserveCompetitionId.
+
+VALIDATION (run after)
+1) curl and sanity check:
+- /api/cup/progress?competitionId=1371
+- /api/cup/progress?competitionId=1372
+- /api/cup/progress?competitionId=1218
+Confirm each returns rounds and matches.
+2) Open Tables → Cups and confirm the 3 new tabs render and show fixtures.
+3) Confirm penalties formatting and AET/Full-Time labels still work.
+
+Make minimal changes. Do not regress existing cups.
+
+---
+
 
