@@ -510,11 +510,11 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
           
           <Card>
             <CardContent className="p-0">
-              <div className="p-4 border-b">
+              <div className="p-4 border-b flex items-center justify-between gap-2">
                 <h4 className="font-semibold" data-testid="text-display-title">{displayTitle}</h4>
-                <p className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground">
                   {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
-                </p>
+                </span>
               </div>
               <div>
                 {displayMatches.length === 0 ? (

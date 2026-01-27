@@ -8081,3 +8081,58 @@ Do NOT add regression video testing. Keep changes limited to europe-progress.tsx
 
 ---
 
+UI polish for Europe > Champions League matchday header.
+
+GOAL
+Move the "18 matches" text onto the same horizontal line as "Matchday X":
+- "Matchday X" left aligned
+- "18 matches" right aligned
+This saves vertical space and makes the fixtures panel feel more compact.
+
+FILE
+client/src/components/tables/europe-progress.tsx
+
+WHAT TO CHANGE
+
+1) Find the section rendering the match list header.
+It likely looks something like:
+
+  <div className="mb-3">
+    <h3 className="text-lg font-semibold">
+      Matchday {selectedMatchday}
+    </h3>
+    <p className="text-sm text-muted-foreground">
+      {fixtures.length} matches
+    </p>
+  </div>
+
+2) Replace that block with a single flex row:
+
+  <div className="mb-3 flex items-center justify-between">
+    <h3 className="text-lg font-semibold">
+      Matchday {selectedMatchday}
+    </h3>
+    <span className="text-sm text-muted-foreground">
+      {fixtures.length} matches
+    </span>
+  </div>
+
+3) Make sure spacing below still looks right:
+- Keep mb-3 (or mb-4 if that matches other card headers)
+- Do NOT change the match list below this block.
+
+RESULT
+
+Before:
+Matchday 1
+18 matches
+
+After:
+Matchday 1                                 18 matches
+
+More compact, cleaner, and consistent with the standings table density.
+
+Do not change any logic or data fetching — layout only.
+
+---
+
