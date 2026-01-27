@@ -40,11 +40,14 @@ export const europeCompetitions: Competition[] = [
 ];
 
 export const cupCompetitions: Competition[] = [
-  { id: "fa-cup", name: "FA Cup", shortName: "FAC", type: "cup" },
-  { id: "efl-cup", name: "EFL Cup", shortName: "EFL", type: "cup" },
-  { id: "copa-del-rey", name: "Copa del Rey", shortName: "CDR", type: "cup" },
-  { id: "dfb-pokal", name: "DFB-Pokal", shortName: "DFB", type: "cup" },
-  { id: "coppa-italia", name: "Coppa Italia", shortName: "CI", type: "cup" },
+  { id: "fa-cup", name: "FA Cup", shortName: "FA Cup", type: "cup" },
+  { id: "efl-cup", name: "EFL Cup", shortName: "EFL Cup", type: "cup" },
+  { id: "scottish-cup", name: "Scottish Cup", shortName: "Scottish Cup", type: "cup" },
+  { id: "scottish-league-cup", name: "Scottish League Cup", shortName: "Scottish League Cup", type: "cup" },
+  { id: "copa-del-rey", name: "Copa del Rey", shortName: "Copa del Rey", type: "cup" },
+  { id: "coppa-italia", name: "Coppa Italia", shortName: "Coppa Italia", type: "cup" },
+  { id: "dfb-pokal", name: "DFB-Pokal", shortName: "DFB-Pokal", type: "cup" },
+  { id: "coupe-de-france", name: "Coupe de France", shortName: "Coupe de France", type: "cup" },
 ];
 
 
@@ -207,6 +210,32 @@ export const coppaItaliaRounds: CupRound[] = [
   { id: "f", name: "Final", status: "upcoming" },
 ];
 
+export const scottishCupRounds: CupRound[] = [
+  { id: "r1", name: "First Round", status: "completed" },
+  { id: "r2", name: "Second Round", status: "ongoing" },
+  { id: "r3", name: "Third Round", status: "upcoming" },
+  { id: "qf", name: "Quarter-Finals", status: "upcoming" },
+  { id: "sf", name: "Semi-Finals", status: "upcoming" },
+  { id: "f", name: "Final", status: "upcoming" },
+];
+
+export const scottishLeagueCupRounds: CupRound[] = [
+  { id: "r2", name: "Second Round", status: "completed" },
+  { id: "qf", name: "Quarter-Finals", status: "ongoing" },
+  { id: "sf", name: "Semi-Finals", status: "upcoming" },
+  { id: "f", name: "Final", status: "upcoming" },
+];
+
+export const coupeDeFranceRounds: CupRound[] = [
+  { id: "r1", name: "First Round", status: "completed" },
+  { id: "r2", name: "Second Round", status: "completed" },
+  { id: "r3", name: "Third Round", status: "ongoing" },
+  { id: "r16", name: "Round of 16", status: "upcoming" },
+  { id: "qf", name: "Quarter-Finals", status: "upcoming" },
+  { id: "sf", name: "Semi-Finals", status: "upcoming" },
+  { id: "f", name: "Final", status: "upcoming" },
+];
+
 export const seasons = [
   "2025/26",
   "2024/25",
@@ -239,12 +268,18 @@ export function getRoundsForCup(cupId: string): CupRound[] {
       return faCupRounds;
     case "efl-cup":
       return eflCupRounds;
+    case "scottish-cup":
+      return scottishCupRounds;
+    case "scottish-league-cup":
+      return scottishLeagueCupRounds;
     case "copa-del-rey":
       return copaDelReyRounds;
-    case "dfb-pokal":
-      return dfbPokalRounds;
     case "coppa-italia":
       return coppaItaliaRounds;
+    case "dfb-pokal":
+      return dfbPokalRounds;
+    case "coupe-de-france":
+      return coupeDeFranceRounds;
     default:
       return faCupRounds;
   }

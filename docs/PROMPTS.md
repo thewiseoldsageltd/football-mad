@@ -7607,4 +7607,44 @@ Make minimal changes. Do not regress existing cups.
 
 ---
 
+Update the Cups navigation/tab order and labels in the Tables → Cups section.
+
+TARGET TAB ORDER:
+FA Cup | EFL Cup | Scottish Cup | Scottish League Cup | Copa del Rey | Coppa Italia | DFB-Pokal | Coupe de France
+
+TASKS:
+
+1) Find the frontend cup configuration file where cup tabs are defined (likely cup-config.ts or similar).
+
+2) Reorder the cups array to exactly match this order:
+   - FA Cup
+   - EFL Cup
+   - Scottish Cup
+   - Scottish League Cup
+   - Copa del Rey
+   - Coppa Italia
+   - DFB-Pokal
+   - Coupe de France
+
+3) Ensure Scottish League Cup uses:
+   name: "Scottish League Cup"
+   shortName / tabLabel: "Scottish League Cup"
+
+   (Do NOT shorten this to "League Cup" to avoid confusion with the EFL Cup.)
+
+4) Do NOT change:
+   - slugs
+   - goalserveCompetitionId values
+   - any backend logic
+
+5) Verify:
+   - Tabs render in this order on the Cups page
+   - Active state still works
+   - Switching season still works
+   - Mobile layout doesn’t wrap awkwardly (reduce padding if needed, but keep labels intact)
+
+Make minimal, safe UI-only changes.
+
+---
+
 
