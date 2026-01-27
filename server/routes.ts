@@ -3399,18 +3399,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Build knockout rounds array with status
       const knockoutRounds: KnockoutRound[] = [];
-      for (const [name, matches] of knockoutRoundsMap.entries()) {
-        const mapping = Object.values(UCL_KNOCKOUT_ROUNDS).find(m => m.name === name);
+      const knockoutEntries = Array.from(knockoutRoundsMap.entries());
+      for (const [name, matches] of knockoutEntries) {
+        const mapping = Object.values(UCL_KNOCKOUT_ROUNDS).find((m: { name: string; order: number }) => m.name === name);
         if (!mapping) continue;
 
         // Sort matches by kickoff
-        matches.sort((a, b) => (a.kickoff || "").localeCompare(b.kickoff || ""));
+        matches.sort((a: EuropeMatch, b: EuropeMatch) => (a.kickoff || "").localeCompare(b.kickoff || ""));
 
         // Determine status
-        const allCompleted = matches.every(m => 
+        const allCompleted = matches.every((m: EuropeMatch) => 
           m.status === "Full-Time" || m.status === "AET" || m.status === "Penalties"
         );
-        const anyLive = matches.some(m => 
+        const anyLive = matches.some((m: EuropeMatch) => 
           m.status !== "Not Started" && m.status !== "Full-Time" && 
           m.status !== "AET" && m.status !== "Penalties"
         );

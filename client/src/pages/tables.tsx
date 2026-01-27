@@ -2,21 +2,14 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Trophy, Loader2 } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
-import { RoundsList } from "@/components/tables/rounds-list";
 import { CupProgress } from "@/components/tables/cup-progress";
-import { GroupSelector } from "@/components/tables/group-selector";
+import { EuropeProgress } from "@/components/tables/europe-progress";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
-import {
-  getGroupsForEuropeCompetition,
-  getRoundsForCup,
-  knockoutRounds,
-} from "@/data/tables-mock";
 import type { TableRow } from "@/data/tables-mock";
 
 /**
@@ -92,15 +85,12 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
 }
 
 type TopTab = "leagues" | "cups" | "europe";
-type EuropeView = "groups" | "knockout";
 
 export default function TablesPage() {
   const [topTab, setTopTab] = useState<TopTab>("leagues");
   const [leagueCompetition, setLeagueCompetition] = useState("premier-league");
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
-  const [europeView, setEuropeView] = useState<EuropeView>("groups");
-  const [selectedGroup, setSelectedGroup] = useState("Group A");
   const [season, setSeason] = useState("2025/26");
   const [tableView, setTableView] = useState("overall");
 
@@ -174,18 +164,6 @@ export default function TablesPage() {
       compEl?.removeEventListener("scroll", handleScroll);
     };
   }, [updateFades, topTab]);
-
-  useEffect(() => {
-    const groups = Object.keys(getGroupsForEuropeCompetition(europeCompetition));
-    if (groups.length > 0 && !groups.includes(selectedGroup)) {
-      setSelectedGroup(groups[0]);
-    }
-  }, [europeCompetition, selectedGroup]);
-
-  const currentGroups = getGroupsForEuropeCompetition(europeCompetition);
-  const currentGroupNames = Object.keys(currentGroups);
-  const currentGroupData = currentGroups[selectedGroup] || [];
-  const currentCupRounds = getRoundsForCup(cupCompetition);
 
   const goalserveLeagueId = useMemo(
     () => getGoalserveLeagueId(leagueCompetition),
@@ -272,37 +250,8 @@ export default function TablesPage() {
   };
 
   const renderEuropeContent = () => {
-    return (
-      <div className="space-y-4">
-        <Tabs value={europeView} onValueChange={(v) => setEuropeView(v as EuropeView)} className="w-auto">
-          <TabsList className="h-auto gap-1" data-testid="tabs-europe-view">
-            <TabsTrigger value="groups" data-testid="tab-groups">
-              Group Stage
-            </TabsTrigger>
-            <TabsTrigger value="knockout" data-testid="tab-knockout">
-              Knockout
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {europeView === "groups" ? (
-          <div className="space-y-4">
-            <GroupSelector
-              groups={currentGroupNames}
-              selectedGroup={selectedGroup}
-              onGroupChange={setSelectedGroup}
-            />
-            <Card>
-              <CardContent className="p-4 sm:p-6">
-                <LeagueTable data={currentGroupData} showZones={false} />
-              </CardContent>
-            </Card>
-          </div>
-        ) : (
-          <RoundsList rounds={knockoutRounds} title="Knockout Stage" />
-        )}
-      </div>
-    );
+    const normalizedSeason = normalizeSeason(season) || "2025/2026";
+    return <EuropeProgress competitionSlug={europeCompetition} season={normalizedSeason} />;
   };
 
   const renderCupsContent = () => {

@@ -103,6 +103,23 @@ Preferred communication style: Simple, everyday language.
     6. Final
   - **Design**: Goalserve uses fraction-style labels, we map to user-friendly names
   - Same accordion UI, deduplication, and empty round seeding as other cups
+- **Europe Competitions (Tables > Europe tab)**:
+  - API: `/api/europe/:slug?season=YYYY/YYYY`
+  - **Champions League (UCL)**: Goalserve competitionId 1005
+    - Uses new league-phase format (2024+ reform): 36 teams, 8 matchdays, single table
+    - Standings: Top 8 advance to Round of 16, 9-24 go to Playoff Round, 25+ eliminated
+    - Zone colors: Green (1-8), Blue (9-24), Red (25+)
+  - **Europa League (UEL)**: Goalserve competitionId 1007 (not yet enabled)
+  - **Conference League (UECL)**: Goalserve competitionId 18853 (not yet enabled)
+  - Config: `client/src/lib/europe-config.ts`
+  - Frontend component: `client/src/components/tables/europe-progress.tsx`
+  - Backend endpoint: `/api/europe/:slug` in `server/routes.ts`
+  - **Knockout round mapping** (Goalserve labels → canonical):
+    - "knockout round play-offs" → "Knockout Play-offs" (order 1)
+    - "1/8-finals" / "round of 16" → "Round of 16" (order 2)
+    - "1/4-finals" / "quarter-finals" → "Quarter-finals" (order 3)
+    - "1/2-finals" / "semi-finals" → "Semi-finals" (order 4)
+    - "final" → "Final" (order 5)
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
