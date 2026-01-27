@@ -482,8 +482,8 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-6 lg:grid-cols-[1fr,400px]">
-        <Card>
+      <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
+        <Card className="h-fit">
           <CardContent className="p-4">
             <h3 className="font-semibold mb-4">Standings</h3>
             {leaguePhase ? (

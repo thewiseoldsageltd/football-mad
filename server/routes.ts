@@ -3137,14 +3137,63 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const homeId = getAttr(home, "id");
         const awayId = getAttr(away, "id");
 
-        // Parse score (ft_score has final score, score might be live)
-        const ftScore = getAttr(home, "ft_score") || getAttr(m, "ft_score");
-        const homeScore = ftScore ? parseInt(ftScore.split("-")[0]?.trim() || "", 10) : null;
-        const awayScoreStr = ftScore?.split("-")[1]?.trim() || "";
-        const awayScore = awayScoreStr ? parseInt(awayScoreStr, 10) : null;
+        // Parse score - try multiple Goalserve formats:
+        // 1. Individual team scores (score/goals attribute on each team)
+        // 2. Combined ft_score as "X-Y" on match
+        // 3. Extra time score (et_score) for AET matches
+        let homeScore: number | null = null;
+        let awayScore: number | null = null;
 
-        // Penalties
-        const penScore = getAttr(home, "pen_score") || getAttr(m, "pen_score");
+        // Method 1: Individual score attributes on teams
+        const homeScoreAttr = getAttr(home, "score") || getAttr(home, "goals");
+        const awayScoreAttr = getAttr(away, "score") || getAttr(away, "goals");
+        if (homeScoreAttr !== null && awayScoreAttr !== null) {
+          const hParsed = parseInt(homeScoreAttr, 10);
+          const aParsed = parseInt(awayScoreAttr, 10);
+          if (!isNaN(hParsed) && !isNaN(aParsed)) {
+            homeScore = hParsed;
+            awayScore = aParsed;
+          }
+        }
+
+        // Method 2: Combined ft_score as "X-Y"
+        if (homeScore === null || awayScore === null) {
+          const ftScore = getAttr(m, "ft_score") || getAttr(home, "ft_score");
+          if (ftScore && ftScore.includes("-")) {
+            const [h, a] = ftScore.split("-").map(s => parseInt(s.trim(), 10));
+            if (!isNaN(h) && !isNaN(a)) {
+              homeScore = h;
+              awayScore = a;
+            }
+          }
+        }
+
+        // Method 3: Extra time score for AET matches
+        if (homeScore === null || awayScore === null) {
+          const etScore = getAttr(m, "et_score");
+          if (etScore && etScore.includes("-")) {
+            const [h, a] = etScore.split("-").map(s => parseInt(s.trim(), 10));
+            if (!isNaN(h) && !isNaN(a)) {
+              homeScore = h;
+              awayScore = a;
+            }
+          }
+        }
+
+        // Method 4: Generic score attribute "X-Y" on match
+        if (homeScore === null || awayScore === null) {
+          const matchScore = getAttr(m, "score");
+          if (matchScore && matchScore.includes("-")) {
+            const [h, a] = matchScore.split("-").map(s => parseInt(s.trim(), 10));
+            if (!isNaN(h) && !isNaN(a)) {
+              homeScore = h;
+              awayScore = a;
+            }
+          }
+        }
+
+        // Penalties - try multiple formats
+        const penScore = getAttr(m, "pen_score") || getAttr(home, "pen_score");
         let penalties: { home: number; away: number } | null = null;
         if (penScore && penScore.includes("-")) {
           const [ph, pa] = penScore.split("-").map(s => parseInt(s.trim(), 10));
@@ -3174,13 +3223,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Status mapping
         const rawStatus = getAttr(m, "status") || "";
         let status = rawStatus;
-        if (rawStatus.toLowerCase() === "not started" || rawStatus === "NS") status = "Not Started";
-        else if (rawStatus === "FT" || rawStatus.toLowerCase() === "finished") status = "Full-Time";
+        const lowerStatus = rawStatus.toLowerCase();
+        if (lowerStatus === "not started" || rawStatus === "NS") status = "Not Started";
+        else if (rawStatus === "FT" || lowerStatus === "finished" || lowerStatus === "full-time" || lowerStatus === "full time") status = "Full-Time";
         else if (rawStatus === "HT") status = "Half-Time";
-        else if (rawStatus === "AET") status = "AET";
-        else if (rawStatus === "PEN" || rawStatus.toLowerCase().includes("penalty")) status = "Penalties";
+        else if (rawStatus === "AET" || lowerStatus === "after extra time" || lowerStatus === "extra time") status = "AET";
+        else if (rawStatus === "PEN" || lowerStatus.includes("penalty") || lowerStatus.includes("pens")) status = "Penalties";
 
         const venue = getAttr(m, "venue") || undefined;
+
+        // Debug log for finished matches without scores
+        const isFinished = ["Full-Time", "AET", "Penalties"].includes(status);
+        if (isFinished && (homeScore === null || awayScore === null)) {
+          console.warn("[EUROPE] Missing score for finished match", { 
+            id, 
+            status, 
+            rawStatus,
+            homeScoreAttr: getAttr(home, "score"),
+            awayScoreAttr: getAttr(away, "score"),
+            ftScore: getAttr(m, "ft_score"),
+            etScore: getAttr(m, "et_score"),
+            matchScore: getAttr(m, "score"),
+            penScore
+          });
+        }
 
         return {
           id,

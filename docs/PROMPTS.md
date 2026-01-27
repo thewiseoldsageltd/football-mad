@@ -8007,3 +8007,77 @@ Update docs briefly (BUILD_LOG.md / DECISIONS.md): “Removed nested scroll on E
 
 ---
 
+Fix Europe UCL layout stretching + make matchday fixtures show scores for completed matchdays.
+
+PROBLEMS:
+A) Layout: left “Standings” card is stretching vertically (empty space at bottom). This happens because the parent grid aligns items as stretch, so the left card matches the height of the right column.
+B) Scores: matchday list shows “–” even for Full-Time matches. Frontend is fine; backend is likely not populating match.score/home/away for Europe endpoint.
+
+GOALS:
+1) Prevent the Standings card from stretching to match the right column height.
+2) Matchday fixtures should show results for completed matchdays (FT/AET/Pens) and date/time for upcoming.
+3) No “scroll within a scroll” inside the right-hand match list: the match list should expand naturally down the page (page scroll only).
+
+PART 1 — FRONTEND LAYOUT FIX
+File: client/src/components/tables/europe-progress.tsx
+
+Find the main 2-column layout wrapper (the grid that contains Standings on the left and Matchdays/Match list on the right).
+- Add Tailwind alignment so grid items don’t stretch:
+  - Add `items-start` to the grid container.
+- Ensure the cards don’t force equal heights:
+  - Remove any `h-full` / fixed heights from the Standings card wrapper.
+  - Add `h-fit` (or just omit height) on the left card container if needed.
+
+Also remove internal scrolling on the match list:
+- Find the match list container (often something like `max-h-[...] overflow-y-auto`).
+- Remove `max-h-*` and `overflow-y-auto` so the list grows naturally.
+
+Expected result: the left table card height fits its content; right column grows with fixtures; no nested scroll.
+
+PART 2 — BACKEND SCORE PARSING FIX
+We need to ensure /api/europe/:slug returns match objects with:
+- score: { home: number|null, away: number|null }
+- penalties?: { home: number|null, away: number|null } (when applicable)
+
+File: server/routes.ts (or wherever the /api/europe/:slug endpoint parser is)
+
+Do this:
+1) Locate Europe match parsing (where you map Goalserve match XML -> JS match object).
+2) Implement robust extraction of FT scores and penalties from Goalserve fields.
+   Goalserve can store scores in multiple places. Check in this order:
+
+For FT (90/120) score:
+- Try match attributes: ft_score (often "2-1" or separate home/away) if present.
+- Try team attributes: localteam ft_score / visitorteam ft_score if present.
+- Try match attribute: score (often "2-1") ONLY if it represents FT (not penalty result).
+- If you find a "X-Y" string, parse it safely.
+
+For penalties:
+- Try match attribute: pen_score (often "4-3")
+- Or team attributes: localteam pen_score / visitorteam pen_score
+- Parse "X-Y" safely into {home, away}
+
+AET:
+- If et_score exists and ft_score absent, you may treat et_score as the main score for AET matches (still store in score.home/away)
+
+IMPORTANT:
+- Never overwrite FT score with penalty score.
+- Status hints: if status indicates penalties, FT/AET score should still be the actual match score (often 0-0, 1-1, etc.), and penalties stored separately.
+
+3) Add a small debug log (temporary) for when status is FT/AET/Penalties but score is still missing:
+   console.warn("[EUROPE] Missing score", { id, status, scoreAttr, ft_score, et_score, pen_score })
+
+4) Confirm the endpoint returns scores:
+- For completed matchdays (e.g. MD1-MD7 in your screenshot), match.score.home/away should be numbers.
+- For upcoming MD8, match.score should be null and UI shows date/time.
+
+PART 3 — QUICK SANITY CHECK
+- Run the app and open Tables > Europe > Champions League
+- Choose MD1: you should see numeric results (and penalties in brackets if present)
+- Choose MD8: you should see upcoming fixtures with date/time
+- Verify no internal scroll in match list, and the standings card no longer stretches.
+
+Do NOT add regression video testing. Keep changes limited to europe-progress.tsx and the Europe endpoint parsing in backend.
+
+---
+
