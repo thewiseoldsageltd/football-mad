@@ -1,0 +1,57 @@
+You are working in my Replit project (Football Mad). IMPORTANT: do NOT run tests, do NOT generate regression videos, do NOT add test scripts, do NOT add debug endpoints/log spam. I will manually test in the UI and with curl.
+
+GOAL:
+1) Fix Premier League “no fixtures” in Tables > Leagues sidebar Matchweek toggle by building matchesByRound from Goalserve EPL XML week blocks (<week number="1..38">) and returning MW1..MW38 correctly.
+2) Fix Conference League Matchday toggle so it can toggle backwards (ensure rounds are sorted and navigation uses correct ordering).
+
+CONSTRAINTS:
+- Surgical edits only.
+- Keep existing UI layout.
+- No refactors across unrelated areas.
+
+BACKEND FIX (Premier League / leagues in general):
+In server/routes.ts, find the existing league standings/fixtures API that Tables > Leagues uses (the response object that includes standings + matchesByRound + defaultMatchweek; tables.tsx reads standingsData?.matchesByRound and standingsData?.defaultMatchweek).
+
+Update that endpoint so that for leagues it builds matchesByRound from Goalserve soccerfixtures XML (NOT json=1):
+- Determine the Goalserve league id already used for the league standings (for EPL it’s 1204).
+- Fetch: https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/soccerfixtures/leagueid/${LEAGUE_ID}
+- Parse XML using the same XML parser approach already used elsewhere in routes.ts (fast-xml-parser or existing helper).
+- Extract week blocks:
+  - The structure is: <week number="1"> ... <match ...> ... </match> ... </week>
+  - In parsed object form it may look like: tournament.week[] with @number, and each week has match (array or single).
+- For each week:
+  - roundKey = `MW${weekNumber}`
+  - parse each match using the existing match parsing helper you already built for cups/europe (use robust getAttr/getAny style that checks @_, @, direct keys, etc).
+  - Ensure each match includes:
+    id, home{id,name}, away{id,name}, score (null if no score), status, kickoffDate (YYYY-MM-DD), kickoffTime (HH:mm or null)
+  - Put into matchesByRound[roundKey] array.
+
+Return in the league endpoint response:
+- rounds: array of { key: "MW1", label: "Matchweek 1", order: 1 } ... up to the last week present in the XML.
+- matchesByRound: Record<string, LeagueMatchInfo[]>
+- defaultMatchweek: pick the most sensible “current/latest” week:
+  - Choose the highest MW where at least one match has status NOT in ["FT","AET","Pen.","PEN","After Extra Time","Full-Time"] (i.e. upcoming/in progress), OR where kickoffDate is within the next 14 days from today.
+  - If none match that, fall back to the highest MW that has any matches.
+This prevents defaulting to MW38 just because it exists.
+
+IMPORTANT: Do not break Europe endpoints; this change is ONLY for the Leagues endpoint used by tables.tsx.
+
+FRONTEND FIX (Conference League toggle backwards):
+In client/src/components/tables/europe-progress.tsx:
+- Ensure the rounds list used for the RoundToggle is ALWAYS sorted in chronological order:
+  - Matchdays: MD1..MD8 ascending
+  - Then KO stages: PO, L16, QF, SF, Final (or whatever keys you already use) in proper order
+- Ensure RoundToggle “prev” and “next” operate on that sorted array (no reverse ordering that would prevent going back).
+- Do NOT change layout, just ensure the ordering + index math is correct so you can go backwards on Conference League.
+
+SMALL SAFETY:
+In client/src/pages/tables.tsx (Leagues tab):
+- Keep the existing “Priority: URL param > defaultMatchweek from API > last round”.
+- Ensure leagueRounds derives from the API rounds keys (MW1..MW38) and is sorted numerically ascending.
+- Ensure if selectedRound is empty, it sets to `MW${defaultMatchweek}` if present.
+
+DELIVERABLE:
+Make the edits and ensure:
+- EPL now shows fixtures and toggles across MW1..MW38.
+- Conference League can toggle backwards across matchdays that exist.
+Do not run tests. Do not add scripts. I will verify manually.

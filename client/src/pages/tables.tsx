@@ -305,8 +305,10 @@ export default function TablesPage() {
   // Use backend-provided rounds directly (from Goalserve XML <week number="X"> containers)
   const leagueRounds = useMemo(() => {
     const apiRounds = standingsData?.rounds ?? [];
+    // Sort by number to ensure MW1..MW38 order (ascending)
+    const sorted = [...apiRounds].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
     // Convert API rounds to RoundInfo format for RoundToggle component
-    return apiRounds.map(r => ({
+    return sorted.map(r => ({
       key: r.key,
       label: r.label, // Just the number like "23"
       startDate: r.startDate,

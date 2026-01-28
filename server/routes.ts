@@ -2128,8 +2128,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Parse XML week containers
       if (xmlData) {
-        // Navigate to weeks container - structure: scores.tournament.week[]
-        const tournament = xmlData?.scores?.tournament;
+        // Navigate to weeks container - Goalserve XML may use different root elements
+        // For soccerfixtures/leagueid: results.tournament.week[]
+        // For other endpoints: scores.tournament.week[]
+        const tournament = xmlData?.results?.tournament 
+          ?? xmlData?.scores?.tournament 
+          ?? xmlData?.tournament;
         let weeks: any[] = [];
         
         if (tournament?.week) {
@@ -2228,22 +2232,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rounds.sort((a, b) => a.number - b.number);
       }
 
-      // Determine default matchweek (latest with any matches, prefer not all future)
+      // Determine default matchweek
+      // Strategy: pick the first round that has any scheduled (not yet played) matches
+      // If all matches are completed, pick the highest round with any matches
       let latestScheduledRoundKey = "";
       let latestActiveRoundKey = "";
+      let firstScheduledRoundKey = "";
       
       for (const round of rounds) {
         if (round.hasAnyMatches) {
           latestActiveRoundKey = round.key;
-          defaultMatchweek = round.number;
         }
         if (round.hasScheduledMatches) {
+          if (!firstScheduledRoundKey) {
+            firstScheduledRoundKey = round.key;
+          }
           latestScheduledRoundKey = round.key;
         }
       }
       
-      // Default to the latest round that has any matches
-      const latestRoundKey = latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
+      // Prefer the first round with scheduled matches (current matchweek)
+      // Fall back to latest active round (all matches completed)
+      // Final fallback to first round
+      if (firstScheduledRoundKey) {
+        const match = firstScheduledRoundKey.match(/(\d+)/);
+        if (match) defaultMatchweek = parseInt(match[1], 10);
+      } else if (latestActiveRoundKey) {
+        const match = latestActiveRoundKey.match(/(\d+)/);
+        if (match) defaultMatchweek = parseInt(match[1], 10);
+      }
+      
+      const latestRoundKey = firstScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
 
       res.json({
         snapshot: {

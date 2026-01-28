@@ -442,8 +442,11 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
 }
 
 // Helper to convert API rounds to RoundInfo for RoundToggle
+// Ensures rounds are sorted by their index (chronological order)
 function mapApiRoundsToRoundInfo(rounds: ApiRoundInfo[]): RoundInfo[] {
-  return rounds.map(r => ({
+  // Sort by index to ensure chronological order (MD1-8, then KO stages)
+  const sorted = [...rounds].sort((a, b) => a.index - b.index);
+  return sorted.map(r => ({
     key: r.key,
     label: r.label,
     startDate: r.startDate,
