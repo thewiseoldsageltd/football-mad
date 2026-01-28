@@ -1,0 +1,205 @@
+/**
+ * ONE-CLICK DROP-IN: Normalize + group fixtures into matchweeks/matchdays across:
+ * - Domestic leagues (Goalserve XML uses <week number="X">)
+ * - Europe comps (often uses matchday/round/stage labels)
+ *
+ * What you get:
+ * - rounds: ["MW1","MW2",...]
+ * - matchesByRound: Record<"MWx", Match[]>
+ * - defaultSelectedRound: latest round with fixtures/results (never MW0)
+ * - helpers for prev/next navigation
+ *
+ * ✅ No testing scripts. Just paste into your Tables page (or a shared util).
+ */
+
+// --- Types are optional; keep as `any` if your match shape varies
+type AnyMatch = Record<string, any>;
+
+const toInt = (v: any): number | null => {
+  if (v === null || v === undefined) return null;
+  const n = Number(String(v).trim());
+  return Number.isFinite(n) ? n : null;
+};
+
+// Try many fields because Goalserve shapes vary by endpoint/competition
+const extractRoundNumber = (m: AnyMatch): number | null => {
+  // Most important: leagues via soccerfixtures/leagueid use "week" (often nested or as attr)
+  // Common patterns:
+  // - m.week = "23"
+  // - m["@week"] = "23"
+  // - m.week?.["@number"] = "23" (rare)
+  // - m.round, m.matchday, m.stage, etc (Europe/cups)
+  const candidates = [
+    m.week,
+    m["@week"],
+    m.week_number,
+    m.weekNo,
+    m.weekno,
+    m.week?.number,
+    m.week?.["@number"],
+
+    m.matchweek,
+    m.matchday,
+    m["@matchday"],
+    m.round,
+    m["@round"],
+    m.round_id,
+    m.round_number,
+
+    // sometimes embedded strings like "Matchweek 23" / "Round 23"
+    m.round_name,
+    m.week_name,
+    m.name,
+    m["@name"],
+  ];
+
+  for (const c of candidates) {
+    const n = toInt(c);
+    if (n !== null && n > 0) return n;
+
+    // If it's a label string, try to parse a number out of it
+    if (typeof c === "string") {
+      const s = c.trim();
+      const match = s.match(/(?:mw|md|matchweek|matchday|round|week)\s*([0-9]{1,3})/i);
+      if (match?.[1]) {
+        const parsed = toInt(match[1]);
+        if (parsed !== null && parsed > 0) return parsed;
+      }
+    }
+  }
+
+  return null;
+};
+
+const extractMatchDateTime = (m: AnyMatch): { date?: string; time?: string } => {
+  // for your sidebar header range + sorting
+  // common Goalserve shapes:
+  // m["@date"]="2026-01-24" m["@time"]="15:00"
+  // or m.date, m.time
+  const date = (m["@date"] ?? m.date ?? m.match_date ?? "").toString().trim() || undefined;
+  const time = (m["@time"] ?? m.time ?? m.match_time ?? "").toString().trim() || undefined;
+  return { date, time };
+};
+
+const isFinishedOrScheduled = (m: AnyMatch): boolean => {
+  // Use whatever you already use. This is conservative.
+  const status = String(m["@status"] ?? m.status ?? "").toLowerCase();
+  return (
+    status.includes("scheduled") ||
+    status.includes("not started") ||
+    status.includes("fixture") ||
+    status.includes("ft") ||
+    status.includes("full") ||
+    status.includes("finished") ||
+    status.includes("played") ||
+    status.includes("half") ||
+    status.includes("live") ||
+    // if no status but it has teams, keep it
+    (!!(m.localteam || m.visitorteam || m.hometeam || m.awayteam))
+  );
+};
+
+export function buildMatchweekModel(allMatches: AnyMatch[]) {
+  // 1) Filter out junk
+  const matches = (allMatches ?? []).filter((m) => m && typeof m === "object" && isFinishedOrScheduled(m));
+
+  // 2) Group by normalized key MW{n}
+  const matchesByRound: Record<string, AnyMatch[]> = {};
+  for (const m of matches) {
+    const n = extractRoundNumber(m);
+    if (!n) continue;
+
+    const key = `MW${n}`;
+    if (!matchesByRound[key]) matchesByRound[key] = [];
+    matchesByRound[key].push(m);
+  }
+
+  // 3) Sorted round keys by numeric
+  const rounds = Object.keys(matchesByRound)
+    .map((k) => ({ k, n: toInt(k.replace("MW", "")) ?? 0 }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => a.n - b.n)
+    .map((x) => x.k);
+
+  // 4) Determine default: latest round that has ANY matches (or prefer latest scheduled if present)
+  //    Strategy:
+  //    - pick latest round that contains a "scheduled" match, else latest round
+  let defaultSelectedRound = rounds[rounds.length - 1] ?? null;
+
+  const hasScheduled = (m: AnyMatch) => {
+    const status = String(m["@status"] ?? m.status ?? "").toLowerCase();
+    return status.includes("scheduled") || status.includes("not started") || status.includes("fixture");
+  };
+
+  for (let i = rounds.length - 1; i >= 0; i--) {
+    const r = rounds[i];
+    const arr = matchesByRound[r] ?? [];
+    if (arr.some(hasScheduled)) {
+      defaultSelectedRound = r;
+      break;
+    }
+  }
+
+  // 5) Sort matches within each round by date/time (optional but nice)
+  for (const r of rounds) {
+    matchesByRound[r].sort((a, b) => {
+      const A = extractMatchDateTime(a);
+      const B = extractMatchDateTime(b);
+      const adt = `${A.date ?? ""} ${A.time ?? ""}`.trim();
+      const bdt = `${B.date ?? ""} ${B.time ?? ""}`.trim();
+      return adt.localeCompare(bdt);
+    });
+  }
+
+  // 6) Prev/Next helpers (use these in your toggle)
+  const getRoundIndex = (roundKey: string) => rounds.indexOf(roundKey);
+
+  const getPrevRound = (roundKey: string) => {
+    const idx = getRoundIndex(roundKey);
+    if (idx <= 0) return null;
+    return rounds[idx - 1];
+  };
+
+  const getNextRound = (roundKey: string) => {
+    const idx = getRoundIndex(roundKey);
+    if (idx < 0 || idx >= rounds.length - 1) return null;
+    return rounds[idx + 1];
+  };
+
+  const roundLabel = (roundKey: string, labelPrefix = "Matchweek") => {
+    const n = toInt(roundKey.replace("MW", ""));
+    return `${labelPrefix} ${n ?? ""}`.trim();
+  };
+
+  return {
+    rounds, // ["MW1",...]
+    matchesByRound, // { MW23: [...] }
+    defaultSelectedRound, // e.g. "MW23"
+    getPrevRound,
+    getNextRound,
+    roundLabel,
+  };
+}
+
+/**
+ * QUICK USAGE (example):
+ *
+ * const model = useMemo(() => buildMatchweekModel(fixtures), [fixtures]);
+ * const [selectedRound, setSelectedRound] = useState<string | null>(null);
+ *
+ * useEffect(() => {
+ *   if (!selectedRound && model.defaultSelectedRound) setSelectedRound(model.defaultSelectedRound);
+ * }, [selectedRound, model.defaultSelectedRound]);
+ *
+ * const fixturesForRound = selectedRound ? (model.matchesByRound[selectedRound] ?? []) : [];
+ *
+ * const prev = selectedRound ? model.getPrevRound(selectedRound) : null;
+ * const next = selectedRound ? model.getNextRound(selectedRound) : null;
+ *
+ * // Buttons:
+ * // disabled={!prev} onClick={() => prev && setSelectedRound(prev)}
+ * // disabled={!next} onClick={() => next && setSelectedRound(next)}
+ *
+ * // Label:
+ * // model.roundLabel(selectedRound ?? "MW1", "Matchweek")
+ */
