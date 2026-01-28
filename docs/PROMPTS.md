@@ -8952,3 +8952,73 @@ Working matchweek toggle using real matchweek numbers (e.g. MW23 shows “Matchw
 
 ---
 
+We just found the key detail: the EPL fixtures XML includes `<week number="1"> ... <week number="38">`, but the JSON form we’re currently using doesn’t surface any round/matchweek labels. That’s why the Matchweek toggle shows “1” while displaying MW23 data, and why it won’t navigate.
+
+IMPORTANT RULES:
+- Do NOT run regression tests, videos, test suites, or extra scripts.
+- Make surgical changes only: fix matchweek toggles + correct matchweek labeling and default selection.
+- No refactors, no unrelated formatting.
+
+TASK
+1) Backend: ensure the leagues fixtures API returns a proper list of matchweeks derived from Goalserve XML `<week number="X">` containers.
+2) Frontend: make the matchweek toggle work by using the backend-provided matchweeks list (not guessed), and:
+   - Always label as “Matchweek X”
+   - Start at Matchweek 1 on the far-left
+   - Default to the latest Matchweek that has fixtures or results (i.e., any matches at all), prefer the latest that is not entirely in the future if you can infer it.
+3) Keep existing UI layout; only fix the logic.
+
+IMPLEMENTATION DETAILS
+
+A) BACKEND (server/routes.ts or wherever the leagues/fixtures endpoint is)
+- Locate the endpoint used by the Leagues tab sidebar (the one feeding matchweek fixtures).
+- Change the Goalserve fetch for league fixtures to pull XML (NO `?json=1`) so we can read `<week number="...">`.
+  Example:
+    https://www.goalserve.com/getfeed/${GS_KEY}/soccerfixtures/leagueid/${leagueId}
+- Parse XML using the same parser already used elsewhere (fast-xml-parser or equivalent) with attributes enabled.
+- Extract weeks from the payload:
+  - Find the container that holds `<week number="X">` nodes (it appears directly under the league fixtures feed).
+  - For each week node:
+      weekNumber = attribute "number"
+      matches = any `<match ...>` children (support single object or array)
+  - Reuse the existing match parsing logic (teams, score, status, kickoffDate, kickoffTime, penalties, etc.)
+- Return a response shape that includes:
+  {
+    leagueId: "...",
+    matchweeks: [
+      { number: 1, label: "Matchweek 1", matches: [...] },
+      ...
+      { number: 38, label: "Matchweek 38", matches: [...] }
+    ],
+    defaultMatchweek: <number>
+  }
+- defaultMatchweek logic:
+  - Choose the greatest weekNumber where matches.length > 0.
+  - If you can detect “future-only” weeks: prefer the greatest week where at least one match status is not "Not Started"/"NS" OR (kickoffDate <= today in Europe/London). If that’s too risky, just use greatest week with matches.
+- IMPORTANT: Do not break Europe/UCL logic. This change is for league matchweeks only (Leagues tab), not cups and not /api/europe.
+
+B) FRONTEND
+- Find the league matchweek sidebar/toggle component you recently added (prev/next buttons and “Matchweek X” label).
+- Update it to use `matchweeks` returned from the backend:
+  - Build an ordered array of week numbers from the response.
+  - The displayed label is the selected week’s label from the API (or `Matchweek ${n}`).
+  - Prev/next should navigate the index inside that array.
+  - Disable prev when at index 0, disable next at last index.
+- Default selection:
+  - If URL has ?matchweek=, use it (parse int).
+  - Else use `defaultMatchweek` from API.
+- Ensure the fixtures list updates when selected matchweek changes.
+- Ensure the label matches the selected data (no more MW1 showing MW23).
+
+C) QUICK FIX FOR YOUR GREP WARNING (optional, no effect on app)
+- Ignore; it was a shell quoting issue and not part of app.
+
+DELIVERABLE
+- Make the code changes only. Do NOT run tests/videos. Do NOT add debug logs.
+
+After changes, the user will manually verify:
+- Matchweek label matches the fixtures shown
+- Prev/next toggles actually change matchweek and fixtures
+- Default lands on latest matchweek with data
+
+---
+

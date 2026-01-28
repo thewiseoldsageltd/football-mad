@@ -69,6 +69,17 @@ interface LeagueMatchInfo {
   status: string;
 }
 
+interface ApiRoundInfo {
+  key: string;
+  number: number;
+  label: string;
+  startDate: string | null;
+  endDate: string | null;
+  matchesCount: number;
+  hasAnyMatches: boolean;
+  hasScheduledMatches: boolean;
+}
+
 interface StandingsApiResponse {
   snapshot: {
     leagueId: string;
@@ -76,11 +87,12 @@ interface StandingsApiResponse {
     fetchedAt: string;
   };
   table: StandingsApiRow[];
-  rounds?: RoundInfo[];
+  rounds?: ApiRoundInfo[];
   matchesByRound?: Record<string, LeagueMatchInfo[]>;
   latestRoundKey?: string;
   latestScheduledRoundKey?: string;
   latestActiveRoundKey?: string;
+  defaultMatchweek?: number;
 }
 
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
@@ -290,149 +302,49 @@ export default function TablesPage() {
     return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
 
-  const rawMatchesByRound = standingsData?.matchesByRound ?? {};
-  
-  // Helper to check if a status means "scheduled"
-  const isScheduledStatus = (status: string): boolean => {
-    const s = status?.toLowerCase().trim() || "";
-    return (
-      s === "scheduled" || 
-      s === "ns" || 
-      s === "notstarted" || 
-      s === "fixture" ||
-      s === "tbd" ||
-      s === "time tbd" ||
-      s === "timetbd" ||
-      /^\d{1,2}:\d{2}$/.test(s)
-    );
-  };
+  // Use backend-provided rounds directly (from Goalserve XML <week number="X"> containers)
+  const leagueRounds = useMemo(() => {
+    const apiRounds = standingsData?.rounds ?? [];
+    // Convert API rounds to RoundInfo format for RoundToggle component
+    return apiRounds.map(r => ({
+      key: r.key,
+      label: r.label, // Just the number like "23"
+      startDate: r.startDate,
+      endDate: r.endDate,
+      matchesCount: r.matchesCount,
+    }));
+  }, [standingsData?.rounds]);
 
-  // Build rounds from REAL DATA KEYS in matchesByRound
-  // This ensures the UI shows the actual matchweek numbers from the data
-  const { leagueRounds, leagueMatchesByRound, normalizedKeyToOriginal } = useMemo(() => {
-    const rawKeys = Object.keys(rawMatchesByRound);
-    
-    // Debug logging (only when ?debug=1)
-    const debugMode = typeof window !== "undefined" && 
-      new URLSearchParams(window.location.search).get("debug") === "1";
-    
-    if (debugMode) {
-      console.log("[Tables] Building rounds from matchesByRound keys:", rawKeys);
-    }
-    
-    // Extract round numbers and build mapping
-    const roundEntries: { num: number; originalKey: string; normalizedKey: string }[] = [];
-    
-    for (const key of rawKeys) {
-      // Extract number from keys like "MW23", "23", "Matchweek 23", etc.
-      const numMatch = String(key).match(/(\d+)/);
-      if (!numMatch) continue;
-      
-      const num = parseInt(numMatch[1], 10);
-      if (isNaN(num) || num < 1) continue;
-      
-      const normalizedKey = `MW${num}`;
-      roundEntries.push({ num, originalKey: key, normalizedKey });
-    }
-    
-    // Sort by number ascending
-    roundEntries.sort((a, b) => a.num - b.num);
-    
-    // Build normalized mapping and rounds array
-    const keyMap = new Map<string, string>(); // normalizedKey -> originalKey
-    const rounds: RoundInfo[] = [];
-    const normalizedMatchesByRound: Record<string, LeagueMatchInfo[]> = {};
-    
-    for (const entry of roundEntries) {
-      keyMap.set(entry.normalizedKey, entry.originalKey);
-      const matches = rawMatchesByRound[entry.originalKey] ?? [];
-      normalizedMatchesByRound[entry.normalizedKey] = matches;
-      
-      // Compute date range from matches
-      let startDate: string | null = null;
-      let endDate: string | null = null;
-      let hasScheduledMatches = false;
-      
-      for (const m of matches) {
-        if (m.kickoffDate) {
-          if (!startDate || m.kickoffDate < startDate) startDate = m.kickoffDate;
-          if (!endDate || m.kickoffDate > endDate) endDate = m.kickoffDate;
-        }
-        if (isScheduledStatus(m.status)) {
-          hasScheduledMatches = true;
-        }
-      }
-      
-      rounds.push({
-        key: entry.normalizedKey,
-        label: String(entry.num), // Just the number, display will add "Matchweek"
-        startDate,
-        endDate,
-        matchesCount: matches.length,
-      });
-    }
-    
-    if (debugMode) {
-      console.log("[Tables] Built rounds:", rounds.map(r => r.key));
-    }
-    
-    return { 
-      leagueRounds: rounds, 
-      leagueMatchesByRound: normalizedMatchesByRound,
-      normalizedKeyToOriginal: keyMap 
-    };
-  }, [rawMatchesByRound]);
-
-  // Find the latest round with scheduled matches, and the latest with any matches
-  const { latestScheduledRoundKey, latestActiveRoundKey } = useMemo(() => {
-    let scheduled = "";
-    let active = "";
-    
-    for (const round of leagueRounds) {
-      const matches = leagueMatchesByRound[round.key] ?? [];
-      if (matches.length > 0) {
-        active = round.key;
-      }
-      if (matches.some(m => isScheduledStatus(m.status))) {
-        scheduled = round.key;
-      }
-    }
-    
-    return { latestScheduledRoundKey: scheduled, latestActiveRoundKey: active };
-  }, [leagueRounds, leagueMatchesByRound]);
+  const leagueMatchesByRound = standingsData?.matchesByRound ?? {};
+  const defaultMatchweek = standingsData?.defaultMatchweek ?? 1;
+  const latestActiveRoundKey = standingsData?.latestActiveRoundKey ?? "";
 
   // Initialize selected round when data loads or competition changes
-  // Priority: URL param > scheduled round > active round > last round (highest number)
+  // Priority: URL param > defaultMatchweek from API > last round
   useEffect(() => {
     if (leagueRounds.length > 0 && !hasInitializedRound) {
-      // Check if URL has a valid round
+      // Check if URL has a valid matchweek param
       if (urlRound && leagueRounds.some(r => r.key === urlRound)) {
         setSelectedRoundState(urlRound);
         setHasInitializedRound(true);
         return;
       }
       
-      // Use scheduled round if available
-      if (latestScheduledRoundKey && leagueRounds.some(r => r.key === latestScheduledRoundKey)) {
-        setSelectedRound(latestScheduledRoundKey);
+      // Use defaultMatchweek from API (latest week with matches)
+      const defaultKey = `MW${defaultMatchweek}`;
+      if (leagueRounds.some(r => r.key === defaultKey)) {
+        setSelectedRound(defaultKey);
         setHasInitializedRound(true);
         return;
       }
       
-      // Fallback to active round
-      if (latestActiveRoundKey && leagueRounds.some(r => r.key === latestActiveRoundKey)) {
-        setSelectedRound(latestActiveRoundKey);
-        setHasInitializedRound(true);
-        return;
-      }
-      
-      // Fallback to last round (highest matchweek number)
+      // Fallback to last round in the list
       if (leagueRounds.length > 0) {
         setSelectedRound(leagueRounds[leagueRounds.length - 1].key);
         setHasInitializedRound(true);
       }
     }
-  }, [leagueRounds, latestScheduledRoundKey, latestActiveRoundKey, hasInitializedRound, urlRound, setSelectedRound]);
+  }, [leagueRounds, defaultMatchweek, hasInitializedRound, urlRound, setSelectedRound]);
 
   // Reset round selection when competition changes
   useEffect(() => {

@@ -2071,30 +2071,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         },
       }));
 
-      // Fetch fixtures for this league to compute rounds
-      const leagueMatches = await db
-        .select({
-          id: matches.id,
-          homeTeamId: matches.homeTeamId,
-          awayTeamId: matches.awayTeamId,
-          homeTeamName: aliasedTable(teams, "homeTeam").name,
-          awayTeamName: aliasedTable(teams, "awayTeam").name,
-          homeScore: matches.homeScore,
-          awayScore: matches.awayScore,
-          status: matches.status,
-          kickoffTime: matches.kickoffTime,
-          goalserveRound: matches.goalserveRound,
-        })
-        .from(matches)
-        .leftJoin(aliasedTable(teams, "homeTeam"), eq(matches.homeTeamId, aliasedTable(teams, "homeTeam").id))
-        .leftJoin(aliasedTable(teams, "awayTeam"), eq(matches.awayTeamId, aliasedTable(teams, "awayTeam").id))
-        .where(eq(matches.goalserveCompetitionId, leagueId))
-        .orderBy(asc(matches.kickoffTime));
-
-      // Group matches by matchweek (round)
+      // Fetch fixtures from Goalserve XML to get proper <week number="X"> containers
       interface RoundInfo {
         key: string;
-        index: number;
+        number: number;
         label: string;
         startDate: string | null;
         endDate: string | null;
@@ -2116,7 +2096,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Helper to check if a status means "scheduled"
       const isScheduledStatus = (status: string): boolean => {
         const s = status?.toLowerCase().trim() || "";
-        // Various Goalserve scheduled status values
         return (
           s === "scheduled" || 
           s === "ns" || 
@@ -2125,124 +2104,146 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           s === "tbd" ||
           s === "time tbd" ||
           s === "timetbd" ||
-          /^\d{1,2}:\d{2}$/.test(s) // Time format like "15:00" or "3:00"
+          /^\d{1,2}:\d{2}$/.test(s)
         );
       };
+
+      // Fetch Goalserve XML for proper week numbers
+      const { goalserveFetchXml } = await import("./integrations/goalserve/client");
+      const xmlEndpoint = season 
+        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(season)}`
+        : `soccerfixtures/leagueid/${leagueId}`;
       
-      // Helper to extract numeric round from various formats
-      const parseRoundNumber = (roundStr: string | null): number | null => {
-        if (!roundStr) return null;
-        const s = roundStr.trim();
-        
-        // Try direct parse if it's just a number
-        const directNum = parseInt(s, 10);
-        if (!isNaN(directNum)) return directNum;
-        
-        // Try to extract number from strings like "Matchweek 2", "Round 0", "MW5"
-        const numMatch = s.match(/(\d+)/);
-        if (numMatch) {
-          return parseInt(numMatch[1], 10);
-        }
-        
-        return null;
-      };
+      let xmlData: any;
+      try {
+        xmlData = await goalserveFetchXml(xmlEndpoint);
+      } catch (xmlErr) {
+        console.error("[Standings] Failed to fetch Goalserve XML:", xmlErr);
+        xmlData = null;
+      }
 
       const matchesByRound: Record<string, MatchInfo[]> = {};
-      const rawRoundNums: number[] = [];
-      const roundsMap = new Map<number, { startDate: Date | null; endDate: Date | null; matches: MatchInfo[]; hasScheduled: boolean }>();
+      const rounds: RoundInfo[] = [];
+      let defaultMatchweek = 1;
 
-      // First pass: collect all raw round numbers to detect if 0-indexed
-      for (const m of leagueMatches) {
-        const parsed = parseRoundNumber(m.goalserveRound);
-        if (parsed !== null) {
-          rawRoundNums.push(parsed);
+      // Parse XML week containers
+      if (xmlData) {
+        // Navigate to weeks container - structure: scores.tournament.week[]
+        const tournament = xmlData?.scores?.tournament;
+        let weeks: any[] = [];
+        
+        if (tournament?.week) {
+          weeks = Array.isArray(tournament.week) ? tournament.week : [tournament.week];
         }
-      }
-      
-      // Detect if rounds are 0-indexed (contains 0 and no negative numbers)
-      const minRound = rawRoundNums.length > 0 ? Math.min(...rawRoundNums) : 1;
-      const isZeroIndexed = minRound === 0;
-      
-      for (const m of leagueMatches) {
-        // Parse round number from various formats
-        let roundNum = parseRoundNumber(m.goalserveRound);
-        if (roundNum === null) roundNum = 1; // Default to 1 if unparseable
-        
-        // If rounds are 0-indexed, shift all by +1 to make 1-indexed
-        const displayNum = isZeroIndexed ? roundNum + 1 : (roundNum < 1 ? 1 : roundNum);
-        
-        const matchInfo: MatchInfo = {
-          id: m.id,
-          home: { id: m.homeTeamId ?? undefined, name: m.homeTeamName || "TBD" },
-          away: { id: m.awayTeamId ?? undefined, name: m.awayTeamName || "TBD" },
-          score: m.homeScore != null && m.awayScore != null 
-            ? { home: m.homeScore, away: m.awayScore } 
-            : null,
-          kickoffDate: m.kickoffTime ? m.kickoffTime.toISOString().split("T")[0] : null,
-          kickoffTime: m.kickoffTime ? m.kickoffTime.toISOString().split("T")[1].slice(0, 5) : null,
-          status: m.status || "scheduled",
+
+        // Helper to parse date from "dd.mm.yyyy" format
+        const parseGoalserveDate = (dateStr: string): Date | null => {
+          if (!dateStr) return null;
+          const parts = dateStr.split(".");
+          if (parts.length === 3) {
+            const [day, month, year] = parts.map(p => parseInt(p, 10));
+            return new Date(year, month - 1, day);
+          }
+          return null;
         };
 
-        if (!roundsMap.has(displayNum)) {
-          roundsMap.set(displayNum, { startDate: null, endDate: null, matches: [], hasScheduled: false });
-        }
-        const roundData = roundsMap.get(displayNum)!;
-        roundData.matches.push(matchInfo);
+        // Helper to parse match from XML
+        const parseXmlMatch = (m: any, weekNum: number): MatchInfo => {
+          const homeScore = m["@_homescore"] ?? m.homescore ?? null;
+          const awayScore = m["@_awayscore"] ?? m.awayscore ?? null;
+          const matchDate = m["@_date"] ?? m.date ?? "";
+          const matchTime = m["@_time"] ?? m.time ?? "";
+          const status = m["@_status"] ?? m.status ?? "scheduled";
+          const matchId = m["@_id"] ?? m.id ?? `mw${weekNum}-${Math.random().toString(36).slice(2, 9)}`;
+          
+          const parsedDate = parseGoalserveDate(matchDate);
+          const kickoffDate = parsedDate ? parsedDate.toISOString().split("T")[0] : null;
+          
+          return {
+            id: String(matchId),
+            home: { 
+              id: m.hometeam?.["@_id"] ?? m.hometeam?.id ?? undefined, 
+              name: m.hometeam?.["@_name"] ?? m.hometeam?.name ?? m["@_hometeam"] ?? "TBD" 
+            },
+            away: { 
+              id: m.awayteam?.["@_id"] ?? m.awayteam?.id ?? undefined, 
+              name: m.awayteam?.["@_name"] ?? m.awayteam?.name ?? m["@_awayteam"] ?? "TBD" 
+            },
+            score: (homeScore !== null && awayScore !== null && homeScore !== "" && awayScore !== "")
+              ? { home: parseInt(String(homeScore), 10), away: parseInt(String(awayScore), 10) }
+              : null,
+            kickoffDate,
+            kickoffTime: matchTime || null,
+            status: String(status),
+          };
+        };
 
-        // Track if this round has scheduled matches
-        if (isScheduledStatus(matchInfo.status)) {
-          roundData.hasScheduled = true;
+        // Process each week
+        for (const week of weeks) {
+          const weekNum = parseInt(week["@_number"] ?? week.number ?? "0", 10);
+          if (weekNum < 1) continue;
+          
+          const key = `MW${weekNum}`;
+          const weekMatches: MatchInfo[] = [];
+          let startDate: string | null = null;
+          let endDate: string | null = null;
+          let hasScheduled = false;
+          
+          // Get matches from week - can be in week.match or week.matches.match
+          let matchList: any[] = [];
+          if (week.match) {
+            matchList = Array.isArray(week.match) ? week.match : [week.match];
+          } else if (week.matches?.match) {
+            matchList = Array.isArray(week.matches.match) ? week.matches.match : [week.matches.match];
+          }
+          
+          for (const m of matchList) {
+            const matchInfo = parseXmlMatch(m, weekNum);
+            weekMatches.push(matchInfo);
+            
+            if (matchInfo.kickoffDate) {
+              if (!startDate || matchInfo.kickoffDate < startDate) startDate = matchInfo.kickoffDate;
+              if (!endDate || matchInfo.kickoffDate > endDate) endDate = matchInfo.kickoffDate;
+            }
+            
+            if (isScheduledStatus(matchInfo.status)) {
+              hasScheduled = true;
+            }
+          }
+          
+          matchesByRound[key] = weekMatches;
+          rounds.push({
+            key,
+            number: weekNum,
+            label: String(weekNum),
+            startDate,
+            endDate,
+            matchesCount: weekMatches.length,
+            hasAnyMatches: weekMatches.length > 0,
+            hasScheduledMatches: hasScheduled,
+          });
         }
 
-        if (m.kickoffTime) {
-          if (!roundData.startDate || m.kickoffTime < roundData.startDate) {
-            roundData.startDate = m.kickoffTime;
-          }
-          if (!roundData.endDate || m.kickoffTime > roundData.endDate) {
-            roundData.endDate = m.kickoffTime;
-          }
-        }
+        // Sort rounds by week number ascending
+        rounds.sort((a, b) => a.number - b.number);
       }
 
-      // Convert to arrays and sort numerically
-      const roundNums = Array.from(roundsMap.keys()).sort((a, b) => a - b);
-
-      const rounds: RoundInfo[] = [];
-      let latestRoundKey = "";
+      // Determine default matchweek (latest with any matches, prefer not all future)
       let latestScheduledRoundKey = "";
       let latestActiveRoundKey = "";
       
-      for (let i = 0; i < roundNums.length; i++) {
-        const num = roundNums[i];
-        const data = roundsMap.get(num)!;
-        const key = `MW${num}`;
-        
-        matchesByRound[key] = data.matches;
-        
-        rounds.push({
-          key,
-          index: i,
-          label: String(num), // Just the number, frontend will prefix "Matchweek"
-          startDate: data.startDate?.toISOString().split("T")[0] ?? null,
-          endDate: data.endDate?.toISOString().split("T")[0] ?? null,
-          matchesCount: data.matches.length,
-          hasAnyMatches: data.matches.length > 0,
-          hasScheduledMatches: data.hasScheduled,
-        });
-
-        // Track the latest round with any matches
-        if (data.matches.length > 0) {
-          latestActiveRoundKey = key;
+      for (const round of rounds) {
+        if (round.hasAnyMatches) {
+          latestActiveRoundKey = round.key;
+          defaultMatchweek = round.number;
         }
-        
-        // Track the latest round with scheduled matches
-        if (data.hasScheduled) {
-          latestScheduledRoundKey = key;
+        if (round.hasScheduledMatches) {
+          latestScheduledRoundKey = round.key;
         }
       }
       
-      // Default to scheduled if available, otherwise active, otherwise first
-      latestRoundKey = latestScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
+      // Default to the latest round that has any matches
+      const latestRoundKey = latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
 
       res.json({
         snapshot: {
@@ -2256,6 +2257,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         matchesByRound,
         latestRoundKey,
         latestScheduledRoundKey,
+        defaultMatchweek,
         latestActiveRoundKey,
       });
     } catch (error) {
