@@ -2153,8 +2153,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         // Helper to parse match from XML
         const parseXmlMatch = (m: any, weekNum: number): MatchInfo => {
-          const homeScore = m["@_homescore"] ?? m.homescore ?? null;
-          const awayScore = m["@_awayscore"] ?? m.awayscore ?? null;
           const matchDate = m["@_date"] ?? m.date ?? "";
           const matchTime = m["@_time"] ?? m.time ?? "";
           const status = m["@_status"] ?? m.status ?? "scheduled";
@@ -2163,18 +2161,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const parsedDate = parseGoalserveDate(matchDate);
           const kickoffDate = parsedDate ? parsedDate.toISOString().split("T")[0] : null;
           
+          // Support both hometeam/awayteam AND localteam/visitorteam (Goalserve uses both)
+          const homeTeamNode = m.hometeam ?? m.localteam ?? {};
+          const awayTeamNode = m.awayteam ?? m.visitorteam ?? {};
+          
+          // Extract team names - check multiple attribute formats
+          const homeName = homeTeamNode["@_name"] ?? homeTeamNode["@name"] ?? homeTeamNode.name ?? m["@_hometeam"] ?? "TBD";
+          const awayName = awayTeamNode["@_name"] ?? awayTeamNode["@name"] ?? awayTeamNode.name ?? m["@_awayteam"] ?? "TBD";
+          
+          // Extract team IDs
+          const homeId = homeTeamNode["@_id"] ?? homeTeamNode["@id"] ?? homeTeamNode.id ?? undefined;
+          const awayId = awayTeamNode["@_id"] ?? awayTeamNode["@id"] ?? awayTeamNode.id ?? undefined;
+          
+          // Parse scores - prefer ft_score, fallback to score, then match-level scores
+          let homeScore: number | null = null;
+          let awayScore: number | null = null;
+          
+          // First try team-level scores (localteam/visitorteam format)
+          const homeFtScore = homeTeamNode["@_ft_score"] ?? homeTeamNode["@ft_score"] ?? homeTeamNode.ft_score;
+          const awayFtScore = awayTeamNode["@_ft_score"] ?? awayTeamNode["@ft_score"] ?? awayTeamNode.ft_score;
+          const homeTeamScore = homeTeamNode["@_score"] ?? homeTeamNode["@score"] ?? homeTeamNode.score;
+          const awayTeamScore = awayTeamNode["@_score"] ?? awayTeamNode["@score"] ?? awayTeamNode.score;
+          
+          // Prefer ft_score if available and non-empty
+          if (homeFtScore !== undefined && homeFtScore !== "" && awayFtScore !== undefined && awayFtScore !== "") {
+            homeScore = parseInt(String(homeFtScore), 10);
+            awayScore = parseInt(String(awayFtScore), 10);
+          } else if (homeTeamScore !== undefined && homeTeamScore !== "" && awayTeamScore !== undefined && awayTeamScore !== "") {
+            homeScore = parseInt(String(homeTeamScore), 10);
+            awayScore = parseInt(String(awayTeamScore), 10);
+          } else {
+            // Fallback to match-level scores
+            const matchHomeScore = m["@_homescore"] ?? m.homescore ?? null;
+            const matchAwayScore = m["@_awayscore"] ?? m.awayscore ?? null;
+            if (matchHomeScore !== null && matchHomeScore !== "" && matchAwayScore !== null && matchAwayScore !== "") {
+              homeScore = parseInt(String(matchHomeScore), 10);
+              awayScore = parseInt(String(matchAwayScore), 10);
+            }
+          }
+          
           return {
             id: String(matchId),
-            home: { 
-              id: m.hometeam?.["@_id"] ?? m.hometeam?.id ?? undefined, 
-              name: m.hometeam?.["@_name"] ?? m.hometeam?.name ?? m["@_hometeam"] ?? "TBD" 
-            },
-            away: { 
-              id: m.awayteam?.["@_id"] ?? m.awayteam?.id ?? undefined, 
-              name: m.awayteam?.["@_name"] ?? m.awayteam?.name ?? m["@_awayteam"] ?? "TBD" 
-            },
-            score: (homeScore !== null && awayScore !== null && homeScore !== "" && awayScore !== "")
-              ? { home: parseInt(String(homeScore), 10), away: parseInt(String(awayScore), 10) }
+            home: { id: homeId, name: homeName },
+            away: { id: awayId, name: awayName },
+            score: (homeScore !== null && awayScore !== null && !isNaN(homeScore) && !isNaN(awayScore))
+              ? { home: homeScore, away: awayScore }
               : null,
             kickoffDate,
             kickoffTime: matchTime || null,

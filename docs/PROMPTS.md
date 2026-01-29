@@ -9290,3 +9290,31 @@ Do not run tests. Do not add scripts. I will verify manually.
 
 ---
 
+DO NOT run tests, regression videos, or long QA scripts. Just implement the change.
+
+We already have /api/standings returning matchesByRound MW1..MW38 for EPL, but each match has home/away name "TBD" and score null even when status is FT. The Goalserve EPL XML uses:
+<match ... status="FT" date="DD.MM.YYYY" time="HH:mm">
+  <localteam name="West Ham" score="3" ft_score="3" et_score="" pen_score="" id="9427" />
+  <visitorteam name="Sunderland" score="1" ft_score="1" et_score="" pen_score="" id="9384" />
+</match>
+
+Fix the LEAGUE fixtures parsing inside /api/standings so it correctly reads localteam/visitorteam (and also keep existing hometeam/awayteam support for other feeds).
+
+Implementation details (server/routes.ts or wherever league fixtures parsing happens):
+1) When building LeagueMatchInfo (or equivalent), set:
+- home.name from localteam['@_name'] OR localteam['@name'] OR localteam.name OR localteam['name'] (same for away via visitorteam)
+- home.id from localteam['@_id'] OR localteam['@id'] OR localteam.id (same for away)
+2) Score parsing:
+- If status indicates played (FT, AET, Pen., etc.) OR localteam/visitorteam have score/ft_score:
+  - Prefer ft_score if present and non-empty, else score.
+  - Set match.score = { home: int, away: int } (or homeScore/awayScore depending on your model).
+3) Kickoff:
+- Keep existing kickoffDate/kickoffTime logic (it’s already correct).
+4) Ensure we never default home/away to "TBD" if a name exists on localteam/visitorteam.
+5) Do not change any UI in this prompt.
+
+After change, calling /api/standings?leagueId=1204&season=2025/2026 should produce matches where MW23 sample has:
+home.name "West Ham", away.name "Sunderland", score {home:3, away:1}, status "FT".
+
+---
+
