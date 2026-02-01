@@ -249,32 +249,55 @@ export default function TablesPage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   
+  // Helper to get current URL params
+  const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
+  const urlLeague = urlParams.get("league") ?? "premier-league";
+  const urlRound = urlParams.get("round") ?? "";
+  const urlSeason = urlParams.get("season") ?? "";
+  
   const [topTab, setTopTab] = useState<TopTab>("leagues");
-  const [leagueCompetition, setLeagueCompetition] = useState("premier-league");
+  const [leagueCompetition, setLeagueCompetition] = useState(urlLeague);
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
-  const [season, setSeason] = useState("2025/26");
+  const [season, setSeason] = useState(urlSeason || "2025/26");
   const [tableView, setTableView] = useState("overall");
   const [selectedRound, setSelectedRoundState] = useState("");
   const [hasInitializedRound, setHasInitializedRound] = useState(false);
   
-  // Helper to get current URL params
-  const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
-  const urlRound = urlParams.get("round") ?? "";
-  
-  // Wrapper to update selectedRound and sync to URL
-  const setSelectedRound = useCallback((newRound: string) => {
-    setSelectedRoundState(newRound);
-    // Update URL without full navigation
+  // Helper to update URL params
+  const setUrlParams = useCallback((updates: { league?: string; season?: string; round?: string }) => {
     const params = new URLSearchParams(searchString);
-    if (newRound) {
-      params.set("round", newRound);
-    } else {
-      params.delete("round");
+    if (updates.league !== undefined) {
+      if (updates.league) params.set("league", updates.league);
+      else params.delete("league");
+    }
+    if (updates.season !== undefined) {
+      if (updates.season) params.set("season", updates.season);
+      else params.delete("season");
+    }
+    if (updates.round !== undefined) {
+      if (updates.round) params.set("round", updates.round);
+      else params.delete("round");
     }
     const newSearch = params.toString();
     setLocation(`/tables${newSearch ? `?${newSearch}` : ""}`, { replace: true });
   }, [searchString, setLocation]);
+  
+  // Wrapper to update selectedRound and sync to URL
+  const setSelectedRound = useCallback((newRound: string) => {
+    setSelectedRoundState(newRound);
+    setUrlParams({ round: newRound });
+  }, [setUrlParams]);
+  
+  // Handle league change - update URL and reset round initialization
+  const handleLeagueChange = useCallback((newLeague: string) => {
+    if (newLeague === leagueCompetition) return;
+    setLeagueCompetition(newLeague);
+    setSelectedRoundState("");
+    setHasInitializedRound(false);
+    // Update URL with new league, keep season, remove old round (will be set after API response)
+    setUrlParams({ league: newLeague, round: "" });
+  }, [leagueCompetition, setUrlParams]);
 
   const topScrollRef = useRef<HTMLDivElement>(null);
   const competitionScrollRef = useRef<HTMLDivElement>(null);
@@ -424,11 +447,7 @@ export default function TablesPage() {
     }
   }, [leagueRounds, defaultMatchweek, hasInitializedRound, urlRound, setSelectedRound]);
 
-  // Reset round selection when competition changes
-  useEffect(() => {
-    setSelectedRoundState("");
-    setHasInitializedRound(false);
-  }, [leagueCompetition]);
+  // Note: Round reset is handled by handleLeagueChange, no separate effect needed
 
   const currentLeagueConfig = getLeagueBySlug(leagueCompetition);
 
@@ -618,7 +637,7 @@ export default function TablesPage() {
                     leagueCompetition={leagueCompetition}
                     europeCompetition={europeCompetition}
                     cupCompetition={cupCompetition}
-                    onLeagueChange={setLeagueCompetition}
+                    onLeagueChange={handleLeagueChange}
                     onEuropeChange={setEuropeCompetition}
                     onCupChange={setCupCompetition}
                   />
@@ -673,7 +692,7 @@ export default function TablesPage() {
                 leagueCompetition={leagueCompetition}
                 europeCompetition={europeCompetition}
                 cupCompetition={cupCompetition}
-                onLeagueChange={setLeagueCompetition}
+                onLeagueChange={handleLeagueChange}
                 onEuropeChange={setEuropeCompetition}
                 onCupChange={setCupCompetition}
               />

@@ -1,0 +1,37 @@
+You are working in a Replit project. Please make a surgical frontend fix so that each league defaults to its own current matchweek, instead of inheriting the previous league’s `round` query param.
+
+Context:
+- /tables currently uses a global query param like `?round=MW24`.
+- When switching league tabs (Premier League → Championship etc), the URL does NOT change, so the new league incorrectly stays stuck on the old round.
+- We already have `defaultMatchweek` coming back from `/api/standings` for each league/season, and round keys are `MW1..MW46` etc depending on league.
+
+Goal:
+1) Add `league` as a query param in the URL for league tables:
+   Example: `/tables?league=premier-league&season=2025/26&round=MW24`
+2) When the user changes league tab, automatically update the URL:
+   - set `league=<newLeagueSlug>`
+   - set `round=MW<defaultMatchweek from that league’s API response>`
+   - preserve `season`
+   This ensures Championship does NOT inherit Premier League’s round.
+3) When the user manually toggles matchweeks, update ONLY the `round` query param (and keep `league` + `season` intact).
+4) Avoid “Rendered more hooks than during the previous render” regressions — do not introduce hooks inside conditional render helpers.
+
+Implementation notes (client/src/pages/tables.tsx):
+- Read initial league from URL: `const urlLeague = searchParams.get("league") ?? "premier-league";`
+- Ensure selected league state is initialised from `urlLeague`.
+- When league changes (user clicks a different league tab), immediately update search params:
+    `league=<slug>`
+    `season=<season>`
+    `round=` should be set once the API response for that league is available:
+       use `standingsData?.defaultMatchweek` and build `MW${defaultMatchweek}`.
+    If `defaultMatchweek` is missing, fall back to:
+       - the first available round key in `leagueRounds`, else "MW1".
+- Important: when switching leagues, reset any “hasInitializedRound” / round init guard so the new league can re-init from its own default.
+- Ensure the URL is updated via the existing URL sync wrapper (or add a small helper `setUrlParams({league, season, round})`).
+
+Deliverable:
+- Update client/src/pages/tables.tsx so switching leagues updates URL and round correctly per league.
+- Keep behaviour for Europe/Cups unchanged.
+- After change, navigating directly to `/tables?league=championship&season=2025/26` should auto-select the Championship default matchweek and set `round=MWxx` in the URL.
+
+Once done, briefly tell me what you changed and where.
