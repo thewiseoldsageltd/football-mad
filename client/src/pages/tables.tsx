@@ -149,7 +149,7 @@ function isLeagueMatchLive(status: string): boolean {
   return s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s);
 }
 
-// Format date as "Sun 1 Feb"
+// Format date as "Sun 1 Feb" using UK timezone
 function formatShortDate(dateStr: string | null): string {
   if (!dateStr) return "";
   try {
@@ -158,16 +158,18 @@ function formatShortDate(dateStr: string | null): string {
       weekday: "short",
       day: "numeric",
       month: "short",
+      timeZone: "Europe/London",
     }).format(date);
   } catch {
     return "";
   }
 }
 
-function LeagueMatchRow({ match, showDate }: { match: LeagueMatchInfo; showDate: boolean }) {
+function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
   const isCompleted = isLeagueMatchCompleted(match.status);
   const isLive = isLeagueMatchLive(match.status);
   const isHalfTime = match.status.toLowerCase() === "ht";
+  const isScheduled = !isCompleted && !isLive;
   
   // Extract minute from status (e.g., "67'", "90+2", or just "67")
   const extractMinute = (): string | null => {
@@ -183,43 +185,39 @@ function LeagueMatchRow({ match, showDate }: { match: LeagueMatchInfo; showDate:
   
   // Build status label for pill (only Live/HT/FT)
   const getStatusPillLabel = (): string => {
-    const s = match.status.toLowerCase();
-    if (isHalfTime) return "Half-Time";
+    if (isHalfTime) return "HT";
     if (isLive) {
       const minute = extractMinute();
-      return minute ? `Live ${minute}` : "Live";
+      return minute ? `LIVE ${minute}` : "LIVE";
     }
-    if (isCompleted) return "Full-Time";
+    if (isCompleted) return "FT";
     return "";
-  };
-  
-  // Build kickoff display string for scheduled matches
-  const getKickoffDisplay = (): string => {
-    const time = match.kickoffTime ?? "TBC";
-    if (showDate && match.kickoffDate) {
-      const formattedDate = formatShortDate(match.kickoffDate);
-      return formattedDate ? `${formattedDate} · ${time}` : time;
-    }
-    return time;
   };
   
   const showPill = isCompleted || isLive;
   const statusLabel = getStatusPillLabel();
   const badgeVariant = getLeagueStatusBadgeVariant(match.status);
   
+  // For scheduled matches, format the date to show above the row
+  const scheduledDateLabel = isScheduled ? formatShortDate(match.kickoffDate) : "";
+  
   return (
     <div 
       className="flex flex-col px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
       data-testid={`match-row-${match.id}`}
     >
-      {/* Status pill above the row (only for Live/HT/FT) */}
-      {showPill && (
+      {/* Above the row: Status pill for Live/HT/FT OR Date text for Scheduled */}
+      {showPill ? (
         <div className="flex justify-center mb-2">
           <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
             {statusLabel}
           </Badge>
         </div>
-      )}
+      ) : scheduledDateLabel ? (
+        <div className="flex justify-center mb-2">
+          <span className="text-xs text-muted-foreground">{scheduledDateLabel}</span>
+        </div>
+      ) : null}
       
       {/* Main row: Home - Score/Time - Away */}
       <div className="flex items-center justify-between">
@@ -234,7 +232,7 @@ function LeagueMatchRow({ match, showDate }: { match: LeagueMatchInfo; showDate:
             </span>
           ) : (
             <span className="text-sm text-muted-foreground">
-              {getKickoffDisplay()}
+              {match.kickoffTime ?? "TBC"}
             </span>
           )}
         </div>
@@ -508,15 +506,6 @@ export default function TablesPage() {
     })();
     
     const matchweekTitle = matchweekNum !== null ? `Matchweek ${matchweekNum}` : selectedRound;
-    
-    // Determine if scheduled matches span multiple dates (plain computation, no hooks)
-    const scheduledMatches = displayMatches.filter(
-      (m) => !isLeagueMatchCompleted(m.status) && !isLeagueMatchLive(m.status)
-    );
-    const uniqueDates = new Set(
-      scheduledMatches.map((m) => m.kickoffDate).filter(Boolean)
-    );
-    const multiDay = uniqueDates.size > 1;
 
     return (
       <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
@@ -558,7 +547,7 @@ export default function TablesPage() {
                   </div>
                 ) : (
                   displayMatches.map((match) => (
-                    <LeagueMatchRow key={match.id} match={match} showDate={multiDay} />
+                    <LeagueMatchRow key={match.id} match={match} />
                   ))
                 )}
               </div>

@@ -1,0 +1,30 @@
+Update the Premier League (and other league) fixtures list layout in client/src/pages/tables.tsx.
+
+GOAL (design rules):
+1) The “pill” area above the row should show:
+   - For LIVE: a pill like "LIVE 63'" (minute if available) OR "LIVE"
+   - For HT: a pill "HT"
+   - For FT (and other completed statuses): a pill "FT" or "Full-Time" (keep existing label you already use)
+   - For SCHEDULED (not live, not completed): DO NOT show a status pill. Instead show the match date text, formatted exactly like: "Sun 1 Feb"
+2) The main row line should be inline with team names:
+   - If match is LIVE or COMPLETED: show the score between teams (e.g. "2–1")
+   - If match is SCHEDULED: show the kickoff time between teams (e.g. "14:00") instead of a scoreline.
+3) Remove the “Scheduled” badge entirely (do not render it anywhere).
+4) If the matchweek spans multiple dates, still show the date above each scheduled match row.
+   If the matchweek is single-day, you can still show the date above scheduled matches (that’s fine and consistent) OR keep it only when multi-day — choose the cleaner option but MUST avoid ambiguity (your current issue was the Monday fixture looking like it followed Sunday).
+   Recommendation: always show the date above scheduled matches.
+5) IMPORTANT: do not introduce any new hooks inside nested render helpers. If you need “multiDay” logic, compute it without hooks.
+
+IMPLEMENTATION NOTES:
+- Reuse existing helper functions you already added: isLeagueMatchLive(), isLeagueMatchCompleted(), formatLeagueStatusLabel(), etc.
+- Add a date formatter for scheduled matches:
+   - Input: match.kickoffDate in "YYYY-MM-DD"
+   - Output: "Sun 1 Feb" (short weekday, day number, short month)
+   - Use Intl.DateTimeFormat with locale "en-GB" and timeZone "Europe/London" so it matches UK expectations.
+- For scheduled matches, the middle column should be kickoffTime (HH:mm). For live/completed, middle column should be score.
+- Keep everything else (toggle, sorting, API shapes) unchanged.
+
+Deliverable:
+- Only modify client/src/pages/tables.tsx
+- Provide a short summary of the changes made.
+- Do NOT run tests.
