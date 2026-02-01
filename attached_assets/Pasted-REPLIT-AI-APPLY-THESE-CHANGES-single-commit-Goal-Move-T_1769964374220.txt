@@ -1,0 +1,91 @@
+REPLIT AI — APPLY THESE CHANGES (single commit)
+
+Goal
+- Move Tables onto pretty, SEO-friendly URLs:
+  - /tables/:leagueSlug/:seasonSlug
+  - Example: /tables/premier-league/2025-26
+- DO NOT store matchweek (round) in the URL anymore.
+  - Round is a UI state for the fixtures widget only.
+- Fix the bug where switching leagues keeps forcing MW24 (because round stays in the URL).
+- Keep backward compatibility: if a user lands on old URLs like /tables?league=championship&round=MW24&season=2025/26, auto-redirect to the new route and ignore round.
+
+Implementation plan (do exactly this)
+
+1) Add new routes (React Router)
+Find wherever Routes are defined (commonly: client/src/App.tsx or client/src/main.tsx).
+Add:
+- /tables/:leagueSlug/:seasonSlug  -> TablesPage
+- /tables                           -> redirect to default league+season
+- Legacy: /tables?league=...&season=...&round=... -> redirect to /tables/:leagueSlug/:seasonSlug (ignore round)
+
+Default seasonSlug:
+- Use the season currently selected in your UI default (looks like 2025/26 in API).
+- Convert to seasonSlug "2025-26" for URLs.
+- Mapping helpers:
+  - seasonApi: "2025/26"  <->  seasonSlug: "2025-26"
+  - also accept "2025/2026" and normalize to "2025/26" internally.
+
+2) Update Tables page to use URL params for league + season, but NOT round
+Edit: client/src/pages/tables.tsx
+
+A) Read params:
+- const { leagueSlug, seasonSlug } = useParams();
+
+B) Keep “selectedRound” ONLY in component state.
+- Delete (or stop using) the “sync round to URL” wrapper.
+- Remove any logic that reads round from URL querystring.
+- When the user changes matchweek using the arrows/toggle, only setSelectedRound(newKey).
+
+C) When leagueSlug OR seasonSlug changes:
+- Fetch standings for that league+season as you do now.
+- After standingsData arrives, set selectedRound to the “default matchweek” for THAT league (from API), unless the user has already manually changed round since this league loaded.
+
+Use this rule:
+- On each league+season change, reset a ref flag:
+  - userTouchedRoundRef.current = false
+- When user clicks next/prev round:
+  - userTouchedRoundRef.current = true
+- When standingsData loads:
+  - if (!userTouchedRoundRef.current) setSelectedRound(`MW${standingsData.defaultMatchweek ?? 1}`)
+
+D) Ensure hooks are not inside render helpers
+You previously hit:
+“Rendered more hooks than during the previous render” at tables.tsx:513 because useMemo (or another hook) was called inside a conditional render function.
+Fix:
+- Move ALL hooks (useMemo, useEffect, etc.) to the top level of the TablesPage component.
+- If you need derived values (like multiDay), compute them with useMemo at top-level from displayMatches + selectedRound.
+
+3) Redirect legacy URLs
+In the /tables route component (or a small wrapper component), do:
+- const search = new URLSearchParams(location.search)
+- league = search.get("league") || "premier-league"
+- season = search.get("season") || "2025/26"
+- Convert season -> seasonSlug
+- navigate(`/tables/${league}/${seasonSlug}`, { replace: true })
+- Ignore “round” completely.
+
+4) Keep the fixtures date display improvement you just made
+For scheduled fixtures spanning multiple dates:
+- Don’t show “Scheduled” pill.
+- Show the date label (e.g. “Sun 1 Feb”) in the pill position.
+- Keep kickoff time as the scoreline replacement (center).
+- Make sure Monday fixtures display “Mon 2 Feb” so they don’t look like they’re on the same day.
+
+Acceptance checks
+- Visiting /tables redirects to /tables/premier-league/2025-26
+- Switching Premier League -> Championship changes URL to /tables/championship/2025-26
+- Championship no longer defaults to MW24 unless its own defaultMatchweek is 24
+- Round arrows DO NOT change the URL
+- No React hooks error
+- Old URLs with ?round=MWxx do not break; they redirect to the new format
+
+Deliverables
+- Update router file (where <Routes> live)
+- Update client/src/pages/tables.tsx
+- Add small helper functions:
+  - seasonApiToSlug("2025/26") => "2025-26"
+  - seasonSlugToApi("2025-26") => "2025/26"
+  - normalizeSeasonApi("2025/2026") => "2025/26"
+
+Now implement and commit with a message:
+“Tables: pretty URLs by league/season; round no longer in URL; fix MW persistence bug”

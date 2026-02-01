@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,26 @@ import { TablesFilters } from "@/components/tables/tables-filters";
 import { RoundToggle, type RoundInfo } from "@/components/shared/round-toggle";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
+
+// Season slug helpers: "2025/26" <-> "2025-26"
+function seasonApiToSlug(apiSeason: string): string {
+  const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
+  if (match) {
+    const startYear = match[1];
+    const endPart = match[2];
+    const endYear = endPart.length === 4 ? endPart.slice(2) : endPart;
+    return `${startYear}-${endYear}`;
+  }
+  return apiSeason.replace("/", "-");
+}
+
+function seasonSlugToApi(slug: string): string {
+  const match = slug.match(/^(\d{4})-(\d{2})$/);
+  if (match) {
+    return `${match[1]}/${match[2]}`;
+  }
+  return slug.replace("-", "/");
+}
 
 /**
  * Normalizes season strings to "YYYY/YYYY" format for API compatibility.
@@ -247,57 +267,54 @@ type TopTab = "leagues" | "cups" | "europe";
 
 export default function TablesPage() {
   const [, setLocation] = useLocation();
-  const searchString = useSearch();
   
-  // Helper to get current URL params
-  const urlParams = useMemo(() => new URLSearchParams(searchString), [searchString]);
-  const urlLeague = urlParams.get("league") ?? "premier-league";
-  const urlRound = urlParams.get("round") ?? "";
-  const urlSeason = urlParams.get("season") ?? "";
+  // Get URL params from route: /tables/:leagueSlug/:seasonSlug
+  const [, params] = useRoute("/tables/:leagueSlug/:seasonSlug");
+  const leagueSlug = params?.leagueSlug ?? "premier-league";
+  const seasonSlug = params?.seasonSlug ?? "2025-26";
+  
+  // Convert season slug to API format for queries
+  const season = seasonSlugToApi(seasonSlug);
   
   const [topTab, setTopTab] = useState<TopTab>("leagues");
-  const [leagueCompetition, setLeagueCompetition] = useState(urlLeague);
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
-  const [season, setSeason] = useState(urlSeason || "2025/26");
   const [tableView, setTableView] = useState("overall");
-  const [selectedRound, setSelectedRoundState] = useState("");
-  const [hasInitializedRound, setHasInitializedRound] = useState(false);
   
-  // Helper to update URL params
-  const setUrlParams = useCallback((updates: { league?: string; season?: string; round?: string }) => {
-    const params = new URLSearchParams(searchString);
-    if (updates.league !== undefined) {
-      if (updates.league) params.set("league", updates.league);
-      else params.delete("league");
-    }
-    if (updates.season !== undefined) {
-      if (updates.season) params.set("season", updates.season);
-      else params.delete("season");
-    }
-    if (updates.round !== undefined) {
-      if (updates.round) params.set("round", updates.round);
-      else params.delete("round");
-    }
-    const newSearch = params.toString();
-    setLocation(`/tables${newSearch ? `?${newSearch}` : ""}`, { replace: true });
-  }, [searchString, setLocation]);
+  // Round is component state only (NOT in URL)
+  const [selectedRound, setSelectedRound] = useState("");
+  const userTouchedRoundRef = useRef(false);
   
-  // Wrapper to update selectedRound and sync to URL
-  const setSelectedRound = useCallback((newRound: string) => {
-    setSelectedRoundState(newRound);
-    setUrlParams({ round: newRound });
-  }, [setUrlParams]);
+  // Track previous league/season for reset detection
+  const prevLeagueSeasonRef = useRef(`${leagueSlug}:${seasonSlug}`);
   
-  // Handle league change - update URL and reset round initialization
+  // Reset round touched flag when league/season changes
+  useEffect(() => {
+    const key = `${leagueSlug}:${seasonSlug}`;
+    if (prevLeagueSeasonRef.current !== key) {
+      prevLeagueSeasonRef.current = key;
+      userTouchedRoundRef.current = false;
+      setSelectedRound("");
+    }
+  }, [leagueSlug, seasonSlug]);
+  
+  // Handle round change from user interaction (marks as touched)
+  const handleRoundChange = useCallback((newRound: string) => {
+    userTouchedRoundRef.current = true;
+    setSelectedRound(newRound);
+  }, []);
+  
+  // Handle league change - navigate to new URL
   const handleLeagueChange = useCallback((newLeague: string) => {
-    if (newLeague === leagueCompetition) return;
-    setLeagueCompetition(newLeague);
-    setSelectedRoundState("");
-    setHasInitializedRound(false);
-    // Update URL with new league, keep season, remove old round (will be set after API response)
-    setUrlParams({ league: newLeague, round: "" });
-  }, [leagueCompetition, setUrlParams]);
+    if (newLeague === leagueSlug) return;
+    setLocation(`/tables/${newLeague}/${seasonSlug}`, { replace: false });
+  }, [leagueSlug, seasonSlug, setLocation]);
+  
+  // Handle season change - navigate to new URL
+  const handleSeasonChange = useCallback((newSeason: string) => {
+    const newSlug = seasonApiToSlug(newSeason);
+    setLocation(`/tables/${leagueSlug}/${newSlug}`, { replace: false });
+  }, [leagueSlug, setLocation]);
 
   const topScrollRef = useRef<HTMLDivElement>(null);
   const competitionScrollRef = useRef<HTMLDivElement>(null);
@@ -371,8 +388,8 @@ export default function TablesPage() {
   }, [updateFades, topTab]);
 
   const goalserveLeagueId = useMemo(
-    () => getGoalserveLeagueId(leagueCompetition),
-    [leagueCompetition]
+    () => getGoalserveLeagueId(leagueSlug),
+    [leagueSlug]
   );
 
   const apiSeason = useMemo(() => normalizeSeason(season), [season]);
@@ -420,36 +437,20 @@ export default function TablesPage() {
   const defaultMatchweek = standingsData?.defaultMatchweek ?? 1;
   const latestActiveRoundKey = standingsData?.latestActiveRoundKey ?? "";
 
-  // Initialize selected round when data loads or competition changes
-  // Priority: URL param > defaultMatchweek from API > last round
+  // Initialize selected round when data loads
+  // Only auto-set if user hasn't manually changed the round
   useEffect(() => {
-    if (leagueRounds.length > 0 && !hasInitializedRound) {
-      // Check if URL has a valid matchweek param
-      if (urlRound && leagueRounds.some(r => r.key === urlRound)) {
-        setSelectedRoundState(urlRound);
-        setHasInitializedRound(true);
-        return;
-      }
-      
-      // Use defaultMatchweek from API (latest week with matches)
+    if (leagueRounds.length > 0 && !userTouchedRoundRef.current && !selectedRound) {
       const defaultKey = `MW${defaultMatchweek}`;
       if (leagueRounds.some(r => r.key === defaultKey)) {
         setSelectedRound(defaultKey);
-        setHasInitializedRound(true);
-        return;
-      }
-      
-      // Fallback to last round in the list
-      if (leagueRounds.length > 0) {
+      } else if (leagueRounds.length > 0) {
         setSelectedRound(leagueRounds[leagueRounds.length - 1].key);
-        setHasInitializedRound(true);
       }
     }
-  }, [leagueRounds, defaultMatchweek, hasInitializedRound, urlRound, setSelectedRound]);
+  }, [leagueRounds, defaultMatchweek, selectedRound]);
 
-  // Note: Round reset is handled by handleLeagueChange, no separate effect needed
-
-  const currentLeagueConfig = getLeagueBySlug(leagueCompetition);
+  const currentLeagueConfig = getLeagueBySlug(leagueSlug);
 
   const renderLeaguesContent = () => {
     if (!goalserveLeagueId) {
@@ -541,7 +542,7 @@ export default function TablesPage() {
                   labelType="Matchweek"
                   rounds={leagueRounds}
                   value={selectedRound}
-                  onChange={setSelectedRound}
+                  onChange={handleRoundChange}
                 />
               )}
             </CardContent>
@@ -634,7 +635,7 @@ export default function TablesPage() {
                 <div className="overflow-x-auto scrollbar-hide">
                   <TablesCompetitionTabs
                     topTab={topTab}
-                    leagueCompetition={leagueCompetition}
+                    leagueCompetition={leagueSlug}
                     europeCompetition={europeCompetition}
                     cupCompetition={cupCompetition}
                     onLeagueChange={handleLeagueChange}
@@ -648,7 +649,7 @@ export default function TablesPage() {
                 topTab={topTab}
                 season={season}
                 tableView={tableView}
-                onSeasonChange={setSeason}
+                onSeasonChange={handleSeasonChange}
                 onTableViewChange={setTableView}
               />
             </div>
@@ -689,7 +690,7 @@ export default function TablesPage() {
             >
               <TablesCompetitionTabs
                 topTab={topTab}
-                leagueCompetition={leagueCompetition}
+                leagueCompetition={leagueSlug}
                 europeCompetition={europeCompetition}
                 cupCompetition={cupCompetition}
                 onLeagueChange={handleLeagueChange}
@@ -709,7 +710,7 @@ export default function TablesPage() {
             topTab={topTab}
             season={season}
             tableView={tableView}
-            onSeasonChange={setSeason}
+            onSeasonChange={handleSeasonChange}
             onTableViewChange={setTableView}
             mobile
           />

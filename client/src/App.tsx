@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect, useSearch } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -24,6 +24,26 @@ import PlayerProfilePage from "@/pages/player-profile";
 import ManagerProfilePage from "@/pages/manager-profile";
 import TablesPage from "@/pages/tables";
 
+function seasonApiToSlug(apiSeason: string): string {
+  const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
+  if (match) {
+    const startYear = match[1];
+    const endPart = match[2];
+    const endYear = endPart.length === 4 ? endPart.slice(2) : endPart;
+    return `${startYear}-${endYear}`;
+  }
+  return apiSeason.replace("/", "-");
+}
+
+function TablesLegacyRedirect() {
+  const searchString = useSearch();
+  const params = new URLSearchParams(searchString);
+  const league = params.get("league") || "premier-league";
+  const season = params.get("season") || "2025/26";
+  const seasonSlug = seasonApiToSlug(season);
+  return <Redirect to={`/tables/${league}/${seasonSlug}`} replace />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -40,7 +60,8 @@ function Router() {
       <Route path="/managers/:slug" component={ManagerProfilePage} />
       <Route path="/transfers" component={TransfersPage} />
       <Route path="/injuries" component={InjuriesPage} />
-      <Route path="/tables" component={TablesPage} />
+      <Route path="/tables/:leagueSlug/:seasonSlug" component={TablesPage} />
+      <Route path="/tables" component={TablesLegacyRedirect} />
       <Route path="/fpl" component={FPLPage} />
       <Route path="/community" component={CommunityPage} />
       <Route path="/shop" component={ShopPage} />
