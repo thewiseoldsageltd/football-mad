@@ -1,0 +1,41 @@
+Make a small UI improvement to League fixtures in client/src/pages/tables.tsx (League fixtures list / LeagueMatchRow).
+
+GOAL
+Scheduled matches currently show only kickoff time inline between team names (e.g. "14:00"). This becomes ambiguous when a matchweek spans multiple dates.
+Fix: If the selected matchweek has scheduled fixtures across >1 unique date, then scheduled rows should show DATE + TIME in the middle (e.g. "Sun 1 Feb · 14:00"). Otherwise keep showing time only.
+
+RULES
+1) Determine if selectedRound’s fixtures span multiple dates:
+   - Use the matches already being rendered for the selectedRound (displayMatches / leagueMatchesByRound[selectedRound]).
+   - Extract a “kickoff date key” per match from match.kickoffDate (expected "YYYY-MM-DD").
+   - Only consider matches that are scheduled (i.e. NOT live/HT/FT).
+   - multiDay = number of unique kickoffDate keys > 1.
+
+2) Rendering for scheduled matches:
+   - If multiDay === true:
+       show formattedDate + " · " + kickoffTime
+       formattedDate format: "Sun 1 Feb" (weekday short + day + month short).
+   - If multiDay === false:
+       show kickoffTime only (existing behaviour).
+   - If kickoffDate missing, fall back gracefully:
+       - show kickoffTime, or "TBC" if no time.
+
+3)) Leave completed/live/HT/FT rows unchanged:
+   - Status pill above row stays as is.
+   - Score inline stays as is.
+
+4) Keep styling subtle:
+   - The date/time string should use the same “muted” styling as the time currently does (don’t make it louder than the scoreline).
+   - Use a middle dot separator (·) with spaces.
+
+IMPLEMENTATION NOTES
+- Add a small helper to format date:
+  - Input: "YYYY-MM-DD"
+  - Output: "Sun 1 Feb"
+  - Use Intl.DateTimeFormat('en-GB', { weekday:'short', day:'numeric', month:'short' }) for consistency.
+- Compute multiDay once with useMemo based on displayMatches + selectedRound.
+
+DELIVERABLE
+- Commit only the changes required.
+- Do NOT run tests or long scripts. I will verify manually.
+- Output a short summary of what changed and where.

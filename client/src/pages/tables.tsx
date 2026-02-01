@@ -149,7 +149,22 @@ function isLeagueMatchLive(status: string): boolean {
   return s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s);
 }
 
-function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
+// Format date as "Sun 1 Feb"
+function formatShortDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const date = new Date(dateStr + "T12:00:00");
+    return new Intl.DateTimeFormat("en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    }).format(date);
+  } catch {
+    return "";
+  }
+}
+
+function LeagueMatchRow({ match, showDate }: { match: LeagueMatchInfo; showDate: boolean }) {
   const isCompleted = isLeagueMatchCompleted(match.status);
   const isLive = isLeagueMatchLive(match.status);
   const isHalfTime = match.status.toLowerCase() === "ht";
@@ -176,6 +191,16 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
     }
     if (isCompleted) return "Full-Time";
     return "";
+  };
+  
+  // Build kickoff display string for scheduled matches
+  const getKickoffDisplay = (): string => {
+    const time = match.kickoffTime ?? "TBC";
+    if (showDate && match.kickoffDate) {
+      const formattedDate = formatShortDate(match.kickoffDate);
+      return formattedDate ? `${formattedDate} · ${time}` : time;
+    }
+    return time;
   };
   
   const showPill = isCompleted || isLive;
@@ -209,7 +234,7 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
             </span>
           ) : (
             <span className="text-sm text-muted-foreground">
-              {match.kickoffTime ?? "TBC"}
+              {getKickoffDisplay()}
             </span>
           )}
         </div>
@@ -483,6 +508,17 @@ export default function TablesPage() {
     })();
     
     const matchweekTitle = matchweekNum !== null ? `Matchweek ${matchweekNum}` : selectedRound;
+    
+    // Determine if scheduled matches span multiple dates
+    const multiDay = useMemo(() => {
+      const scheduledMatches = displayMatches.filter(
+        (m) => !isLeagueMatchCompleted(m.status) && !isLeagueMatchLive(m.status)
+      );
+      const uniqueDates = new Set(
+        scheduledMatches.map((m) => m.kickoffDate).filter(Boolean)
+      );
+      return uniqueDates.size > 1;
+    }, [displayMatches]);
 
     return (
       <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
@@ -524,7 +560,7 @@ export default function TablesPage() {
                   </div>
                 ) : (
                   displayMatches.map((match) => (
-                    <LeagueMatchRow key={match.id} match={match} />
+                    <LeagueMatchRow key={match.id} match={match} showDate={multiDay} />
                   ))
                 )}
               </div>
