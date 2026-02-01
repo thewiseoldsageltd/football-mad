@@ -1,0 +1,49 @@
+Implement the UI changes below ONLY. Keep it surgical. Do NOT run tests or long scripts; I will verify manually.
+
+GOAL
+League fixtures (Tables > Leagues) should match this layout:
+- For completed/live matches: show a status pill (Live + minute if available, Half-Time, Full-Time) ABOVE the row.
+- The scoreline should be inline between team names (Home 2–1 Away).
+- For scheduled matches: remove status pill entirely and replace score with kickoff time inline between team names (Home 15:00 Away).
+- Remove “Scheduled” pill completely.
+
+SCOPE
+Update the League fixtures rendering in: client/src/pages/tables.tsx (or wherever LeagueMatchRow / league fixtures list is defined).
+Do not change Europe components unless you must.
+
+REQUIREMENTS
+
+1) STATUS PILL (only for Live/HT/FT)
+- Render a pill ONLY when status indicates: Live, Half-Time, Full-Time (or equivalents currently supported).
+- Put the pill in its own line ABOVE the row content (aligned nicely, not inside the scoreline).
+- For Live: include minute if available (examples: "Live 67'", "Live 90+2").
+  - Extract minute from any of:
+    - match.minute
+    - match.time
+    - match.status if it contains digits like 67 or 90+2 (use a regex)
+  - If no minute is found, use “Live”.
+- Keep existing variants/styling for Live/HT/FT; just reposition and improve label text.
+
+2) ROW CONTENT (single line)
+- Always render: Home team name — middle — Away team name
+- Middle section rules:
+  a) If match is completed/live/HT:
+     - show score inline, e.g. "2 - 1"
+     - Use existing score fields already in the model (don’t invent).
+  b) If match is scheduled (no FT/HT/Live):
+     - show kickoff time inline instead of score, e.g. "15:00"
+     - If kickoffTime missing, fall back to "TBC".
+- Remove any "Scheduled" text/badge anywhere.
+
+3) ORDERING (keep from previous instruction if already implemented)
+- Ensure matches within a selected matchweek are sorted by kickoff datetime ascending before rendering.
+- kickoff datetime = kickoffDate + kickoffTime (use 00:00 if missing).
+
+4) KEEP EXISTING DATA MODEL
+- Do not change API contracts.
+- Only adjust frontend presentation + minor helper functions.
+
+DELIVERABLE
+- Update the relevant component(s).
+- Keep styling consistent with existing UI (spacing, typography).
+- Output a short summary: files changed + what changed.

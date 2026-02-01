@@ -152,58 +152,71 @@ function isLeagueMatchLive(status: string): boolean {
 function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
   const isCompleted = isLeagueMatchCompleted(match.status);
   const isLive = isLeagueMatchLive(match.status);
+  const isHalfTime = match.status.toLowerCase() === "ht";
   
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "";
-    try {
-      const date = new Date(dateStr + "T00:00:00");
-      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    } catch {
-      return "";
-    }
+  // Extract minute from status (e.g., "67'", "90+2", or just "67")
+  const extractMinute = (): string | null => {
+    const s = match.status;
+    // Match patterns like "67'", "90+2", "45+3'", or just digits
+    const minuteMatch = s.match(/^(\d+(?:\+\d+)?)'?$/);
+    if (minuteMatch) return minuteMatch[1] + "'";
+    // Check if status contains minute-like pattern
+    const embeddedMatch = s.match(/(\d+(?:\+\d+)?)/);
+    if (embeddedMatch && isLive && !isHalfTime) return embeddedMatch[1] + "'";
+    return null;
   };
   
-  const statusLabel = formatLeagueStatusLabel(match.status);
+  // Build status label for pill (only Live/HT/FT)
+  const getStatusPillLabel = (): string => {
+    const s = match.status.toLowerCase();
+    if (isHalfTime) return "Half-Time";
+    if (isLive) {
+      const minute = extractMinute();
+      return minute ? `Live ${minute}` : "Live";
+    }
+    if (isCompleted) return "Full-Time";
+    return "";
+  };
+  
+  const showPill = isCompleted || isLive;
+  const statusLabel = getStatusPillLabel();
   const badgeVariant = getLeagueStatusBadgeVariant(match.status);
   
   return (
     <div 
-      className="flex items-center justify-between px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
+      className="flex flex-col px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
       data-testid={`match-row-${match.id}`}
     >
-      <div className="flex-1 text-right pr-2 text-sm truncate">
-        {match.home.name}
-      </div>
+      {/* Status pill above the row (only for Live/HT/FT) */}
+      {showPill && (
+        <div className="flex justify-center mb-2">
+          <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
+            {statusLabel}
+          </Badge>
+        </div>
+      )}
       
-      <div className="flex flex-col items-center min-w-[80px] justify-center gap-1">
-        {isCompleted || isLive ? (
-          <>
-            <div className="flex items-center gap-1 text-sm font-semibold">
-              <span>{match.score?.home ?? 0}</span>
-              <span className="text-muted-foreground">-</span>
-              <span>{match.score?.away ?? 0}</span>
-            </div>
-            <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
-              {statusLabel}
-            </Badge>
-          </>
-        ) : (
-          <>
-            <span className="text-xs text-muted-foreground">
-              {formatDate(match.kickoffDate)}
+      {/* Main row: Home - Score/Time - Away */}
+      <div className="flex items-center justify-between">
+        <div className="flex-1 text-right pr-3 text-sm truncate">
+          {match.home.name}
+        </div>
+        
+        <div className="flex items-center justify-center min-w-[60px]">
+          {isCompleted || isLive ? (
+            <span className="text-sm font-semibold">
+              {match.score?.home ?? 0} – {match.score?.away ?? 0}
             </span>
-            <span className="text-xs font-medium">
-              {match.kickoffTime ?? "TBD"}
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {match.kickoffTime ?? "TBC"}
             </span>
-            <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
-              {statusLabel}
-            </Badge>
-          </>
-        )}
-      </div>
-      
-      <div className="flex-1 pl-2 text-sm truncate">
-        {match.away.name}
+          )}
+        </div>
+        
+        <div className="flex-1 pl-3 text-sm truncate">
+          {match.away.name}
+        </div>
       </div>
     </div>
   );
@@ -440,7 +453,20 @@ export default function TablesPage() {
       );
     }
 
-    const displayMatches = leagueMatchesByRound[selectedRound] ?? [];
+    // Get matches and sort by kickoff datetime ascending
+    const rawMatches = leagueMatchesByRound[selectedRound] ?? [];
+    const displayMatches = [...rawMatches].sort((a, b) => {
+      const getKickoffTime = (m: LeagueMatchInfo): number => {
+        const dateStr = m.kickoffDate ?? "9999-12-31";
+        const timeStr = m.kickoffTime ?? "00:00";
+        try {
+          return new Date(`${dateStr}T${timeStr}`).getTime();
+        } catch {
+          return Number.MAX_SAFE_INTEGER;
+        }
+      };
+      return getKickoffTime(a) - getKickoffTime(b);
+    });
     const currentRoundInfo = leagueRounds.find((r) => r.key === selectedRound);
     
     // Extract matchweek number from the key (e.g., "MW23" -> 23)
