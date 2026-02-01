@@ -165,7 +165,7 @@ function formatShortDate(dateStr: string | null): string {
   }
 }
 
-function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
+function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; showDateLabel: boolean }) {
   const isCompleted = isLeagueMatchCompleted(match.status);
   const isLive = isLeagueMatchLive(match.status);
   const isHalfTime = match.status.toLowerCase() === "ht";
@@ -174,10 +174,8 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
   // Extract minute from status (e.g., "67'", "90+2", or just "67")
   const extractMinute = (): string | null => {
     const s = match.status;
-    // Match patterns like "67'", "90+2", "45+3'", or just digits
     const minuteMatch = s.match(/^(\d+(?:\+\d+)?)'?$/);
     if (minuteMatch) return minuteMatch[1] + "'";
-    // Check if status contains minute-like pattern
     const embeddedMatch = s.match(/(\d+(?:\+\d+)?)/);
     if (embeddedMatch && isLive && !isHalfTime) return embeddedMatch[1] + "'";
     return null;
@@ -198,15 +196,15 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
   const statusLabel = getStatusPillLabel();
   const badgeVariant = getLeagueStatusBadgeVariant(match.status);
   
-  // For scheduled matches, format the date to show above the row
-  const scheduledDateLabel = isScheduled ? formatShortDate(match.kickoffDate) : "";
+  // For scheduled matches, format the date to show above the row (only if showDateLabel)
+  const scheduledDateLabel = isScheduled && showDateLabel ? formatShortDate(match.kickoffDate) : "";
   
   return (
     <div 
       className="flex flex-col px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
       data-testid={`match-row-${match.id}`}
     >
-      {/* Above the row: Status pill for Live/HT/FT OR Date text for Scheduled */}
+      {/* Above the row: Status pill for Live/HT/FT OR Date text for Scheduled (first of date block) */}
       {showPill ? (
         <div className="flex justify-center mb-2">
           <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
@@ -546,9 +544,20 @@ export default function TablesPage() {
                     No fixtures yet
                   </div>
                 ) : (
-                  displayMatches.map((match) => (
-                    <LeagueMatchRow key={match.id} match={match} />
-                  ))
+                  (() => {
+                    // Determine which scheduled matches should show date label (first of each date block)
+                    const seenDates = new Set<string>();
+                    return displayMatches.map((match) => {
+                      const isScheduled = !isLeagueMatchCompleted(match.status) && !isLeagueMatchLive(match.status);
+                      const dateKey = match.kickoffDate || "";
+                      let showDateLabel = false;
+                      if (isScheduled && dateKey && !seenDates.has(dateKey)) {
+                        seenDates.add(dateKey);
+                        showDateLabel = true;
+                      }
+                      return <LeagueMatchRow key={match.id} match={match} showDateLabel={showDateLabel} />;
+                    });
+                  })()
                 )}
               </div>
             </CardContent>

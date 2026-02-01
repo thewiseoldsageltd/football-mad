@@ -1,0 +1,95 @@
+You are working in my repo. Make the following surgical fixes (must compile, no extra refactors). Only touch the files mentioned.
+
+========================
+A) BACKEND: correct defaultMatchweek per-league (Goalserve DD.MM.YYYY)
+File: server/routes.ts
+========================
+Problem: multiple leagues default to MW24 because our “upcoming/live” detection fails (Goalserve date format + status mapping). Fix it so defaultMatchweek is the CURRENT/ACTIVE matchweek for the requested leagueId+season.
+
+Implement these helper functions near the standings route helpers (or inside the route file, but NOT in a conditional block):
+
+1) parseGoalserveDateTime(dateStr, timeStr):
+- Goalserve date is usually "DD.MM.YYYY" (e.g. "24.01.2026"). Sometimes may arrive as "YYYY-MM-DD" or "DD/MM/YYYY".
+- time is "HH:MM" (24h). If missing, treat as "00:00".
+- Return a JS Date in UTC-safe way OR local-safe way, but be consistent. Use a manual parse:
+  - If matches /^(\d{2})\.(\d{2})\.(\d{4})$/ => day, month, year
+  - If matches /^(\d{4})-(\d{2})-(\d{2})$/ => year, month, day
+  - If matches /^(\d{2})\/(\d{2})\/(\d{4})$/ => day, month, year
+  - Then parse time HH:MM
+  - Construct new Date(Date.UTC(year, month-1, day, hh, mm, 0))
+Return null if invalid.
+
+2) isLiveStatus(status):
+- true for: "LIVE", "HT", "1H", "2H", "ET", "PEN", "BREAK", and also Goalserve sometimes uses "Playing" or "In Progress"
+- status comparisons should be case-insensitive
+
+3) isFinishedStatus(status):
+- true for: "FT", "AET", "FT_PEN", "PEN", "Finished", "Full-Time"
+- case-insensitive
+
+4) isScheduledStatus(status):
+- true for: "NS", "SCHEDULED", "Scheduled", empty/null (treat empty as scheduled if score is null)
+- case-insensitive
+
+Now update the defaultMatchweek selection logic used in /api/standings to work like this:
+
+Inputs available: matchesByRound (keys "MW1"...), and each match includes kickoffDate + kickoffTime (or original xml date/time), plus status and score.
+
+Algorithm (in order):
+- Sort round keys numerically ascending.
+- For each round:
+  - If any match is LIVE (isLiveStatus) => choose this round immediately.
+- Else for each round:
+  - Consider a match “upcoming” if:
+    - NOT finished AND (kickoffDateTime >= nowUtc)  OR
+    - status is scheduled (isScheduledStatus) and kickoffDateTime exists and >= nowUtc
+  - If any upcoming match in the round => choose this round immediately.
+- Else (season appears completed / all in past):
+  - Choose the highest round that exists.
+- IMPORTANT: Use nowUtc = new Date() but compare against Date.UTC constructed values (so comparisons are apples-to-apples).
+- Return this as defaultMatchweek (number), and also keep latestRoundKey/latestActiveRoundKey/latestScheduledRoundKey if you already return them.
+
+Also add lightweight debug fields to the API response (safe for prod):
+- snapshot.nowUtc (ISO string)
+- snapshot.defaultMatchweekReason: "live" | "upcoming" | "fallback_last"
+This will help us verify in the UI.
+
+Do NOT change the response structure for existing consumers besides adding those snapshot fields.
+
+========================
+B) FRONTEND: remove hook-order crash + implement fixtures layout
+File: client/src/pages/tables.tsx
+========================
+1) Fix the hook error:
+- There is a useMemo around line ~513 used to detect multi-day scheduled matches.
+- Remove the useMemo hook entirely and replace it with a plain computed const:
+  const multiDay = (() => { ...existing logic... })();
+- Ensure no React hooks are called inside render helper functions that might run conditionally.
+
+2) Fixtures list display rules (Leagues view, not Europe view):
+For each fixture row:
+- If match is LIVE: show a small pill ABOVE the row content: "LIVE 67'" (use minute if available; if not, just "LIVE"). If you don't have minute yet, just "LIVE".
+- If match is HT: pill "HT"
+- If match is finished: pill "FT"
+- The scoreline should be INLINE between team names: "Wolves 0 - 2 Bournemouth"
+- For scheduled (not live, not finished):
+  - DO NOT show any pill.
+  - Show kickoff time inline instead of score: "Aston Villa 14:00 Brentford"
+  - Also show a date label ABOVE the row content in muted text: "Sun 1 Feb"
+  - If multiple consecutive scheduled matches share the same date, only show the date label for the first match of that date block (so it visually groups).
+  - If the list contains both finished/live and scheduled, only scheduled matches get the date label blocks.
+
+3) Formatting helpers:
+- Create helper formatShortDateLabel(dateISO) => "Sun 1 Feb" using Intl.DateTimeFormat("en-GB", { weekday:"short", day:"numeric", month:"short" })
+- Kickoff time should remain "HH:MM" (already).
+
+4) Keep styling consistent with current UI:
+- Use existing Badge/pill component for LIVE/HT/FT only.
+- Date label should be small and muted (text-xs, text-muted-foreground) and centered like your current pill position.
+
+After changes, ensure:
+- EPL no longer defaults to MW38; it defaults to the current MW based on nowUtc.
+- Championship/League One etc no longer default to MW24 unless MW24 is genuinely the next/upcoming/live round.
+- No React hook order errors.
+
+Deliver the code changes only. No commentary.

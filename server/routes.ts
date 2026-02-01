@@ -2264,27 +2264,62 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // --- Determine default matchweek based on dates for THIS league only ---
-      const isLiveStatusCheck = (status?: string | null): boolean => {
-        if (!status) return false;
-        const s = status.toLowerCase();
-        return s.includes("live") || s.includes("ht") || s.includes("1h") || s.includes("2h");
-      };
-
-      const parseKickoffDatetimeCheck = (date?: string | null, time?: string | null): Date | null => {
-        if (!date) return null;
-        const iso = time ? `${date}T${time}` : `${date}T00:00`;
-        const d = new Date(iso);
+      // Parse Goalserve date formats: DD.MM.YYYY, YYYY-MM-DD, DD/MM/YYYY
+      const parseGoalserveDateTime = (dateStr?: string | null, timeStr?: string | null): Date | null => {
+        if (!dateStr) return null;
+        let year: number, month: number, day: number;
+        
+        const dotMatch = dateStr.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+        if (dotMatch) {
+          day = parseInt(dotMatch[1], 10);
+          month = parseInt(dotMatch[2], 10);
+          year = parseInt(dotMatch[3], 10);
+        } else {
+          const isoMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (isoMatch) {
+            year = parseInt(isoMatch[1], 10);
+            month = parseInt(isoMatch[2], 10);
+            day = parseInt(isoMatch[3], 10);
+          } else {
+            const slashMatch = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+            if (slashMatch) {
+              day = parseInt(slashMatch[1], 10);
+              month = parseInt(slashMatch[2], 10);
+              year = parseInt(slashMatch[3], 10);
+            } else {
+              return null;
+            }
+          }
+        }
+        
+        const time = timeStr || "00:00";
+        const [hh, mm] = time.split(":").map((x) => parseInt(x, 10) || 0);
+        const d = new Date(Date.UTC(year, month - 1, day, hh, mm, 0));
         return isNaN(d.getTime()) ? null : d;
       };
 
-      const hasUpcomingOrLiveMatchCheck = (matches: MatchInfo[]): boolean => {
-        const nowCheck = new Date();
-        return matches.some((m) => {
-          if (isLiveStatusCheck(m.status)) return true;
-          const ko = parseKickoffDatetimeCheck(m.kickoffDate, m.kickoffTime);
-          return ko && ko >= nowCheck;
-        });
+      const isLiveStatusCheck = (status?: string | null): boolean => {
+        if (!status) return false;
+        const s = status.toLowerCase();
+        return s === "live" || s === "ht" || s === "1h" || s === "2h" || s === "et" || 
+               s === "pen" || s === "break" || s === "playing" || s === "in progress" ||
+               s.includes("live");
       };
+
+      const isFinishedStatusCheck = (status?: string | null): boolean => {
+        if (!status) return false;
+        const s = status.toLowerCase();
+        return s === "ft" || s === "aet" || s === "ft_pen" || s === "finished" || s === "full-time";
+      };
+
+      const isScheduledStatusCheck = (status?: string | null): boolean => {
+        if (!status || status.trim() === "") return true;
+        const s = status.toLowerCase();
+        return s === "ns" || s === "scheduled" || s === "fixture" || s === "tbd";
+      };
+
+      const nowUtc = new Date();
+      let defaultMatchweekReason: "live" | "upcoming" | "fallback_last" = "fallback_last";
 
       const sortedRoundKeys = Object.keys(matchesByRound)
         .sort((a, b) => {
@@ -2293,17 +2328,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return na - nb;
         });
 
-      // 1️⃣ Find earliest round with upcoming or live match
-      const upcomingRound = sortedRoundKeys.find((roundKey) =>
-        hasUpcomingOrLiveMatchCheck(matchesByRound[roundKey] || [])
-      );
+      // 1️⃣ Find round with any LIVE match
+      const liveRound = sortedRoundKeys.find((roundKey) => {
+        const matches = matchesByRound[roundKey] || [];
+        return matches.some((m) => isLiveStatusCheck(m.status));
+      });
 
-      if (upcomingRound) {
-        defaultMatchweek = parseInt(upcomingRound.replace(/\D/g, ""), 10);
-      } else if (sortedRoundKeys.length > 0) {
-        // 2️⃣ Fallback: last round with matches (season finished)
-        const lastRound = sortedRoundKeys[sortedRoundKeys.length - 1];
-        defaultMatchweek = parseInt(lastRound.replace(/\D/g, ""), 10);
+      if (liveRound) {
+        defaultMatchweek = parseInt(liveRound.replace(/\D/g, ""), 10);
+        defaultMatchweekReason = "live";
+      } else {
+        // 2️⃣ Find earliest round with upcoming matches
+        const upcomingRound = sortedRoundKeys.find((roundKey) => {
+          const matches = matchesByRound[roundKey] || [];
+          return matches.some((m) => {
+            if (isFinishedStatusCheck(m.status)) return false;
+            const ko = parseGoalserveDateTime(m.kickoffDate, m.kickoffTime);
+            if (ko && ko >= nowUtc) return true;
+            if (isScheduledStatusCheck(m.status) && ko && ko >= nowUtc) return true;
+            return false;
+          });
+        });
+
+        if (upcomingRound) {
+          defaultMatchweek = parseInt(upcomingRound.replace(/\D/g, ""), 10);
+          defaultMatchweekReason = "upcoming";
+        } else if (sortedRoundKeys.length > 0) {
+          // 3️⃣ Fallback: last round (season finished)
+          const lastRound = sortedRoundKeys[sortedRoundKeys.length - 1];
+          defaultMatchweek = parseInt(lastRound.replace(/\D/g, ""), 10);
+          defaultMatchweekReason = "fallback_last";
+        }
       }
 
       // ensure safe number
@@ -2312,9 +2367,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       // Compute latestRoundKey for backward compatibility
-      const latestScheduledRoundKey = upcomingRound || "";
+      const latestScheduledRoundKey = liveRound || sortedRoundKeys.find((roundKey) => {
+        const matches = matchesByRound[roundKey] || [];
+        return matches.some((m) => !isFinishedStatusCheck(m.status));
+      }) || "";
       const latestActiveRoundKey = sortedRoundKeys.length > 0 ? sortedRoundKeys[sortedRoundKeys.length - 1] : "";
-      const latestRoundKey = upcomingRound || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
+      const latestRoundKey = liveRound || latestScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
 
       res.json({
         snapshot: {
@@ -2322,6 +2380,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           season: snapshot.season,
           stageId: snapshot.stageId,
           asOf: snapshot.asOf,
+          nowUtc: nowUtc.toISOString(),
+          defaultMatchweekReason,
         },
         table,
         rounds,
