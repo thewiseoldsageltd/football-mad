@@ -2263,37 +2263,80 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rounds.sort((a, b) => a.number - b.number);
       }
 
-      // Determine default matchweek
-      // Strategy: pick the first round that has any scheduled (not yet played) matches
-      // If all matches are completed, pick the highest round with any matches
+      // Determine default matchweek using date-aware logic
+      // Definition: A match is "upcomingOrLive" if:
+      //   - status indicates live/playing (HT, minute like "67'", LIVE) OR
+      //   - kickoff datetime >= now OR
+      //   - status is scheduled/unknown and kickoff datetime >= now
+      // Choose defaultMatchweek as:
+      //   1) the LOWEST MW number that contains any upcomingOrLive match
+      //   2) else (season over): the HIGHEST MW number that contains any matches
+      //   3) else fallback 1
+      
+      const currentTime = new Date();
+      
+      const isLiveStatus = (status: string): boolean => {
+        const s = status.toLowerCase();
+        return s === "ht" || s === "live" || /^\d+['′]?$/.test(s) || s.includes("'");
+      };
+      
+      const isFinishedStatus = (status: string): boolean => {
+        const s = status.toLowerCase();
+        return ["ft", "fulltime", "full-time", "finished", "aet", "after extra time", "penalties", "after pen."].includes(s);
+      };
+      
+      const parseKickoffDatetime = (m: MatchInfo): Date | null => {
+        if (!m.kickoffDate) return null;
+        const timeStr = m.kickoffTime || "00:00";
+        try {
+          return new Date(`${m.kickoffDate}T${timeStr}:00`);
+        } catch {
+          return null;
+        }
+      };
+      
+      const hasUpcomingOrLiveMatch = (matches: MatchInfo[]): boolean => {
+        for (const m of matches) {
+          // Live match
+          if (isLiveStatus(m.status)) return true;
+          // Finished match - skip
+          if (isFinishedStatus(m.status)) continue;
+          // Check kickoff time
+          const kickoff = parseKickoffDatetime(m);
+          if (kickoff && kickoff >= currentTime) return true;
+          // If no kickoff but not finished, consider upcoming
+          if (!kickoff && !isFinishedStatus(m.status)) return true;
+        }
+        return false;
+      };
+      
       let latestScheduledRoundKey = "";
       let latestActiveRoundKey = "";
-      let firstScheduledRoundKey = "";
+      let firstUpcomingRoundKey = "";
       
       for (const round of rounds) {
-        if (round.hasAnyMatches) {
+        const roundMatches = matchesByRound[round.key] ?? [];
+        if (roundMatches.length > 0) {
           latestActiveRoundKey = round.key;
         }
-        if (round.hasScheduledMatches) {
-          if (!firstScheduledRoundKey) {
-            firstScheduledRoundKey = round.key;
+        if (hasUpcomingOrLiveMatch(roundMatches)) {
+          if (!firstUpcomingRoundKey) {
+            firstUpcomingRoundKey = round.key;
           }
           latestScheduledRoundKey = round.key;
         }
       }
       
-      // Prefer the first round with scheduled matches (current matchweek)
-      // Fall back to latest active round (all matches completed)
-      // Final fallback to first round
-      if (firstScheduledRoundKey) {
-        const match = firstScheduledRoundKey.match(/(\d+)/);
+      // Priority: first round with upcoming/live matches > highest round with any matches > 1
+      if (firstUpcomingRoundKey) {
+        const match = firstUpcomingRoundKey.match(/(\d+)/);
         if (match) defaultMatchweek = parseInt(match[1], 10);
       } else if (latestActiveRoundKey) {
         const match = latestActiveRoundKey.match(/(\d+)/);
         if (match) defaultMatchweek = parseInt(match[1], 10);
       }
       
-      const latestRoundKey = firstScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
+      const latestRoundKey = firstUpcomingRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
 
       res.json({
         snapshot: {

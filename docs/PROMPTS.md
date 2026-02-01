@@ -9318,3 +9318,79 @@ home.name "West Ham", away.name "Sunderland", score {home:3, away:1}, status "FT
 
 ---
 
+You are Replit AI working inside this repo. Make ONLY the code changes described below, keep them surgical, and DO NOT run any automated tests or long “testing scripts”. Just implement + let me manually verify in the browser.
+
+GOAL
+1) Premier League (and all leagues) should default to the “current” matchweek (or next upcoming), NOT MW38.
+2) League fixtures list should show a status badge (Full-Time / Live / Scheduled etc) like Europe, for consistency.
+
+CONTEXT (what we know is true)
+- Goalserve EPL fixtures XML uses <week number="X"> and match has attributes like: <match date="24.01.2026" time="12:30" status="FT"> and <localteam name="West Ham" score="3" .../> <visitorteam name="Sunderland" score="1" .../>
+- /api/standings already returns matchesByRound keyed MW1..MW38 and also returns defaultMatchweek.
+- Frontend tables page uses: client/src/pages/tables.tsx and selects default with:
+  const defaultMatchweek = standingsData?.defaultMatchweek ?? 1;
+  const defaultKey = `MW${defaultMatchweek}`;
+- Europe UI shows status chips (Full-Time etc). Leagues should too.
+
+PART A — BACKEND: smarter defaultMatchweek
+Find the /api/standings endpoint implementation (server side). It currently sets defaultMatchweek in a “max round number” way or similar.
+Replace that with date-aware logic:
+
+Definition:
+- “Now” = current server time.
+- A match is “upcomingOrLive” if:
+  - status indicates live/playing OR
+  - kickoff datetime is >= now OR
+  - status is empty/unknown but kickoff datetime is >= now
+- Choose defaultMatchweek as:
+  1) the LOWEST MW number that contains any upcomingOrLive match
+  2) else (season over): the HIGHEST MW number that contains any matches
+  3) else fallback 1
+
+Implementation details:
+- Parse kickoff datetime from the match object you already build (kickoffDate + kickoffTime). If kickoffTime missing, treat as 00:00.
+- Normalize statuses:
+  - FT => finished
+  - HT or a minute like "67'" or "LIVE" => live
+  - anything else => scheduled/unknown
+- IMPORTANT: do NOT break Europe/Cups behaviour. Only change the league standings response defaultMatchweek selection, using the already-produced matchesByRound object.
+
+PART B — BACKEND: ensure match objects include proper names + scores
+Right now leagues are sometimes showing “TBD 0-0 TBD”. We already proved the XML has name/score on attributes:
+- localteam name="West Ham" score="3"
+- visitorteam name="Sunderland" score="1"
+Ensure your XML parsing maps those attributes into the API match objects:
+- match.home.name = localteam@name (or name)
+- match.away.name = visitorteam@name (or name)
+- match.homeScore / awayScore OR a score object should be populated when status indicates played (FT, LIVE, HT) if score attributes exist.
+- Preserve match.id from <match id="..."> attribute.
+- Preserve status from <match status="...">.
+
+Do not invent “TBD” unless the source name is truly missing.
+
+PART C — FRONTEND: show status badge in league fixtures list
+In client/src/pages/tables.tsx (or whichever component renders the league fixtures list on the right), add a status badge like Europe:
+- If match.status is FT => show “Full-Time”
+- If match.status is HT => show “Half-Time”
+- If match.status indicates live (e.g. contains "'" or equals LIVE) => show “Live”
+- Else show “Scheduled” (or show nothing for scheduled if you prefer, but user asked for consistency so better to show Scheduled)
+
+Also:
+- If match is FT/HT/LIVE and scores exist, show the score (homeScore-awayScore).
+- If Scheduled and no scores, show kickoff time as it does now.
+
+Use the existing Badge component pattern already used in Europe (search for “Full-Time” or Badge usage in europe-progress.tsx and mirror that style in the league fixtures rendering).
+
+PART D — QUICK CHECKS (no automated testing, just reasoning)
+- Default landing on Premier League should pick the current/next matchweek based on dates, not MW38.
+- MW toggle left/right should still work.
+- League fixtures should no longer be “TBD 0-0 TBD” (they should show real teams and scores where available).
+- Status badge should display on league fixtures rows similar to Europe.
+
+DELIVERABLE
+- Apply edits and save files.
+- Print a short summary of which files you changed and the key logic change.
+- Do NOT run tests, do NOT run long scripts, do NOT add debug spam logs.
+
+---
+

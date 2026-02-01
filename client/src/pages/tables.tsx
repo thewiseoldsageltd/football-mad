@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Trophy, Loader2 } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { CupProgress } from "@/components/tables/cup-progress";
@@ -113,9 +114,44 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
   };
 }
 
+// Status badge helpers for league fixtures (mirrors Europe pattern)
+function getLeagueStatusBadgeVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
+  const s = status.toLowerCase();
+  // Completed
+  if (["ft", "fulltime", "full-time", "finished", "aet", "after extra time", "penalties", "after pen."].includes(s)) {
+    return "secondary";
+  }
+  // Live
+  if (s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s)) {
+    return "destructive";
+  }
+  // Scheduled
+  return "outline";
+}
+
+function formatLeagueStatusLabel(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "ft" || s === "fulltime" || s === "finished") return "Full-Time";
+  if (s === "aet" || s === "after extra time") return "AET";
+  if (s === "penalties" || s === "after pen.") return "Penalties";
+  if (s === "ht") return "Half-Time";
+  if (s === "live" || s.includes("'") || /^\d+$/.test(s)) return "Live";
+  return "Scheduled";
+}
+
+function isLeagueMatchCompleted(status: string): boolean {
+  const s = status.toLowerCase();
+  return ["ft", "fulltime", "full-time", "finished", "aet", "after extra time", "penalties", "after pen."].includes(s);
+}
+
+function isLeagueMatchLive(status: string): boolean {
+  const s = status.toLowerCase();
+  return s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s);
+}
+
 function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
-  const isCompleted = match.status === "fulltime" || match.status === "FT" || match.status === "finished";
-  const isLive = match.status === "live" || match.status.match(/^\d+$/) || match.status === "HT";
+  const isCompleted = isLeagueMatchCompleted(match.status);
+  const isLive = isLeagueMatchLive(match.status);
   
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "";
@@ -127,6 +163,9 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
     }
   };
   
+  const statusLabel = formatLeagueStatusLabel(match.status);
+  const badgeVariant = getLeagueStatusBadgeVariant(match.status);
+  
   return (
     <div 
       className="flex items-center justify-between px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
@@ -136,18 +175,18 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
         {match.home.name}
       </div>
       
-      <div className="flex flex-col items-center min-w-[70px] justify-center">
+      <div className="flex flex-col items-center min-w-[80px] justify-center gap-1">
         {isCompleted || isLive ? (
-          <div className="flex items-center gap-1 text-sm font-semibold">
-            <span>{match.score?.home ?? 0}</span>
-            <span className="text-muted-foreground">-</span>
-            <span>{match.score?.away ?? 0}</span>
-            {isLive && (
-              <span className="ml-1 text-xs text-emerald-500 font-medium">
-                {match.status === "HT" ? "HT" : `${match.status}'`}
-              </span>
-            )}
-          </div>
+          <>
+            <div className="flex items-center gap-1 text-sm font-semibold">
+              <span>{match.score?.home ?? 0}</span>
+              <span className="text-muted-foreground">-</span>
+              <span>{match.score?.away ?? 0}</span>
+            </div>
+            <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
+              {statusLabel}
+            </Badge>
+          </>
         ) : (
           <>
             <span className="text-xs text-muted-foreground">
@@ -156,6 +195,9 @@ function LeagueMatchRow({ match }: { match: LeagueMatchInfo }) {
             <span className="text-xs font-medium">
               {match.kickoffTime ?? "TBD"}
             </span>
+            <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
+              {statusLabel}
+            </Badge>
           </>
         )}
       </div>
