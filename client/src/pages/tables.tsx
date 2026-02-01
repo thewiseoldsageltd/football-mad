@@ -509,16 +509,14 @@ export default function TablesPage() {
     
     const matchweekTitle = matchweekNum !== null ? `Matchweek ${matchweekNum}` : selectedRound;
     
-    // Determine if scheduled matches span multiple dates
-    const multiDay = useMemo(() => {
-      const scheduledMatches = displayMatches.filter(
-        (m) => !isLeagueMatchCompleted(m.status) && !isLeagueMatchLive(m.status)
-      );
-      const uniqueDates = new Set(
-        scheduledMatches.map((m) => m.kickoffDate).filter(Boolean)
-      );
-      return uniqueDates.size > 1;
-    }, [displayMatches]);
+    // Determine if scheduled matches span multiple dates (plain computation, no hooks)
+    const scheduledMatches = displayMatches.filter(
+      (m) => !isLeagueMatchCompleted(m.status) && !isLeagueMatchLive(m.status)
+    );
+    const uniqueDates = new Set(
+      scheduledMatches.map((m) => m.kickoffDate).filter(Boolean)
+    );
+    const multiDay = uniqueDates.size > 1;
 
     return (
       <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
