@@ -1,0 +1,60 @@
+We need to fix default matchweek selection so it is correct per league and based on match dates, not shared MW numbers.
+
+Open server/routes.ts and find where defaultMatchweek is determined inside the /api/standings route.
+
+Replace the entire default matchweek selection block with this logic:
+
+// --- Determine default matchweek based on dates for THIS league only ---
+function isLiveStatus(status?: string) {
+  if (!status) return false;
+  const s = status.toLowerCase();
+  return s.includes("live") || s.includes("ht") || s.includes("1h") || s.includes("2h");
+}
+
+function parseKickoffDatetime(date?: string, time?: string) {
+  if (!date) return null;
+  // Expect date like YYYY-MM-DD
+  const iso = time ? `${date}T${time}` : `${date}T00:00`;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function hasUpcomingOrLiveMatch(matches: any[]) {
+  const now = new Date();
+  return matches.some((m) => {
+    if (isLiveStatus(m.status)) return true;
+    const ko = parseKickoffDatetime(m.kickoffDate, m.kickoffTime);
+    return ko && ko >= now;
+  });
+}
+
+let defaultMatchweek = 1;
+
+const sortedRounds = Object.keys(matchesByRound)
+  .sort((a, b) => {
+    const na = parseInt(a.replace(/\D/g, ""), 10);
+    const nb = parseInt(b.replace(/\D/g, ""), 10);
+    return na - nb;
+  });
+
+// 1️⃣ Find earliest round with upcoming or live match
+const upcomingRound = sortedRounds.find((roundKey) =>
+  hasUpcomingOrLiveMatch(matchesByRound[roundKey] || [])
+);
+
+if (upcomingRound) {
+  defaultMatchweek = parseInt(upcomingRound.replace(/\D/g, ""), 10);
+} else if (sortedRounds.length > 0) {
+  // 2️⃣ Fallback: last round with matches (season finished)
+  const lastRound = sortedRounds[sortedRounds.length - 1];
+  defaultMatchweek = parseInt(lastRound.replace(/\D/g, ""), 10);
+}
+
+// ensure safe number
+if (!Number.isFinite(defaultMatchweek) || defaultMatchweek <= 0) {
+  defaultMatchweek = 1;
+}
+
+Make sure this logic runs AFTER matchesByRound has been fully built.
+
+Do not change any other behaviour.
