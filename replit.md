@@ -130,9 +130,12 @@ Preferred communication style: Simple, everyday language.
 - **League Tables (Tables > Leagues tab)**:
   - API: `/api/league/:slug?season=YYYY/YYYY`
   - Returns: `{ standings, rounds, matchesByRound, latestRoundKey, latestScheduledRoundKey, latestActiveRoundKey }`
-  - Rounds grouped by `goalserveRound` field from matches
-  - Uses same RoundToggle component for matchweek navigation
-  - **Matchweek numbering**: Always 1-indexed (MW1, MW2, etc., never MW0)
+  - **Round Navigation**: Only Premier League (leagueId: 1204) shows matchweek-based navigation
+    - PL: Full RoundToggle with "Matchweek X" navigation
+    - Other leagues (Championship, League One, League Two, etc.): Simple chronological fixtures list with "Upcoming Fixtures" and "Recent Results" cards
+  - Backend returns null for round metadata (latestRoundKey, defaultMatchweek, etc.) for non-PL leagues
+  - Non-PL leagues: all fixtures in single "all" bucket instead of matchweek groupings
+  - **Matchweek numbering** (Premier League only): Always 1-indexed (MW1, MW2, etc., never MW0)
     - Backend detects 0-indexed feeds and shifts all rounds by +1
     - Round parsing handles various formats: "2", "Matchweek 2", "Round 0", "MW5"
   - **Default selection algorithm** (cluster-around-now scoring):
