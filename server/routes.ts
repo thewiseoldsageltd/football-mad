@@ -2224,6 +2224,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           let endDate: string | null = null;
           let hasScheduled = false;
           
+          // Helper to check if match is postponed (for date range exclusion)
+          const isMatchPostponed = (status: string): boolean => {
+            const s = status?.toLowerCase() || "";
+            return s === "pstp" || s === "postponed" || s === "postp" || s === "susp" || 
+                   s === "suspended" || s === "cancelled" || s === "canceled" || 
+                   s === "abandoned" || s === "abn";
+          };
+          
           // Get matches from week - can be in week.match or week.matches.match
           let matchList: any[] = [];
           if (week.match) {
@@ -2236,13 +2244,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             const matchInfo = parseXmlMatch(m, weekNum);
             weekMatches.push(matchInfo);
             
-            if (matchInfo.kickoffDate) {
+            // Exclude postponed matches from date range calculation
+            if (matchInfo.kickoffDate && !isMatchPostponed(matchInfo.status)) {
               if (!startDate || matchInfo.kickoffDate < startDate) startDate = matchInfo.kickoffDate;
               if (!endDate || matchInfo.kickoffDate > endDate) endDate = matchInfo.kickoffDate;
             }
             
             if (isScheduledStatus(matchInfo.status)) {
               hasScheduled = true;
+            }
+          }
+          
+          // Fallback: if entire round is postponed (no dates computed), use all match dates
+          if (startDate === null && endDate === null) {
+            for (const match of weekMatches) {
+              if (match.kickoffDate) {
+                if (!startDate || match.kickoffDate < startDate) startDate = match.kickoffDate;
+                if (!endDate || match.kickoffDate > endDate) endDate = match.kickoffDate;
+              }
             }
           }
           
@@ -2318,6 +2337,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return s === "ns" || s === "scheduled" || s === "fixture" || s === "tbd";
       };
 
+      const isPostponedStatusCheck = (status?: string | null): boolean => {
+        if (!status) return false;
+        const s = status.toLowerCase();
+        return s === "pstp" || s === "postponed" || s === "postp" || s === "susp" || s === "suspended" ||
+               s === "cancelled" || s === "canceled" || s === "abandoned" || s === "abn";
+      };
+
       const nowUtc = new Date();
       let defaultMatchweekReason: "live" | "upcoming" | "fallback_last" = "fallback_last";
 
@@ -2328,20 +2354,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return na - nb;
         });
 
-      // 1️⃣ Find round with any LIVE match
+      // 1️⃣ Find round with any LIVE match (exclude postponed)
       const liveRound = sortedRoundKeys.find((roundKey) => {
         const matches = matchesByRound[roundKey] || [];
-        return matches.some((m) => isLiveStatusCheck(m.status));
+        return matches.some((m) => isLiveStatusCheck(m.status) && !isPostponedStatusCheck(m.status));
       });
 
       if (liveRound) {
         defaultMatchweek = parseInt(liveRound.replace(/\D/g, ""), 10);
         defaultMatchweekReason = "live";
       } else {
-        // 2️⃣ Find earliest round with upcoming matches
+        // 2️⃣ Find earliest round with upcoming matches (exclude postponed)
         const upcomingRound = sortedRoundKeys.find((roundKey) => {
           const matches = matchesByRound[roundKey] || [];
           return matches.some((m) => {
+            // Skip postponed matches - they shouldn't influence default round selection
+            if (isPostponedStatusCheck(m.status)) return false;
             if (isFinishedStatusCheck(m.status)) return false;
             const ko = parseGoalserveDateTime(m.kickoffDate, m.kickoffTime);
             if (ko && ko >= nowUtc) return true;

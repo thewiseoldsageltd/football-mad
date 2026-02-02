@@ -1,0 +1,74 @@
+You are working in this repo. Make surgical changes only. Implement the following fixes end-to-end and ensure the app builds.
+
+GOAL
+- Leagues fixtures widget should only show pills for: LIVE(+minute if available), HT, FT, PSTP.
+- Scheduled fixtures should NOT show a pill. Instead:
+  - For scheduled fixtures: show the kickoff TIME in the middle (replacing scoreline).
+  - Show the DATE label above the row (e.g. "Sun 1 Feb") whenever needed to avoid ambiguity (especially if the round spans multiple dates).
+- Postponed fixtures should show a PSTP pill (and still show the fixture teams). If kickoff date/time is present, show it as normal, but the PSTP pill must communicate postponement.
+- Default matchweek selection must be per-league and must NOT be skewed by postponed fixtures. Postponed (PSTP) matches must not count as "upcoming/live" when picking the default round.
+- Matchweek header date range must not be distorted by postponed fixtures. When calculating the header range, ignore postponed fixtures unless the entire round is postponed.
+- IMPORTANT: Fix/avoid the React hooks error "Rendered more hooks than during the previous render" by ensuring no hooks (useMemo/useEffect/useState) are declared inside nested render functions or conditionals.
+
+FILES TO CHANGE
+1) server/routes.ts (or wherever /api/standings is implemented)
+2) client/src/pages/tables.tsx (league fixtures widget rendering + header date range)
+(Only touch other files if absolutely necessary.)
+
+BACKEND CHANGE (server/routes.ts)
+In the logic that computes defaultMatchweek (or default round key):
+- Introduce helpers:
+  - isLiveStatus(status): true for values like "LIVE", "HT", "1H", "2H", "ET", "BT" etc if you currently support these
+  - isFinishedStatus(status): true for "FT", "AET", "PEN" etc
+  - isPostponedStatus(status): true for "PSTP" plus any Goalserve postponed variants you see in the codebase
+- When selecting the default round:
+  - Sort round keys ascending by their numeric part (MW1..MW46 etc)
+  - Find the earliest round that has ANY match that is (LIVE) OR (scheduled in the future) BUT NOT postponed:
+    - A match counts as "scheduled/upcoming" if kickoff >= now AND NOT isPostponedStatus(status) AND NOT isFinishedStatus(status)
+    - A match counts as "live" if isLiveStatus(status) AND NOT isPostponedStatus(status)
+  - If none found, fall back to the latest round that has any match (season completed scenario)
+- Return defaultMatchweek consistently as a number (e.g. 24), derived from the chosen MW key.
+- Keep response compatibility: do not remove existing fields like matchesByRound, rounds, leagueRounds, etc.
+
+FRONTEND CHANGE (client/src/pages/tables.tsx)
+A) Remove any useMemo/useEffect/useState from nested render helpers (e.g. renderLeaguesContent). If there’s currently a useMemo inside a function, replace it with a plain const calculation.
+
+B) Add status helpers for league fixture rows:
+- isLeagueMatchPostponed(status): status indicates PSTP
+- formatLeagueStatusShort(status, minute?): return "LIVE 63'" for live, "HT" for half-time, "FT" for full-time, "PSTP" for postponed. Keep it short like the screenshot (FT).
+- Decide pill variant mapping (neutral/secondary is fine). We only render a pill for LIVE/HT/FT/PSTP.
+
+C) Row layout rules for the Fixtures list (right-side widget):
+- For completed/live/postponed matches:
+  - Show pill ABOVE the row, centered (like current FT pill).
+  - Show team names left/right with the scoreline in the middle for completed/live.
+  - For postponed: show teams + (optionally) show time in the middle if kickoff time exists, otherwise "TBD". Do NOT show a score.
+- For scheduled matches:
+  - No pill.
+  - Put kickoff TIME in the middle (replacing scoreline).
+  - Show a DATE label above the row when needed:
+    - If the round contains fixtures across multiple dates (ignoring postponed), show the date label for each scheduled fixture row (e.g. "Sun 1 Feb").
+    - If all scheduled fixtures are on the same day, you may show the date label once above the first scheduled fixture row (or still per-row; either is acceptable, but must prevent the "16:30 then 20:00 looks same day" confusion).
+
+D) Matchweek header date range (the small text under "Matchweek X"):
+- Currently it’s getting stretched (e.g. "6 Sept – 10 Feb") because a postponed fixture has a far-future kickoff.
+- Fix by computing the range using NON-postponed fixtures first:
+  - Consider matches where kickoffDate exists AND NOT isLeagueMatchPostponed(status)
+  - If that list is empty (entire round postponed), fall back to using all matches with kickoffDate
+- Use min/max of that list to build the range:
+  - If same day: show single date (e.g. "1 Feb")
+  - If multiple days: show "31 Jan – 2 Feb"
+- Ensure the per-row date labels (above scheduled fixtures) use the same date formatting (e.g. "Sun 1 Feb").
+
+E) Minute display for LIVE:
+- If your match object has minute/timer anywhere, append it like "LIVE 63'". If not available, show "LIVE" only.
+
+TESTS / MANUAL CHECKS
+- Premier League should still default correctly.
+- Championship / League One / League Two should now default to their actual current round (not inherited from ?round=MW24).
+- Postponed fixtures should show PSTP pill and should not distort round header date range.
+- No hooks error overlay.
+
+DELIVERABLE
+- Implement the changes with clean, readable code.
+- After changes, print a short summary of what you changed and where.

@@ -137,6 +137,10 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
 // Status badge helpers for league fixtures (mirrors Europe pattern)
 function getLeagueStatusBadgeVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
   const s = status.toLowerCase();
+  // Postponed - show with neutral variant
+  if (isLeagueMatchPostponed(status)) {
+    return "outline";
+  }
   // Completed
   if (["ft", "fulltime", "full-time", "finished", "aet", "after extra time", "penalties", "after pen."].includes(s)) {
     return "secondary";
@@ -145,7 +149,7 @@ function getLeagueStatusBadgeVariant(status: string): "default" | "secondary" | 
   if (s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s)) {
     return "destructive";
   }
-  // Scheduled
+  // Scheduled (no pill shown)
   return "outline";
 }
 
@@ -169,6 +173,13 @@ function isLeagueMatchLive(status: string): boolean {
   return s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s);
 }
 
+function isLeagueMatchPostponed(status: string): boolean {
+  const s = status.toLowerCase();
+  return s === "pstp" || s === "postponed" || s === "postp" || s === "susp" || 
+         s === "suspended" || s === "cancelled" || s === "canceled" || 
+         s === "abandoned" || s === "abn";
+}
+
 // Format date as "Sun 1 Feb" using UK timezone
 function formatShortDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -188,8 +199,9 @@ function formatShortDate(dateStr: string | null): string {
 function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; showDateLabel: boolean }) {
   const isCompleted = isLeagueMatchCompleted(match.status);
   const isLive = isLeagueMatchLive(match.status);
+  const isPostponed = isLeagueMatchPostponed(match.status);
   const isHalfTime = match.status.toLowerCase() === "ht";
-  const isScheduled = !isCompleted && !isLive;
+  const isScheduled = !isCompleted && !isLive && !isPostponed;
   
   // Extract minute from status (e.g., "67'", "90+2", or just "67")
   const extractMinute = (): string | null => {
@@ -201,8 +213,9 @@ function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; show
     return null;
   };
   
-  // Build status label for pill (only Live/HT/FT)
+  // Build status label for pill (LIVE/HT/FT/PSTP only)
   const getStatusPillLabel = (): string => {
+    if (isPostponed) return "PSTP";
     if (isHalfTime) return "HT";
     if (isLive) {
       const minute = extractMinute();
@@ -212,7 +225,8 @@ function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; show
     return "";
   };
   
-  const showPill = isCompleted || isLive;
+  // Show pill for completed, live, OR postponed matches
+  const showPill = isCompleted || isLive || isPostponed;
   const statusLabel = getStatusPillLabel();
   const badgeVariant = getLeagueStatusBadgeVariant(match.status);
   
@@ -224,7 +238,7 @@ function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; show
       className="flex flex-col px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
       data-testid={`match-row-${match.id}`}
     >
-      {/* Above the row: Status pill for Live/HT/FT OR Date text for Scheduled (first of date block) */}
+      {/* Above the row: Status pill for Live/HT/FT/PSTP OR Date text for Scheduled (first of date block) */}
       {showPill ? (
         <div className="flex justify-center mb-2">
           <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
@@ -248,7 +262,13 @@ function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; show
             <span className="text-sm font-semibold">
               {match.score?.home ?? 0} – {match.score?.away ?? 0}
             </span>
+          ) : isPostponed ? (
+            // Postponed: show time if available, else TBD
+            <span className="text-sm text-muted-foreground">
+              {match.kickoffTime ?? "TBD"}
+            </span>
           ) : (
+            // Scheduled: show kickoff time
             <span className="text-sm text-muted-foreground">
               {match.kickoffTime ?? "TBC"}
             </span>
@@ -565,12 +585,18 @@ export default function TablesPage() {
                   </div>
                 ) : (
                   (() => {
-                    // Determine which scheduled matches should show date label (first of each date block)
+                    // Determine which SCHEDULED (not postponed) matches should show date label
+                    // Only show date label for truly scheduled matches (first of each date block)
+                    // Postponed matches should NOT show date labels (they show PSTP pill instead)
                     const seenDates = new Set<string>();
                     return displayMatches.map((match) => {
-                      const isScheduled = !isLeagueMatchCompleted(match.status) && !isLeagueMatchLive(match.status);
+                      const isPostponed = isLeagueMatchPostponed(match.status);
+                      const isScheduled = !isLeagueMatchCompleted(match.status) && 
+                                          !isLeagueMatchLive(match.status) && 
+                                          !isPostponed;
                       const dateKey = match.kickoffDate || "";
                       let showDateLabel = false;
+                      // Only show date labels for scheduled (non-postponed) matches
                       if (isScheduled && dateKey && !seenDates.has(dateKey)) {
                         seenDates.add(dateKey);
                         showDateLabel = true;
