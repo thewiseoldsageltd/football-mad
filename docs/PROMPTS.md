@@ -10450,3 +10450,45 @@ Save the file.
 
 ---
 
+Implement a hard product rule for matchweek/matchday grouping so we never show rounds/matchesByRound for older seasons.
+
+RULES:
+1) In GET /api/standings:
+   - If seasonNorm !== "2025-2026": return league table ONLY. Do not include rounds, matchesByRound, latestRoundKey/latestScheduledRoundKey/defaultMatchweek/latestActiveRoundKey (or any matchweek metadata).
+   - If seasonNorm === "2025-2026":
+       - Only Premier League (leagueId === "1204") should compute and return matchweek grouping (rounds + matchesByRound + related matchweek keys).
+       - All other leagues return table only (no matchweek info).
+
+2) Keep existing snapshot/table logic unchanged.
+
+WHERE:
+server/routes.ts inside:
+app.get("/api/standings", async (req, res) => { ... })
+
+HOW:
+- After seasonNorm is computed, define:
+   const MATCHWEEK_ENABLED_SEASON = "2025-2026";
+   const ROUND_ENABLED_LEAGUE_IDS = ["1204"]; // Premier League only
+
+- Replace current 'shouldComputeRounds' logic with:
+   const shouldComputeRounds =
+     seasonNorm === MATCHWEEK_ENABLED_SEASON &&
+     ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
+
+- Only run the Goalserve XML fetch + week parsing block if shouldComputeRounds is true.
+  If shouldComputeRounds is false:
+    - Do not fetch fixtures XML
+    - Set rounds to [] and matchesByRound to {}
+    - Do not compute or include latestRoundKey/latestScheduledRoundKey/defaultMatchweek/latestActiveRoundKey
+
+- When forming the response JSON at the end, conditionally include matchweek fields only if shouldComputeRounds is true.
+  Otherwise respond with:
+    { snapshot, table } (and nothing else related to rounds).
+
+Add a clear console.log line:
+  console.log(`[Standings] roundsEnabled=${shouldComputeRounds} leagueId=${leagueId} seasonNorm=${seasonNorm}`);
+
+Save the file.
+
+---
+

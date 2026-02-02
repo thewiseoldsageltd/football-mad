@@ -2174,8 +2174,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // PRODUCT DECISION: Only Premier League uses round-based navigation
       // European competitions are handled separately in /api/europe/:slug
       // All other leagues return fixtures without round grouping
+      // HARD RULE: Matchweek grouping ONLY for current season (2025-2026) and PL only
+      const MATCHWEEK_ENABLED_SEASON = "2025-2026";
       const ROUND_ENABLED_LEAGUE_IDS = ["1204"]; // Premier League only
-      const shouldComputeRounds = ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
+      const shouldComputeRounds = 
+        seasonNorm === MATCHWEEK_ENABLED_SEASON && 
+        ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
+
+      console.log(`[Standings] roundsEnabled=${shouldComputeRounds} leagueId=${leagueId} seasonNorm=${seasonNorm}`);
 
       // Helper to check if a status means "scheduled"
       const isScheduledStatus = (status: string): boolean => {
@@ -2192,82 +2198,84 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
       };
 
-      // Fetch Goalserve XML for proper week numbers
-      // Try multiple season formats - Goalserve may expect YYYY-YYYY or YYYY/YYYY
-      const { goalserveFetchXml } = await import("./integrations/goalserve/client");
-      
-      const seasonForFixturesA = seasonNorm;                       // e.g. 2024-2025
-      const seasonForFixturesB = seasonNorm?.replace("-", "/");    // e.g. 2024/2025
-
-      const endpointsToTry = seasonNorm
-        ? [
-            `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesA!)}`,
-            `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesB!)}`,
-            `soccerfixtures/leagueid/${leagueId}`, // fallback (current season)
-          ]
-        : [`soccerfixtures/leagueid/${leagueId}`];
-
-      const startYear = seasonNorm ? Number(String(seasonNorm).split("-")[0]) : null;
-
-      let xmlData: any = null;
-
-      const getYearFromDateString = (d: string): number | null => {
-        if (!d) return null;
-        // formats: "2024-08-16", "16.08.2024", "08/16/2024"
-        const iso = d.match(/^(\d{4})-\d{2}-\d{2}$/);
-        if (iso) return Number(iso[1]);
-        const dot = d.match(/(\d{2})\.(\d{2})\.(\d{4})/);
-        if (dot) return Number(dot[3]);
-        const slash = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-        if (slash) return Number(slash[3]);
-        const anyYear = d.match(/(19|20)\d{2}/);
-        return anyYear ? Number(anyYear[0]) : null;
-      };
-
-      for (const ep of endpointsToTry) {
-        try {
-          const attempt = await goalserveFetchXml(ep);
-
-          const tournament = attempt?.results?.tournament 
-            ?? attempt?.scores?.tournament 
-            ?? attempt?.tournament;
-
-          const weekArr = Array.isArray(tournament?.week)
-            ? tournament.week
-            : (tournament?.week ? [tournament.week] : []);
-          const weeksCount = weekArr.length;
-
-          let earliestDateStr: string | null = null;
-          for (const w of weekArr) {
-            const matches = Array.isArray(w?.match) ? w.match : (w?.match ? [w.match] : []);
-            for (const m of matches) {
-              const ds = m?.date || m?.formatted_date || m?.["@date"] || null;
-              if (!ds) continue;
-              if (!earliestDateStr) earliestDateStr = ds;
-              if (typeof ds === "string" && typeof earliestDateStr === "string" && ds < earliestDateStr) {
-                earliestDateStr = ds;
-              }
-            }
-            if (earliestDateStr) break;
-          }
-
-          const earliestYear = earliestDateStr ? getYearFromDateString(String(earliestDateStr)) : null;
-
-          console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount} earliestDate=${earliestDateStr} earliestYear=${earliestYear} targetStartYear=${startYear}`);
-
-          // Accept if we have weeks and (no season filter OR year matches)
-          if (weeksCount > 0 && (startYear === null || earliestYear === startYear)) {
-            xmlData = attempt;
-            break;
-          }
-        } catch (e) {
-          console.warn(`[Standings] fixturesXml failed ep=${ep}`);
-        }
-      }
-
       const matchesByRound: Record<string, MatchInfo[]> = {};
       const rounds: RoundInfo[] = [];
       let defaultMatchweek = 1;
+      let xmlData: any = null;
+
+      // Only fetch fixtures XML if we need matchweek grouping
+      if (shouldComputeRounds) {
+        // Fetch Goalserve XML for proper week numbers
+        // Try multiple season formats - Goalserve may expect YYYY-YYYY or YYYY/YYYY
+        const { goalserveFetchXml } = await import("./integrations/goalserve/client");
+        
+        const seasonForFixturesA = seasonNorm;                       // e.g. 2024-2025
+        const seasonForFixturesB = seasonNorm?.replace("-", "/");    // e.g. 2024/2025
+
+        const endpointsToTry = seasonNorm
+          ? [
+              `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesA!)}`,
+              `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesB!)}`,
+              `soccerfixtures/leagueid/${leagueId}`, // fallback (current season)
+            ]
+          : [`soccerfixtures/leagueid/${leagueId}`];
+
+        const startYear = seasonNorm ? Number(String(seasonNorm).split("-")[0]) : null;
+
+        const getYearFromDateString = (d: string): number | null => {
+          if (!d) return null;
+          // formats: "2024-08-16", "16.08.2024", "08/16/2024"
+          const iso = d.match(/^(\d{4})-\d{2}-\d{2}$/);
+          if (iso) return Number(iso[1]);
+          const dot = d.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+          if (dot) return Number(dot[3]);
+          const slash = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+          if (slash) return Number(slash[3]);
+          const anyYear = d.match(/(19|20)\d{2}/);
+          return anyYear ? Number(anyYear[0]) : null;
+        };
+
+        for (const ep of endpointsToTry) {
+          try {
+            const attempt = await goalserveFetchXml(ep);
+
+            const tournament = attempt?.results?.tournament 
+              ?? attempt?.scores?.tournament 
+              ?? attempt?.tournament;
+
+            const weekArr = Array.isArray(tournament?.week)
+              ? tournament.week
+              : (tournament?.week ? [tournament.week] : []);
+            const weeksCount = weekArr.length;
+
+            let earliestDateStr: string | null = null;
+            for (const w of weekArr) {
+              const matches = Array.isArray(w?.match) ? w.match : (w?.match ? [w.match] : []);
+              for (const m of matches) {
+                const ds = m?.date || m?.formatted_date || m?.["@date"] || null;
+                if (!ds) continue;
+                if (!earliestDateStr) earliestDateStr = ds;
+                if (typeof ds === "string" && typeof earliestDateStr === "string" && ds < earliestDateStr) {
+                  earliestDateStr = ds;
+                }
+              }
+              if (earliestDateStr) break;
+            }
+
+            const earliestYear = earliestDateStr ? getYearFromDateString(String(earliestDateStr)) : null;
+
+            console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount} earliestDate=${earliestDateStr} earliestYear=${earliestYear} targetStartYear=${startYear}`);
+
+            // Accept if we have weeks and (no season filter OR year matches)
+            if (weeksCount > 0 && (startYear === null || earliestYear === startYear)) {
+              xmlData = attempt;
+              break;
+            }
+          } catch (e) {
+            console.warn(`[Standings] fixturesXml failed ep=${ep}`);
+          }
+        }
+      }
 
       // PRODUCT DECISION: Only compute rounds for Premier League
       // Other leagues just need fixtures returned without round grouping
@@ -2552,8 +2560,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const nowUtc = new Date();
       
-      // For non-round leagues, skip all round computation
-      // Just return fixtures in the "all" bucket without matchweek metadata
+      // For non-round leagues/seasons, return TABLE ONLY - no matchweek metadata
+      // This applies to: all historical seasons, and non-PL leagues in current season
       if (!shouldComputeRounds) {
         res.json({
           snapshot: {
@@ -2562,15 +2570,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             stageId: snapshot.stageId,
             asOf: snapshot.asOf,
             nowUtc: nowUtc.toISOString(),
-            defaultMatchweekReason: null,
           },
           table,
-          rounds,
-          matchesByRound,
-          latestRoundKey: null,
-          latestScheduledRoundKey: null,
-          defaultMatchweek: null,
-          latestActiveRoundKey: null,
         });
         return;
       }
