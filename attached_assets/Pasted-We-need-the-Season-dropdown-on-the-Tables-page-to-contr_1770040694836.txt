@@ -1,0 +1,55 @@
+We need the Season dropdown on the Tables page to control ALL leagues/cups/europe tables, and to update the SEO URL.
+
+🚫 DO NOT run regression tests
+🚫 DO NOT generate preview videos
+🚫 DO NOT add tests or run Playwright/Cypress
+I will test manually after deployment.
+
+CURRENT URL FORMAT:
+ /tables/{league-slug}/{season}
+Example: /tables/championship/2023-24
+
+GOAL BEHAVIOUR:
+- Selecting a season updates the URL and becomes the single source of truth.
+- Switching competition tabs keeps the same season.
+- The page fetches standings for (activeLeagueSlug + season) every time.
+- Season selection must apply globally (Leagues/Cups/Europe tabs).
+
+FILES LIKELY INVOLVED:
+client/src/pages/tables.tsx
+client/src/components/tables/tables-filters.tsx
+client/src/lib/urls.ts (if it has builders)
+client/src/lib/league-config.ts (for goalserveLeagueId mapping)
+server/routes.ts (/api/standings already supports season param)
+
+IMPLEMENTATION REQUIREMENTS:
+
+1) Tables page should read `leagueSlug` and `season` from the route (React Router).
+   - If season is missing, redirect to current season (e.g. 2025-26).
+   - Season is stored as URL segment like "2023-24" (not "2023/24").
+
+2) Season dropdown:
+   - Displays labels like "2025/26", "2024/25", etc.
+   - On change, NAVIGATE to `/tables/${activeLeagueSlug}/${newSeasonSlug}`
+     where seasonSlug is "YYYY-YY" (e.g., 2024-25).
+
+3) Competition tabs (Premier League, Championship, etc.):
+   - On change, NAVIGATE to `/tables/${newLeagueSlug}/${currentSeasonSlug}`.
+   - Do NOT reset season on league change.
+
+4) Data fetch:
+   - Wherever tables.tsx calls the API for standings, include season from URL.
+   - Use goalserveLeagueId from league-config for the active league slug.
+   - Call `/api/standings?leagueId=${goalserveLeagueId}&season=${seasonParam}`
+
+5) Season param normalization:
+   - The API expects a season string consistent with what standings ingestion uses.
+   - Implement a small helper:
+       seasonSlugToApiSeason("2024-25") => "2024-25" (or whatever server expects)
+   - Keep it consistent across client and server. Avoid mixing "2024/25" vs "2024-25" in requests.
+
+DELIVERABLE:
+- Season dropdown updates the URL.
+- Switching between leagues/cups/europe retains the season.
+- Standings shown match the selected season (once backfilled).
+- No change to fixtures sidebar rules.
