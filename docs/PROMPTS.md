@@ -9733,3 +9733,72 @@ Code should compile cleanly with no unused variables or imports.
 
 ---
 
+We have a rendering bug in the Football Mad tables page.
+
+Issue:
+In some leagues (e.g. Championship), a position like 4th place disappears from the table even though the data exists.
+
+Cause:
+In client/src/components/tables/league-table.tsx, the table rows are keyed using row.pos:
+key={row.pos}
+
+If row.pos is ever duplicated, missing, or unstable, React reuses DOM nodes and one row can vanish.
+
+Fix this safely.
+
+Steps:
+
+1) In client/src/components/tables/league-table.tsx, locate the map rendering StandingsRow:
+
+{data.map((row) => (
+  <StandingsRow
+    key={row.pos}
+    ...
+  />
+))}
+
+2) Replace this with a stable unique key based on both position and team name:
+
+{data.map((row) => {
+  const rowKey = `${row.pos}-${row.teamName}`;
+  return (
+    <StandingsRow
+      key={rowKey}
+      row={row}
+      showZones={showZones}
+      zones={zones}
+      isExpanded={expandedRows.has(rowKey)}
+      onToggle={() => toggleRow(rowKey)}
+    />
+  );
+})}
+
+3) Update the expanded rows state so it matches the new key type:
+
+Change:
+const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+
+To:
+const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+4) Update toggleRow to accept a string key instead of number:
+
+Change:
+const toggleRow = useCallback((pos: number) => {
+
+To:
+const toggleRow = useCallback((key: string) => {
+
+And inside the function, replace references to pos with key.
+
+This ensures:
+• Every row has a unique React key
+• Rows never disappear due to key collisions
+• Mobile expand/collapse stays in sync with the same unique key
+
+Do not change styling, layout, zones, or table logic. Only adjust keys and expandedRows handling.
+
+The page should compile with no TypeScript or lint errors.
+
+---
+

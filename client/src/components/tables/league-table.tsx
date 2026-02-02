@@ -202,15 +202,16 @@ const StandingsRow = memo(function StandingsRow({
 });
 
 export function LeagueTable({ data, showZones = true, zones }: LeagueTableProps) {
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  // Use string keys to avoid duplicate position collisions (e.g. tied teams)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  const toggleRow = useCallback((pos: number) => {
+  const toggleRow = useCallback((key: string) => {
     setExpandedRows((prev) => {
       const next = new Set(prev);
-      if (next.has(pos)) {
-        next.delete(pos);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(pos);
+        next.add(key);
       }
       return next;
     });
@@ -243,16 +244,19 @@ export function LeagueTable({ data, showZones = true, zones }: LeagueTableProps)
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row) => (
-              <StandingsRow
-                key={row.pos}
-                row={row}
-                showZones={showZones}
-                zones={zones}
-                isExpanded={expandedRows.has(row.pos)}
-                onToggle={() => toggleRow(row.pos)}
-              />
-            ))}
+            {data.map((row) => {
+              const rowKey = `${row.pos}-${row.teamName}`;
+              return (
+                <StandingsRow
+                  key={rowKey}
+                  row={row}
+                  showZones={showZones}
+                  zones={zones}
+                  isExpanded={expandedRows.has(rowKey)}
+                  onToggle={() => toggleRow(rowKey)}
+                />
+              );
+            })}
           </TableBody>
         </Table>
       </div>
