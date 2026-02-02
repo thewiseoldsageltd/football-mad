@@ -20,7 +20,6 @@ import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
 import { backfillStandings } from "./jobs/backfill-standings";
-import { normalizeSeasonForGoalserve } from "./lib/season";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -1641,12 +1640,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== DEBUG GOALSERVE STANDINGS ==========
-  app.all(
+  app.post(
     "/api/jobs/debug-goalserve-standings",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
       const leagueId = req.query.leagueId as string;
-      const seasonRaw = req.query.season as string | undefined;
+      const season = req.query.season as string | undefined;
 
       if (!leagueId) {
         return res.status(400).json({ error: "leagueId query param required" });
@@ -1654,17 +1653,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       try {
         const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
-        const seasonNorm = normalizeSeasonForGoalserve(seasonRaw);
-        
-        // Build URL: historical seasons use different endpoint (without .xml)
-        let urlPath: string;
-        let url: string;
-        if (seasonNorm) {
-          urlPath = `/standings/${leagueId}?json=true&season=${encodeURIComponent(seasonNorm)}`;
-          url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}${urlPath}`;
-        } else {
-          urlPath = `/standings/${leagueId}.xml?json=true`;
-          url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}${urlPath}`;
+        let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
+        if (season) {
+          url += `&season=${encodeURIComponent(season)}`;
         }
 
         const response = await fetch(url);
@@ -1706,10 +1697,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.json({
           ok: true,
           leagueId,
-          seasonRaw,
-          seasonNorm,
-          season: tournament.season || seasonNorm || "",
-          goalserveUrlPath: urlPath,
+          season: tournament.season || season || "",
           fetchedAt: new Date().toISOString(),
           tournament: {
             league: tournament.league,
@@ -1734,41 +1722,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== GOALSERVE STANDINGS UPSERT ==========
-  // Handler function shared between GET and POST
-  const handleStandingsUpsert = async (req: any, res: any) => {
-    const leagueId = req.query.leagueId as string;
-    const seasonRaw = req.query.season as string | undefined;
-    const force = req.query.force === "1" || req.query.force === "true";
+  app.post(
+    "/api/jobs/upsert-goalserve-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      const season = req.query.season as string | undefined;
+      const force = req.query.force === "1";
 
-    if (!leagueId) {
-      return res.status(400).json({ ok: false, error: "leagueId query param required" });
-    }
-
-    // Normalize season for Goalserve
-    const seasonNorm = normalizeSeasonForGoalserve(seasonRaw);
-    console.log(`[StandingsUpsertJob] leagueId=${leagueId} seasonRaw=${seasonRaw} seasonNorm=${seasonNorm}`);
-
-    try {
-      const result = await upsertGoalserveStandings(leagueId, { seasonParam: seasonNorm, force });
-      if (!result.ok && result.missingTeams && result.missingTeams.length > 0) {
-        return res.status(409).json({
-          error: result.error,
-          leagueId: result.leagueId,
-          season: result.season,
-          missingTeamIds: result.missingTeams.map((t: any) => t.goalserveTeamId),
-          missingTeamNames: result.missingTeams.map((t: any) => t.name),
-        });
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
       }
-      res.json(result);
-    } catch (error) {
-      console.error("Standings upsert error:", error);
-      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
-    }
-  };
 
-  // Support both GET and POST for the upsert job
-  app.get("/api/jobs/upsert-goalserve-standings", requireJobSecret("GOALSERVE_SYNC_SECRET"), handleStandingsUpsert);
-  app.post("/api/jobs/upsert-goalserve-standings", requireJobSecret("GOALSERVE_SYNC_SECRET"), handleStandingsUpsert);
+      try {
+        const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
+        if (!result.ok && result.missingTeams && result.missingTeams.length > 0) {
+          return res.status(409).json({
+            error: result.error,
+            leagueId: result.leagueId,
+            season: result.season,
+            missingTeamIds: result.missingTeams.map((t) => t.goalserveTeamId),
+            missingTeamNames: result.missingTeams.map((t) => t.name),
+          });
+        }
+        res.json(result);
+      } catch (error) {
+        console.error("Standings upsert error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
 
   // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========
   app.get(
@@ -1992,39 +1975,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const now = new Date();
       const currentYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-      const defaultSeason = `${currentYear}-${currentYear + 1}`;
-      const seasonRaw = (req.query.season as string) || defaultSeason;
+      const defaultSeason = `${currentYear}/${currentYear + 1}`;
+      const season = (req.query.season as string) || defaultSeason;
       const asOfParam = req.query.asOf as string | undefined;
       const autoRefresh = req.query.autoRefresh === "1";
-      
-      // Normalize season to YYYY-YYYY format for DB queries and Goalserve API
-      const seasonNorm = normalizeSeasonForGoalserve(seasonRaw) || defaultSeason;
-      console.log(`[Standings] leagueId=${leagueId} seasonRaw=${seasonRaw} seasonNorm=${seasonNorm}`);
 
       // Auto-refresh logic: attempt standings ingestion if allowed by throttle
       if (autoRefresh) {
-        const throttleKey = `${leagueId}:${seasonNorm}`;
+        const throttleKey = `${leagueId}:${season}`;
         const lastRun = standingsAutoRefreshThrottle.get(throttleKey) || 0;
         const nowMs = Date.now();
         
         if (nowMs - lastRun >= STANDINGS_REFRESH_COOLDOWN_MS) {
           standingsAutoRefreshThrottle.set(throttleKey, nowMs);
           try {
-            const result = await upsertGoalserveStandings(leagueId, { seasonParam: seasonNorm });
+            const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
             if (result.ok) {
-              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${seasonNorm} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
+              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
             } else {
-              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${seasonNorm} FAILED: ${result.error}`);
+              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} FAILED: ${result.error}`);
             }
           } catch (refreshErr) {
-            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${seasonNorm} ERROR:`, refreshErr);
+            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ERROR:`, refreshErr);
           }
         }
       }
 
       const conditions = [
         eq(standingsSnapshots.leagueId, leagueId),
-        eq(standingsSnapshots.season, seasonNorm),
+        eq(standingsSnapshots.season, season),
       ];
 
       if (asOfParam) {
@@ -2041,11 +2020,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // On-demand backfill: if no snapshot exists, try to ingest one
       if (!snapshot) {
-        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${seasonNorm}, attempting backfill...`);
+        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${season}, attempting backfill...`);
         try {
-          const result = await upsertGoalserveStandings(leagueId, { seasonParam: seasonNorm, force: true });
+          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force: true });
           if (result.ok && !result.skipped) {
-            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${seasonNorm} rows=${result.insertedRowsCount}`);
+            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${season} rows=${result.insertedRowsCount}`);
             // Query again for the newly created snapshot
             [snapshot] = await db
               .select()
@@ -2054,12 +2033,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               .orderBy(desc(standingsSnapshots.asOf))
               .limit(1);
           } else if (result.ok && result.skipped) {
-            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${seasonNorm} (no change from Goalserve)`);
+            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${season} (no change from Goalserve)`);
           } else {
-            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${seasonNorm}: ${result.error || result.reason}`);
+            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${season}: ${result.error || result.reason}`);
           }
         } catch (backfillErr) {
-          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${seasonNorm}:`, backfillErr);
+          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${season}:`, backfillErr);
         }
       }
 
@@ -2067,8 +2046,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ 
           error: "No standings snapshot found", 
           leagueId, 
-          seasonRaw,
-          seasonNorm,
+          season,
           hint: "Goalserve may not have data for this league/season combination"
         });
       }
@@ -2171,30 +2149,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: string;
       }
 
-      // HARD GATE: Non-2025/26 seasons get TABLE ONLY - no rounds, no fixtures XML
-      const MATCHWEEK_ENABLED_SEASON = "2025-2026";
-      if (seasonNorm !== MATCHWEEK_ENABLED_SEASON) {
-        console.log(`[Standings] TABLE ONLY mode (historical season) leagueId=${leagueId} seasonNorm=${seasonNorm}`);
-        res.json({
-          snapshot: {
-            leagueId: snapshot.leagueId,
-            season: snapshot.season,
-            stageId: snapshot.stageId,
-            asOf: snapshot.asOf,
-            nowUtc: new Date().toISOString(),
-          },
-          table,
-        });
-        return;
-      }
-
       // PRODUCT DECISION: Only Premier League uses round-based navigation
       // European competitions are handled separately in /api/europe/:slug
       // All other leagues return fixtures without round grouping
       const ROUND_ENABLED_LEAGUE_IDS = ["1204"]; // Premier League only
       const shouldComputeRounds = ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
-
-      console.log(`[Standings] roundsEnabled=${shouldComputeRounds} leagueId=${leagueId} seasonNorm=${seasonNorm}`);
 
       // Helper to check if a status means "scheduled"
       const isScheduledStatus = (status: string): boolean => {
@@ -2211,84 +2170,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
       };
 
+      // Fetch Goalserve XML for proper week numbers
+      const { goalserveFetchXml } = await import("./integrations/goalserve/client");
+      const xmlEndpoint = season 
+        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(season)}`
+        : `soccerfixtures/leagueid/${leagueId}`;
+      
+      let xmlData: any;
+      try {
+        xmlData = await goalserveFetchXml(xmlEndpoint);
+      } catch (xmlErr) {
+        console.error("[Standings] Failed to fetch Goalserve XML:", xmlErr);
+        xmlData = null;
+      }
+
       const matchesByRound: Record<string, MatchInfo[]> = {};
       const rounds: RoundInfo[] = [];
       let defaultMatchweek = 1;
-      let xmlData: any = null;
-
-      // Only fetch fixtures XML if we need matchweek grouping
-      if (shouldComputeRounds) {
-        // Fetch Goalserve XML for proper week numbers
-        // Try multiple season formats - Goalserve may expect YYYY-YYYY or YYYY/YYYY
-        const { goalserveFetchXml } = await import("./integrations/goalserve/client");
-        
-        const seasonForFixturesA = seasonNorm;                       // e.g. 2024-2025
-        const seasonForFixturesB = seasonNorm?.replace("-", "/");    // e.g. 2024/2025
-
-        const endpointsToTry = seasonNorm
-          ? [
-              `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesA!)}`,
-              `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesB!)}`,
-              `soccerfixtures/leagueid/${leagueId}`, // fallback (current season)
-            ]
-          : [`soccerfixtures/leagueid/${leagueId}`];
-
-        const startYear = seasonNorm ? Number(String(seasonNorm).split("-")[0]) : null;
-
-        const getYearFromDateString = (d: string): number | null => {
-          if (!d) return null;
-          // formats: "2024-08-16", "16.08.2024", "08/16/2024"
-          const iso = d.match(/^(\d{4})-\d{2}-\d{2}$/);
-          if (iso) return Number(iso[1]);
-          const dot = d.match(/(\d{2})\.(\d{2})\.(\d{4})/);
-          if (dot) return Number(dot[3]);
-          const slash = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-          if (slash) return Number(slash[3]);
-          const anyYear = d.match(/(19|20)\d{2}/);
-          return anyYear ? Number(anyYear[0]) : null;
-        };
-
-        for (const ep of endpointsToTry) {
-          try {
-            const attempt = await goalserveFetchXml(ep);
-
-            const tournament = attempt?.results?.tournament 
-              ?? attempt?.scores?.tournament 
-              ?? attempt?.tournament;
-
-            const weekArr = Array.isArray(tournament?.week)
-              ? tournament.week
-              : (tournament?.week ? [tournament.week] : []);
-            const weeksCount = weekArr.length;
-
-            let earliestDateStr: string | null = null;
-            for (const w of weekArr) {
-              const matches = Array.isArray(w?.match) ? w.match : (w?.match ? [w.match] : []);
-              for (const m of matches) {
-                const ds = m?.date || m?.formatted_date || m?.["@date"] || null;
-                if (!ds) continue;
-                if (!earliestDateStr) earliestDateStr = ds;
-                if (typeof ds === "string" && typeof earliestDateStr === "string" && ds < earliestDateStr) {
-                  earliestDateStr = ds;
-                }
-              }
-              if (earliestDateStr) break;
-            }
-
-            const earliestYear = earliestDateStr ? getYearFromDateString(String(earliestDateStr)) : null;
-
-            console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount} earliestDate=${earliestDateStr} earliestYear=${earliestYear} targetStartYear=${startYear}`);
-
-            // Accept if we have weeks and (no season filter OR year matches)
-            if (weeksCount > 0 && (startYear === null || earliestYear === startYear)) {
-              xmlData = attempt;
-              break;
-            }
-          } catch (e) {
-            console.warn(`[Standings] fixturesXml failed ep=${ep}`);
-          }
-        }
-      }
 
       // PRODUCT DECISION: Only compute rounds for Premier League
       // Other leagues just need fixtures returned without round grouping
@@ -2573,8 +2471,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const nowUtc = new Date();
       
-      // For non-round leagues/seasons, return TABLE ONLY - no matchweek metadata
-      // This applies to: all historical seasons, and non-PL leagues in current season
+      // For non-round leagues, skip all round computation
+      // Just return fixtures in the "all" bucket without matchweek metadata
       if (!shouldComputeRounds) {
         res.json({
           snapshot: {
@@ -2583,8 +2481,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             stageId: snapshot.stageId,
             asOf: snapshot.asOf,
             nowUtc: nowUtc.toISOString(),
+            defaultMatchweekReason: null,
           },
           table,
+          rounds,
+          matchesByRound,
+          latestRoundKey: null,
+          latestScheduledRoundKey: null,
+          defaultMatchweek: null,
+          latestActiveRoundKey: null,
         });
         return;
       }

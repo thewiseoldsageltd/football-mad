@@ -71,11 +71,6 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Catch-all for unmatched /api routes - returns JSON 404 instead of SPA HTML
-  app.use("/api", (_req: Request, res: Response) => {
-    res.status(404).json({ error: "API route not found", path: _req.originalUrl });
-  });
-
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes

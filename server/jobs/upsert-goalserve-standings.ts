@@ -2,7 +2,6 @@ import { db } from "../db";
 import { teams, standingsSnapshots, standingsRows } from "@shared/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import crypto from "crypto";
-import { normalizeSeasonForGoalserve } from "../lib/season";
 
 const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
 
@@ -230,30 +229,17 @@ export async function upsertGoalserveStandings(
   options: UpsertStandingsOptions = {}
 ): Promise<UpsertStandingsResult> {
   const { seasonParam, force = false } = options;
-  
-  // Normalize season to YYYY-YYYY format for Goalserve historical data
-  const normalizedSeason = normalizeSeasonForGoalserve(seasonParam);
-  
-  // Build URL: historical seasons require different endpoint (without .xml)
-  let url: string;
-  if (normalizedSeason) {
-    // Historical season: use endpoint WITHOUT .xml
-    url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${encodeURIComponent(normalizedSeason)}`;
-  } else {
-    // Current season: use endpoint WITH .xml
-    url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
+  let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
+  if (seasonParam) {
+    url += `&season=${encodeURIComponent(seasonParam)}`;
   }
-  
-  // Log the URL (truncate key for security)
-  const logUrl = url.replace(GOALSERVE_FEED_KEY, "***");
-  console.log(`[StandingsIngest] url=${logUrl}`);
 
   const response = await fetch(url);
   if (!response.ok) {
     return {
       ok: false,
       leagueId,
-      season: normalizedSeason || seasonParam || "",
+      season: seasonParam || "",
       insertedRowsCount: 0,
       error: `Goalserve API returned ${response.status}`,
     };
@@ -284,7 +270,7 @@ export async function upsertGoalserveStandings(
 
   if (teamRows.length < minTeams) {
     console.warn(
-      `[StandingsIngest] ABORTED — leagueId=${leagueId} season=${normalizedSeason || ""} teams=${teamRows.length} (expected at least ${minTeams})`
+      `[StandingsIngest] ABORTED — leagueId=${leagueId} season=${seasonParam || ""} teams=${teamRows.length} (expected at least ${minTeams})`
     );
 
     return {
@@ -293,7 +279,7 @@ export async function upsertGoalserveStandings(
       reason: "Too few teams returned from Goalserve feed — possible partial data",
       teamCount: teamRows.length,
       leagueId,
-      season: normalizedSeason || seasonParam || "",
+      season: seasonParam || "",
       insertedRowsCount: 0,
     };
   }
@@ -314,7 +300,7 @@ export async function upsertGoalserveStandings(
     return {
       ok: false,
       leagueId,
-      season: normalizedSeason || seasonParam || "",
+      season: seasonParam || "",
       insertedRowsCount: 0,
       error: "No standings object in response",
       debug: debugInfo,
@@ -329,7 +315,7 @@ export async function upsertGoalserveStandings(
     return {
       ok: false,
       leagueId,
-      season: normalizedSeason || seasonParam || "",
+      season: seasonParam || "",
       insertedRowsCount: 0,
       error: parseErr instanceof Error ? parseErr.message : "Timestamp parse error",
       debug: debugInfo,
@@ -340,16 +326,15 @@ export async function upsertGoalserveStandings(
     return {
       ok: false,
       leagueId,
-      season: normalizedSeason || seasonParam || "",
+      season: seasonParam || "",
       insertedRowsCount: 0,
       error: "No tournament object in response",
       debug: debugInfo,
     };
   }
 
-  // Extract metadata from resolved tournament - normalize Goalserve's season format too
-  const goalserveSeason = t?.season || t?.["@season"];
-  const season = normalizeSeasonForGoalserve(goalserveSeason) || normalizedSeason || seasonParam || "";
+  // Extract metadata from resolved tournament
+  const season = t?.season || seasonParam || "";
   const stageId = t?.stage_id || null;
 
   if (teamRows.length === 0) {
