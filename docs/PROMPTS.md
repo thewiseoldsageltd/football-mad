@@ -9745,3 +9745,51 @@ Deliverable:
 
 ---
 
+We need to add a safety check to prevent incomplete Goalserve standings tables from being saved.
+
+GOAL:
+Abort the standings ingestion if Goalserve returns fewer teams than expected for a league (for example, 23 instead of 24 in the Championship). This prevents broken tables overwriting good data.
+
+FILE TO EDIT:
+server/jobs/upsert-goalserve-standings.ts
+
+INSTRUCTIONS:
+
+1. Locate where the team rows from the Goalserve standings feed are parsed into an array.
+   It will look something like:
+   const teamRows = ...
+
+2. Immediately AFTER that logic (before any DB writes or snapshot inserts), add this guard:
+
+// 🚨 SAFETY CHECK: Prevent saving incomplete standings tables
+const MIN_EXPECTED_TEAMS: Record<string, number> = {
+  "1204": 20, // Premier League
+  "1205": 24, // Championship
+  "1206": 24, // League One
+  "1207": 24, // League Two
+};
+
+const minTeams = MIN_EXPECTED_TEAMS[leagueId] || 10;
+
+if (teamRows.length < minTeams) {
+  console.warn(
+    `[StandingsIngest] ABORTED — leagueId=${leagueId} season=${season} teams=${teamRows.length} (expected at least ${minTeams})`
+  );
+
+  return {
+    ok: false,
+    skipped: true,
+    reason: "Too few teams returned from Goalserve feed — possible partial data",
+    teamCount: teamRows.length,
+  };
+}
+
+3. Do NOT change any other logic.
+   Do NOT modify hashing, inserts, updates, or mapping logic.
+   We are only adding this safety guard.
+
+EXPECTED RESULT:
+If Goalserve ever returns a partial standings table, ingestion will abort and the previous valid snapshot will remain live.
+
+---
+

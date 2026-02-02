@@ -204,6 +204,8 @@ interface UpsertStandingsResult {
   snapshotId?: string;
   skipped?: boolean;
   error?: string;
+  reason?: string;
+  teamCount?: number;
   missingTeams?: { goalserveTeamId: string; name: string }[];
   debug?: {
     timestampRaw: unknown;
@@ -255,6 +257,32 @@ export async function upsertGoalserveStandings(
   // Resolve teams safely (may be array or single object)
   const teamRaw = t?.team;
   const teamRows: GoalserveTeamRow[] = Array.isArray(teamRaw) ? teamRaw : (teamRaw ? [teamRaw] : []);
+
+  // 🚨 SAFETY CHECK: Prevent saving incomplete standings tables
+  const MIN_EXPECTED_TEAMS: Record<string, number> = {
+    "1204": 20, // Premier League
+    "1205": 24, // Championship
+    "1206": 24, // League One
+    "1207": 24, // League Two
+  };
+
+  const minTeams = MIN_EXPECTED_TEAMS[leagueId] || 10;
+
+  if (teamRows.length < minTeams) {
+    console.warn(
+      `[StandingsIngest] ABORTED — leagueId=${leagueId} season=${seasonParam || ""} teams=${teamRows.length} (expected at least ${minTeams})`
+    );
+
+    return {
+      ok: false,
+      skipped: true,
+      reason: "Too few teams returned from Goalserve feed — possible partial data",
+      teamCount: teamRows.length,
+      leagueId,
+      season: seasonParam || "",
+      insertedRowsCount: 0,
+    };
+  }
   
   // Build comprehensive debug info
   const debugInfo = {
