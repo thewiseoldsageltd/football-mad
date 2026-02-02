@@ -10306,3 +10306,188 @@ After changes, output:
 
 ---
 
+We are building Football Mad MVP (Node/Express + Drizzle ORM + Postgres + React/Vite + Tailwind) on Replit.
+
+IMPORTANT PRODUCT RULE
+The Tables tab is standings-only and must NOT include fixtures, matchdays, or rounds logic. Do not modify anything related to Tables.
+
+We are now implementing the NEWS system with CANONICAL ENTITY TAGGING backed by Goalserve IDs.
+
+────────────────────────
+🧠 CORE CONCEPT: ENTITY TAGGING (CRITICAL)
+────────────────────────
+
+We must NOT rely on freeform tags for teams/players/managers.
+
+Instead, articles must link to canonical entities sourced from Goalserve so that:
+- Players and managers can move clubs without breaking historical articles
+- Team/Player/Manager hubs work reliably
+- “More like this” works via shared entities
+
+Each article can link to multiple entities:
+- Competition (league)
+- Team
+- Manager
+- Player
+
+Entity relationships like “player belongs to team” must NOT be hardcoded in article tags. That relationship is derived from Goalserve data and can change over time.
+
+────────────────────────
+📦 DATABASE SCHEMA
+────────────────────────
+
+Create Drizzle schema + migrations for:
+
+1) articles
+- id (uuid pk)
+- source enum('pa_media','ghost')
+- sourceId (string)
+- slug (unique)
+- title
+- excerpt
+- bodyHtml
+- heroImageUrl
+- heroImageCredit
+- publishedAt (timestamp)
+- competitionId (fk → entities.id, nullable)
+- createdAt
+- updatedAt
+Unique constraint: (source, sourceId)
+
+2) entities
+- id (uuid pk)
+- type enum('competition','team','manager','player')
+- name
+- slug (unique)
+- goalserveId (string)
+- meta jsonb nullable
+Unique constraint: (type, goalserveId)
+
+3) articleEntities
+- articleId (fk)
+- entityId (fk)
+- confidence int nullable
+Primary key (articleId, entityId)
+
+4) teamMembership (derived, not editorial)
+- teamEntityId
+- memberEntityId
+- memberType enum('player','manager')
+- role string nullable
+- isCurrent boolean
+Primary key (teamEntityId, memberEntityId)
+
+────────────────────────
+⚙️ ENTITY SYNC FROM GOALSERVE
+────────────────────────
+
+Add admin endpoint:
+
+POST /api/admin/sync/entities
+Auth: x-ingest-secret = process.env.INGEST_SECRET
+
+This should:
+- Pull competitions, teams, players, and managers from Goalserve feeds
+- Upsert entities using goalserveId
+- Build/update teamMembership so players/managers link to current teams
+- Generate or update an alias dictionary file or table for name matching (common team/player/manager name variations)
+
+This endpoint prepares the canonical entity layer for tagging articles.
+
+────────────────────────
+📰 ARTICLE INGESTION
+────────────────────────
+
+All ingestion must perform ENTITY ENRICHMENT to map content to Goalserve-backed entities.
+
+A) POST /api/ingest/pa-media
+- Upsert article where (source='pa_media', sourceId)
+- Generate unique slug
+- Store hero image url (already webp from Make.com)
+- Extract possible entity names from:
+  - Provided tags
+  - Title
+  - Excerpt
+  - Body text
+- Match against canonical entities using alias dictionary
+- Insert rows in articleEntities with confidence score
+
+B) POST /api/ingest/ghost-webhook
+Ghost(Pro) remains our CMS for manual posts & newsletters.
+
+Env vars:
+GHOST_CONTENT_API_URL
+GHOST_CONTENT_API_KEY
+
+Webhook payload includes Ghost post id. The server must:
+- Fetch full post from Ghost Content API
+- Upsert article where (source='ghost', sourceId=ghostPostId)
+- Store title, excerpt, html, feature_image, published_at
+- Extract entity matches from:
+  - Ghost tags
+  - Title/body text
+- Map to canonical entities and populate articleEntities
+
+C) POST /api/admin/sync/ghost
+- Pull posts from Ghost Content API (paginated)
+- Upsert all into DB
+- Used as a safety sync if webhook misses events
+
+────────────────────────
+🔎 PUBLIC NEWS API
+────────────────────────
+
+GET /api/news
+Query params:
+- competition (slug)
+- limit
+- cursor (publishedAt)
+
+Returns combined Ghost + PA Media articles sorted by publishedAt desc.
+
+GET /api/news/:slug
+Returns:
+- Full article
+- Linked entities grouped by type
+- moreLikeThis:
+   1) Articles sharing the most entities
+   2) Fallback: same competition
+
+────────────────────────
+🖥️ FRONTEND
+────────────────────────
+
+News Index Page:
+- Tabs: All, Premier League, Championship, League One, League Two
+- Filters call /api/news?competition=...
+- Show article cards with hero image, title, excerpt, age, read time
+- Replace large blank image placeholder with proper skeleton/fallback
+
+Article Page:
+- Title, subtitle/excerpt, hero image, body
+- Right rail:
+  - Team follow card (based on first linked team entity)
+  - Email subscribe card
+  - “More like this”
+  - Share buttons
+- Show canonical entity pills (team/player/manager)
+
+Do not expose internal source labels (“pa_media” / “ghost”) in UI.
+
+────────────────────────
+🔐 REQUIRED ENV VARS
+────────────────────────
+
+INGEST_SECRET
+GHOST_CONTENT_API_URL
+GHOST_CONTENT_API_KEY
+
+────────────────────────
+🚫 DO NOT TOUCH
+────────────────────────
+
+Do not modify Tables tab logic.
+Do not add fixtures, matchdays, or rounds anywhere in Tables.
+
+---
+

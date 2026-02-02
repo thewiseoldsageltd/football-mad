@@ -73,6 +73,7 @@ export const articles = pgTable("articles", {
   excerpt: text("excerpt"),
   content: text("content").notNull(),
   coverImage: text("cover_image"),
+  heroImageCredit: text("hero_image_credit"),
   authorId: varchar("author_id"),
   authorName: text("author_name").default("Football Mad"),
   category: text("category").default("news"),
@@ -88,7 +89,7 @@ export const articles = pgTable("articles", {
   publishedAt: timestamp("published_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  source: text("source").default("editorial"),
+  source: text("source").default("editorial"), // 'editorial', 'pa_media', 'ghost'
   sourceId: text("source_id"),
   sourceVersion: text("source_version"),
   sourcePublishedAt: timestamp("source_published_at"),
@@ -98,6 +99,7 @@ export const articles = pgTable("articles", {
   index("articles_category_idx").on(table.category),
   index("articles_competition_idx").on(table.competition),
   index("articles_content_type_idx").on(table.contentType),
+  index("articles_source_source_id_idx").on(table.source, table.sourceId),
 ]);
 
 export const articlesRelations = relations(articles, ({ many }) => ({
@@ -105,6 +107,7 @@ export const articlesRelations = relations(articles, ({ many }) => ({
   comments: many(comments),
   competitions: many(articleCompetitions),
   players: many(articlePlayers),
+  managers: many(articleManagers),
 }));
 
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
@@ -677,3 +680,58 @@ export const standingsRowsRelations = relations(standingsRows, ({ one }) => ({
 export const insertStandingsRowSchema = createInsertSchema(standingsRows).omit({ id: true });
 export type InsertStandingsRow = z.infer<typeof insertStandingsRowSchema>;
 export type StandingsRow = typeof standingsRows.$inferSelect;
+
+// ============ MANAGERS ============
+export const managers = pgTable("managers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  nationality: text("nationality"),
+  imageUrl: text("image_url"),
+  currentTeamId: varchar("current_team_id").references(() => teams.id),
+  goalserveManagerId: text("goalserve_manager_id").unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("managers_current_team_idx").on(table.currentTeamId),
+]);
+
+export const managersRelations = relations(managers, ({ one, many }) => ({
+  currentTeam: one(teams, { fields: [managers.currentTeamId], references: [teams.id] }),
+  articles: many(articleManagers),
+}));
+
+export const insertManagerSchema = createInsertSchema(managers).omit({ id: true, createdAt: true });
+export type InsertManager = z.infer<typeof insertManagerSchema>;
+export type Manager = typeof managers.$inferSelect;
+
+// ============ ARTICLE-MANAGERS JUNCTION ============
+export const articleManagers = pgTable("article_managers", {
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  managerId: varchar("manager_id").references(() => managers.id, { onDelete: "cascade" }).notNull(),
+  confidence: integer("confidence"),
+}, (table) => [
+  index("article_managers_article_idx").on(table.articleId),
+  index("article_managers_manager_idx").on(table.managerId),
+]);
+
+export const articleManagersRelations = relations(articleManagers, ({ one }) => ({
+  article: one(articles, { fields: [articleManagers.articleId], references: [articles.id] }),
+  manager: one(managers, { fields: [articleManagers.managerId], references: [managers.id] }),
+}));
+
+// ============ ENTITY ALIASES (for name matching) ============
+export const entityAliases = pgTable("entity_aliases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: text("entity_type").notNull(), // 'team', 'player', 'manager', 'competition'
+  entityId: varchar("entity_id").notNull(),
+  alias: text("alias").notNull(),
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("entity_aliases_entity_idx").on(table.entityType, table.entityId),
+  index("entity_aliases_alias_idx").on(table.alias),
+]);
+
+export const insertEntityAliasSchema = createInsertSchema(entityAliases).omit({ id: true, createdAt: true });
+export type InsertEntityAlias = z.infer<typeof insertEntityAliasSchema>;
+export type EntityAlias = typeof entityAliases.$inferSelect;
