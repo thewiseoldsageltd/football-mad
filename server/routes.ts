@@ -2345,7 +2345,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       const nowUtc = new Date();
-      let defaultMatchweekReason: "live" | "upcoming" | "fallback_last" = "fallback_last";
+      let defaultMatchweekReason: "live" | "in_window" | "next_upcoming" | "fallback_last" = "fallback_last";
 
       const sortedRoundKeys = Object.keys(matchesByRound)
         .sort((a, b) => {
@@ -2354,35 +2354,94 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           return na - nb;
         });
 
-      // 1️⃣ Find round with any LIVE match (exclude postponed)
-      const liveRound = sortedRoundKeys.find((roundKey) => {
+      // ========== CLUSTER-AROUND-NOW SCORING ALGORITHM ==========
+      // This prevents a single postponed fixture weeks/months away from forcing the default round
+      
+      // Define scoring window: now - 24h to now + 72h
+      const windowStart = new Date(nowUtc.getTime() - 24 * 60 * 60 * 1000);  // 24 hours ago
+      const windowEnd = new Date(nowUtc.getTime() + 72 * 60 * 60 * 1000);    // 72 hours from now
+
+      interface RoundScore {
+        roundKey: string;
+        liveCount: number;
+        inWindowCount: number;
+        score: number;
+        nearestKickoffDiff: number;  // Absolute difference in ms from now to nearest kickoff
+      }
+
+      const roundScores: RoundScore[] = sortedRoundKeys.map((roundKey) => {
         const matches = matchesByRound[roundKey] || [];
-        return matches.some((m) => isLiveStatusCheck(m.status) && !isPostponedStatusCheck(m.status));
+        let liveCount = 0;
+        let inWindowCount = 0;
+        let nearestKickoffDiff = Infinity;
+
+        for (const m of matches) {
+          // Skip postponed matches entirely - they shouldn't influence scoring
+          if (isPostponedStatusCheck(m.status)) continue;
+
+          // Count live matches
+          if (isLiveStatusCheck(m.status)) {
+            liveCount++;
+          }
+
+          // Parse kickoff datetime
+          const ko = parseGoalserveDateTime(m.kickoffDate, m.kickoffTime);
+          if (ko) {
+            // Count matches within the scoring window
+            if (ko >= windowStart && ko <= windowEnd) {
+              inWindowCount++;
+            }
+
+            // Track nearest kickoff to now for tie-breaking
+            const diff = Math.abs(ko.getTime() - nowUtc.getTime());
+            if (diff < nearestKickoffDiff) {
+              nearestKickoffDiff = diff;
+            }
+          }
+        }
+
+        // Score: live matches weighted heavily (1000), in-window matches get 10 points each
+        const score = (liveCount * 1000) + (inWindowCount * 10);
+
+        return { roundKey, liveCount, inWindowCount, score, nearestKickoffDiff };
       });
 
-      if (liveRound) {
-        defaultMatchweek = parseInt(liveRound.replace(/\D/g, ""), 10);
-        defaultMatchweekReason = "live";
-      } else {
-        // 2️⃣ Find earliest round with upcoming matches (exclude postponed)
-        const upcomingRound = sortedRoundKeys.find((roundKey) => {
-          const matches = matchesByRound[roundKey] || [];
-          return matches.some((m) => {
-            // Skip postponed matches - they shouldn't influence default round selection
-            if (isPostponedStatusCheck(m.status)) return false;
-            if (isFinishedStatusCheck(m.status)) return false;
-            const ko = parseGoalserveDateTime(m.kickoffDate, m.kickoffTime);
-            if (ko && ko >= nowUtc) return true;
-            if (isScheduledStatusCheck(m.status) && ko && ko >= nowUtc) return true;
-            return false;
-          });
-        });
+      // Find the best round by score, with tie-breaker on nearest kickoff to now
+      roundScores.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;  // Higher score first
+        return a.nearestKickoffDiff - b.nearestKickoffDiff;  // Closer kickoff wins tie
+      });
 
-        if (upcomingRound) {
-          defaultMatchweek = parseInt(upcomingRound.replace(/\D/g, ""), 10);
-          defaultMatchweekReason = "upcoming";
+      const bestScore = roundScores[0];
+
+      if (bestScore && bestScore.score > 0) {
+        defaultMatchweek = parseInt(bestScore.roundKey.replace(/\D/g, ""), 10);
+        defaultMatchweekReason = bestScore.liveCount > 0 ? "live" : "in_window";
+      } else {
+        // FALLBACK: All rounds have score = 0 (no matches in window, no live matches)
+        // Find the next upcoming kickoff across ALL rounds (kickoff >= now, excluding postponed)
+        let nextUpcomingRound: string | null = null;
+        let nextUpcomingTime = Infinity;
+
+        for (const roundKey of sortedRoundKeys) {
+          const matches = matchesByRound[roundKey] || [];
+          for (const m of matches) {
+            if (isPostponedStatusCheck(m.status)) continue;
+            if (isFinishedStatusCheck(m.status)) continue;
+            
+            const ko = parseGoalserveDateTime(m.kickoffDate, m.kickoffTime);
+            if (ko && ko >= nowUtc && ko.getTime() < nextUpcomingTime) {
+              nextUpcomingTime = ko.getTime();
+              nextUpcomingRound = roundKey;
+            }
+          }
+        }
+
+        if (nextUpcomingRound) {
+          defaultMatchweek = parseInt(nextUpcomingRound.replace(/\D/g, ""), 10);
+          defaultMatchweekReason = "next_upcoming";
         } else if (sortedRoundKeys.length > 0) {
-          // 3️⃣ Fallback: last round (season finished)
+          // Final fallback: last round with any matches (season finished)
           const lastRound = sortedRoundKeys[sortedRoundKeys.length - 1];
           defaultMatchweek = parseInt(lastRound.replace(/\D/g, ""), 10);
           defaultMatchweekReason = "fallback_last";
@@ -2394,13 +2453,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         defaultMatchweek = 1;
       }
 
-      // Compute latestRoundKey for backward compatibility
-      const latestScheduledRoundKey = liveRound || sortedRoundKeys.find((roundKey) => {
+      // Compute latestRoundKey for backward compatibility using the new scoring
+      const defaultRoundKey = `MW${defaultMatchweek}`;
+      const latestScheduledRoundKey = sortedRoundKeys.find((roundKey) => {
         const matches = matchesByRound[roundKey] || [];
-        return matches.some((m) => !isFinishedStatusCheck(m.status));
+        return matches.some((m) => !isFinishedStatusCheck(m.status) && !isPostponedStatusCheck(m.status));
       }) || "";
       const latestActiveRoundKey = sortedRoundKeys.length > 0 ? sortedRoundKeys[sortedRoundKeys.length - 1] : "";
-      const latestRoundKey = liveRound || latestScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
+      const latestRoundKey = defaultRoundKey || latestScheduledRoundKey || latestActiveRoundKey || (rounds.length > 0 ? rounds[0].key : "");
 
       res.json({
         snapshot: {

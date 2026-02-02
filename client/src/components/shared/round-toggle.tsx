@@ -34,10 +34,21 @@ function formatDateRange(startDate?: string | null, endDate?: string | null): st
     const startStr = formatDate(start);
     const endStr = formatDate(end);
     
+    // Same day: show single date
     if (startStr === endStr) {
       return startStr;
     }
     
+    // Calculate span in days
+    const dayMs = 24 * 60 * 60 * 1000;
+    const spanDays = Math.round((end.getTime() - start.getTime()) / dayMs);
+    
+    // Span > 3 days: show "Various dates" (handles rearranged EFL fixtures)
+    if (spanDays > 3) {
+      return "Various dates";
+    }
+    
+    // Normal range (<=3 days): show "31 Jan – 2 Feb"
     return `${startStr} – ${endStr}`;
   } catch {
     return null;

@@ -9520,3 +9520,76 @@ TESTS / MANUAL CHECKS
 DELIVERABLE
 - Implement the changes with clean, readable code.
 - After changes, print a short summary of what you changed and where.
+
+---
+
+You are working in a repo with a backend route /api/standings that returns matchesByRound and a default/latest round key. We have an issue: in lower leagues (Championship/League One/League Two), postponed fixtures remain tagged to their original matchweek, so our current “pick earliest round with any upcoming match” logic defaults to very early matchweeks (e.g., MW7) if a postponed game is replayed months later. This also causes the matchweek date label to show huge ranges like “6 Sep – 10 Feb”.
+
+Implement the following fixes:
+
+PART A — Backend: robust default round selection
+File: server/routes.ts (or wherever /api/standings is implemented)
+
+1) Replace the current default matchweek selection logic with a “cluster around now” approach:
+
+- Parse kickoff datetime from match.kickoffDate + match.kickoffTime (if time missing, assume "00:00").
+- Define helper functions:
+  - isLiveStatus(status): true for statuses like "LIVE","HT","1H","2H" (keep existing live detection)
+  - isPostponedStatus(status): true for "PSTP","POSTP","PPD" (include whatever exists in our feed)
+  - parseKickoffDatetime(match): returns Date|null
+- Define a scoring window around now:
+  - windowStart = now - 24 hours
+  - windowEnd   = now + 72 hours
+  (this intentionally ignores single postponed games weeks/months away)
+
+For each round key in matchesByRound:
+- Build an array of matches for that round.
+- Compute:
+  - liveCount = matches where isLiveStatus(status)
+  - inWindowCount = matches where kickoffDateTime exists AND kickoff between windowStart and windowEnd
+  - score = (liveCount * 1000) + (inWindowCount * 10)
+- Choose the round with the HIGHEST score.
+- Tie-breaker: choose the round whose nearest kickoff datetime is closest to now.
+
+Fallbacks:
+- If ALL rounds have score = 0:
+  - Find the next upcoming kickoff across ALL rounds (kickoff >= now) and select that match’s round.
+  - If no future matches exist, select the latest round (highest MW number) that has any matches.
+
+Return fields should remain backward compatible:
+- Keep returning latestRoundKey/latestScheduledRoundKey/latestActiveRoundKey if they exist today
+- Add/keep a single “defaultRoundKey” (or whatever the frontend uses) that uses the new selection algorithm
+
+IMPORTANT: Do not let a single postponed fixture weeks/months away force the default round.
+
+PART B — Frontend: matchweek header date label
+File: client/src/pages/tables.tsx (fixtures side widget)
+
+We currently show a matchweek “range” under the Matchweek title (min date – max date). This looks wrong for EFL because rearranged fixtures create huge spans.
+
+Change the label rule:
+- Compute minKickoffDate and maxKickoffDate for matches in the selected round (ignore matches with null kickoffDate).
+- If min/max are the same day: show that single day (e.g., "Sun 1 Feb")
+- If the span is <= 3 days: show range (e.g., "31 Jan – 2 Feb")
+- If span is > 3 days: show "Various dates" (or "Multiple dates")
+This should fix “6 Sep – 10 Feb” style labels.
+
+PART C — Frontend: show PSTP pill
+In the fixtures list row rendering:
+- Add a status pill for postponed matches, showing "PSTP" (or "Postponed" if we prefer short vs long; use PSTP for consistency with FT)
+- For postponed matches:
+  - Show the pill above the row (same position as FT)
+  - Keep the center value as kickoff time if we have it; if time is missing, show "TBC"
+  - Do NOT treat postponed as scheduled in a way that hides its status
+- Ensure existing FT/HT/LIVE behaviour remains unchanged.
+
+PART D — Regression checks
+- Premier League should still default correctly (current MW)
+- Championship/League One/League Two should default to the matchweek that has the bulk of fixtures in the next 72 hours (or live)
+- The matchweek date label should not show massive ranges; should show "Various dates" when appropriate
+- Postponed matches should display PSTP pill
+
+Make changes surgically, keep styling consistent with existing shadcn Badge usage, and do not introduce conditional hooks (avoid useMemo inside conditional renders).
+
+---
+
