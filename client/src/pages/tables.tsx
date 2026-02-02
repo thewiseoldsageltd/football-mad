@@ -76,6 +76,26 @@ function getCompetitionRoundMode(leagueSlug: string): "matchweek" | null {
   return null;
 }
 
+/**
+ * PRODUCT DECISION: Only specific competitions show the fixtures sidebar.
+ * This is intentional simplification until round/fixtures logic is improved for lower leagues.
+ * 
+ * Competitions WITH fixtures sidebar:
+ * - Premier League (domestic top flight with reliable round data)
+ * - Champions League, Europa League, Conference League (handled in Europe tab)
+ * 
+ * All other leagues show table-only view (full width, no sidebar).
+ */
+function hasFixturesSidebar(leagueSlug: string): boolean {
+  const slugsWithSidebar = [
+    "premier-league",
+    "champions-league",
+    "europa-league", 
+    "conference-league"
+  ];
+  return slugsWithSidebar.includes(leagueSlug);
+}
+
 interface StandingsApiRow {
   position: number;
   team: {
@@ -569,72 +589,15 @@ export default function TablesPage() {
       });
     };
 
-    // NON-ROUND MODE: Simple chronological fixtures list (Championship, League One, etc.)
+    // NON-ROUND MODE: Table-only view for most leagues (Championship, League One, etc.)
+    // PRODUCT DECISION: These leagues do not show fixtures sidebar - full-width table only
     if (roundMode === null) {
-      // Backend returns all fixtures in a single "all" bucket for non-round leagues
-      // Prefer the "all" bucket if it exists, otherwise collect from all keys
-      const allMatches: LeagueMatchInfo[] = leagueMatchesByRound["all"] 
-        ? [...leagueMatchesByRound["all"]]
-        : Object.keys(leagueMatchesByRound).flatMap(key => leagueMatchesByRound[key] ?? []);
-
-      // Separate upcoming and completed matches
-      const now = Date.now();
-      const upcomingMatches = allMatches.filter(m => {
-        const status = (m.status || "").toLowerCase();
-        const isComplete = ["ft", "aet", "pen", "awarded", "cancelled", "canceled"].some(s => status.includes(s));
-        return !isComplete;
-      });
-      const completedMatches = allMatches.filter(m => {
-        const status = (m.status || "").toLowerCase();
-        return ["ft", "aet", "pen", "awarded"].some(s => status.includes(s));
-      });
-
-      // Sort upcoming by kickoff ascending, completed by kickoff descending (most recent first)
-      upcomingMatches.sort((a, b) => getKickoffTime(a) - getKickoffTime(b));
-      completedMatches.sort((a, b) => getKickoffTime(b) - getKickoffTime(a));
-
-      // Limit to reasonable number: 10 upcoming + 5 recent
-      const displayUpcoming = upcomingMatches.slice(0, 10);
-      const displayCompleted = completedMatches.slice(0, 5);
-
       return (
-        <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
-          <Card className="h-fit">
-            <CardContent className="p-4 sm:p-6">
-              <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
-            </CardContent>
-          </Card>
-
-          <div className="space-y-4">
-            {/* Upcoming fixtures - simple list, no round navigation */}
-            <Card>
-              <CardContent className="p-0">
-                <div className="p-4 border-b flex items-center justify-between gap-2">
-                  <h4 className="font-semibold" data-testid="text-fixtures-title">Upcoming Fixtures</h4>
-                  <span className="text-sm text-muted-foreground">
-                    {displayUpcoming.length} {displayUpcoming.length === 1 ? "match" : "matches"}
-                  </span>
-                </div>
-                <div>{renderMatchRows(displayUpcoming)}</div>
-              </CardContent>
-            </Card>
-
-            {/* Recent results */}
-            {displayCompleted.length > 0 && (
-              <Card>
-                <CardContent className="p-0">
-                  <div className="p-4 border-b flex items-center justify-between gap-2">
-                    <h4 className="font-semibold" data-testid="text-results-title">Recent Results</h4>
-                    <span className="text-sm text-muted-foreground">
-                      {displayCompleted.length} {displayCompleted.length === 1 ? "match" : "matches"}
-                    </span>
-                  </div>
-                  <div>{renderMatchRows(displayCompleted)}</div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
+        <Card className="h-fit">
+          <CardContent className="p-4 sm:p-6">
+            <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
+          </CardContent>
+        </Card>
       );
     }
 

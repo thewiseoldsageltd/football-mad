@@ -9678,3 +9678,40 @@ Add comments explaining this is an intentional product decision.
 
 ---
 
+We are simplifying the Tables page further.
+
+DECISION:
+Only these competitions should show the right-hand fixtures column (Upcoming Fixtures + Recent Results):
+
+• Premier League
+• Champions League
+• Europa League
+• Conference League
+
+ALL OTHER leagues/competitions should NOT show the right-hand column at all.
+
+EXPECTED UI:
+- For excluded leagues, the league table becomes full-width (use the space where the right column used to be).
+- Remove/hide BOTH cards: “Upcoming Fixtures” and “Recent Results”.
+- Remove/hide any container/wrapper spacing reserved for the right column so there is no blank gap.
+- Keep the top tabs/filters unchanged.
+
+IMPLEMENTATION:
+1) Create a helper like:
+
+const hasFixturesSidebar = (leagueSlug: string) =>
+  leagueSlug === "premier-league" ||
+  ["champions-league","europa-league","conference-league"].includes(leagueSlug);
+
+2) In tables page layout:
+- If hasFixturesSidebar(activeLeagueSlug) is true:
+   render current 2-column layout (table left + fixtures sidebar right) unchanged.
+- Else:
+   render a 1-column layout (table only) and DO NOT render the fixtures sidebar components at all.
+
+3) Make minimal changes; do not alter Premier League or European competitions behaviour.
+
+Add short comment in code explaining this is an intentional product decision until round logic is improved.
+
+---
+
