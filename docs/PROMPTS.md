@@ -10492,3 +10492,23 @@ Save the file.
 
 ---
 
+Update GET /api/standings in server/routes.ts with the smallest possible change.
+
+Context:
+- 2025/26 Premier League + UCL + UEL + UECL matchweek/matchday output was working.
+- Older seasons (2024/25, 2023/24, 2022/23) should be TABLE ONLY (no rounds, no matchesByRound).
+
+Task:
+1) Keep all existing 2025/26 matchweek logic exactly as-is (do not refactor it).
+2) Add a hard gate: if seasonNorm !== "2025-2026", return ONLY { snapshot, table } and exit early.
+   - Do not include rounds, matchesByRound, defaultMatchweek, latestRoundKey, etc for non-2025/26 seasons.
+   - Do not fetch Goalserve fixtures XML for non-2025/26 seasons.
+3) Ensure this gate happens AFTER we successfully load the standings snapshot + build the table, but BEFORE any rounds/matchesByRound computation.
+
+Acceptance tests:
+- 2024/25 PL response contains no "rounds" and no "matchesByRound".
+- 2025/26 PL response behaves exactly as before (includes rounds/matchesByRound).
+- 2025/26 non-enabled leagues still do not include rounds/matchesByRound (existing behavior).
+
+---
+

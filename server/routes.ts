@@ -2171,15 +2171,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: string;
       }
 
+      // HARD GATE: Non-2025/26 seasons get TABLE ONLY - no rounds, no fixtures XML
+      const MATCHWEEK_ENABLED_SEASON = "2025-2026";
+      if (seasonNorm !== MATCHWEEK_ENABLED_SEASON) {
+        console.log(`[Standings] TABLE ONLY mode (historical season) leagueId=${leagueId} seasonNorm=${seasonNorm}`);
+        res.json({
+          snapshot: {
+            leagueId: snapshot.leagueId,
+            season: snapshot.season,
+            stageId: snapshot.stageId,
+            asOf: snapshot.asOf,
+            nowUtc: new Date().toISOString(),
+          },
+          table,
+        });
+        return;
+      }
+
       // PRODUCT DECISION: Only Premier League uses round-based navigation
       // European competitions are handled separately in /api/europe/:slug
       // All other leagues return fixtures without round grouping
-      // HARD RULE: Matchweek grouping ONLY for current season (2025-2026) and PL only
-      const MATCHWEEK_ENABLED_SEASON = "2025-2026";
       const ROUND_ENABLED_LEAGUE_IDS = ["1204"]; // Premier League only
-      const shouldComputeRounds = 
-        seasonNorm === MATCHWEEK_ENABLED_SEASON && 
-        ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
+      const shouldComputeRounds = ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
 
       console.log(`[Standings] roundsEnabled=${shouldComputeRounds} leagueId=${leagueId} seasonNorm=${seasonNorm}`);
 
