@@ -19,6 +19,7 @@ import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
+import { backfillStandings } from "./jobs/backfill-standings";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -1747,6 +1748,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.json(result);
       } catch (error) {
         console.error("Standings upsert error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
+  // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========
+  app.get(
+    "/api/jobs/backfill-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const seasonsParam = req.query.seasons as string | undefined;
+      const leaguesParam = req.query.leagues as string | undefined;
+      const forceParam = req.query.force as string | undefined;
+
+      const seasons = seasonsParam ? seasonsParam.split(",").map(s => s.trim()) : undefined;
+      const leagueIds = leaguesParam ? leaguesParam.split(",").map(l => l.trim()) : undefined;
+      const force = forceParam !== "false"; // default true
+
+      try {
+        console.log("[backfill-standings] Starting with:", { seasons, leagueIds, force });
+        const result = await backfillStandings({ seasons, leagueIds, force });
+        res.json(result);
+      } catch (error) {
+        console.error("Backfill standings error:", error);
         res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
       }
     }

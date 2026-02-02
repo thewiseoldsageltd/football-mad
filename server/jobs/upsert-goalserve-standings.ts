@@ -195,7 +195,7 @@ interface GoalserveTeamRow {
   description?: string;
 }
 
-interface UpsertStandingsResult {
+export interface UpsertStandingsResult {
   ok: boolean;
   leagueId: string;
   season: string;

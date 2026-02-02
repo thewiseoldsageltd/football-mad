@@ -9949,3 +9949,58 @@ DELIVERABLE:
 
 ---
 
+We need to backfill Goalserve standings for previous seasons so the Tables season dropdown works.
+
+🚫 DO NOT run regression tests
+🚫 DO NOT generate preview videos
+🚫 DO NOT add tests or run Playwright/Cypress
+I will test manually after deployment.
+
+DATA MODEL:
+We store standings in standingsSnapshots + standingsRows.
+The public endpoint /api/standings reads the latest snapshot for (leagueId, season).
+
+GOAL:
+Create a dev-only backfill job that ingests standings for a list of leagueIds and seasons:
+- 2024-25
+- 2023-24
+- 2022-23
+(leave 2025-26 as normal current)
+
+FILES:
+server/jobs/upsert-goalserve-standings.ts (already exists)
+server/routes.ts (add a dev-only endpoint)
+
+IMPLEMENTATION:
+
+1) Add a new job file:
+   server/jobs/backfill-standings.ts
+
+2) It should:
+   - Accept:
+       seasons: string[] (default ["2024-25","2023-24","2022-23"])
+       leagueIds: string[] (default the leagueIds we support on Tables, read from config or a hardcoded list for now)
+       force: boolean (default true)
+   - For each (leagueId, season):
+       await upsertGoalserveStandings(leagueId, { seasonParam: season, force: true })
+   - Log progress and return a summary:
+       total, okCount, failCount, failures[]
+
+3) Add a DEV endpoint in server/routes.ts:
+   GET /api/jobs/backfill-standings
+   Query params:
+     seasons=2024-25,2023-24,2022-23
+     leagues=1204,1205,1206,1207,... (optional)
+     force=true|false
+   If params omitted, use defaults.
+
+4) IMPORTANT:
+   - Respect the new “too few team rows” safety guard we added earlier.
+   - Backfill should not overwrite good data with incomplete snapshots.
+
+DELIVERABLE:
+- Calling /api/jobs/backfill-standings will ingest historical snapshots for the chosen seasons/leagues.
+- After running it, selecting a prior season in Tables shows the correct standings.
+
+---
+
