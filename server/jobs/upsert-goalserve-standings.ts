@@ -234,9 +234,14 @@ export async function upsertGoalserveStandings(
   // Normalize season to YYYY-YYYY format for Goalserve historical data
   const normalizedSeason = normalizeSeasonForGoalserve(seasonParam);
   
-  let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
+  // Build URL: historical seasons require different endpoint (without .xml)
+  let url: string;
   if (normalizedSeason) {
-    url += `&season=${encodeURIComponent(normalizedSeason)}`;
+    // Historical season: use endpoint WITHOUT .xml
+    url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${encodeURIComponent(normalizedSeason)}`;
+  } else {
+    // Current season: use endpoint WITH .xml
+    url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
   }
   
   // Log the URL (truncate key for security)

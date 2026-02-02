@@ -10256,3 +10256,34 @@ Expected: season in response should now reflect 2024/2025 or 2024-2025 (not 2025
 
 ---
 
+Replit AI prompt (copy/paste)
+
+Do NOT run tests or generate videos.
+
+Goal: Historical seasons must ingest correctly from Goalserve.
+We confirmed via debug endpoint that historical standings work when using:
+  /standings/{leagueId}?json=true&season=YYYY-YYYY
+and that the .xml endpoint ignores season.
+
+Change ONLY server/jobs/upsert-goalserve-standings.ts:
+
+1) Ensure season normalization is used (normalizeSeasonForGoalserve).
+2) When seasonParam is provided (after normalization), build Goalserve URL WITHOUT .xml:
+   https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${seasonNorm}
+3) When seasonParam is NOT provided, keep current-season URL WITH .xml:
+   https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true
+
+4) Store the normalized season (YYYY-YYYY) in standingsSnapshots.season so /api/standings?season=2024/25 finds it after normalization.
+
+No other changes.
+
+Manual verification commands (I will run):
+curl -s -H "Authorization: Bearer $GOALSERVE_SYNC_SECRET" \
+  "http://localhost:5000/api/jobs/upsert-goalserve-standings?leagueId=1204&season=2024/25&force=true" | head -c 4000
+
+Then:
+curl -i "http://localhost:5000/api/standings?leagueId=1204&season=2024/25" | head -n 40
+Expected: 200 OK and JSON rows.
+
+---
+
