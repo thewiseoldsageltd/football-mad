@@ -2193,17 +2193,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       // Fetch Goalserve XML for proper week numbers
+      // Try multiple season formats - Goalserve may expect YYYY-YYYY or YYYY/YYYY
       const { goalserveFetchXml } = await import("./integrations/goalserve/client");
-      const xmlEndpoint = seasonNorm 
-        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonNorm)}`
-        : `soccerfixtures/leagueid/${leagueId}`;
       
-      let xmlData: any;
-      try {
-        xmlData = await goalserveFetchXml(xmlEndpoint);
-      } catch (xmlErr) {
-        console.error("[Standings] Failed to fetch Goalserve XML:", xmlErr);
-        xmlData = null;
+      const seasonForFixturesA = seasonNorm;                       // e.g. 2024-2025
+      const seasonForFixturesB = seasonNorm?.replace("-", "/");    // e.g. 2024/2025
+
+      const endpointsToTry = seasonNorm
+        ? [
+            `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesA!)}`,
+            `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesB!)}`,
+            `soccerfixtures/leagueid/${leagueId}`, // fallback (current season)
+          ]
+        : [`soccerfixtures/leagueid/${leagueId}`];
+
+      let xmlData: any = null;
+
+      for (const ep of endpointsToTry) {
+        try {
+          const attempt = await goalserveFetchXml(ep);
+
+          const tournament = attempt?.results?.tournament 
+            ?? attempt?.scores?.tournament 
+            ?? attempt?.tournament;
+
+          const week = tournament?.week;
+          const weeksCount = Array.isArray(week) ? week.length : (week ? 1 : 0);
+
+          console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount}`);
+
+          if (weeksCount > 0) {
+            xmlData = attempt;
+            break;
+          }
+        } catch (e) {
+          console.warn(`[Standings] fixturesXml failed ep=${ep}`);
+        }
       }
 
       const matchesByRound: Record<string, MatchInfo[]> = {};

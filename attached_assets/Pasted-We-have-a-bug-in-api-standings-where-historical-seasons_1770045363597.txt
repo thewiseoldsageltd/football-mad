@@ -1,0 +1,73 @@
+We have a bug in /api/standings where historical seasons (like 2024/25) show the CORRECT league table but the WRONG fixtures — Goalserve is returning the CURRENT season fixtures instead of the requested season.
+
+The issue is that the fixtures XML endpoint appears to expect a DIFFERENT season format than the standings endpoint.
+
+Right now we are doing this in server/routes.ts:
+
+const xmlEndpoint = seasonNorm 
+  ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonNorm)}`
+  : `soccerfixtures/leagueid/${leagueId}`;
+
+Where seasonNorm is in YYYY-YYYY format (e.g. 2024-2025).
+
+However, Goalserve fixtures sometimes require YYYY/YYYY format instead (e.g. 2024/2025), otherwise they silently fall back to the current season.
+
+---
+
+🎯 TASK
+
+Update the fixtures XML fetch logic inside the `/api/standings` route to TRY MULTIPLE SEASON FORMATS before giving up.
+
+---
+
+🔧 IMPLEMENT THIS REPLACEMENT
+
+Find the block where we set `xmlEndpoint` and fetch XML, and REPLACE it with:
+
+------------------------------------------------
+
+const seasonForFixturesA = seasonNorm;                       // e.g. 2024-2025
+const seasonForFixturesB = seasonNorm.replace("-", "/");     // e.g. 2024/2025
+
+const endpointsToTry = [
+  `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesA)}`,
+  `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonForFixturesB)}`,
+  `soccerfixtures/leagueid/${leagueId}`, // fallback (current season)
+];
+
+let xmlData: any = null;
+
+for (const ep of endpointsToTry) {
+  try {
+    const attempt = await goalserveFetchXml(ep);
+
+    const tournament = attempt?.results?.tournament 
+      ?? attempt?.scores?.tournament 
+      ?? attempt?.tournament;
+
+    const week = tournament?.week;
+    const weeksCount = Array.isArray(week) ? week.length : (week ? 1 : 0);
+
+    console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount}`);
+
+    if (weeksCount > 0) {
+      xmlData = attempt;
+      break;
+    }
+  } catch (e) {
+    console.warn(`[Standings] fixturesXml failed ep=${ep}`);
+  }
+}
+
+------------------------------------------------
+
+⚠️ Do NOT change any other logic.
+⚠️ Do NOT modify standings ingestion.
+⚠️ Only adjust how fixtures XML is fetched.
+
+This ensures:
+• Historical seasons use correct fixtures
+• Current season still works
+• We gracefully fall back if Goalserve changes format
+
+Save the file after editing.
