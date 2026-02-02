@@ -10250,3 +10250,59 @@ After implementing, tell me:
 
 ---
 
+You are working in the Football Mad codebase.
+
+Decision: Remove ALL Matchday/Matchweek/fixtures panels from the Tables tab. Tables tab should show STANDINGS ONLY across all competitions and seasons.
+
+Constraints:
+- Do NOT run regression tests.
+- Keep other areas (e.g. Matches page) untouched.
+- Tables page layout should remain clean: Standings card should expand to full width (or use existing responsive layout).
+- Do not break existing API consumers; but it’s OK to stop requesting/using rounds/matchesByRound/matchdays on the Tables page.
+
+Tasks:
+
+A) CLIENT (UI) — remove Fixtures/Matchday panel from Tables tab
+1) Find the Tables page component(s) that render:
+   - the right-hand "Fixtures" card
+   - the Matchday/Matchweek navigation (chevrons and label)
+   - the "No fixtures available / No fixtures yet" state
+2) Remove those UI blocks entirely from the Tables tab.
+3) Update layout so the standings table takes the full width:
+   - If currently a 2-column grid, switch to 1-column when fixtures panel removed.
+4) Remove any state/hooks/data-fetching on the Tables page that is only used for fixtures navigation:
+   - selectedMatchday / selectedMatchweek
+   - rounds/matchdays arrays
+   - matchesByRound / fixturesByMatchday mapping
+   - effects that set default matchday/week
+   Keep standings fetch and standings render intact.
+
+B) CLIENT (API usage) — stop relying on fixtures fields
+5) Wherever Tables page fetches /api/standings or /api/europe/:slug:
+   - Ensure the UI only reads snapshot + table.
+   - Remove references to response.rounds, response.matchesByRound, response.defaultMatchweek, response.latestRoundKey, matchdays, etc.
+
+C) SERVER (optional but recommended) — add “tablesOnly=1” flag to reduce payload
+6) In server/routes.ts:
+   - /api/standings: if req.query.tablesOnly === "1", skip Goalserve XML fetch and do NOT compute rounds/matchesByRound even for 2025/26 PL.
+     Return only { snapshot, table }.
+   - /api/europe/:slug: if tablesOnly === "1", return standings-only (skip fixtures/matchday computation).
+7) Then in the Tables page fetch calls, add tablesOnly=1 to the requests:
+   - /api/standings?...&tablesOnly=1
+   - /api/europe/...?...&tablesOnly=1
+This keeps the server logic available for later (when we revisit fixtures), but Tables stays standings-only.
+
+Manual checks (no tests):
+- Tables page shows ONLY standings for Premier League and Europe comps.
+- No Fixtures card is visible.
+- No Matchday/Matchweek UI exists.
+- No console errors about rounds/matchesByRound/matchdays.
+- Page looks good on desktop (standings uses full width).
+
+After changes, output:
+- Files changed
+- What was removed (UI blocks + any states/hooks)
+- Any new query param usage (tablesOnly=1)
+
+---
+

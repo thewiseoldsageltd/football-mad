@@ -1979,6 +1979,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const season = (req.query.season as string) || defaultSeason;
       const asOfParam = req.query.asOf as string | undefined;
       const autoRefresh = req.query.autoRefresh === "1";
+      const tablesOnly = req.query.tablesOnly === "1";
 
       // Normalize season to YYYY-YYYY format for comparison (handles 2025/26, 2025-26, 2025/2026, etc.)
       const normalizeSeason = (s: string): string => {
@@ -1996,7 +1997,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const isCurrentSeason = seasonNorm === CURRENT_SEASON;
       const isPremierLeague = leagueId === "1204";
       // Only fetch Goalserve XML and compute rounds for current season Premier League
-      const includeRounds = isCurrentSeason && isPremierLeague;
+      // When tablesOnly=1, skip round computation entirely for faster response
+      const includeRounds = !tablesOnly && isCurrentSeason && isPremierLeague;
 
       // Auto-refresh logic: attempt standings ingestion if allowed by throttle
       if (autoRefresh) {
@@ -3652,8 +3654,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const season = (req.query.season as string) || "2025/2026";
+      const tablesOnly = req.query.tablesOnly === "1";
       
       // SEASON GATING: Only compute matchdays/fixtures for 2025/2026
+      // When tablesOnly=1, skip matchday computation entirely for faster response
       const normalizeSeason = (s: string): string => {
         const match = s.match(/(\d{4})[\/\-](\d{2,4})/);
         if (!match) return s;
@@ -3666,7 +3670,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
       const CURRENT_SEASON = "2025-2026";
       const seasonNorm = normalizeSeason(season);
-      const includeMatchdays = seasonNorm === CURRENT_SEASON;
+      const includeMatchdays = !tablesOnly && seasonNorm === CURRENT_SEASON;
       
       const { goalserveFetch } = await import("./integrations/goalserve/client");
 

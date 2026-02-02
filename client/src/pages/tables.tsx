@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Trophy, Loader2 } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { CupProgress } from "@/components/tables/cup-progress";
@@ -11,7 +10,6 @@ import { EuropeProgress } from "@/components/tables/europe-progress";
 import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
 import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
-import { RoundToggle, type RoundInfo } from "@/components/shared/round-toggle";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
 
@@ -61,40 +59,6 @@ function normalizeSeason(input: string | null | undefined): string | undefined {
   return input;
 }
 
-/**
- * PRODUCT DECISION: Only specific competitions show round-based navigation.
- * - Premier League → "Matchweek" (round navigation enabled)
- * - Champions League, Europa League, Conference League → "Matchday" (handled in EuropeProgress)
- * - All other leagues → null (chronological fixtures list, no round navigation)
- * 
- * This simplifies the UX for lower leagues where round structure is less meaningful.
- */
-function getCompetitionRoundMode(leagueSlug: string): "matchweek" | null {
-  // Only Premier League uses round-based navigation in the leagues tab
-  // European competitions are handled separately in the "europe" tab with their own component
-  if (leagueSlug === "premier-league") return "matchweek";
-  return null;
-}
-
-/**
- * PRODUCT DECISION: Only specific competitions show the fixtures sidebar.
- * This is intentional simplification until round/fixtures logic is improved for lower leagues.
- * 
- * Competitions WITH fixtures sidebar:
- * - Premier League (domestic top flight with reliable round data)
- * - Champions League, Europa League, Conference League (handled in Europe tab)
- * 
- * All other leagues show table-only view (full width, no sidebar).
- */
-function hasFixturesSidebar(leagueSlug: string): boolean {
-  const slugsWithSidebar = [
-    "premier-league",
-    "champions-league",
-    "europa-league", 
-    "conference-league"
-  ];
-  return slugsWithSidebar.includes(leagueSlug);
-}
 
 interface StandingsApiRow {
   position: number;
@@ -115,27 +79,6 @@ interface StandingsApiRow {
   recentForm?: string | null;
 }
 
-interface LeagueMatchInfo {
-  id: string;
-  home: { id?: string; name: string };
-  away: { id?: string; name: string };
-  score: { home: number; away: number } | null;
-  kickoffDate: string | null;
-  kickoffTime: string | null;
-  status: string;
-}
-
-interface ApiRoundInfo {
-  key: string;
-  number: number;
-  label: string;
-  startDate: string | null;
-  endDate: string | null;
-  matchesCount: number;
-  hasAnyMatches: boolean;
-  hasScheduledMatches: boolean;
-}
-
 interface StandingsApiResponse {
   snapshot: {
     leagueId: string;
@@ -143,12 +86,6 @@ interface StandingsApiResponse {
     fetchedAt: string;
   };
   table: StandingsApiRow[];
-  rounds?: ApiRoundInfo[];
-  matchesByRound?: Record<string, LeagueMatchInfo[]>;
-  latestRoundKey?: string;
-  latestScheduledRoundKey?: string;
-  latestActiveRoundKey?: string;
-  defaultMatchweek?: number;
 }
 
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
@@ -169,154 +106,6 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
   };
 }
 
-// Status badge helpers for league fixtures (mirrors Europe pattern)
-function getLeagueStatusBadgeVariant(status: string): "default" | "secondary" | "outline" | "destructive" {
-  const s = status.toLowerCase();
-  // Postponed - show with neutral variant
-  if (isLeagueMatchPostponed(status)) {
-    return "outline";
-  }
-  // Completed
-  if (["ft", "fulltime", "full-time", "finished", "aet", "after extra time", "penalties", "after pen."].includes(s)) {
-    return "secondary";
-  }
-  // Live
-  if (s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s)) {
-    return "destructive";
-  }
-  // Scheduled (no pill shown)
-  return "outline";
-}
-
-function formatLeagueStatusLabel(status: string): string {
-  const s = status.toLowerCase();
-  if (s === "ft" || s === "fulltime" || s === "finished") return "Full-Time";
-  if (s === "aet" || s === "after extra time") return "AET";
-  if (s === "penalties" || s === "after pen.") return "Penalties";
-  if (s === "ht") return "Half-Time";
-  if (s === "live" || s.includes("'") || /^\d+$/.test(s)) return "Live";
-  return "Scheduled";
-}
-
-function isLeagueMatchCompleted(status: string): boolean {
-  const s = status.toLowerCase();
-  return ["ft", "fulltime", "full-time", "finished", "aet", "after extra time", "penalties", "after pen."].includes(s);
-}
-
-function isLeagueMatchLive(status: string): boolean {
-  const s = status.toLowerCase();
-  return s === "ht" || s === "live" || s.includes("'") || /^\d+$/.test(s);
-}
-
-function isLeagueMatchPostponed(status: string): boolean {
-  const s = status.toLowerCase();
-  return s === "pstp" || s === "postponed" || s === "postp" || s === "susp" || 
-         s === "suspended" || s === "cancelled" || s === "canceled" || 
-         s === "abandoned" || s === "abn";
-}
-
-// Format date as "Sun 1 Feb" using UK timezone
-function formatShortDate(dateStr: string | null): string {
-  if (!dateStr) return "";
-  try {
-    const date = new Date(dateStr + "T12:00:00");
-    return new Intl.DateTimeFormat("en-GB", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      timeZone: "Europe/London",
-    }).format(date);
-  } catch {
-    return "";
-  }
-}
-
-function LeagueMatchRow({ match, showDateLabel }: { match: LeagueMatchInfo; showDateLabel: boolean }) {
-  const isCompleted = isLeagueMatchCompleted(match.status);
-  const isLive = isLeagueMatchLive(match.status);
-  const isPostponed = isLeagueMatchPostponed(match.status);
-  const isHalfTime = match.status.toLowerCase() === "ht";
-  const isScheduled = !isCompleted && !isLive && !isPostponed;
-  
-  // Extract minute from status (e.g., "67'", "90+2", or just "67")
-  const extractMinute = (): string | null => {
-    const s = match.status;
-    const minuteMatch = s.match(/^(\d+(?:\+\d+)?)'?$/);
-    if (minuteMatch) return minuteMatch[1] + "'";
-    const embeddedMatch = s.match(/(\d+(?:\+\d+)?)/);
-    if (embeddedMatch && isLive && !isHalfTime) return embeddedMatch[1] + "'";
-    return null;
-  };
-  
-  // Build status label for pill (LIVE/HT/FT/PSTP only)
-  const getStatusPillLabel = (): string => {
-    if (isPostponed) return "PSTP";
-    if (isHalfTime) return "HT";
-    if (isLive) {
-      const minute = extractMinute();
-      return minute ? `LIVE ${minute}` : "LIVE";
-    }
-    if (isCompleted) return "FT";
-    return "";
-  };
-  
-  // Show pill for completed, live, OR postponed matches
-  const showPill = isCompleted || isLive || isPostponed;
-  const statusLabel = getStatusPillLabel();
-  const badgeVariant = getLeagueStatusBadgeVariant(match.status);
-  
-  // For scheduled matches, format the date to show above the row (only if showDateLabel)
-  const scheduledDateLabel = isScheduled && showDateLabel ? formatShortDate(match.kickoffDate) : "";
-  
-  return (
-    <div 
-      className="flex flex-col px-4 py-3 border-b last:border-b-0 hover:bg-muted/30"
-      data-testid={`match-row-${match.id}`}
-    >
-      {/* Above the row: Status pill for Live/HT/FT/PSTP OR Date text for Scheduled (first of date block) */}
-      {showPill ? (
-        <div className="flex justify-center mb-2">
-          <Badge variant={badgeVariant} className="text-xs" data-testid={`badge-status-${match.id}`}>
-            {statusLabel}
-          </Badge>
-        </div>
-      ) : scheduledDateLabel ? (
-        <div className="flex justify-center mb-2">
-          <span className="text-xs text-muted-foreground">{scheduledDateLabel}</span>
-        </div>
-      ) : null}
-      
-      {/* Main row: Home - Score/Time - Away */}
-      <div className="flex items-center justify-between">
-        <div className="flex-1 text-right pr-3 text-sm truncate">
-          {match.home.name}
-        </div>
-        
-        <div className="flex items-center justify-center min-w-[60px]">
-          {isCompleted || isLive ? (
-            <span className="text-sm font-semibold">
-              {match.score?.home ?? 0} – {match.score?.away ?? 0}
-            </span>
-          ) : isPostponed ? (
-            // Postponed: show time if available, else TBD
-            <span className="text-sm text-muted-foreground">
-              {match.kickoffTime ?? "TBD"}
-            </span>
-          ) : (
-            // Scheduled: show kickoff time
-            <span className="text-sm text-muted-foreground">
-              {match.kickoffTime ?? "TBC"}
-            </span>
-          )}
-        </div>
-        
-        <div className="flex-1 pl-3 text-sm truncate">
-          {match.away.name}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 type TopTab = "leagues" | "cups" | "europe";
 
@@ -334,29 +123,6 @@ export default function TablesPage() {
   const [topTab, setTopTab] = useState<TopTab>("leagues");
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
-  
-  // Round is component state only (NOT in URL)
-  const [selectedRound, setSelectedRound] = useState("");
-  const userTouchedRoundRef = useRef(false);
-  
-  // Track previous league/season for reset detection
-  const prevLeagueSeasonRef = useRef(`${leagueSlug}:${seasonSlug}`);
-  
-  // Reset round touched flag when league/season changes
-  useEffect(() => {
-    const key = `${leagueSlug}:${seasonSlug}`;
-    if (prevLeagueSeasonRef.current !== key) {
-      prevLeagueSeasonRef.current = key;
-      userTouchedRoundRef.current = false;
-      setSelectedRound("");
-    }
-  }, [leagueSlug, seasonSlug]);
-  
-  // Handle round change from user interaction (marks as touched)
-  const handleRoundChange = useCallback((newRound: string) => {
-    userTouchedRoundRef.current = true;
-    setSelectedRound(newRound);
-  }, []);
   
   // Handle league change - navigate to new URL
   const handleLeagueChange = useCallback((newLeague: string) => {
@@ -456,6 +222,7 @@ export default function TablesPage() {
       params.set("season", apiSeason);
     }
     params.set("autoRefresh", "1");
+    params.set("tablesOnly", "1");
     return `/api/standings?${params.toString()}`;
   }, [goalserveLeagueId, apiSeason]);
 
@@ -471,38 +238,6 @@ export default function TablesPage() {
     if (!Array.isArray(standingsData?.table)) return [];
     return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
-
-  // Use backend-provided rounds directly (from Goalserve XML <week number="X"> containers)
-  const leagueRounds = useMemo(() => {
-    const apiRounds = standingsData?.rounds ?? [];
-    // Sort by number to ensure MW1..MW38 order (ascending)
-    const sorted = [...apiRounds].sort((a, b) => (a.number ?? 0) - (b.number ?? 0));
-    // Convert API rounds to RoundInfo format for RoundToggle component
-    return sorted.map(r => ({
-      key: r.key,
-      label: r.label, // Just the number like "23"
-      startDate: r.startDate,
-      endDate: r.endDate,
-      matchesCount: r.matchesCount,
-    }));
-  }, [standingsData?.rounds]);
-
-  const leagueMatchesByRound = standingsData?.matchesByRound ?? {};
-  const defaultMatchweek = standingsData?.defaultMatchweek ?? 1;
-  const latestActiveRoundKey = standingsData?.latestActiveRoundKey ?? "";
-
-  // Initialize selected round when data loads
-  // Only auto-set if user hasn't manually changed the round
-  useEffect(() => {
-    if (leagueRounds.length > 0 && !userTouchedRoundRef.current && !selectedRound) {
-      const defaultKey = `MW${defaultMatchweek}`;
-      if (leagueRounds.some(r => r.key === defaultKey)) {
-        setSelectedRound(defaultKey);
-      } else if (leagueRounds.length > 0) {
-        setSelectedRound(leagueRounds[leagueRounds.length - 1].key);
-      }
-    }
-  }, [leagueRounds, defaultMatchweek, selectedRound]);
 
   const currentLeagueConfig = getLeagueBySlug(leagueSlug);
 
@@ -548,114 +283,12 @@ export default function TablesPage() {
       );
     }
 
-    // PRODUCT DECISION: Only Premier League uses round-based navigation
-    // All other leagues show chronological fixtures without round controls
-    const roundMode = getCompetitionRoundMode(leagueSlug);
-
-    // Helper to get kickoff timestamp for sorting
-    const getKickoffTime = (m: LeagueMatchInfo): number => {
-      const dateStr = m.kickoffDate ?? "9999-12-31";
-      const timeStr = m.kickoffTime ?? "00:00";
-      try {
-        return new Date(`${dateStr}T${timeStr}`).getTime();
-      } catch {
-        return Number.MAX_SAFE_INTEGER;
-      }
-    };
-
-    // Helper to render match rows with date labels
-    const renderMatchRows = (matches: LeagueMatchInfo[]) => {
-      if (matches.length === 0) {
-        return (
-          <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
-            No fixtures available
-          </div>
-        );
-      }
-      const seenDates = new Set<string>();
-      return matches.map((match) => {
-        const isPostponed = isLeagueMatchPostponed(match.status);
-        const isScheduled = !isLeagueMatchCompleted(match.status) && 
-                            !isLeagueMatchLive(match.status) && 
-                            !isPostponed;
-        const dateKey = match.kickoffDate || "";
-        let showDateLabel = false;
-        if (isScheduled && dateKey && !seenDates.has(dateKey)) {
-          seenDates.add(dateKey);
-          showDateLabel = true;
-        }
-        return <LeagueMatchRow key={match.id} match={match} showDateLabel={showDateLabel} />;
-      });
-    };
-
-    // NON-ROUND MODE: Table-only view for most leagues (Championship, League One, etc.)
-    // PRODUCT DECISION: These leagues do not show fixtures sidebar - full-width table only
-    if (roundMode === null) {
-      return (
-        <Card className="h-fit">
-          <CardContent className="p-4 sm:p-6">
-            <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
-          </CardContent>
-        </Card>
-      );
-    }
-
-    // ROUND MODE: Premier League with Matchweek navigation
-    const rawMatches = leagueMatchesByRound[selectedRound] ?? [];
-    const displayMatches = [...rawMatches].sort((a, b) => getKickoffTime(a) - getKickoffTime(b));
-    const currentRoundInfo = leagueRounds.find((r) => r.key === selectedRound);
-    
-    // Extract matchweek number from the key (e.g., "MW23" -> 23)
-    const matchweekNum = (() => {
-      const match = selectedRound.match(/(\d+)/);
-      if (match) return parseInt(match[1], 10);
-      if (currentRoundInfo?.label) {
-        const labelMatch = currentRoundInfo.label.match(/(\d+)/);
-        if (labelMatch) return parseInt(labelMatch[1], 10);
-      }
-      return null;
-    })();
-    
-    const matchweekTitle = matchweekNum !== null ? `Matchweek ${matchweekNum}` : selectedRound;
-
     return (
-      <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
-        <Card className="h-fit">
-          <CardContent className="p-4 sm:p-6">
-            <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-semibold mb-4">Fixtures</h3>
-              {leagueRounds.length > 0 && (
-                <RoundToggle
-                  labelType="Matchweek"
-                  rounds={leagueRounds}
-                  value={selectedRound}
-                  onChange={handleRoundChange}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-0">
-              <div className="p-4 border-b flex items-center justify-between gap-2">
-                <h4 className="font-semibold" data-testid="text-matchweek-title">
-                  {matchweekTitle}
-                </h4>
-                <span className="text-sm text-muted-foreground">
-                  {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
-                </span>
-              </div>
-              <div>{renderMatchRows(displayMatches)}</div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <Card className="h-fit">
+        <CardContent className="p-4 sm:p-6">
+          <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
+        </CardContent>
+      </Card>
     );
   };
 
