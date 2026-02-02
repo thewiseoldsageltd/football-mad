@@ -9715,3 +9715,21 @@ Add short comment in code explaining this is an intentional product decision unt
 
 ---
 
+We are working on the Football Mad Tables page.
+
+Task: Remove the "Overall" dropdown in the top-right of the Tables navigation.
+
+Details:
+- This dropdown sits next to the season selector (e.g. "2025/26").
+- It currently shows "Overall" but has no functional impact.
+- Remove the Select / Dropdown component from the UI.
+- Remove any related state variables, handlers, props, or imports that were only used by this dropdown.
+- Ensure spacing and alignment still look correct after removal.
+- Do NOT modify any other table, sidebar, standings, or routing logic.
+
+Goal:
+The Tables page should now only show the season selector on the right side, with no "Overall" dropdown.
+Code should compile cleanly with no unused variables or imports.
+
+---
+

@@ -334,7 +334,6 @@ export default function TablesPage() {
   const [topTab, setTopTab] = useState<TopTab>("leagues");
   const [europeCompetition, setEuropeCompetition] = useState("champions-league");
   const [cupCompetition, setCupCompetition] = useState("fa-cup");
-  const [tableView, setTableView] = useState("overall");
   
   // Round is component state only (NOT in URL)
   const [selectedRound, setSelectedRound] = useState("");
@@ -719,11 +718,8 @@ export default function TablesPage() {
               </div>
 
               <TablesFilters
-                topTab={topTab}
                 season={season}
-                tableView={tableView}
                 onSeasonChange={handleSeasonChange}
-                onTableViewChange={setTableView}
               />
             </div>
           </div>
@@ -780,11 +776,8 @@ export default function TablesPage() {
           </div>
 
           <TablesFilters
-            topTab={topTab}
             season={season}
-            tableView={tableView}
             onSeasonChange={handleSeasonChange}
-            onTableViewChange={setTableView}
             mobile
           />
         </div>
