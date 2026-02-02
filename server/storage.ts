@@ -229,7 +229,25 @@ export class DatabaseStorage implements IStorage {
       teamIds = teamResults.map(t => t.id);
     }
     
-    let result: Article[];
+    // Lightweight fields for article list (no content/html)
+    const listFields = {
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      coverImage: articles.coverImage,
+      heroImageCredit: articles.heroImageCredit,
+      authorName: articles.authorName,
+      publishedAt: articles.publishedAt,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      isFeatured: articles.isFeatured,
+      isTrending: articles.isTrending,
+      isBreaking: articles.isBreaking,
+      viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount,
+    };
     
     if (teamIds.length > 0) {
       const articleIdsWithTeams = await db
@@ -272,10 +290,14 @@ export class DatabaseStorage implements IStorage {
         orderByClause = desc(articles.publishedAt);
     }
     
+    // Default limit of 20 articles
+    const limit = 20;
+    
+    let result;
     if (whereClause) {
-      result = await db.select().from(articles).where(whereClause).orderBy(orderByClause);
+      result = await db.select(listFields).from(articles).where(whereClause).orderBy(orderByClause).limit(limit);
     } else {
-      result = await db.select().from(articles).orderBy(orderByClause);
+      result = await db.select(listFields).from(articles).orderBy(orderByClause).limit(limit);
     }
     
     return {

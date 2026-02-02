@@ -1,3 +1,18 @@
+## ⚠️ REPLIT EXECUTION RULES (MUST FOLLOW)
+
+This project is cost-sensitive on Replit credits.
+
+DO NOT:
+- run end-to-end/regression testing (Playwright/Cypress/Puppeteer)
+- generate videos/screenshots
+- use “Testing your app”
+- run lighthouse audits
+- run broad automated UI checks
+
+Allowed verification:
+- max ONE curl request to a relevant API endpoint
+- OR confirm server starts without errors
+
 ## Team Hub Navigation Prompt
 
 "Update team navigation so the URL is the single source of truth.
@@ -10522,6 +10537,24 @@ Rules:
 - Only generate a new slug on first insert if the desired slug is already taken by another article.
 
 Also: make the sync return JSON counts even on partial failures, and log the conflicting slug for debugging (do not log secrets).
+
+---
+
+CRITICAL: Do NOT run any end-to-end/regression tests, no videos/screenshots, no “Testing your app”.
+Verification budget: ONE curl command only.
+
+Problem: GET /api/news returns an enormous payload (~9.8MB) because it includes full article content/html for list items.
+
+Fix:
+- Update the /api/news LIST endpoint to return only lightweight fields per article:
+  id, slug, title, excerpt, publishedAt, heroImageUrl, heroImageCredit, and entity tags/ids needed for the cards.
+- Do NOT include article content/html/body in the list response.
+- Ensure full content/html is only returned by GET /api/news/:slug.
+- Enforce default limit=20 on /api/news and support pagination if already present.
+
+Verification (only):
+curl -sS -m 2 -D - http://127.0.0.1:5000/api/news -o /dev/null | head -n 5
+Expect Content-Length to drop dramatically (< ~200KB).
 
 ---
 
