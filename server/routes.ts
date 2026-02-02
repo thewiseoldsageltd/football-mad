@@ -2093,6 +2093,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         status: string;
       }
 
+      // PRODUCT DECISION: Only Premier League uses round-based navigation
+      // European competitions are handled separately in /api/europe/:slug
+      // All other leagues return fixtures without round grouping
+      const ROUND_ENABLED_LEAGUE_IDS = ["1204"]; // Premier League only
+      const shouldComputeRounds = ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
+
       // Helper to check if a status means "scheduled"
       const isScheduledStatus = (status: string): boolean => {
         const s = status?.toLowerCase().trim() || "";
@@ -2126,8 +2132,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const rounds: RoundInfo[] = [];
       let defaultMatchweek = 1;
 
-      // Parse XML week containers
-      if (xmlData) {
+      // PRODUCT DECISION: Only compute rounds for Premier League
+      // Other leagues just need fixtures returned without round grouping
+      // Parse XML week containers (only for round-enabled leagues)
+      if (xmlData && shouldComputeRounds) {
         // Navigate to weeks container - Goalserve XML may use different root elements
         // For soccerfixtures/leagueid: results.tournament.week[]
         // For other endpoints: scores.tournament.week[]
@@ -2280,6 +2288,67 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         // Sort rounds by week number ascending
         rounds.sort((a, b) => a.number - b.number);
+      } else if (xmlData && !shouldComputeRounds) {
+        // NON-ROUND MODE: Return all fixtures in a single bucket "all"
+        // This is used by Championship, League One, etc. where round navigation is disabled
+        const tournament = xmlData?.results?.tournament 
+          ?? xmlData?.scores?.tournament 
+          ?? xmlData?.tournament;
+        let weeks: any[] = [];
+        
+        if (tournament?.week) {
+          weeks = Array.isArray(tournament.week) ? tournament.week : [tournament.week];
+        }
+
+        const allMatches: MatchInfo[] = [];
+        for (const week of weeks) {
+          const matches = week?.match;
+          if (!matches) continue;
+          const matchList = Array.isArray(matches) ? matches : [matches];
+          
+          for (const m of matchList) {
+            const matchDate = m["@_date"] ?? m.date ?? "";
+            const matchTime = m["@_time"] ?? m.time ?? "";
+            const status = m["@_status"] ?? m.status ?? "scheduled";
+            const matchId = m["@_id"] ?? m.id ?? `all-${Math.random().toString(36).slice(2, 9)}`;
+            
+            const homeTeam = m.localteam ?? m.home ?? {};
+            const awayTeam = m.visitorteam ?? m.away ?? {};
+            const homeScore = homeTeam["@_score"] ?? homeTeam.score;
+            const awayScore = awayTeam["@_score"] ?? awayTeam.score;
+
+            allMatches.push({
+              id: matchId,
+              home: {
+                id: homeTeam["@_id"] ?? homeTeam.id,
+                name: homeTeam["@_name"] ?? homeTeam.name ?? "Home",
+              },
+              away: {
+                id: awayTeam["@_id"] ?? awayTeam.id,
+                name: awayTeam["@_name"] ?? awayTeam.name ?? "Away",
+              },
+              score: homeScore != null && awayScore != null
+                ? { home: parseInt(homeScore, 10) || 0, away: parseInt(awayScore, 10) || 0 }
+                : null,
+              kickoffDate: matchDate,
+              kickoffTime: matchTime,
+              status,
+            });
+          }
+        }
+
+        // Put all matches in a single "all" bucket
+        matchesByRound["all"] = allMatches;
+        rounds.push({
+          key: "all",
+          number: 1,
+          label: "All",
+          startDate: null,
+          endDate: null,
+          matchesCount: allMatches.length,
+          hasAnyMatches: allMatches.length > 0,
+          hasScheduledMatches: allMatches.some(m => isScheduledStatus(m.status)),
+        });
       }
 
       // --- Determine default matchweek based on dates for THIS league only ---
@@ -2345,6 +2414,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       const nowUtc = new Date();
+      
+      // For non-round leagues, skip all round computation
+      // Just return fixtures in the "all" bucket without matchweek metadata
+      if (!shouldComputeRounds) {
+        res.json({
+          snapshot: {
+            leagueId: snapshot.leagueId,
+            season: snapshot.season,
+            stageId: snapshot.stageId,
+            asOf: snapshot.asOf,
+            nowUtc: nowUtc.toISOString(),
+            defaultMatchweekReason: null,
+          },
+          table,
+          rounds,
+          matchesByRound,
+          latestRoundKey: null,
+          latestScheduledRoundKey: null,
+          defaultMatchweek: null,
+          latestActiveRoundKey: null,
+        });
+        return;
+      }
+      
       let defaultMatchweekReason: "live" | "in_window" | "next_upcoming" | "fallback_last" = "fallback_last";
 
       const sortedRoundKeys = Object.keys(matchesByRound)

@@ -61,6 +61,21 @@ function normalizeSeason(input: string | null | undefined): string | undefined {
   return input;
 }
 
+/**
+ * PRODUCT DECISION: Only specific competitions show round-based navigation.
+ * - Premier League → "Matchweek" (round navigation enabled)
+ * - Champions League, Europa League, Conference League → "Matchday" (handled in EuropeProgress)
+ * - All other leagues → null (chronological fixtures list, no round navigation)
+ * 
+ * This simplifies the UX for lower leagues where round structure is less meaningful.
+ */
+function getCompetitionRoundMode(leagueSlug: string): "matchweek" | null {
+  // Only Premier League uses round-based navigation in the leagues tab
+  // European competitions are handled separately in the "europe" tab with their own component
+  if (leagueSlug === "premier-league") return "matchweek";
+  return null;
+}
+
 interface StandingsApiRow {
   position: number;
   team: {
@@ -514,28 +529,124 @@ export default function TablesPage() {
       );
     }
 
-    // Get matches and sort by kickoff datetime ascending
-    const rawMatches = leagueMatchesByRound[selectedRound] ?? [];
-    const displayMatches = [...rawMatches].sort((a, b) => {
-      const getKickoffTime = (m: LeagueMatchInfo): number => {
-        const dateStr = m.kickoffDate ?? "9999-12-31";
-        const timeStr = m.kickoffTime ?? "00:00";
-        try {
-          return new Date(`${dateStr}T${timeStr}`).getTime();
-        } catch {
-          return Number.MAX_SAFE_INTEGER;
+    // PRODUCT DECISION: Only Premier League uses round-based navigation
+    // All other leagues show chronological fixtures without round controls
+    const roundMode = getCompetitionRoundMode(leagueSlug);
+
+    // Helper to get kickoff timestamp for sorting
+    const getKickoffTime = (m: LeagueMatchInfo): number => {
+      const dateStr = m.kickoffDate ?? "9999-12-31";
+      const timeStr = m.kickoffTime ?? "00:00";
+      try {
+        return new Date(`${dateStr}T${timeStr}`).getTime();
+      } catch {
+        return Number.MAX_SAFE_INTEGER;
+      }
+    };
+
+    // Helper to render match rows with date labels
+    const renderMatchRows = (matches: LeagueMatchInfo[]) => {
+      if (matches.length === 0) {
+        return (
+          <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
+            No fixtures available
+          </div>
+        );
+      }
+      const seenDates = new Set<string>();
+      return matches.map((match) => {
+        const isPostponed = isLeagueMatchPostponed(match.status);
+        const isScheduled = !isLeagueMatchCompleted(match.status) && 
+                            !isLeagueMatchLive(match.status) && 
+                            !isPostponed;
+        const dateKey = match.kickoffDate || "";
+        let showDateLabel = false;
+        if (isScheduled && dateKey && !seenDates.has(dateKey)) {
+          seenDates.add(dateKey);
+          showDateLabel = true;
         }
-      };
-      return getKickoffTime(a) - getKickoffTime(b);
-    });
+        return <LeagueMatchRow key={match.id} match={match} showDateLabel={showDateLabel} />;
+      });
+    };
+
+    // NON-ROUND MODE: Simple chronological fixtures list (Championship, League One, etc.)
+    if (roundMode === null) {
+      // Backend returns all fixtures in a single "all" bucket for non-round leagues
+      // Prefer the "all" bucket if it exists, otherwise collect from all keys
+      const allMatches: LeagueMatchInfo[] = leagueMatchesByRound["all"] 
+        ? [...leagueMatchesByRound["all"]]
+        : Object.keys(leagueMatchesByRound).flatMap(key => leagueMatchesByRound[key] ?? []);
+
+      // Separate upcoming and completed matches
+      const now = Date.now();
+      const upcomingMatches = allMatches.filter(m => {
+        const status = (m.status || "").toLowerCase();
+        const isComplete = ["ft", "aet", "pen", "awarded", "cancelled", "canceled"].some(s => status.includes(s));
+        return !isComplete;
+      });
+      const completedMatches = allMatches.filter(m => {
+        const status = (m.status || "").toLowerCase();
+        return ["ft", "aet", "pen", "awarded"].some(s => status.includes(s));
+      });
+
+      // Sort upcoming by kickoff ascending, completed by kickoff descending (most recent first)
+      upcomingMatches.sort((a, b) => getKickoffTime(a) - getKickoffTime(b));
+      completedMatches.sort((a, b) => getKickoffTime(b) - getKickoffTime(a));
+
+      // Limit to reasonable number: 10 upcoming + 5 recent
+      const displayUpcoming = upcomingMatches.slice(0, 10);
+      const displayCompleted = completedMatches.slice(0, 5);
+
+      return (
+        <div className="grid gap-6 lg:grid-cols-[1fr,400px] items-start">
+          <Card className="h-fit">
+            <CardContent className="p-4 sm:p-6">
+              <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            {/* Upcoming fixtures - simple list, no round navigation */}
+            <Card>
+              <CardContent className="p-0">
+                <div className="p-4 border-b flex items-center justify-between gap-2">
+                  <h4 className="font-semibold" data-testid="text-fixtures-title">Upcoming Fixtures</h4>
+                  <span className="text-sm text-muted-foreground">
+                    {displayUpcoming.length} {displayUpcoming.length === 1 ? "match" : "matches"}
+                  </span>
+                </div>
+                <div>{renderMatchRows(displayUpcoming)}</div>
+              </CardContent>
+            </Card>
+
+            {/* Recent results */}
+            {displayCompleted.length > 0 && (
+              <Card>
+                <CardContent className="p-0">
+                  <div className="p-4 border-b flex items-center justify-between gap-2">
+                    <h4 className="font-semibold" data-testid="text-results-title">Recent Results</h4>
+                    <span className="text-sm text-muted-foreground">
+                      {displayCompleted.length} {displayCompleted.length === 1 ? "match" : "matches"}
+                    </span>
+                  </div>
+                  <div>{renderMatchRows(displayCompleted)}</div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ROUND MODE: Premier League with Matchweek navigation
+    const rawMatches = leagueMatchesByRound[selectedRound] ?? [];
+    const displayMatches = [...rawMatches].sort((a, b) => getKickoffTime(a) - getKickoffTime(b));
     const currentRoundInfo = leagueRounds.find((r) => r.key === selectedRound);
     
     // Extract matchweek number from the key (e.g., "MW23" -> 23)
-    // Never use array index, always use the real number from the key
     const matchweekNum = (() => {
       const match = selectedRound.match(/(\d+)/);
       if (match) return parseInt(match[1], 10);
-      // Fallback to label if available
       if (currentRoundInfo?.label) {
         const labelMatch = currentRoundInfo.label.match(/(\d+)/);
         if (labelMatch) return parseInt(labelMatch[1], 10);
@@ -578,34 +689,7 @@ export default function TablesPage() {
                   {displayMatches.length} {displayMatches.length === 1 ? "match" : "matches"}
                 </span>
               </div>
-              <div>
-                {displayMatches.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-6" data-testid="text-no-fixtures">
-                    No fixtures yet
-                  </div>
-                ) : (
-                  (() => {
-                    // Determine which SCHEDULED (not postponed) matches should show date label
-                    // Only show date label for truly scheduled matches (first of each date block)
-                    // Postponed matches should NOT show date labels (they show PSTP pill instead)
-                    const seenDates = new Set<string>();
-                    return displayMatches.map((match) => {
-                      const isPostponed = isLeagueMatchPostponed(match.status);
-                      const isScheduled = !isLeagueMatchCompleted(match.status) && 
-                                          !isLeagueMatchLive(match.status) && 
-                                          !isPostponed;
-                      const dateKey = match.kickoffDate || "";
-                      let showDateLabel = false;
-                      // Only show date labels for scheduled (non-postponed) matches
-                      if (isScheduled && dateKey && !seenDates.has(dateKey)) {
-                        seenDates.add(dateKey);
-                        showDateLabel = true;
-                      }
-                      return <LeagueMatchRow key={match.id} match={match} showDateLabel={showDateLabel} />;
-                    });
-                  })()
-                )}
-              </div>
+              <div>{renderMatchRows(displayMatches)}</div>
             </CardContent>
           </Card>
         </div>

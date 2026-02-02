@@ -9593,3 +9593,88 @@ Make changes surgically, keep styling consistent with existing shadcn Badge usag
 
 ---
 
+We are simplifying the Tables page product logic.
+
+DECISION:
+Only these competitions should show a round-based fixtures widget:
+
+• Premier League → label: “Matchweek”
+• Champions League → label: “Matchday”
+• Europa League → label: “Matchday”
+• Conference League → label: “Matchday”
+
+ALL OTHER LEAGUES (Championship, League One, League Two, National League, etc) should NOT use any Matchweek/Matchday/Round logic.
+
+Instead, they should show:
+• League table as normal
+• Fixtures list in simple chronological order (upcoming + recent)
+• NO round header
+• NO round navigation arrows
+• NO “Matchweek X” or “Round X” labels
+
+---
+
+FRONTEND CHANGES (tables page)
+
+1. Create a helper:
+
+const competitionRoundMode = (leagueSlug: string) => {
+  if (leagueSlug === "premier-league") return "matchweek";
+  if (["champions-league","europa-league","conference-league"].includes(leagueSlug)) return "matchday";
+  return null;
+};
+
+2. Use this to conditionally render the round widget:
+
+const roundMode = competitionRoundMode(activeLeagueSlug);
+
+If roundMode === null:
+  • Hide the entire Fixtures round header block
+  • Hide round navigation chevrons
+  • Hide round label
+  • Instead, render fixtures as a flat list sorted by kickoff datetime:
+      - Upcoming first (ascending date)
+      - Then recent completed matches (descending date)
+  • Keep existing fixture row design (status pill, scoreline, kickoff time)
+
+If roundMode !== null:
+  • Keep existing Matchweek / Matchday widget exactly as-is
+  • Only change the label text dynamically:
+      roundMode === "matchweek" → "Matchweek"
+      roundMode === "matchday" → "Matchday"
+
+3. Remove any logic that tries to compute default rounds for non-PL / non-European competitions.
+
+4. Make sure this does NOT affect:
+  • Premier League matchweek navigation
+  • European matchday navigation
+
+---
+
+BACKEND CHANGES
+
+1. Do NOT compute or return "latestRoundKey" or "latestActiveRoundKey" for leagues other than:
+   • Premier League
+   • Champions League
+   • Europa League
+   • Conference League
+
+2. For all other leagues, just return fixtures normally without grouping logic.
+
+---
+
+GOAL RESULT
+
+• Premier League still shows “Matchweek 24”
+• Champions League shows “Matchday 6”
+• Championship, League One, League Two etc:
+   → Show fixtures list only
+   → No Matchweek header
+   → No broken date ranges
+
+Keep all existing styles.
+Make minimal changes.
+Add comments explaining this is an intentional product decision.
+
+---
+
