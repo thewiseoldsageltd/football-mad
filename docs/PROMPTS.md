@@ -10578,3 +10578,24 @@ Do not run UI tests or “Testing your app”.
 
 ---
 
+CRITICAL:
+- Do NOT run any end-to-end/regression testing, no videos/screenshots.
+- Minimal verification only (one curl).
+
+Issue: News page isn't updating. /api/news responses include an ETag but no cache-control headers.
+
+Fix:
+In the GET /api/news route handler (server/routes.ts), set explicit no-cache headers before sending JSON:
+res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+res.setHeader("Pragma", "no-cache");
+res.setHeader("Expires", "0");
+res.setHeader("Surrogate-Control", "no-store");
+
+Do not change other routes.
+
+Verification (only):
+curl -sS -D - "http://127.0.0.1:5000/api/news?comp=all&limit=5" -o /dev/null | sed -n '1,15p'
+Confirm Cache-Control header is present.
+
+---
+

@@ -369,4 +369,33 @@ Status:
 
 ---
 
+Decision: Entities-only pills with “primary + overflow”
+Card view pill rules (max 3)
+
+Add up to 1 Competition pill
+
+Add up to 2 Team pills (if space remains)
+
+Add Managers/Players only if there’s still space
+
+If an article references multiple competitions (daily briefing), we:
+
+show the primary competition on the card
+
+keep the rest for the article page pills (and for “more like this” / filtering)
+
+Article view pill rules
+
+show all linked entities
+
+grouped visually by type:
+
+Competitions
+
+Teams
+
+Managers
+
+Players
+
 

@@ -128,6 +128,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       result.appliedFilters.myTeams = myTeams;
       
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
       res.json(result);
     } catch (error) {
       console.error("Error fetching news:", error);
