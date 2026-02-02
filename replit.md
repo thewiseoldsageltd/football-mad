@@ -135,9 +135,21 @@ Preferred communication style: Simple, everyday language.
   - **Matchweek numbering**: Always 1-indexed (MW1, MW2, etc., never MW0)
     - Backend detects 0-indexed feeds and shifts all rounds by +1
     - Round parsing handles various formats: "2", "Matchweek 2", "Round 0", "MW5"
-  - **Default selection priority**: URL param > latestScheduledRoundKey > latestActiveRoundKey > last round
+  - **Default selection algorithm** (cluster-around-now scoring):
+    - Scoring window: now - 24h to now + 72h
+    - Each round scored: (liveCount × 1000) + (inWindowCount × 10)
+    - Postponed matches excluded from scoring
+    - Tie-breaker: nearest kickoff to now wins
+    - Fallbacks: next upcoming match across all rounds, then last round
+    - This prevents single postponed fixtures weeks/months away from forcing early matchweeks
   - **URL sync**: Round changes update `?round=MWX` query parameter
+  - **Date range display**:
+    - Same day: show single date (e.g., "1 Feb")
+    - Span ≤ 3 days: show range (e.g., "31 Jan – 2 Feb")
+    - Span > 3 days: show "Various dates" (handles EFL rearranged fixtures)
   - **Scheduled status detection**: includes "scheduled", "ns", "notstarted", "fixture", "tbd", "time tbd", time formats
+  - **Postponed status detection**: pstp, postponed, postp, susp, suspended, cancelled, canceled, abandoned, abn
+  - **Status pills**: LIVE (with minute), HT, FT, PSTP only - scheduled matches show kickoff time instead
 - **Transfers**: Rumor tracking with reliability tiers (A-D) and source attribution
 - **Injuries**: Player injury status (OUT/DOUBTFUL/FIT) with expected return dates
 - **Follows**: User-team relationships for personalized feeds
