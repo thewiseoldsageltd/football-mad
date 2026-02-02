@@ -117,8 +117,8 @@ export type Article = typeof articles.$inferSelect;
 // ============ ARTICLE-TEAMS JUNCTION ============
 export const articleTeams = pgTable("article_teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  articleId: varchar("article_id").references(() => articles.id).notNull(),
-  teamId: varchar("team_id").references(() => teams.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  teamId: varchar("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
 });
 
 export const articleTeamsRelations = relations(articleTeams, ({ one }) => ({
@@ -147,8 +147,8 @@ export type Competition = typeof competitions.$inferSelect;
 
 // ============ ARTICLE-COMPETITIONS JUNCTION ============
 export const articleCompetitions = pgTable("article_competitions", {
-  articleId: varchar("article_id").references(() => articles.id).notNull(),
-  competitionId: varchar("competition_id").references(() => competitions.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  competitionId: varchar("competition_id").references(() => competitions.id, { onDelete: "cascade" }).notNull(),
 }, (table) => [
   index("article_competitions_article_idx").on(table.articleId),
   index("article_competitions_competition_idx").on(table.competitionId),
@@ -161,8 +161,8 @@ export const articleCompetitionsRelations = relations(articleCompetitions, ({ on
 
 // ============ ARTICLE-PLAYERS JUNCTION ============
 export const articlePlayers = pgTable("article_players", {
-  articleId: varchar("article_id").references(() => articles.id).notNull(),
-  playerId: varchar("player_id").references(() => players.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
+  playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
 }, (table) => [
   index("article_players_article_idx").on(table.articleId),
   index("article_players_player_idx").on(table.playerId),
@@ -219,7 +219,7 @@ export type ProviderTagMap = typeof providerTagMap.$inferSelect;
 // ============ ARTICLE ENTITY OVERRIDES ============
 export const articleEntityOverrides = pgTable("article_entity_overrides", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   entityType: text("entity_type").notNull(),
   entityId: varchar("entity_id").notNull(),
   action: text("action").notNull(),
@@ -386,9 +386,9 @@ export const comments = pgTable("comments", {
   userId: varchar("user_id").notNull(),
   userName: text("user_name"),
   userImage: text("user_image"),
-  postId: varchar("post_id").references(() => posts.id),
-  articleId: varchar("article_id").references(() => articles.id),
-  matchId: varchar("match_id").references(() => matches.id),
+  postId: varchar("post_id").references(() => posts.id, { onDelete: "cascade" }),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }),
+  matchId: varchar("match_id").references(() => matches.id, { onDelete: "cascade" }),
   parentId: varchar("parent_id"),
   content: text("content").notNull(),
   likesCount: integer("likes_count").default(0),
@@ -488,7 +488,7 @@ export type Subscriber = typeof subscribers.$inferSelect;
 // ============ SHARE CLICKS (ANALYTICS) ============
 export const shareClicks = pgTable("share_clicks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   platform: text("platform").notNull(), // whatsapp, twitter, facebook, copy, native
   userId: varchar("user_id"),
   userAgent: text("user_agent"),

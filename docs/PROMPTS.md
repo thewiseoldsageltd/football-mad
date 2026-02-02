@@ -10558,3 +10558,23 @@ Expect Content-Length to drop dramatically (< ~200KB).
 
 ---
 
+CRITICAL: Do NOT run any end-to-end/regression testing, no videos/screenshots.
+Verification budget: ONE lightweight DB check only.
+
+We deleted demo articles and hit FK blocks from article_teams and share_clicks.
+Please update the DB constraints so deleting an article cascades to dependent rows.
+
+1) Update Drizzle schema so these FKs include ON DELETE CASCADE:
+- article_teams.article_id -> articles.id
+- share_clicks.article_id -> articles.id
+
+2) Check for any other FK constraints referencing articles.id and set them to ON DELETE CASCADE too (views, comments, bookmarks, reactions etc if present).
+
+3) Generate and run a migration that updates the constraints safely.
+
+Verification (only):
+Run a DB query listing FKs referencing articles to confirm CASCADE is set.
+Do not run UI tests or “Testing your app”.
+
+---
+
