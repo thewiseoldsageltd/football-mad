@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -4315,6 +4315,820 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching global availability:", error);
       res.status(500).json({ error: "Failed to fetch availability" });
+    }
+  });
+
+  // ========== NEWS & ENTITY SYNC ENDPOINTS ==========
+  
+  // Helper: Generate slug from title
+  const generateSlug = (title: string, suffix?: string): string => {
+    let slug = title
+      .toLowerCase()
+      .replace(/['']/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80);
+    if (suffix) {
+      slug = `${slug}-${suffix}`;
+    }
+    return slug;
+  };
+
+  // Helper: Extract entity mentions from text using alias dictionary
+  const extractEntityMentions = async (
+    text: string,
+    tags: string[] = []
+  ): Promise<{
+    teams: { id: string; confidence: number }[];
+    players: { id: string; confidence: number }[];
+    managers: { id: string; confidence: number }[];
+    competitions: { id: string; confidence: number }[];
+  }> => {
+    const result = {
+      teams: [] as { id: string; confidence: number }[],
+      players: [] as { id: string; confidence: number }[],
+      managers: [] as { id: string; confidence: number }[],
+      competitions: [] as { id: string; confidence: number }[],
+    };
+    
+    const combinedText = `${text} ${tags.join(" ")}`.toLowerCase();
+    
+    const aliases = await db.select().from(entityAliases);
+    
+    for (const alias of aliases) {
+      const pattern = new RegExp(`\\b${alias.alias.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (pattern.test(combinedText)) {
+        const confidence = alias.isPrimary ? 100 : 80;
+        
+        switch (alias.entityType) {
+          case 'team':
+            if (!result.teams.find(t => t.id === alias.entityId)) {
+              result.teams.push({ id: alias.entityId, confidence });
+            }
+            break;
+          case 'player':
+            if (!result.players.find(p => p.id === alias.entityId)) {
+              result.players.push({ id: alias.entityId, confidence });
+            }
+            break;
+          case 'manager':
+            if (!result.managers.find(m => m.id === alias.entityId)) {
+              result.managers.push({ id: alias.entityId, confidence });
+            }
+            break;
+          case 'competition':
+            if (!result.competitions.find(c => c.id === alias.entityId)) {
+              result.competitions.push({ id: alias.entityId, confidence });
+            }
+            break;
+        }
+      }
+    }
+    
+    return result;
+  };
+
+  // POST /api/admin/sync/entities - Sync entities from Goalserve
+  app.post("/api/admin/sync/entities", async (req, res) => {
+    try {
+      const ingestSecret = process.env.INGEST_SECRET;
+      const providedSecret = req.headers["x-ingest-secret"];
+      
+      if (!ingestSecret || providedSecret !== ingestSecret) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { goalserveFetch } = await import("./integrations/goalserve/client");
+      
+      const stats = {
+        teams: { synced: 0, aliasesCreated: 0 },
+        players: { synced: 0, aliasesCreated: 0 },
+        managers: { synced: 0, aliasesCreated: 0 },
+        competitions: { synced: 0, aliasesCreated: 0 },
+      };
+      
+      // Sync teams from existing teams table and create aliases
+      const existingTeams = await db.select().from(teams);
+      for (const team of existingTeams) {
+        // Create primary alias
+        const existingAlias = await db
+          .select()
+          .from(entityAliases)
+          .where(and(
+            eq(entityAliases.entityType, 'team'),
+            eq(entityAliases.entityId, team.id),
+            eq(entityAliases.isPrimary, true)
+          ))
+          .limit(1);
+        
+        if (existingAlias.length === 0) {
+          await db.insert(entityAliases).values({
+            entityType: 'team',
+            entityId: team.id,
+            alias: team.name,
+            isPrimary: true,
+          });
+          stats.teams.aliasesCreated++;
+        }
+        
+        // Add short name alias if exists
+        if (team.shortName && team.shortName !== team.name) {
+          const shortAlias = await db
+            .select()
+            .from(entityAliases)
+            .where(and(
+              eq(entityAliases.entityType, 'team'),
+              eq(entityAliases.entityId, team.id),
+              eq(entityAliases.alias, team.shortName)
+            ))
+            .limit(1);
+          
+          if (shortAlias.length === 0) {
+            await db.insert(entityAliases).values({
+              entityType: 'team',
+              entityId: team.id,
+              alias: team.shortName,
+              isPrimary: false,
+            });
+            stats.teams.aliasesCreated++;
+          }
+        }
+        
+        stats.teams.synced++;
+      }
+      
+      // Sync players from existing players table and create aliases
+      const existingPlayers = await db.select().from(players);
+      for (const player of existingPlayers) {
+        const existingAlias = await db
+          .select()
+          .from(entityAliases)
+          .where(and(
+            eq(entityAliases.entityType, 'player'),
+            eq(entityAliases.entityId, player.id),
+            eq(entityAliases.isPrimary, true)
+          ))
+          .limit(1);
+        
+        if (existingAlias.length === 0) {
+          await db.insert(entityAliases).values({
+            entityType: 'player',
+            entityId: player.id,
+            alias: player.name,
+            isPrimary: true,
+          });
+          stats.players.aliasesCreated++;
+        }
+        
+        // Add last name alias
+        const nameParts = player.name.split(' ');
+        if (nameParts.length > 1) {
+          const lastName = nameParts[nameParts.length - 1];
+          const lastNameAlias = await db
+            .select()
+            .from(entityAliases)
+            .where(and(
+              eq(entityAliases.entityType, 'player'),
+              eq(entityAliases.entityId, player.id),
+              eq(entityAliases.alias, lastName)
+            ))
+            .limit(1);
+          
+          if (lastNameAlias.length === 0) {
+            await db.insert(entityAliases).values({
+              entityType: 'player',
+              entityId: player.id,
+              alias: lastName,
+              isPrimary: false,
+            });
+            stats.players.aliasesCreated++;
+          }
+        }
+        
+        stats.players.synced++;
+      }
+      
+      // Sync managers and create aliases
+      const existingManagers = await db.select().from(managers);
+      for (const manager of existingManagers) {
+        const existingAlias = await db
+          .select()
+          .from(entityAliases)
+          .where(and(
+            eq(entityAliases.entityType, 'manager'),
+            eq(entityAliases.entityId, manager.id),
+            eq(entityAliases.isPrimary, true)
+          ))
+          .limit(1);
+        
+        if (existingAlias.length === 0) {
+          await db.insert(entityAliases).values({
+            entityType: 'manager',
+            entityId: manager.id,
+            alias: manager.name,
+            isPrimary: true,
+          });
+          stats.managers.aliasesCreated++;
+        }
+        
+        stats.managers.synced++;
+      }
+      
+      // Sync competitions and create aliases
+      const existingCompetitions = await db.select().from(competitions);
+      for (const competition of existingCompetitions) {
+        const existingAlias = await db
+          .select()
+          .from(entityAliases)
+          .where(and(
+            eq(entityAliases.entityType, 'competition'),
+            eq(entityAliases.entityId, competition.id),
+            eq(entityAliases.isPrimary, true)
+          ))
+          .limit(1);
+        
+        if (existingAlias.length === 0) {
+          await db.insert(entityAliases).values({
+            entityType: 'competition',
+            entityId: competition.id,
+            alias: competition.name,
+            isPrimary: true,
+          });
+          stats.competitions.aliasesCreated++;
+        }
+        
+        stats.competitions.synced++;
+      }
+      
+      res.json({
+        success: true,
+        message: "Entity sync completed",
+        stats,
+      });
+    } catch (error: any) {
+      console.error("Entity sync error:", error);
+      res.status(500).json({ error: error.message || "Entity sync failed" });
+    }
+  });
+
+  // POST /api/ingest/pa-media - PA Media article ingestion
+  app.post("/api/ingest/pa-media", async (req, res) => {
+    try {
+      const ingestSecret = process.env.INGEST_SECRET;
+      const providedSecret = req.headers["x-ingest-secret"];
+      
+      if (!ingestSecret || providedSecret !== ingestSecret) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const {
+        sourceId,
+        title,
+        excerpt,
+        bodyHtml,
+        heroImageUrl,
+        heroImageCredit,
+        publishedAt,
+        tags = [],
+      } = req.body;
+      
+      if (!sourceId || !title || !bodyHtml) {
+        return res.status(400).json({ error: "sourceId, title, and bodyHtml are required" });
+      }
+      
+      // Check if article already exists
+      const existing = await db
+        .select()
+        .from(articles)
+        .where(and(eq(articles.source, "pa_media"), eq(articles.sourceId, sourceId)))
+        .limit(1);
+      
+      let articleId: string;
+      const uniqueSuffix = Date.now().toString(36);
+      const slug = generateSlug(title, uniqueSuffix);
+      
+      if (existing.length > 0) {
+        // Update existing article
+        articleId = existing[0].id;
+        await db
+          .update(articles)
+          .set({
+            title,
+            excerpt,
+            content: bodyHtml,
+            coverImage: heroImageUrl,
+            heroImageCredit,
+            tags,
+            updatedAt: new Date(),
+            sourcePublishedAt: publishedAt ? new Date(publishedAt) : undefined,
+          })
+          .where(eq(articles.id, articleId));
+      } else {
+        // Create new article
+        const result = await db.insert(articles).values({
+          title,
+          slug,
+          excerpt,
+          content: bodyHtml,
+          coverImage: heroImageUrl,
+          heroImageCredit,
+          source: "pa_media",
+          sourceId,
+          tags,
+          publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
+          sourcePublishedAt: publishedAt ? new Date(publishedAt) : undefined,
+        }).returning({ id: articles.id });
+        
+        articleId = result[0].id;
+      }
+      
+      // Extract entity mentions from title, excerpt, body, and tags
+      const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
+      const mentions = await extractEntityMentions(combinedText, tags);
+      
+      // Clear existing entity links
+      await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+      await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+      await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+      await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+      
+      // Insert new entity links
+      for (const team of mentions.teams) {
+        await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+      }
+      for (const player of mentions.players) {
+        await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+      }
+      for (const manager of mentions.managers) {
+        await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+      }
+      for (const competition of mentions.competitions) {
+        await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+      }
+      
+      res.json({
+        success: true,
+        articleId,
+        slug,
+        entitiesLinked: {
+          teams: mentions.teams.length,
+          players: mentions.players.length,
+          managers: mentions.managers.length,
+          competitions: mentions.competitions.length,
+        },
+      });
+    } catch (error: any) {
+      console.error("PA Media ingest error:", error);
+      res.status(500).json({ error: error.message || "Ingestion failed" });
+    }
+  });
+
+  // POST /api/ingest/ghost-webhook - Ghost CMS webhook
+  app.post("/api/ingest/ghost-webhook", async (req, res) => {
+    try {
+      const ingestSecret = process.env.INGEST_SECRET;
+      const providedSecret = req.headers["x-ingest-secret"];
+      
+      if (!ingestSecret || providedSecret !== ingestSecret) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
+      const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
+      
+      if (!ghostApiUrl || !ghostApiKey) {
+        return res.status(500).json({ error: "Ghost API not configured" });
+      }
+      
+      // Ghost sends post.published, post.updated webhooks
+      const { post } = req.body;
+      if (!post?.current?.id) {
+        return res.status(400).json({ error: "Invalid webhook payload - missing post.current.id" });
+      }
+      
+      const ghostPostId = post.current.id;
+      
+      // Fetch full post from Ghost Content API
+      const ghostUrl = `${ghostApiUrl}/ghost/api/content/posts/${ghostPostId}/?key=${ghostApiKey}&include=tags`;
+      const response = await fetch(ghostUrl);
+      
+      if (!response.ok) {
+        return res.status(502).json({ error: `Ghost API error: ${response.status}` });
+      }
+      
+      const data = await response.json() as { posts?: any[] };
+      const ghostPost = data.posts?.[0];
+      
+      if (!ghostPost) {
+        return res.status(404).json({ error: "Post not found in Ghost" });
+      }
+      
+      // Map Ghost post to our article
+      const title = ghostPost.title;
+      const excerpt = ghostPost.excerpt || ghostPost.custom_excerpt;
+      const bodyHtml = ghostPost.html;
+      const heroImageUrl = ghostPost.feature_image;
+      const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
+      const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
+      
+      // Check if article exists
+      const existing = await db
+        .select()
+        .from(articles)
+        .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPostId)))
+        .limit(1);
+      
+      let articleId: string;
+      const uniqueSuffix = Date.now().toString(36);
+      const slug = ghostPost.slug || generateSlug(title, uniqueSuffix);
+      
+      if (existing.length > 0) {
+        articleId = existing[0].id;
+        await db
+          .update(articles)
+          .set({
+            title,
+            excerpt,
+            content: bodyHtml,
+            coverImage: heroImageUrl,
+            tags: ghostTags,
+            updatedAt: new Date(),
+            sourcePublishedAt: publishedAt,
+            sourceUpdatedAt: ghostPost.updated_at ? new Date(ghostPost.updated_at) : undefined,
+          })
+          .where(eq(articles.id, articleId));
+      } else {
+        const result = await db.insert(articles).values({
+          title,
+          slug,
+          excerpt,
+          content: bodyHtml,
+          coverImage: heroImageUrl,
+          source: "ghost",
+          sourceId: ghostPostId,
+          tags: ghostTags,
+          publishedAt,
+          sourcePublishedAt: publishedAt,
+        }).returning({ id: articles.id });
+        
+        articleId = result[0].id;
+      }
+      
+      // Extract entity mentions
+      const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
+      const mentions = await extractEntityMentions(combinedText, ghostTags);
+      
+      // Clear and re-link entities
+      await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+      await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+      await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+      await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+      
+      for (const team of mentions.teams) {
+        await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+      }
+      for (const player of mentions.players) {
+        await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+      }
+      for (const manager of mentions.managers) {
+        await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+      }
+      for (const competition of mentions.competitions) {
+        await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+      }
+      
+      res.json({
+        success: true,
+        articleId,
+        slug,
+        entitiesLinked: {
+          teams: mentions.teams.length,
+          players: mentions.players.length,
+          managers: mentions.managers.length,
+          competitions: mentions.competitions.length,
+        },
+      });
+    } catch (error: any) {
+      console.error("Ghost webhook error:", error);
+      res.status(500).json({ error: error.message || "Webhook processing failed" });
+    }
+  });
+
+  // POST /api/admin/sync/ghost - Full Ghost sync
+  app.post("/api/admin/sync/ghost", async (req, res) => {
+    try {
+      const ingestSecret = process.env.INGEST_SECRET;
+      const providedSecret = req.headers["x-ingest-secret"];
+      
+      if (!ingestSecret || providedSecret !== ingestSecret) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
+      const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
+      
+      if (!ghostApiUrl || !ghostApiKey) {
+        return res.status(500).json({ error: "Ghost API not configured" });
+      }
+      
+      let page = 1;
+      let totalSynced = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        const url = `${ghostApiUrl}/ghost/api/content/posts/?key=${ghostApiKey}&include=tags&limit=15&page=${page}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          return res.status(502).json({ error: `Ghost API error: ${response.status}` });
+        }
+        
+        const data = await response.json() as { posts?: any[]; meta?: { pagination?: { pages?: number } } };
+        const posts = data.posts || [];
+        
+        for (const ghostPost of posts) {
+          const title = ghostPost.title;
+          const excerpt = ghostPost.excerpt || ghostPost.custom_excerpt;
+          const bodyHtml = ghostPost.html || "";
+          const heroImageUrl = ghostPost.feature_image;
+          const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
+          const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
+          
+          const existing = await db
+            .select()
+            .from(articles)
+            .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPost.id)))
+            .limit(1);
+          
+          let articleId: string;
+          const slug = ghostPost.slug || generateSlug(title, Date.now().toString(36));
+          
+          if (existing.length > 0) {
+            articleId = existing[0].id;
+            await db
+              .update(articles)
+              .set({
+                title,
+                excerpt,
+                content: bodyHtml,
+                coverImage: heroImageUrl,
+                tags: ghostTags,
+                updatedAt: new Date(),
+                sourcePublishedAt: publishedAt,
+              })
+              .where(eq(articles.id, articleId));
+          } else {
+            const result = await db.insert(articles).values({
+              title,
+              slug,
+              excerpt,
+              content: bodyHtml,
+              coverImage: heroImageUrl,
+              source: "ghost",
+              sourceId: ghostPost.id,
+              tags: ghostTags,
+              publishedAt,
+              sourcePublishedAt: publishedAt,
+            }).returning({ id: articles.id });
+            
+            articleId = result[0].id;
+          }
+          
+          // Extract and link entities
+          const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
+          const mentions = await extractEntityMentions(combinedText, ghostTags);
+          
+          await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+          await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+          await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+          await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+          
+          for (const team of mentions.teams) {
+            await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+          }
+          for (const player of mentions.players) {
+            await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+          }
+          for (const manager of mentions.managers) {
+            await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+          }
+          for (const competition of mentions.competitions) {
+            await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+          }
+          
+          totalSynced++;
+        }
+        
+        const totalPages = data.meta?.pagination?.pages || 1;
+        hasMore = page < totalPages;
+        page++;
+      }
+      
+      res.json({
+        success: true,
+        message: `Synced ${totalSynced} posts from Ghost`,
+        totalSynced,
+      });
+    } catch (error: any) {
+      console.error("Ghost sync error:", error);
+      res.status(500).json({ error: error.message || "Ghost sync failed" });
+    }
+  });
+
+  // ========== PUBLIC NEWS API ==========
+  
+  // GET /api/news - List news articles
+  app.get("/api/news", async (req, res) => {
+    try {
+      const competitionSlug = req.query.competition as string | undefined;
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+      const cursor = req.query.cursor as string | undefined;
+      
+      let query = db
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          excerpt: articles.excerpt,
+          coverImage: articles.coverImage,
+          heroImageCredit: articles.heroImageCredit,
+          authorName: articles.authorName,
+          publishedAt: articles.publishedAt,
+          competition: articles.competition,
+          contentType: articles.contentType,
+          isFeatured: articles.isFeatured,
+          isTrending: articles.isTrending,
+          isBreaking: articles.isBreaking,
+          viewCount: articles.viewCount,
+          commentsCount: articles.commentsCount,
+        })
+        .from(articles)
+        .orderBy(desc(articles.publishedAt))
+        .limit(limit + 1);
+      
+      const conditions: any[] = [];
+      
+      // Filter by competition if provided
+      if (competitionSlug && competitionSlug !== "all") {
+        const competitionMap: Record<string, string> = {
+          "premier-league": "Premier League",
+          "championship": "Championship",
+          "league-one": "League One",
+          "league-two": "League Two",
+        };
+        const competitionValue = competitionMap[competitionSlug];
+        if (competitionValue) {
+          conditions.push(eq(articles.competition, competitionValue));
+        }
+      }
+      
+      // Cursor-based pagination
+      if (cursor) {
+        const cursorDate = new Date(cursor);
+        if (!isNaN(cursorDate.getTime())) {
+          conditions.push(lt(articles.publishedAt, cursorDate));
+        }
+      }
+      
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+      
+      const rows = await query;
+      
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore && items.length > 0 
+        ? items[items.length - 1].publishedAt?.toISOString() 
+        : null;
+      
+      res.json({
+        articles: items,
+        nextCursor,
+        hasMore,
+      });
+    } catch (error) {
+      console.error("Error fetching news:", error);
+      res.status(500).json({ error: "Failed to fetch news" });
+    }
+  });
+
+  // GET /api/news/:slug - Get single article with entities and more-like-this
+  app.get("/api/news/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      
+      // Fetch article
+      const articleRows = await db
+        .select()
+        .from(articles)
+        .where(eq(articles.slug, slug))
+        .limit(1);
+      
+      if (articleRows.length === 0) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+      
+      const article = articleRows[0];
+      
+      // Increment view count
+      await db
+        .update(articles)
+        .set({ viewCount: (article.viewCount || 0) + 1 })
+        .where(eq(articles.id, article.id));
+      
+      // Fetch linked entities
+      const linkedTeams = await db
+        .select({ id: teams.id, name: teams.name, slug: teams.slug, logoUrl: teams.logoUrl })
+        .from(articleTeams)
+        .innerJoin(teams, eq(articleTeams.teamId, teams.id))
+        .where(eq(articleTeams.articleId, article.id));
+      
+      const linkedPlayers = await db
+        .select({ id: players.id, name: players.name, slug: players.slug, imageUrl: players.imageUrl, position: players.position })
+        .from(articlePlayers)
+        .innerJoin(players, eq(articlePlayers.playerId, players.id))
+        .where(eq(articlePlayers.articleId, article.id));
+      
+      const linkedManagers = await db
+        .select({ id: managers.id, name: managers.name, slug: managers.slug })
+        .from(articleManagers)
+        .innerJoin(managers, eq(articleManagers.managerId, managers.id))
+        .where(eq(articleManagers.articleId, article.id));
+      
+      const linkedCompetitions = await db
+        .select({ id: competitions.id, name: competitions.name, slug: competitions.slug })
+        .from(articleCompetitions)
+        .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
+        .where(eq(articleCompetitions.articleId, article.id));
+      
+      // Find more-like-this articles (share entities or same competition)
+      let moreLikeThis: any[] = [];
+      
+      // First try: articles sharing team entities
+      if (linkedTeams.length > 0) {
+        const teamIds = linkedTeams.map(t => t.id);
+        const relatedByTeam = await db
+          .selectDistinct({
+            id: articles.id,
+            title: articles.title,
+            slug: articles.slug,
+            excerpt: articles.excerpt,
+            coverImage: articles.coverImage,
+            publishedAt: articles.publishedAt,
+          })
+          .from(articles)
+          .innerJoin(articleTeams, eq(articleTeams.articleId, articles.id))
+          .where(and(
+            inArray(articleTeams.teamId, teamIds),
+            drizzleSql`${articles.id} != ${article.id}`
+          ))
+          .orderBy(desc(articles.publishedAt))
+          .limit(4);
+        
+        moreLikeThis = relatedByTeam;
+      }
+      
+      // Fallback: same competition
+      if (moreLikeThis.length < 4 && article.competition) {
+        const existingIds = moreLikeThis.map(a => a.id);
+        const relatedByCompetition = await db
+          .select({
+            id: articles.id,
+            title: articles.title,
+            slug: articles.slug,
+            excerpt: articles.excerpt,
+            coverImage: articles.coverImage,
+            publishedAt: articles.publishedAt,
+          })
+          .from(articles)
+          .where(and(
+            eq(articles.competition, article.competition),
+            drizzleSql`${articles.id} != ${article.id}`,
+            existingIds.length > 0 ? drizzleSql`${articles.id} NOT IN (${drizzleSql.raw(existingIds.map(id => `'${id}'`).join(","))})` : drizzleSql`1=1`
+          ))
+          .orderBy(desc(articles.publishedAt))
+          .limit(4 - moreLikeThis.length);
+        
+        moreLikeThis = [...moreLikeThis, ...relatedByCompetition];
+      }
+      
+      res.json({
+        article: {
+          ...article,
+          viewCount: (article.viewCount || 0) + 1,
+        },
+        entities: {
+          teams: linkedTeams,
+          players: linkedPlayers,
+          managers: linkedManagers,
+          competitions: linkedCompetitions,
+        },
+        moreLikeThis,
+      });
+    } catch (error) {
+      console.error("Error fetching article:", error);
+      res.status(500).json({ error: "Failed to fetch article" });
     }
   });
 }
