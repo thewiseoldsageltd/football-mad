@@ -10648,3 +10648,29 @@ No UI testing.
 
 ---
 
+CRITICAL:
+- Do NOT run end-to-end/regression tests, no videos/screenshots.
+- Minimal verification only (1 curl).
+- Only change /api/news/updates ordering + cursor logic.
+
+Issue:
+GET /api/news/updates currently returns articles in DESC order (newest->older). For a `since` cursor endpoint this is risky and can cause missed items when paginating.
+
+Fix:
+In /api/news/updates:
+1) Define ts = COALESCE(publishedAt, createdAt).
+2) When since/sinceId are provided, keep the same WHERE:
+   (ts > since) OR (ts = since AND id > sinceId)
+3) Change ordering to:
+   ORDER BY ts ASC, id ASC
+4) Ensure nextCursor (when more results exist) is based on the LAST article returned:
+   nextCursor = { since: last.ts, sinceId: last.id }
+5) Keep returning lightweight fields only + no-cache headers.
+
+Verification (only):
+curl -sS "http://127.0.0.1:5000/api/news/updates?limit=5" \
+| node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const j=JSON.parse(d);console.log(j.articles.map(a=>a.publishedAt||a.createdAt).join(\"\\n\"))})'
+Expect ascending timestamps (oldest->newest).
+
+---
+

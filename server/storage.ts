@@ -359,7 +359,7 @@ export class DatabaseStorage implements IStorage {
     let result;
     if (since) {
       const sinceDate = new Date(since);
-      // (publishedAt > since) OR (publishedAt = since AND id > sinceId)
+      // (ts > since) OR (ts = since AND id > sinceId)
       if (sinceId) {
         result = await db
           .select(listFields)
@@ -373,22 +373,22 @@ export class DatabaseStorage implements IStorage {
               )
             )
           )
-          .orderBy(effectiveDate, articles.id)
+          .orderBy(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) ASC`, sql`${articles.id} ASC`)
           .limit(limit + 1); // Fetch one extra to check for more
       } else {
         result = await db
           .select(listFields)
           .from(articles)
           .where(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) > ${sinceDate}`)
-          .orderBy(effectiveDate, articles.id)
+          .orderBy(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) ASC`, sql`${articles.id} ASC`)
           .limit(limit + 1);
       }
     } else {
-      // No since param: return latest articles (descending order for "latest")
+      // No since param: return oldest articles first (ASC for cursor-based pagination)
       result = await db
         .select(listFields)
         .from(articles)
-        .orderBy(desc(effectiveDate), desc(articles.id))
+        .orderBy(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) ASC`, sql`${articles.id} ASC`)
         .limit(limit + 1);
     }
     
