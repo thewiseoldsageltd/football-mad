@@ -10491,3 +10491,19 @@ Do not add fixtures, matchdays, or rounds anywhere in Tables.
 
 ---
 
+Update vite.config.ts to proxy API calls to the backend.
+
+Backend runs on http://127.0.0.1:5000.
+In vite.config.ts, under server: {...}, add proxy:
+
+proxy: {
+  "/api": {
+    target: "http://127.0.0.1:5000",
+    changeOrigin: true,
+  },
+},
+
+Then restart npm run dev and verify the News page loads articles and DevTools Network shows /api/news returning 200.
+
+---
+
