@@ -10159,3 +10159,38 @@ Deliverables:
 
 ---
 
+Replit AI prompt (copy/paste)
+
+Do NOT run tests, regression testing, Playwright/Cypress, or generate videos. I will test manually.
+
+Problem:
+Calling GET /api/jobs/debug-goalserve-standings returns the Vite index.html (text/html) instead of hitting the Express route in server/routes.ts.
+The route DOES exist in server/routes.ts (grep shows it at ~line 1645), so /api routes are falling through to Vite SPA middleware / catch-all.
+
+Goal:
+Ensure that NO /api/* request ever returns the SPA HTML fallback. If an /api route is not matched, return a JSON 404.
+
+Implement:
+1) In the server startup (likely server/index.ts), AFTER registering all API routes (i.e. after calling whatever attaches routes.ts), add:
+
+app.use("/api", (req, res) => {
+  res.status(404).json({ error: "API route not found", path: req.originalUrl });
+});
+
+This must be placed BEFORE any Vite/static/catch-all handler that serves index.html.
+
+2) Ensure the Vite SPA fallback (app.get("*", ...) or vite middlewares) only runs for non-/api routes.
+
+No other changes.
+
+Manual verification commands (do not run tests):
+- curl -i -H "Accept: application/json" "http://localhost:5000/api/jobs/debug-goalserve-standings?leagueId=1204&season=2024/25" | head -n 40
+Expected: NOT text/html. Should be JSON (or JSON 401/403 if auth required).
+
+- curl -i "http://localhost:5000/api/standings?leagueId=1204&season=2024/25" | head -n 20
+Expected: unchanged (JSON 404 currently is OK).
+
+Proceed with only the minimal diff.
+
+---
+
