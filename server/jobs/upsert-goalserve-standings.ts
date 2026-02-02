@@ -397,8 +397,9 @@ export async function upsertGoalserveStandings(
 
     const rowsToInsert: Array<{
       snapshotId: string;
-      teamId: string;
+      teamId: string | null;
       teamGoalserveId: string;
+      teamName: string;
       position: number;
       points: number;
       played: number;
@@ -427,11 +428,13 @@ export async function upsertGoalserveStandings(
 
     for (const row of teamRows) {
       const gsTeamId = String(row.id).trim();
-      const teamId = teamIdMap.get(gsTeamId);
+      const teamId = teamIdMap.get(gsTeamId) || null;
+      const displayName = getTeamDisplayName(row, gsTeamId);
       
+      // NEVER skip a standings row - insert with teamId=null if no team mapping exists
+      // The teamName field preserves the Goalserve name for display purposes
       if (!teamId) {
-        console.warn(`[StandingsIngest] Skipping row for gsTeamId=${gsTeamId} - no teamId found`);
-        continue;
+        console.log(`[StandingsIngest] No teamId for gsTeamId=${gsTeamId} (${displayName}) - inserting with null teamId`);
       }
 
       const goalsFor = toInt(row.overall?.gs);
@@ -446,6 +449,7 @@ export async function upsertGoalserveStandings(
         snapshotId,
         teamId,
         teamGoalserveId: gsTeamId,
+        teamName: displayName,
         position: toInt(row.position),
         points: toInt(row.total?.p),
         played: toInt(row.overall?.gp),

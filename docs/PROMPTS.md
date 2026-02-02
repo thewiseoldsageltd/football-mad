@@ -9715,3 +9715,33 @@ Add short comment in code explaining this is an intentional product decision unt
 
 ---
 
+Bug: Championship standings missing 4th place (Ipswich). The UI shows 1,2,3,5...
+We confirmed /api/standings uses leftJoin(teams), so the API is not dropping rows.
+The ingestion job server/jobs/upsert-goalserve-standings.ts is skipping rows when teamId cannot be mapped:
+  console.warn(`[StandingsIngest] Skipping row for gsTeamId=... - no teamId found`);
+
+Fix: NEVER skip a standings row just because teamId is missing. Insert it with teamId = null and preserve teamName from Goalserve.
+
+Steps:
+1) Open server/jobs/upsert-goalserve-standings.ts and locate the code path that builds rowsToInsert / standingsRows entries.
+2) Find the block that does:
+   - if (!teamId) { console.warn(...); continue; }
+3) Replace it so that we still create/insert the standings row with:
+   - teamId: null
+   - teamGoalserveId: gsTeamId (still stored)
+   - teamName: the name from the Goalserve feed (store this in standingsRows if not already)
+   - position, played, wins, draws, losses, goalsFor, goalsAgainst, goalDifference, points, recentForm, etc.
+
+4) Ensure the public endpoint /api/standings returns a teamName even when no team join exists:
+   - In server/routes.ts where /api/standings selects fields from standingsRows and leftJoin(teams),
+     include a teamName field using a safe fallback:
+       teamName: coalesce(teams.name, standingsRows.teamName)
+   - (If standingsRows.teamName doesn’t exist in schema, add it to @shared/schema and populate it during ingest.)
+
+Deliverable:
+- After running standings ingest for leagueId=1205, Championship table shows contiguous positions including 4th.
+- No standings rows are skipped because teamId is missing.
+- Keep UI unchanged.
+
+---
+

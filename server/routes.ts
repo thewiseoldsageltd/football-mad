@@ -2002,6 +2002,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           position: standingsRows.position,
           teamId: standingsRows.teamId,
           teamGoalserveId: standingsRows.teamGoalserveId,
+          rowTeamName: standingsRows.teamName,
           played: standingsRows.played,
           won: standingsRows.won,
           drawn: standingsRows.drawn,
@@ -2025,7 +2026,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           awayLost: standingsRows.awayLost,
           awayGoalsFor: standingsRows.awayGoalsFor,
           awayGoalsAgainst: standingsRows.awayGoalsAgainst,
-          teamName: teams.name,
+          joinedTeamName: teams.name,
           teamSlug: teams.slug,
           teamCrestUrl: teams.logoUrl,
         })
@@ -2034,11 +2035,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(standingsRows.snapshotId, snapshot.id))
         .orderBy(asc(standingsRows.position));
 
+      // Use joined team name if available, otherwise fall back to row's stored teamName
       const table = rows.map((r) => ({
         position: r.position,
         team: {
           id: r.teamId,
-          name: r.teamName || r.teamGoalserveId,
+          name: r.joinedTeamName || r.rowTeamName || r.teamGoalserveId,
           slug: r.teamSlug,
           crestUrl: r.teamCrestUrl,
         },

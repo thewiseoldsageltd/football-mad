@@ -640,6 +640,7 @@ export const standingsRows = pgTable("standings_rows", {
   snapshotId: varchar("snapshot_id").notNull().references(() => standingsSnapshots.id, { onDelete: "cascade" }),
   teamId: varchar("team_id").references(() => teams.id),
   teamGoalserveId: text("team_goalserve_id").notNull(),
+  teamName: text("team_name"),  // Fallback name from Goalserve when team not mapped
   position: integer("position").notNull(),
   points: integer("points").notNull(),
   played: integer("played").notNull(),
