@@ -10194,3 +10194,32 @@ Proceed with only the minimal diff.
 
 ---
 
+Replit AI prompt (copy/paste)
+
+Do NOT run any tests (no Playwright/Cypress) and do NOT generate videos.
+
+Fix: /api/jobs/debug-goalserve-standings is currently POST-only, but we call it via curl GET. Add GET support.
+
+In server/routes.ts, locate the existing block:
+
+app.post(
+  "/api/jobs/debug-goalserve-standings",
+  requireJobSecret("GOALSERVE_SYNC_SECRET"),
+  async (req, res) => { ... }
+);
+
+Change it to support BOTH GET and POST, without duplicating code:
+
+Option A (preferred): use app.all(...)
+app.all("/api/jobs/debug-goalserve-standings", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req,res)=>{...});
+
+OR Option B: define app.get(...) that calls the same handler function reused by app.post.
+
+No other changes.
+
+After change, this should return JSON:
+curl -s -H "Accept: application/json" -H "Authorization: Bearer $GOALSERVE_SYNC_SECRET" \
+"http://localhost:5000/api/jobs/debug-goalserve-standings?leagueId=1204&season=2024/25" | head -c 1500
+
+---
+

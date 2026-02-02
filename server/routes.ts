@@ -1641,7 +1641,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== DEBUG GOALSERVE STANDINGS ==========
-  app.post(
+  app.all(
     "/api/jobs/debug-goalserve-standings",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
