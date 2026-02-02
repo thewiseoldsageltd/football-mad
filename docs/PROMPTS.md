@@ -10363,3 +10363,90 @@ Save the file after editing.
 
 ---
 
+We need to fix /api/standings fixtures XML season selection.
+
+Current behaviour: when requesting season=2024/25, standings table is correct (season 2024-2025) but fixtures/rounds come back for current season (first round startDate 2025-08-15). This happens because Goalserve sometimes ignores the season query param but still returns week containers, so our current "weeksCount > 0" test is not sufficient.
+
+Goal: When trying multiple fixtures endpoints, only accept a response if its earliest match date belongs to the requested season start year.
+
+In server/routes.ts inside app.get("/api/standings") where we build endpointsToTry and loop, update the acceptance logic:
+
+- Parse requested startYear from seasonNorm (e.g. "2024-2025" => 2024)
+- For each XML attempt:
+  - locate tournament.week
+  - find the earliest match date from any match in the first week (or across weeks if needed)
+  - normalize / detect year
+  - only accept the attempt if earliest match year === startYear (or startYear+0)
+  - otherwise continue trying next endpoint
+
+Implement a small helper inline:
+
+1) After computing `endpointsToTry`, add:
+------------------------------------------------
+const startYear = Number(String(seasonNorm).split("-")[0]);
+------------------------------------------------
+
+2) In the loop, after computing weeksCount, extract the earliest match date and validate year. Replace the current `if (weeksCount > 0) { xmlData = attempt; break; }` with:
+
+------------------------------------------------
+const getYearFromDateString = (d: string): number | null => {
+  if (!d) return null;
+
+  // formats we might see: "2024-08-16", "16.08.2024", "08/16/2024"
+  const iso = d.match(/^(\d{4})-\d{2}-\d{2}$/);
+  if (iso) return Number(iso[1]);
+
+  const dot = d.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if (dot) return Number(dot[3]);
+
+  const slash = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slash) return Number(slash[3]);
+
+  // fallback: last 4-digit year anywhere
+  const anyYear = d.match(/(19|20)\d{2}/);
+  return anyYear ? Number(anyYear[0]) : null;
+};
+
+const tournament = attempt?.results?.tournament 
+  ?? attempt?.scores?.tournament 
+  ?? attempt?.tournament;
+
+const weekArr = Array.isArray(tournament?.week)
+  ? tournament.week
+  : (tournament?.week ? [tournament.week] : []);
+
+let earliestDateStr: string | null = null;
+
+for (const w of weekArr) {
+  const matches = Array.isArray(w?.match) ? w.match : (w?.match ? [w.match] : []);
+  for (const m of matches) {
+    const ds = m?.date || m?.formatted_date || m?.@date || m?.["@date"] || null;
+    if (!ds) continue;
+    if (!earliestDateStr) earliestDateStr = ds;
+    // quick lexical compare works for ISO; otherwise just keep first seen
+    if (typeof ds === "string" && typeof earliestDateStr === "string" && ds < earliestDateStr) {
+      earliestDateStr = ds;
+    }
+  }
+  if (earliestDateStr) break; // stop early once we have something
+}
+
+const earliestYear = earliestDateStr ? getYearFromDateString(String(earliestDateStr)) : null;
+
+console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount} earliestDate=${earliestDateStr} earliestYear=${earliestYear} targetStartYear=${startYear}`);
+
+if (weeksCount > 0 && earliestYear === startYear) {
+  xmlData = attempt;
+  break;
+}
+------------------------------------------------
+
+Important:
+- Keep the endpointsToTry list (YYYY-YYYY then YYYY/YYYY then fallback)
+- Only accept a response when earliestYear matches startYear
+- Do not change standings ingestion or table logic
+
+Save the file.
+
+---
+

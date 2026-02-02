@@ -2207,7 +2207,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ]
         : [`soccerfixtures/leagueid/${leagueId}`];
 
+      const startYear = seasonNorm ? Number(String(seasonNorm).split("-")[0]) : null;
+
       let xmlData: any = null;
+
+      const getYearFromDateString = (d: string): number | null => {
+        if (!d) return null;
+        // formats: "2024-08-16", "16.08.2024", "08/16/2024"
+        const iso = d.match(/^(\d{4})-\d{2}-\d{2}$/);
+        if (iso) return Number(iso[1]);
+        const dot = d.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (dot) return Number(dot[3]);
+        const slash = d.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (slash) return Number(slash[3]);
+        const anyYear = d.match(/(19|20)\d{2}/);
+        return anyYear ? Number(anyYear[0]) : null;
+      };
 
       for (const ep of endpointsToTry) {
         try {
@@ -2217,12 +2232,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             ?? attempt?.scores?.tournament 
             ?? attempt?.tournament;
 
-          const week = tournament?.week;
-          const weeksCount = Array.isArray(week) ? week.length : (week ? 1 : 0);
+          const weekArr = Array.isArray(tournament?.week)
+            ? tournament.week
+            : (tournament?.week ? [tournament.week] : []);
+          const weeksCount = weekArr.length;
 
-          console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount}`);
+          let earliestDateStr: string | null = null;
+          for (const w of weekArr) {
+            const matches = Array.isArray(w?.match) ? w.match : (w?.match ? [w.match] : []);
+            for (const m of matches) {
+              const ds = m?.date || m?.formatted_date || m?.["@date"] || null;
+              if (!ds) continue;
+              if (!earliestDateStr) earliestDateStr = ds;
+              if (typeof ds === "string" && typeof earliestDateStr === "string" && ds < earliestDateStr) {
+                earliestDateStr = ds;
+              }
+            }
+            if (earliestDateStr) break;
+          }
 
-          if (weeksCount > 0) {
+          const earliestYear = earliestDateStr ? getYearFromDateString(String(earliestDateStr)) : null;
+
+          console.log(`[Standings] fixturesXml ep=${ep} weeksCount=${weeksCount} earliestDate=${earliestDateStr} earliestYear=${earliestYear} targetStartYear=${startYear}`);
+
+          // Accept if we have weeks and (no season filter OR year matches)
+          if (weeksCount > 0 && (startYear === null || earliestYear === startYear)) {
             xmlData = attempt;
             break;
           }
