@@ -10083,3 +10083,129 @@ Go implement now.
 
 ---
 
+We have rolled back to a commit where 2025/26 matchweeks/matchdays worked correctly. 
+Your job is ONLY to add season-based gating. 
+
+🚫 DO NOT:
+- run regression tests
+- generate test files
+- add test frameworks
+- run Playwright/Cypress
+- create screenshots or videos
+- add CI configs
+- refactor unrelated code
+
+Only modify the specific backend logic described below.
+
+==================================================
+PRODUCT RULES (MUST MATCH EXACTLY)
+==================================================
+
+1) Any season older than 2025/26 (e.g. 2024/25, 2023/24, 2022/23):
+- Return TABLE-ONLY everywhere
+- DO NOT include any of these keys in API responses:
+  rounds
+  matchesByRound
+  defaultMatchweek
+  latestRoundKey
+  latestScheduledRoundKey
+  defaultMatchweekReason
+- DO NOT fetch Goalserve XML for these seasons
+
+2) Season 2025/26 ONLY:
+
+• Premier League (leagueId = "1204")
+  - Keep existing matchweek + fixtures behaviour
+
+• Champions League, Europa League, Conference League
+  - Keep existing matchday + navigation behaviour
+
+• All other leagues
+  - Table-only (no matchweek/matchday, no XML fetch)
+
+==================================================
+BACKEND CHANGES (MINIMAL DIFFS ONLY)
+==================================================
+
+FILE: server/routes.ts
+
+Inside:
+app.get("/api/standings", async (req, res) => {
+
+Add near the top:
+
+const CURRENT_SEASON = "2025-2026";
+const isCurrentSeason = seasonNorm === CURRENT_SEASON;
+const isPremierLeague = leagueId === "1204";
+const includeRounds = isCurrentSeason && isPremierLeague;
+
+--------------------------------------
+
+Wrap ALL Goalserve XML + week parsing logic inside:
+
+if (includeRounds) {
+   // EXISTING XML + rounds + matchesByRound code
+}
+
+If includeRounds is false:
+- Do NOT fetch XML
+- Do NOT compute rounds
+- Do NOT compute matchesByRound
+
+--------------------------------------
+
+When building the response JSON:
+
+Always return:
+{
+  snapshot,
+  table
+}
+
+ONLY attach:
+rounds
+matchesByRound
+defaultMatchweek
+etc
+
+WHEN includeRounds === true
+
+For older seasons these keys must be COMPLETELY OMITTED (not empty, not null).
+
+==================================================
+EUROPE ENDPOINTS
+==================================================
+
+Find endpoints handling Champions League, Europa League, Conference League.
+
+Add:
+
+const includeMatchdays = seasonNorm === "2025-2026";
+
+Only compute and return matchday fixtures when includeMatchdays === true.
+Older seasons must return standings only.
+
+==================================================
+VERIFICATION COMMANDS (DO NOT ADD TEST FILES)
+==================================================
+
+# 2024/25 PL → should return 0
+curl -s "http://localhost:5000/api/standings?leagueId=1204&season=2024/25" | grep -c '"rounds"'
+
+# 2025/26 PL → should return >=1
+curl -s "http://localhost:5000/api/standings?leagueId=1204&season=2025/26" | grep -c '"rounds"'
+
+==================================================
+IMPORTANT
+==================================================
+
+• Do NOT change working 2025/26 behaviour
+• Do NOT add logging noise
+• Do NOT modify frontend
+• Do NOT introduce new config files
+• Only small guarded conditionals
+
+Implement exactly this and stop.
+
+---
+

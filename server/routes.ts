@@ -1980,6 +1980,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const asOfParam = req.query.asOf as string | undefined;
       const autoRefresh = req.query.autoRefresh === "1";
 
+      // Normalize season to YYYY-YYYY format for comparison (handles 2025/26, 2025-26, 2025/2026, etc.)
+      const normalizeSeason = (s: string): string => {
+        const match = s.match(/(\d{4})[\/\-](\d{2,4})/);
+        if (!match) return s;
+        const startYear = match[1];
+        let endYear = match[2];
+        if (endYear.length === 2) {
+          endYear = startYear.slice(0, 2) + endYear;
+        }
+        return `${startYear}-${endYear}`;
+      };
+      const CURRENT_SEASON = "2025-2026";
+      const seasonNorm = normalizeSeason(season);
+      const isCurrentSeason = seasonNorm === CURRENT_SEASON;
+      const isPremierLeague = leagueId === "1204";
+      // Only fetch Goalserve XML and compute rounds for current season Premier League
+      const includeRounds = isCurrentSeason && isPremierLeague;
+
       // Auto-refresh logic: attempt standings ingestion if allowed by throttle
       if (autoRefresh) {
         const throttleKey = `${leagueId}:${season}`;
@@ -2155,6 +2173,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const ROUND_ENABLED_LEAGUE_IDS = ["1204"]; // Premier League only
       const shouldComputeRounds = ROUND_ENABLED_LEAGUE_IDS.includes(leagueId);
 
+      // SEASON GATING: For older seasons, return table-only (no rounds, no matchweek data)
+      if (!includeRounds) {
+        const nowUtc = new Date();
+        return res.json({
+          snapshot: {
+            leagueId: snapshot.leagueId,
+            season: snapshot.season,
+            stageId: snapshot.stageId,
+            asOf: snapshot.asOf,
+            nowUtc: nowUtc.toISOString(),
+          },
+          table,
+        });
+      }
+
       // Helper to check if a status means "scheduled"
       const isScheduledStatus = (status: string): boolean => {
         const s = status?.toLowerCase().trim() || "";
@@ -2170,7 +2203,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         );
       };
 
-      // Fetch Goalserve XML for proper week numbers
+      // Fetch Goalserve XML for proper week numbers (only for current season Premier League)
       const { goalserveFetchXml } = await import("./integrations/goalserve/client");
       const xmlEndpoint = season 
         ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(season)}`
@@ -3619,9 +3652,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const season = (req.query.season as string) || "2025/2026";
+      
+      // SEASON GATING: Only compute matchdays/fixtures for 2025/2026
+      const normalizeSeason = (s: string): string => {
+        const match = s.match(/(\d{4})[\/\-](\d{2,4})/);
+        if (!match) return s;
+        const startYear = match[1];
+        let endYear = match[2];
+        if (endYear.length === 2) {
+          endYear = startYear.slice(0, 2) + endYear;
+        }
+        return `${startYear}-${endYear}`;
+      };
+      const CURRENT_SEASON = "2025-2026";
+      const seasonNorm = normalizeSeason(season);
+      const includeMatchdays = seasonNorm === CURRENT_SEASON;
+      
       const { goalserveFetch } = await import("./integrations/goalserve/client");
 
-      // Fetch fixtures and standings in parallel
+      // Fetch fixtures and standings in parallel (only fetch fixtures for current season)
       const fixturesEndpoint = `soccerfixtures/leagueid/${competition.id}?season=${encodeURIComponent(season)}`;
       const standingsEndpoint = `standings/${competition.id}.xml`;
 
@@ -3629,16 +3678,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       let standingsData: any = null;
 
       try {
-        [fixturesData, standingsData] = await Promise.all([
-          goalserveFetch(fixturesEndpoint).catch((e: any) => {
-            console.log(`[Europe] Fixtures fetch error for ${slug}:`, e?.message?.slice(0, 200));
-            return null;
-          }),
+        // Only fetch fixtures for current season, always fetch standings
+        const fetchPromises: Promise<any>[] = [
           goalserveFetch(standingsEndpoint).catch((e: any) => {
             console.log(`[Europe] Standings fetch error for ${slug}:`, e?.message?.slice(0, 200));
             return null;
           }),
-        ]);
+        ];
+        
+        if (includeMatchdays) {
+          fetchPromises.push(
+            goalserveFetch(fixturesEndpoint).catch((e: any) => {
+              console.log(`[Europe] Fixtures fetch error for ${slug}:`, e?.message?.slice(0, 200));
+              return null;
+            })
+          );
+        }
+        
+        const results = await Promise.all(fetchPromises);
+        standingsData = results[0];
+        fixturesData = includeMatchdays ? results[1] : null;
       } catch (fetchError: any) {
         console.error(`[Europe] Parallel fetch error:`, fetchError?.message);
       }
@@ -4150,7 +4209,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Compute unified rounds data for navigation
       const { rounds, matchesByRound, latestRoundKey } = computeRounds(matchdays, knockoutRoundsMap);
 
-      // Build response
+      // Build response - for older seasons, return standings only
+      if (!includeMatchdays) {
+        return res.json({
+          competition: {
+            slug,
+            name: competition.name,
+            country: "Europe",
+            goalserveCompetitionId: competition.id,
+          },
+          season,
+          standings,
+        });
+      }
+      
       const response = {
         competition: {
           slug,
