@@ -10004,3 +10004,82 @@ DELIVERABLE:
 
 ---
 
+REPLIT AI PROMPT — FOOTBALL MAD (Tables)
+
+Goal: 
+1) Remove the useless “Overall” dropdown from the Tables page UI.
+2) Make season selection actually work for backfilled seasons (2024/25, 2023/24, 2022/23) across all supported leagues/cups on /tables/{league-slug}/{season}.
+3) IMPORTANT: Do NOT run regression tests, Playwright/Cypress, or generate test videos. No automated UI testing. I will test manually post-deploy.
+
+Context / current behaviour:
+- URLs are structured: /tables/{league-slug}/{season} (no query params for league/round).
+- Tables always show “latest standings” for the selected season (not by matchweek).
+- When selecting a previous season, the UI currently shows “Failed to load standings”.
+- Curling /api/standings with season params returns 404: “No standings snapshot found”.
+- Server is running on port 5000 in dev.
+
+Work to do:
+
+A) Remove the “Overall” dropdown (UI cleanup)
+- Find where the right-side top filters are rendered (likely client/src/components/tables/tables-filters.tsx and/or client/src/pages/tables.tsx).
+- Remove the “Overall” Select / Dropdown entirely from the UI.
+- Remove any related state/props like tableView / onTableViewChange / topTab etc if still present.
+- Ensure the header row only shows the Season dropdown on the right.
+
+B) Fix season switching + backfill (so /tables/* works for older seasons)
+We need two fixes:
+1) Normalize season formats consistently (UI label, URL season segment, API season query).
+2) If a standings snapshot doesn’t exist yet for (leagueId + season), the API should ingest it on-demand (one time), then return it.
+
+B1) Season normalization
+- In the UI, the dropdown shows: 2025/26, 2024/25, 2023/24, 2022/23.
+- The URL uses: /tables/{league}/{season} where season should be “YYYY-YY” like “2024-25” or “2024-25” (match current pattern “2025-26”).
+- The API (/api/standings) should receive a season string that the DB + Goalserve ingest agree on.
+Implement a shared helper (client + server safe) e.g.:
+- toSeasonSlug("2024/25") -> "2024-25"
+- fromSeasonSlug("2024-25") -> a canonical seasonKey for storage/queries, e.g. "2024-2025"
+- toGoalserveSeasonParam("2024-25" or "2024/25" etc) -> "2024-2025" OR "2024/2025" (whatever your ingest expects). Pick ONE canonical format and use it everywhere.
+Where to put it:
+- client/src/lib/season.ts (and optionally a shared copy in shared/ if you already share helpers)
+
+Update routing / state:
+- When season dropdown changes:
+  - Update the URL to /tables/{activeLeagueSlug}/{seasonSlug}
+  - Trigger fetch using season derived from the URL (single source of truth).
+- On page load:
+  - Parse season from URL and set dropdown accordingly.
+
+B2) API: On-demand ingest when snapshot missing
+In server/routes.ts in GET /api/standings:
+- Currently, it looks up the latest snapshot for (leagueId + season). If none exists, it returns 404.
+Change it to:
+1) Try to find a snapshot.
+2) If none found:
+   - Call upsertGoalserveStandings(leagueId, { seasonParam: normalizedSeason, force: true })
+   - Then query again for the snapshot.
+   - If still none, return 404 with a clearer error (include leagueId + season + normalizedSeason used).
+3) If found, return standings rows as normal.
+
+Notes:
+- Keep throttling sensible (you already have STANDINGS_REFRESH_COOLDOWN_MS). For the “no snapshot” case, allow a one-time ingest attempt even if cooldown is present, but do NOT loop or repeatedly hammer Goalserve.
+- Make sure the season stored on standingsSnapshots/standingsRows matches whatever season string you query by.
+- Log one line when doing the backfill ingest so we can see it in console.
+
+C) Manual verification steps (NO automated tests)
+After code changes, do ONLY these quick manual/dev checks (no test frameworks):
+1) Start dev server.
+2) Open:
+   - /tables/premier-league/2025-26 (should work)
+   - Switch season dropdown to 2024/25 → URL becomes /tables/premier-league/2024-25 and table loads.
+   - Repeat for Championship.
+3) Confirm “Overall” dropdown is gone.
+
+Deliverables:
+- Commit-ready code changes implementing A + B.
+- No Playwright/Cypress. No snapshots/videos.
+- If you add any new helper, keep it tiny and well-named.
+
+Go implement now.
+
+---
+

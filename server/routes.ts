@@ -2011,15 +2011,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(lte(standingsSnapshots.asOf, asOfDate));
       }
 
-      const [snapshot] = await db
+      let [snapshot] = await db
         .select()
         .from(standingsSnapshots)
         .where(and(...conditions))
         .orderBy(desc(standingsSnapshots.asOf))
         .limit(1);
 
+      // On-demand backfill: if no snapshot exists, try to ingest one
       if (!snapshot) {
-        return res.status(404).json({ error: "No standings snapshot found", leagueId, season });
+        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${season}, attempting backfill...`);
+        try {
+          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force: true });
+          if (result.ok && !result.skipped) {
+            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${season} rows=${result.insertedRowsCount}`);
+            // Query again for the newly created snapshot
+            [snapshot] = await db
+              .select()
+              .from(standingsSnapshots)
+              .where(and(...conditions))
+              .orderBy(desc(standingsSnapshots.asOf))
+              .limit(1);
+          } else if (result.ok && result.skipped) {
+            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${season} (no change from Goalserve)`);
+          } else {
+            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${season}: ${result.error || result.reason}`);
+          }
+        } catch (backfillErr) {
+          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${season}:`, backfillErr);
+        }
+      }
+
+      if (!snapshot) {
+        return res.status(404).json({ 
+          error: "No standings snapshot found", 
+          leagueId, 
+          season,
+          hint: "Goalserve may not have data for this league/season combination"
+        });
       }
 
       const rows = await db
