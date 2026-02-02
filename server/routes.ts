@@ -1646,7 +1646,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
       const leagueId = req.query.leagueId as string;
-      const season = req.query.season as string | undefined;
+      const seasonRaw = req.query.season as string | undefined;
 
       if (!leagueId) {
         return res.status(400).json({ error: "leagueId query param required" });
@@ -1654,9 +1654,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       try {
         const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
-        let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
-        if (season) {
-          url += `&season=${encodeURIComponent(season)}`;
+        const seasonNorm = normalizeSeasonForGoalserve(seasonRaw);
+        
+        // Build URL: historical seasons use different endpoint (without .xml)
+        let urlPath: string;
+        let url: string;
+        if (seasonNorm) {
+          urlPath = `/standings/${leagueId}?json=true&season=${encodeURIComponent(seasonNorm)}`;
+          url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}${urlPath}`;
+        } else {
+          urlPath = `/standings/${leagueId}.xml?json=true`;
+          url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}${urlPath}`;
         }
 
         const response = await fetch(url);
@@ -1698,7 +1706,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.json({
           ok: true,
           leagueId,
-          season: tournament.season || season || "",
+          seasonRaw,
+          seasonNorm,
+          season: tournament.season || seasonNorm || "",
+          goalserveUrlPath: urlPath,
           fetchedAt: new Date().toISOString(),
           tournament: {
             league: tournament.league,

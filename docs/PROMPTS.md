@@ -10223,3 +10223,36 @@ curl -s -H "Accept: application/json" -H "Authorization: Bearer $GOALSERVE_SYNC_
 
 ---
 
+Replit AI prompt (copy/paste)
+
+Do NOT run tests or generate videos.
+
+Goal: Make /api/jobs/debug-goalserve-standings actually request historical standings from Goalserve when a season is provided.
+
+Change ONLY the debug endpoint in server/routes.ts:
+
+Currently it builds:
+https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true
+and appends &season=...
+
+Update it so:
+- If season is provided (req.query.season), call WITHOUT .xml:
+  https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${encodeURIComponent(seasonNorm)}
+- If season is NOT provided, keep the current URL WITH .xml:
+  https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true
+
+Also, use the existing season normaliser you added (normalizeSeasonForGoalserve) so that:
+"2024/25" becomes "2024-2025" before being sent to Goalserve.
+
+Finally, include in the debug JSON response a field "goalserveUrlPath" (do NOT include the feed key) e.g.
+"goalserveUrlPath": "/standings/1204?json=true&season=2024-2025"
+
+No other changes.
+
+Manual check (I will run):
+curl -s -H "Authorization: Bearer $GOALSERVE_SYNC_SECRET" \
+"http://localhost:5000/api/jobs/debug-goalserve-standings?leagueId=1204&season=2024/25" | head -c 800
+Expected: season in response should now reflect 2024/2025 or 2024-2025 (not 2025/2026) and teams should exist.
+
+---
+
