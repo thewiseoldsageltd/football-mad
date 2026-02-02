@@ -1,23 +1,15 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { seasons, tableViews } from "@/data/tables-mock";
-
-type TopTab = "leagues" | "cups" | "europe";
+import { seasons } from "@/data/tables-mock";
 
 interface TablesFiltersProps {
-  topTab: TopTab;
   season: string;
-  tableView: string;
   onSeasonChange: (value: string) => void;
-  onTableViewChange: (value: string) => void;
   mobile?: boolean;
 }
 
 export function TablesFilters({
-  topTab,
   season,
-  tableView,
   onSeasonChange,
-  onTableViewChange,
   mobile = false,
 }: TablesFiltersProps) {
   if (mobile) {
@@ -35,23 +27,6 @@ export function TablesFilters({
             ))}
           </SelectContent>
         </Select>
-
-        {topTab === "leagues" && (
-          <Select value={tableView} onValueChange={onTableViewChange}>
-            <SelectTrigger className="w-full" data-testid="select-view-mobile">
-              <span className="flex-1 text-center truncate">
-                {tableViews.find((v) => v.value === tableView)?.label || "Overall"}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {tableViews.map((v) => (
-                <SelectItem key={v.value} value={v.value}>
-                  {v.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
       </div>
     );
   }
@@ -70,21 +45,6 @@ export function TablesFilters({
           ))}
         </SelectContent>
       </Select>
-
-      {topTab === "leagues" && (
-        <Select value={tableView} onValueChange={onTableViewChange}>
-          <SelectTrigger className="w-[120px]" data-testid="select-view">
-            <SelectValue placeholder="View" />
-          </SelectTrigger>
-          <SelectContent>
-            {tableViews.map((v) => (
-              <SelectItem key={v.value} value={v.value}>
-                {v.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
     </div>
   );
 }

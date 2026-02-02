@@ -1,0 +1,95 @@
+We are doing a SMALL UI CLEANUP only.
+
+🚫 DO NOT run regression tests  
+🚫 DO NOT generate preview videos  
+🚫 DO NOT simulate user flows  
+🚫 DO NOT create test files  
+🚫 DO NOT run Playwright, Cypress, or any browser automation  
+🚫 DO NOT run the app after editing  
+
+I will manually test after deployment.
+
+Only edit the specified files and stop.
+
+====================================================
+TASK: Remove the unused "Overall" dropdown
+====================================================
+
+This is a DESIGN CLEANUP ONLY.
+It must NOT affect standings data, Goalserve ingestion, or table rendering.
+
+FILES TO EDIT:
+client/src/components/tables/tables-filters.tsx  
+client/src/pages/tables.tsx
+
+----------------------------------------------------
+STEP 1 — UPDATE tables-filters.tsx
+----------------------------------------------------
+
+1. Remove ANY state related to table view, for example:
+   - tableView
+   - setTableView
+
+2. Remove props related to table view:
+   - tableView
+   - onTableViewChange
+   - topTab (if only used for Overall/Home/Away)
+
+3. Delete the dropdown JSX that renders:
+   "Overall", "Home", "Away"
+
+4. Ensure the component ONLY renders:
+   - Season dropdown
+
+Example final structure:
+
+return (
+  <div className="flex items-center gap-3">
+    <SeasonDropdown ... />
+  </div>
+);
+
+----------------------------------------------------
+STEP 2 — UPDATE tables.tsx
+----------------------------------------------------
+
+1. Remove any state like:
+   const [tableView, setTableView] = useState("overall");
+
+2. Remove props being passed into TablesFilters:
+   tableView={tableView}
+   onTableViewChange={setTableView}
+   topTab={...}
+
+3. Ensure TablesFilters is used like:
+
+<TablesFilters
+  season={season}
+  onSeasonChange={setSeason}
+/>
+
+----------------------------------------------------
+IMPORTANT RULES
+----------------------------------------------------
+
+DO NOT:
+- Change LeagueTable component
+- Change API calls
+- Change standings mapping
+- Change Goalserve logic
+- Add tests
+- Run tests
+- Run preview browser
+- Generate test videos
+
+Only edit the two files listed and stop.
+
+----------------------------------------------------
+EXPECTED RESULT
+----------------------------------------------------
+
+• "Overall" dropdown disappears  
+• Season selector remains  
+• Table still loads exactly the same data  
+• No change to standings behaviour  
+• No tests or previews executed  
