@@ -55,6 +55,20 @@ function formatDateRange(startDate?: string | null, endDate?: string | null): st
   }
 }
 
+/**
+ * Extract numeric portion from a round key or label for sorting.
+ * Handles: "1", "8", "MD8", "matchday_8", "Matchday 8", etc.
+ * Returns Infinity for non-numeric keys (knockout rounds like "PO", "QF", "SF", "F").
+ */
+function extractRoundNumber(keyOrLabel: string): number {
+  const match = keyOrLabel.match(/\d+/);
+  if (match) {
+    return parseInt(match[0], 10);
+  }
+  // Non-numeric keys (knockout rounds) sort after matchdays
+  return Infinity;
+}
+
 export function RoundToggle({ 
   labelType, 
   rounds, 
@@ -62,21 +76,36 @@ export function RoundToggle({
   onChange,
   className 
 }: RoundToggleProps) {
-  const currentIndex = rounds.findIndex(r => r.key === value);
-  const currentRound = rounds[currentIndex];
+  // Ensure rounds are sorted numerically for consistent navigation
+  const sortedRounds = [...rounds].sort((a, b) => {
+    const numA = extractRoundNumber(a.key);
+    const numB = extractRoundNumber(b.key);
+    if (numA !== numB) return numA - numB;
+    // Fallback to lexicographic for same number
+    return a.key.localeCompare(b.key);
+  });
+
+  // Find current index; if not found, default to last round (most recent)
+  let currentIndex = sortedRounds.findIndex(r => r.key === value);
+  if (currentIndex === -1 && sortedRounds.length > 0) {
+    currentIndex = sortedRounds.length - 1;
+  }
   
+  const currentRound = sortedRounds[currentIndex];
+  
+  // Non-wrapping navigation: disable at boundaries
   const canGoPrev = currentIndex > 0;
-  const canGoNext = currentIndex < rounds.length - 1;
+  const canGoNext = currentIndex >= 0 && currentIndex < sortedRounds.length - 1;
   
   const handlePrev = () => {
     if (canGoPrev) {
-      onChange(rounds[currentIndex - 1].key);
+      onChange(sortedRounds[currentIndex - 1].key);
     }
   };
   
   const handleNext = () => {
     if (canGoNext) {
-      onChange(rounds[currentIndex + 1].key);
+      onChange(sortedRounds[currentIndex + 1].key);
     }
   };
   

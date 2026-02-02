@@ -1,0 +1,38 @@
+You are working in the Football Mad codebase.
+
+Goal: Fix Conference League (and all Europe tables) Matchday navigation.
+Current bug: Landing on Matchday 8 is correct, but clicking back from MD8 does nothing; clicking forward from MD8 jumps to MD1. We need numeric ordering and non-wrapping prev/next navigation.
+
+Constraints:
+- Do NOT run regression tests.
+- Keep existing UI/UX (same buttons, same label "Matchday X").
+- Fix should apply to Europe pages (UCL/UEL/UECL) where matchday navigation is shown.
+
+What to do:
+1) Find the client-side component that renders the Europe "Fixtures" Matchday selector (the one with left/right chevrons and the "Matchday X" label) on the Tables page.
+   - Search in /client for "Matchday", "matchday", "fixtures", "ChevronLeft", "ChevronRight", or "No fixtures yet".
+2) Ensure matchday keys are handled numerically, not lexicographically, and the array is stable:
+   - If matchdays are strings like "MD8" or "matchday_8", parse the number.
+   - Create a helper:
+     - extractMatchdayNumber(keyOrLabel: string): number
+     - sort matchdays by that number ascending.
+3) Compute currentIndex safely:
+   - const idx = sortedMatchdays.findIndex(md => md.key === selectedKey) (or compare on number)
+   - If idx === -1, set idx to last index (so default is latest matchday).
+4) Fix navigation:
+   - Prev should go to idx-1 ONLY if idx > 0, otherwise do nothing (or keep disabled).
+   - Next should go to idx+1 ONLY if idx < sortedMatchdays.length-1, otherwise do nothing (or keep disabled).
+   - Remove any modulo/wrap logic that jumps from last -> first or first -> last.
+5) Ensure the selected matchday state updates correctly and triggers fixtures re-render.
+
+Acceptance checks (manual, no tests):
+- Conference League 2025/26 loads on Matchday 8.
+- Clicking left goes MD8 -> MD7 -> MD6 ... -> MD1.
+- Clicking right from MD1 goes to MD2 etc.
+- Clicking right from MD8 does NOT wrap to MD1.
+- The left chevron is disabled on MD1, right chevron disabled on the last matchday.
+
+Implement the change cleanly with a small helper and minimal code churn.
+After implementing, tell me:
+- The file(s) you edited
+- The exact logic used to sort and navigate
