@@ -139,6 +139,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // GET /api/news/updates - Incremental updates for polling
+  app.get("/api/news/updates", async (req, res) => {
+    try {
+      const since = req.query.since as string | undefined;
+      const sinceId = req.query.sinceId as string | undefined;
+      const limitParam = parseInt(req.query.limit as string) || 200;
+      const limit = Math.min(Math.max(1, limitParam), 500); // Clamp to 1-500
+      
+      const result = await storage.getNewsUpdates({ since, sinceId, limit });
+      
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching news updates:", error);
+      res.status(500).json({ error: "Failed to fetch news updates" });
+    }
+  });
+
   // ========== ARTICLES ==========
   app.get("/api/articles", async (req, res) => {
     try {

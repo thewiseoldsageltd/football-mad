@@ -102,6 +102,94 @@ export default function NewsPage() {
     },
   });
 
+  // Polling state for incremental updates
+  const [polledArticles, setPolledArticles] = useState<any[]>([]);
+  const lastCursorRef = useRef<{ since: string; sinceId: string } | null>(null);
+
+  // Merge base articles with polled updates
+  const mergedArticles = useMemo(() => {
+    const baseArticles = newsResponse?.articles || [];
+    if (polledArticles.length === 0) return baseArticles;
+    
+    // Dedupe by id, keeping polled (newer) first
+    const seen = new Set<string>();
+    const result: any[] = [];
+    
+    for (const article of polledArticles) {
+      if (!seen.has(article.id)) {
+        seen.add(article.id);
+        result.push(article);
+      }
+    }
+    for (const article of baseArticles) {
+      if (!seen.has(article.id)) {
+        seen.add(article.id);
+        result.push(article);
+      }
+    }
+    
+    return result;
+  }, [newsResponse?.articles, polledArticles]);
+
+  // Reset polled articles when filters change
+  useEffect(() => {
+    setPolledArticles([]);
+    lastCursorRef.current = null;
+  }, [apiQueryString]);
+
+  // 5-minute polling loop for updates
+  useEffect(() => {
+    const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+    const MAX_LOOPS = 5; // Cap loops per poll cycle
+    
+    const fetchUpdates = async () => {
+      // Get cursor from newest article in current state
+      const allArticles = mergedArticles;
+      if (allArticles.length === 0) return;
+      
+      const newestArticle = allArticles[0];
+      const since = newestArticle.publishedAt || newestArticle.createdAt;
+      if (!since) return;
+      
+      let cursor = { since: new Date(since).toISOString(), sinceId: newestArticle.id };
+      let newArticles: any[] = [];
+      let loops = 0;
+      
+      while (loops < MAX_LOOPS) {
+        try {
+          const url = `/api/news/updates?since=${encodeURIComponent(cursor.since)}&sinceId=${encodeURIComponent(cursor.sinceId)}&limit=200`;
+          const res = await fetch(url);
+          if (!res.ok) break;
+          
+          const data = await res.json();
+          if (data.articles && data.articles.length > 0) {
+            newArticles = [...newArticles, ...data.articles];
+          }
+          
+          if (!data.nextCursor) break;
+          cursor = data.nextCursor;
+          loops++;
+        } catch (err) {
+          console.error("Polling error:", err);
+          break;
+        }
+      }
+      
+      if (newArticles.length > 0) {
+        setPolledArticles(prev => {
+          // Dedupe with existing polled
+          const seen = new Set(prev.map(a => a.id));
+          const unique = newArticles.filter(a => !seen.has(a.id));
+          return [...unique, ...prev];
+        });
+      }
+    };
+    
+    const intervalId = setInterval(fetchUpdates, POLL_INTERVAL);
+    
+    return () => clearInterval(intervalId);
+  }, [mergedArticles]);
+
   const { data: teams } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
   });
@@ -178,7 +266,7 @@ export default function NewsPage() {
     return teams.filter(t => followedTeamIds.includes(t.id));
   }, [teams, followedTeamIds]);
 
-  const articles = newsResponse?.articles || [];
+  const articles = mergedArticles;
   const featuredArticle = articles.find(a => a.isFeatured);
   const regularArticles = articles.filter(a => a.id !== featuredArticle?.id);
 

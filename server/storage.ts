@@ -32,6 +32,18 @@ export interface NewsFilterParams {
   breaking: boolean;
 }
 
+export interface NewsUpdatesParams {
+  since?: string;       // ISO timestamp
+  sinceId?: string;     // UUID tie-breaker
+  limit: number;        // default 200, max 500
+}
+
+export interface NewsUpdatesResponse {
+  articles: any[];
+  nextCursor: { since: string; sinceId: string } | null;
+  serverTime: string;
+}
+
 export interface IStorage {
   // Teams
   getTeams(): Promise<Team[]>;
@@ -51,6 +63,7 @@ export interface IStorage {
   createArticle(data: InsertArticle): Promise<Article>;
   incrementArticleViews(id: string): Promise<void>;
   getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse>;
+  getNewsUpdates(params: NewsUpdatesParams): Promise<NewsUpdatesResponse>;
   
   // Matches
   getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
@@ -312,6 +325,91 @@ export class DatabaseStorage implements IStorage {
         breaking,
         total: result.length,
       },
+    };
+  }
+
+  async getNewsUpdates(params: NewsUpdatesParams): Promise<NewsUpdatesResponse> {
+    const { since, sinceId, limit } = params;
+    const serverTime = new Date().toISOString();
+    
+    // Lightweight fields for article list (no content/html)
+    const listFields = {
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      coverImage: articles.coverImage,
+      heroImageCredit: articles.heroImageCredit,
+      authorName: articles.authorName,
+      publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      isFeatured: articles.isFeatured,
+      isTrending: articles.isTrending,
+      isBreaking: articles.isBreaking,
+      viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount,
+    };
+    
+    // Use COALESCE(published_at, created_at) for sorting
+    const effectiveDate = sql`COALESCE(${articles.publishedAt}, ${articles.createdAt})`;
+    
+    let result;
+    if (since) {
+      const sinceDate = new Date(since);
+      // (publishedAt > since) OR (publishedAt = since AND id > sinceId)
+      if (sinceId) {
+        result = await db
+          .select(listFields)
+          .from(articles)
+          .where(
+            or(
+              sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) > ${sinceDate}`,
+              and(
+                sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) = ${sinceDate}`,
+                sql`${articles.id} > ${sinceId}`
+              )
+            )
+          )
+          .orderBy(effectiveDate, articles.id)
+          .limit(limit + 1); // Fetch one extra to check for more
+      } else {
+        result = await db
+          .select(listFields)
+          .from(articles)
+          .where(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) > ${sinceDate}`)
+          .orderBy(effectiveDate, articles.id)
+          .limit(limit + 1);
+      }
+    } else {
+      // No since param: return latest articles (descending order for "latest")
+      result = await db
+        .select(listFields)
+        .from(articles)
+        .orderBy(desc(effectiveDate), desc(articles.id))
+        .limit(limit + 1);
+    }
+    
+    // Check if there are more results
+    let nextCursor: { since: string; sinceId: string } | null = null;
+    if (result.length > limit) {
+      result = result.slice(0, limit);
+      const lastArticle = result[result.length - 1];
+      const lastDate = lastArticle.publishedAt || lastArticle.createdAt;
+      if (lastDate) {
+        nextCursor = {
+          since: new Date(lastDate).toISOString(),
+          sinceId: lastArticle.id,
+        };
+      }
+    }
+    
+    return {
+      articles: result,
+      nextCursor,
+      serverTime,
     };
   }
 

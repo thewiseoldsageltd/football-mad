@@ -10599,3 +10599,52 @@ Confirm Cache-Control header is present.
 
 ---
 
+CRITICAL:
+- Do NOT run end-to-end/regression tests, no Playwright/Cypress, no videos/screenshots.
+- Minimal verification only (1-2 curl calls). No browser automation.
+- Keep /api/news list endpoint lightweight (no content/html).
+
+Goal:
+Implement incremental “only new articles since last call” fetching so we never miss spikes (e.g. hundreds of posts published 16:45–17:15 Saturdays).
+
+Backend:
+1) Add new endpoint: GET /api/news/updates
+Query params:
+- since (ISO timestamp, optional)
+- sinceId (uuid/string, optional tie-breaker)
+- limit (int, default 200, max 500)
+
+Response:
+{
+  articles: [lightweight fields only],
+  nextCursor: { since, sinceId } | null,
+  serverTime: ISO timestamp
+}
+
+Query behavior:
+- Use publishedAt if present, else createdAt.
+- If since is provided:
+  return articles where
+    (publishedAt > since)
+    OR (publishedAt = since AND id > sinceId)
+- Order by publishedAt asc, id asc (stable).
+- Return up to limit.
+- If more rows exist beyond limit, set nextCursor to the last returned row’s (publishedAt, id).
+- Set Cache-Control no-store headers (same as /api/news).
+
+Frontend:
+2) In client news page, keep existing initial load (paginated list).
+3) Add a 5-minute polling loop that calls /api/news/updates using cursor from the newest article currently in state:
+- since = newestArticle.publishedAt (or createdAt fallback)
+- sinceId = newestArticle.id
+4) If updates return articles, merge by id (dedupe), then prepend them to the list.
+5) If nextCursor is returned, loop fetching until nextCursor is null (but cap to e.g. 5 loops per poll to avoid runaway).
+6) Store the latest cursor after merge.
+
+Verification (only):
+- curl /api/news/updates without since returns latest limit articles.
+- curl /api/news/updates?since=<timestamp>&sinceId=<id> returns only items newer than that.
+No UI testing.
+
+---
+
