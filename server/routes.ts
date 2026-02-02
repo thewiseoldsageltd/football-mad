@@ -20,6 +20,7 @@ import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
 import { backfillStandings } from "./jobs/backfill-standings";
+import { normalizeSeasonForGoalserve } from "./lib/season";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -1722,36 +1723,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== GOALSERVE STANDINGS UPSERT ==========
-  app.post(
-    "/api/jobs/upsert-goalserve-standings",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const leagueId = req.query.leagueId as string;
-      const season = req.query.season as string | undefined;
-      const force = req.query.force === "1";
+  // Handler function shared between GET and POST
+  const handleStandingsUpsert = async (req: any, res: any) => {
+    const leagueId = req.query.leagueId as string;
+    const seasonRaw = req.query.season as string | undefined;
+    const force = req.query.force === "1" || req.query.force === "true";
 
-      if (!leagueId) {
-        return res.status(400).json({ ok: false, error: "leagueId query param required" });
-      }
-
-      try {
-        const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
-        if (!result.ok && result.missingTeams && result.missingTeams.length > 0) {
-          return res.status(409).json({
-            error: result.error,
-            leagueId: result.leagueId,
-            season: result.season,
-            missingTeamIds: result.missingTeams.map((t) => t.goalserveTeamId),
-            missingTeamNames: result.missingTeams.map((t) => t.name),
-          });
-        }
-        res.json(result);
-      } catch (error) {
-        console.error("Standings upsert error:", error);
-        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
-      }
+    if (!leagueId) {
+      return res.status(400).json({ ok: false, error: "leagueId query param required" });
     }
-  );
+
+    // Normalize season for Goalserve
+    const seasonNorm = normalizeSeasonForGoalserve(seasonRaw);
+    console.log(`[StandingsUpsertJob] leagueId=${leagueId} seasonRaw=${seasonRaw} seasonNorm=${seasonNorm}`);
+
+    try {
+      const result = await upsertGoalserveStandings(leagueId, { seasonParam: seasonNorm, force });
+      if (!result.ok && result.missingTeams && result.missingTeams.length > 0) {
+        return res.status(409).json({
+          error: result.error,
+          leagueId: result.leagueId,
+          season: result.season,
+          missingTeamIds: result.missingTeams.map((t: any) => t.goalserveTeamId),
+          missingTeamNames: result.missingTeams.map((t: any) => t.name),
+        });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Standings upsert error:", error);
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  };
+
+  // Support both GET and POST for the upsert job
+  app.get("/api/jobs/upsert-goalserve-standings", requireJobSecret("GOALSERVE_SYNC_SECRET"), handleStandingsUpsert);
+  app.post("/api/jobs/upsert-goalserve-standings", requireJobSecret("GOALSERVE_SYNC_SECRET"), handleStandingsUpsert);
 
   // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========
   app.get(
@@ -1975,35 +1981,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const now = new Date();
       const currentYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-      const defaultSeason = `${currentYear}/${currentYear + 1}`;
-      const season = (req.query.season as string) || defaultSeason;
+      const defaultSeason = `${currentYear}-${currentYear + 1}`;
+      const seasonRaw = (req.query.season as string) || defaultSeason;
       const asOfParam = req.query.asOf as string | undefined;
       const autoRefresh = req.query.autoRefresh === "1";
+      
+      // Normalize season to YYYY-YYYY format for DB queries and Goalserve API
+      const seasonNorm = normalizeSeasonForGoalserve(seasonRaw) || defaultSeason;
+      console.log(`[Standings] leagueId=${leagueId} seasonRaw=${seasonRaw} seasonNorm=${seasonNorm}`);
 
       // Auto-refresh logic: attempt standings ingestion if allowed by throttle
       if (autoRefresh) {
-        const throttleKey = `${leagueId}:${season}`;
+        const throttleKey = `${leagueId}:${seasonNorm}`;
         const lastRun = standingsAutoRefreshThrottle.get(throttleKey) || 0;
         const nowMs = Date.now();
         
         if (nowMs - lastRun >= STANDINGS_REFRESH_COOLDOWN_MS) {
           standingsAutoRefreshThrottle.set(throttleKey, nowMs);
           try {
-            const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
+            const result = await upsertGoalserveStandings(leagueId, { seasonParam: seasonNorm });
             if (result.ok) {
-              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
+              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${seasonNorm} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
             } else {
-              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} FAILED: ${result.error}`);
+              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${seasonNorm} FAILED: ${result.error}`);
             }
           } catch (refreshErr) {
-            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ERROR:`, refreshErr);
+            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${seasonNorm} ERROR:`, refreshErr);
           }
         }
       }
 
       const conditions = [
         eq(standingsSnapshots.leagueId, leagueId),
-        eq(standingsSnapshots.season, season),
+        eq(standingsSnapshots.season, seasonNorm),
       ];
 
       if (asOfParam) {
@@ -2020,11 +2030,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // On-demand backfill: if no snapshot exists, try to ingest one
       if (!snapshot) {
-        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${season}, attempting backfill...`);
+        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${seasonNorm}, attempting backfill...`);
         try {
-          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force: true });
+          const result = await upsertGoalserveStandings(leagueId, { seasonParam: seasonNorm, force: true });
           if (result.ok && !result.skipped) {
-            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${season} rows=${result.insertedRowsCount}`);
+            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${seasonNorm} rows=${result.insertedRowsCount}`);
             // Query again for the newly created snapshot
             [snapshot] = await db
               .select()
@@ -2033,12 +2043,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               .orderBy(desc(standingsSnapshots.asOf))
               .limit(1);
           } else if (result.ok && result.skipped) {
-            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${season} (no change from Goalserve)`);
+            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${seasonNorm} (no change from Goalserve)`);
           } else {
-            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${season}: ${result.error || result.reason}`);
+            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${seasonNorm}: ${result.error || result.reason}`);
           }
         } catch (backfillErr) {
-          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${season}:`, backfillErr);
+          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${seasonNorm}:`, backfillErr);
         }
       }
 
@@ -2046,7 +2056,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(404).json({ 
           error: "No standings snapshot found", 
           leagueId, 
-          season,
+          seasonRaw,
+          seasonNorm,
           hint: "Goalserve may not have data for this league/season combination"
         });
       }
@@ -2172,8 +2183,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Fetch Goalserve XML for proper week numbers
       const { goalserveFetchXml } = await import("./integrations/goalserve/client");
-      const xmlEndpoint = season 
-        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(season)}`
+      const xmlEndpoint = seasonNorm 
+        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonNorm)}`
         : `soccerfixtures/leagueid/${leagueId}`;
       
       let xmlData: any;
