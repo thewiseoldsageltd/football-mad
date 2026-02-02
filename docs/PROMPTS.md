@@ -10507,3 +10507,21 @@ Then restart npm run dev and verify the News page loads articles and DevTools Ne
 
 ---
 
+Ghost sync is failing with:
+duplicate key value violates unique constraint "articles_slug_unique"
+
+Update the Ghost sync upsert logic so slug collisions are handled safely:
+
+- When importing a Ghost post, preferred slug is ghost.slug.
+- If that slug already exists for a DIFFERENT article (different source/sourceId), generate a unique slug by suffixing:
+  - `${slug}-2`, `${slug}-3`, ... until it’s free
+  - OR `${slug}-${ghostPostId.slice(-6)}` as a deterministic suffix
+
+Rules:
+- Keep slugs stable per Ghost post: once a Ghost post is assigned a slug in our DB, reuse it on updates.
+- Only generate a new slug on first insert if the desired slug is already taken by another article.
+
+Also: make the sync return JSON counts even on partial failures, and log the conflicting slug for debugging (do not log secrets).
+
+---
+
