@@ -4978,17 +4978,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
 
   // Reusable Ghost sync function
-  const triggerGhostSync = async (): Promise<{ success: boolean; totalSynced: number; totalErrors: number; message: string }> => {
+  const triggerGhostSync = async (): Promise<{ success: boolean; totalSynced: number; totalInserted: number; totalUpdated: number; totalErrors: number; message: string }> => {
     const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
     const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
     
     if (!ghostApiUrl || !ghostApiKey) {
-      return { success: false, totalSynced: 0, totalErrors: 0, message: "Ghost API not configured" };
+      return { success: false, totalSynced: 0, totalInserted: 0, totalUpdated: 0, totalErrors: 0, message: "Ghost API not configured" };
     }
     
     // Sync logic - just call the full sync endpoint internally
     let page = 1;
     let totalSynced = 0;
+    let totalInserted = 0;
+    let totalUpdated = 0;
     let totalErrors = 0;
     let hasMore = true;
     
@@ -5054,6 +5056,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   sourcePublishedAt: publishedAt,
                 })
                 .where(eq(articles.id, articleId));
+              totalUpdated++;
             } else {
               const desiredSlug = ghostPost.slug || `ghost-${Date.now().toString(36)}`;
               const uniqueSlug = await findUniqueSlugSync(desiredSlug, ghostPost.id);
@@ -5072,6 +5075,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               }).returning({ id: articles.id });
               
               articleId = result[0].id;
+              totalInserted++;
             }
             
             // Extract and link entities
@@ -5115,8 +5119,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return {
       success: totalErrors === 0,
       totalSynced,
+      totalInserted,
+      totalUpdated,
       totalErrors,
-      message: `Synced ${totalSynced} posts${totalErrors > 0 ? ` (${totalErrors} errors)` : ""}`,
+      message: `Synced ${totalSynced} posts (${totalInserted} inserted, ${totalUpdated} updated)${totalErrors > 0 ? ` (${totalErrors} errors)` : ""}`,
     };
   };
 
@@ -5231,15 +5237,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Audit log: sync started
     logWebhookAudit(`sync started postId=${postId}`);
     
-    // Trigger sync asynchronously
-    try {
-      const result = await triggerGhostSync();
-      console.log(`[Ghost webhook] Sync completed: ${result.message}`);
-      logWebhookAudit(`sync completed synced=${result.totalSynced} errors=${result.totalErrors}`);
-    } catch (err: any) {
-      console.error(`[Ghost webhook] Sync error: ${err.message}`);
-      logWebhookAudit(`sync failed error=${err.message}`);
-    }
+    // Trigger sync asynchronously with proper error handling
+    (async () => {
+      try {
+        const result = await triggerGhostSync();
+        console.log(`[Ghost webhook] Sync completed: ${result.message}`);
+        logWebhookAudit(`sync completed postId=${postId} inserted=${result.totalInserted} updated=${result.totalUpdated}`);
+      } catch (err: any) {
+        console.error(`[Ghost webhook] Sync error: ${err.message}`);
+        logWebhookAudit(`sync failed postId=${postId} error=${err.message}`);
+      }
+    })();
   });
 
   // ========== PUBLIC NEWS API ==========

@@ -10987,3 +10987,17 @@ Update POST /api/webhooks/ghost audit logging so it always logs even when unauth
 
 ---
 
+Improve webhook sync audit logging.
+
+Inside the async Ghost sync block triggered by /api/webhooks/ghost:
+
+1) Wrap the sync call in try/catch/finally.
+2) On success, append:
+   WEBHOOK_AUDIT sync completed postId=<id> inserted=<n> updated=<n>
+3) On error, append:
+   WEBHOOK_AUDIT sync failed postId=<id> error=<message>
+4) Ensure one of these two lines always runs, even if an exception occurs.
+5) Do NOT run full regression tests or videos.
+
+---
+
