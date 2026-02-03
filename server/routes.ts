@@ -5102,7 +5102,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
 
   // POST /api/webhooks/ghost - Ghost CMS auto-sync webhook
-  // Security: Verifies X-Ghost-Signature HMAC or falls back to x-ingest-secret
+  // Security: Token auth (query/header), HMAC signature, or x-ingest-secret fallback
   // Note: This route needs raw body for HMAC verification. We store it via rawBody property.
   app.post("/api/webhooks/ghost", async (req: Request, res: Response) => {
     // Debug logging at very top - always log incoming webhook requests
@@ -5113,11 +5113,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     console.log(`[Ghost webhook] ${timestamp} | sig=${hasGhostSig} | type=${contentType} | len=${contentLength}`);
     console.log(`[Ghost webhook] Headers: ${JSON.stringify(Object.keys(req.headers).sort())}`);
     
+    const webhookToken = process.env.GHOST_WEBHOOK_TOKEN;
     const webhookSecret = process.env.GHOST_WEBHOOK_SECRET;
     const ingestSecret = process.env.INGEST_SECRET;
     const allowFallback = process.env.GHOST_WEBHOOK_ALLOW_INGEST_SECRET_FALLBACK === "true";
     const ghostSignature = req.headers["x-ghost-signature"] as string | undefined;
     const providedIngestSecret = req.headers["x-ingest-secret"] as string | undefined;
+    
+    // Token auth: query param ?token=... or header x-webhook-token
+    const tokenFromQuery = req.query.token as string | undefined;
+    const tokenFromHeader = req.headers["x-webhook-token"] as string | undefined;
+    const providedToken = tokenFromQuery || tokenFromHeader;
     
     // Get raw body for HMAC verification
     // Express.json middleware stores raw buffer in req.rawBody via verify callback
@@ -5134,17 +5140,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     let authenticated = false;
     
-    // Try HMAC signature verification first
-    if (ghostSignature && webhookSecret) {
+    // 1. Token-based auth (most reliable for Ghost webhooks without signature support)
+    if (providedToken && webhookToken) {
+      if (providedToken === webhookToken) {
+        authenticated = true;
+        console.log("[Ghost webhook] Authenticated via webhook token");
+      } else {
+        console.log("[Ghost webhook] Token mismatch");
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+    }
+    // 2. HMAC signature verification (if x-ghost-signature header exists)
+    else if (ghostSignature && webhookSecret) {
       console.log(`[Ghost webhook] Attempting HMAC verification with signature: ${ghostSignature.substring(0, 30)}...`);
       authenticated = verifyGhostSignature(rawBody, ghostSignature, webhookSecret);
       if (!authenticated) {
         console.log("[Ghost webhook] HMAC signature verification failed");
-        return res.status(401).json({ error: "Invalid signature" });
+        return res.status(401).json({ error: "Unauthorized" });
       }
       console.log("[Ghost webhook] Authenticated via HMAC signature");
     }
-    // Fallback to ingest secret if enabled
+    // 3. Ingest secret fallback if enabled
     else if (allowFallback && providedIngestSecret && ingestSecret) {
       authenticated = providedIngestSecret === ingestSecret;
       if (!authenticated) {
@@ -5153,7 +5169,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       console.log("[Ghost webhook] Authenticated via ingest secret fallback");
     }
-    // Dev mode: allow ingest secret without fallback flag
+    // 4. Dev mode: allow ingest secret without fallback flag
     else if (process.env.NODE_ENV !== "production" && providedIngestSecret && ingestSecret) {
       authenticated = providedIngestSecret === ingestSecret;
       if (!authenticated) {
@@ -5164,7 +5180,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     if (!authenticated) {
       console.log("[Ghost webhook] No valid authentication method provided");
-      return res.status(401).json({ error: "Unauthorized - provide X-Ghost-Signature or x-ingest-secret" });
+      return res.status(401).json({ error: "Unauthorized" });
     }
     
     // Parse event from payload

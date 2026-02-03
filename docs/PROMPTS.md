@@ -10938,3 +10938,25 @@ Object.keys(req.headers).sort()
 Do NOT log header values.
 Do NOT run end-to-end tests or videos.
 
+---
+
+We have confirmed Ghost webhooks are firing, and the Secret is set in Ghost UI, but Ghost requests arrive with only basic headers and no signature header at all. We need a secure MVP auth method that works with Ghost.
+
+IMPORTANT: Do NOT run full regression tests or browser/video tests.
+
+Implement token-based auth for POST /api/webhooks/ghost:
+1) Add env var GHOST_WEBHOOK_TOKEN (a long random string).
+2) Accept token either via:
+   - query param ?token=...
+   - OR header x-webhook-token (support both)
+3) If token missing/invalid, return 401 with:
+   { error: "Unauthorized" }
+4) Keep existing signature verification logic in place IF x-ghost-signature exists, but token auth must work regardless.
+5) Update docs/replit.md with Ghost configuration instructions:
+   - Set webhook URL to: https://<replit>/api/webhooks/ghost?token=YOUR_TOKEN
+6) Keep current webhook logging.
+
+Goal: Ghost webhooks authenticate and trigger sync reliably even without any signature headers.
+
+---
+

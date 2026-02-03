@@ -207,25 +207,32 @@ Preferred communication style: Simple, everyday language.
 ### Ghost CMS Webhook Configuration
 To enable automatic syncing when Ghost posts are published/updated:
 
-1. **Environment Variables**:
-   - `GHOST_WEBHOOK_SECRET` - Secret key for HMAC signature verification (set in Ghost webhook config)
+1. **Environment Variables** (choose one auth method):
+   - `GHOST_WEBHOOK_TOKEN` - **Recommended**: Long random token for URL-based auth (works reliably with Ghost)
+   - `GHOST_WEBHOOK_SECRET` - HMAC signature verification (Ghost may not send signature headers)
    - `GHOST_WEBHOOK_ALLOW_INGEST_SECRET_FALLBACK` - Set to "true" to allow fallback to x-ingest-secret header
 
-2. **Ghost Admin Setup**:
+2. **Ghost Admin Setup** (Token Auth - Recommended):
    - Go to Ghost Admin > Settings > Integrations > Add custom integration
    - Create webhook with:
      - Name: "Football Mad Sync"
      - Event: post.published (also add post.published.edited, post.unpublished, post.deleted)
-     - Target URL: `https://your-domain.replit.app/api/webhooks/ghost`
-     - Secret: Generate a secret and set it as GHOST_WEBHOOK_SECRET env var
+     - Target URL: `https://your-domain.replit.app/api/webhooks/ghost?token=YOUR_GHOST_WEBHOOK_TOKEN`
+   - Generate a secure random token (e.g., `openssl rand -hex 32`) and set as `GHOST_WEBHOOK_TOKEN` env var
+   - Use the same token in the webhook URL query parameter
 
-3. **Supported Events**:
+3. **Authentication Methods** (priority order):
+   1. Token auth: `?token=...` query param or `x-webhook-token` header
+   2. HMAC signature: `x-ghost-signature` header (if Ghost sends it)
+   3. Ingest secret fallback: `x-ingest-secret` header (if enabled)
+
+4. **Supported Events**:
    - `post.published` - New post published
    - `post.published.edited` - Published post updated
    - `post.unpublished` - Post unpublished
    - `post.deleted` - Post deleted
 
-4. **Manual Sync** (for testing/backfill):
+5. **Manual Sync** (for testing/backfill):
    ```bash
    curl -X POST https://your-domain.replit.app/api/admin/sync/ghost \
      -H "x-ingest-secret: $INGEST_SECRET"
