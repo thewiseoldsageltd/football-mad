@@ -5197,8 +5197,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       throw new Error("Ghost API not configured");
     }
 
+    // Classify event types
+    const isDeleteEvent = ["post.deleted", "post.unpublished"].includes(eventName);
+    const isUpdateEvent = ["post.updated", "post.edited", "post.published"].includes(eventName);
+
     // Handle delete/unpublish events
-    if (eventName === "post.deleted" || eventName === "post.unpublished") {
+    if (isDeleteEvent) {
       const existing = await db
         .select({ id: articles.id })
         .from(articles)
@@ -5337,10 +5341,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     logWebhookAudit(`incoming path=${req.path} hasToken=${hasToken} tokenLen=${tokenLen} sigHeader=${sigHeader} contentType=${contentType} len=${contentLength}`);
     
     // Parse webhook body using helper
-    const body = parseWebhookBody(req);
-    const eventName = body.event;
+    const parsedBody: any = parseWebhookBody(req);
+    
+    // Improved event detection: check body.event, headers, or infer from body structure
+    const headerEvent =
+      (req.headers["x-ghost-event"] as string | undefined) ||
+      (req.headers["x-ghost-topic"] as string | undefined);
+    
+    // Only use parsedBody.event if it's a real event (not "unknown")
+    const bodyEvent = parsedBody?.event !== "unknown" ? parsedBody?.event : undefined;
+    
+    const eventName =
+      bodyEvent ||
+      headerEvent ||
+      (parsedBody?.post?.previous ? "post.deleted" :
+       parsedBody?.post?.current ? "post.edited" :
+       "unknown");
+    
     // Ghost sends post.current for publish/update, post.previous for delete
-    const postId = body.post?.current?.id ?? body.post?.previous?.id ?? body.post?.id ?? "unknown";
+    const postId = parsedBody?.post?.current?.id ?? parsedBody?.post?.previous?.id ?? parsedBody?.post?.id ?? "unknown";
     
     logWebhookAudit(`received event=${eventName} postId=${postId}`);
     

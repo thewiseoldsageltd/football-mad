@@ -11039,3 +11039,51 @@ Goal: webhook updates should complete quickly (single post), log clearly, and ne
 
 ---
 
+We need to improve event detection in the Ghost webhook handler so real Ghost CMS webhooks are not logged as "event=unknown".
+
+FILE: server/routes.ts  
+ROUTE: POST /api/webhooks/ghost
+
+Find where the webhook body is parsed and where we currently determine:
+
+const eventName = ...
+
+Replace that logic with the following:
+
+------------------------------------------------------------
+
+const body: any = parsedBody; // use the already parsed webhook body
+
+const headerEvent =
+  (req.headers["x-ghost-event"] as string | undefined) ||
+  (req.headers["x-ghost-topic"] as string | undefined);
+
+const eventName =
+  body?.event ||
+  headerEvent ||
+  (body?.post?.previous ? "post.deleted" :
+   body?.post?.current ? "post.edited" :
+   "unknown");
+
+------------------------------------------------------------
+
+Then update any event checks so updates are triggered for BOTH:
+
+- "post.updated"
+- "post.edited"
+- "post.published"
+
+Example:
+
+const isUpdateEvent = ["post.updated", "post.edited", "post.published"].includes(eventName);
+const isDeleteEvent = ["post.deleted", "post.unpublished"].includes(eventName);
+
+Make sure existing logging still works:
+
+logWebhookAudit(`received event=${eventName} postId=${postId}`);
+
+Do NOT change authentication, token handling, signature verification, or database logic.
+Only improve how eventName is determined and how update/delete events are classified.
+
+---
+
