@@ -106,29 +106,41 @@ export default function NewsPage() {
   const [polledArticles, setPolledArticles] = useState<any[]>([]);
   const lastCursorRef = useRef<{ since: string; sinceId: string } | null>(null);
 
-  // Merge base articles with polled updates
+  // Merge base articles with polled updates (webhook-safe)
   const mergedArticles = useMemo(() => {
-    const baseArticles = newsResponse?.articles || [];
-    if (polledArticles.length === 0) return baseArticles;
-    
-    // Dedupe by id, keeping polled (newer) first
-    const seen = new Set<string>();
-    const result: any[] = [];
-    
-    for (const article of polledArticles) {
-      if (!seen.has(article.id)) {
-        seen.add(article.id);
-        result.push(article);
+    const base = newsResponse?.articles ?? [];
+    if (polledArticles.length === 0) return base;
+
+    const map = new Map<string, any>();
+
+    // Start with base articles (these may already include webhook updates)
+    for (const article of base) {
+      map.set(article.id, article);
+    }
+
+    // Only overwrite if the polled version is actually newer
+    for (const polled of polledArticles) {
+      const existing = map.get(polled.id);
+
+      if (!existing) {
+        map.set(polled.id, polled);
+        continue;
+      }
+
+      const existingTs = new Date(existing.publishedAt || existing.createdAt).getTime();
+      const polledTs = new Date(polled.publishedAt || polled.createdAt).getTime();
+
+      if (polledTs > existingTs) {
+        map.set(polled.id, polled);
       }
     }
-    for (const article of baseArticles) {
-      if (!seen.has(article.id)) {
-        seen.add(article.id);
-        result.push(article);
-      }
-    }
-    
-    return result;
+
+    // Always return newest-first
+    return Array.from(map.values()).sort(
+      (a, b) =>
+        new Date(b.publishedAt || b.createdAt).getTime() -
+        new Date(a.publishedAt || a.createdAt).getTime()
+    );
   }, [newsResponse?.articles, polledArticles]);
 
   // Reset polled articles when filters change

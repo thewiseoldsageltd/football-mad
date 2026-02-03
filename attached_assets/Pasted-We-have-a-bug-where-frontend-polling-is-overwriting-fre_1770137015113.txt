@@ -1,0 +1,79 @@
+We have a bug where frontend polling is overwriting fresher article updates that arrive via Ghost webhooks.
+
+Context:
+• Webhooks now update articles in real-time in the database
+• The /news page still runs a 5-minute polling loop using /api/news/updates
+• The merge logic currently assumes all polled articles are newer, which is false
+• Result: older polling results sometimes overwrite newer webhook-updated articles in UI
+
+We need to make polling a SAFE BACKUP that NEVER downgrades article data.
+
+FILE TO EDIT:
+client/src/pages/news.tsx
+
+FIND the section that merges base articles with polled articles. It currently looks like this:
+
+// Merge base articles with polled updates
+const mergedArticles = useMemo(() => {
+  if (polledArticles.length === 0) return baseArticles;
+
+  const map = new Map();
+
+  for (const article of polledArticles) {
+    map.set(article.id, article);
+  }
+
+  for (const article of baseArticles) {
+    if (!map.has(article.id)) {
+      map.set(article.id, article);
+    }
+  }
+
+  return Array.from(map.values());
+}, [newsResponse?.articles, polledArticles]);
+
+REPLACE that entire block with this safer, timestamp-aware version:
+
+// Merge base articles with polled updates (webhook-safe)
+const mergedArticles = useMemo(() => {
+  const base = newsResponse?.articles ?? [];
+  if (polledArticles.length === 0) return base;
+
+  const map = new Map<string, any>();
+
+  // Start with base articles (these may already include webhook updates)
+  for (const article of base) {
+    map.set(article.id, article);
+  }
+
+  // Only overwrite if the polled version is actually newer
+  for (const polled of polledArticles) {
+    const existing = map.get(polled.id);
+
+    if (!existing) {
+      map.set(polled.id, polled);
+      continue;
+    }
+
+    const existingTs = new Date(existing.publishedAt || existing.createdAt).getTime();
+    const polledTs = new Date(polled.publishedAt || polled.createdAt).getTime();
+
+    if (polledTs > existingTs) {
+      map.set(polled.id, polled);
+    }
+  }
+
+  // Always return newest-first
+  return Array.from(map.values()).sort(
+    (a, b) =>
+      new Date(b.publishedAt || b.createdAt).getTime() -
+      new Date(a.publishedAt || a.createdAt).getTime()
+  );
+}, [newsResponse?.articles, polledArticles]);
+
+GOAL:
+• Webhook updates should appear instantly and NEVER be overwritten by polling
+• Polling should only add genuinely newer articles
+• Sorting should remain newest first
+
+Do not change backend code. Frontend merge logic only.
