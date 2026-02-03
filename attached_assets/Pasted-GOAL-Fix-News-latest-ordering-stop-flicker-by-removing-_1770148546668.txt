@@ -1,0 +1,47 @@
+GOAL: Fix News “latest” ordering + stop flicker by removing DB updatedAt from freshness. Ensure Ghost timestamps (sourceUpdatedAt) are consistently populated. Do NOT run regression/E2E tests.
+
+EVIDENCE:
+Top 15 /api/news shows almost all posts have sourceUpdatedAt=null and updatedAt set to bulk-ingest time (e.g. 2026-02-03T13:52:21.xxxZ). This causes old posts to appear as “latest” and the UI to flicker/revert on poll/merge.
+
+CHANGES REQUIRED:
+
+1) server/storage.ts
+   - Replace freshnessTs expression everywhere in news queries with:
+     COALESCE(sourceUpdatedAt, publishedAt, createdAt)
+     (IMPORTANT: do NOT include updatedAt in this expression)
+   - Apply to BOTH:
+     a) getNewsArticles (the main /api/news endpoint)
+     b) getNewsUpdates (/api/news/updates polling endpoint)
+   - Ensure ORDER BY uses freshnessTs.
+   - Ensure nextCursor uses the same freshnessTs chain (sourceUpdatedAt -> publishedAt -> createdAt), NOT updatedAt.
+
+2) server/routes.ts (Ghost sync)
+   - Ensure sourceUpdatedAt is ALWAYS set on BOTH insert AND update paths.
+   - Derive it only from Ghost fields:
+     const ghostSourceUpdatedAt =
+       ghostPost.updated_at ? new Date(ghostPost.updated_at) :
+       ghostPost.published_at ? new Date(ghostPost.published_at) :
+       ghostPost.created_at ? new Date(ghostPost.created_at) :
+       new Date();
+   - Persist:
+     sourceUpdatedAt: ghostSourceUpdatedAt
+     updatedAt: ghostSourceUpdatedAt   (allowed, but sorting no longer depends on updatedAt)
+   - Remove/replace any remaining updatedAt: new Date() in Ghost news sync paths IF it’s used to represent Ghost freshness.
+
+3) client/src/pages/news.tsx
+   - For merge “is newer” comparisons, use:
+     sourceUpdatedAt || publishedAt || createdAt
+     (updatedAt should not decide article freshness for news)
+
+NO TESTS:
+- Do not run regression tests, E2E, or long test suites.
+
+MANUAL VERIFICATION ONLY:
+A) After change, run:
+   curl -s "http://127.0.0.1:5000/api/news?limit=50" | node script to print top 15 timestamps
+   Confirm “freshness” is driven by sourceUpdatedAt/publishedAt, not bulk DB updatedAt.
+B) Edit the Strand Larsen post title in Ghost and confirm:
+   - Ghost Content API shows updated_at changes
+   - Webhook sync updates DB sourceUpdatedAt
+   - /api/news reflects new title within 60–120 seconds.
+C) Confirm the news grid no longer shows “about 1 year ago” items near the top unless their Ghost updated_at is truly recent.
