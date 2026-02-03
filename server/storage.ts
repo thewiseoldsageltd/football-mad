@@ -353,61 +353,61 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
     
-    // Use COALESCE(published_at, created_at) for sorting
-    const effectiveDate = sql`COALESCE(${articles.publishedAt}, ${articles.createdAt})`;
+    // Timestamp expression: ts = COALESCE(publishedAt, createdAt)
+    const tsExpr = sql`COALESCE(${articles.publishedAt}, ${articles.createdAt})`;
     
-    let result;
-    if (since) {
+    let rows;
+    
+    if (!since) {
+      // FIRST LOAD: get latest N (DESC), then reverse for UI stability (oldest→newest)
+      rows = await db
+        .select(listFields)
+        .from(articles)
+        .orderBy(desc(tsExpr), desc(articles.id))
+        .limit(limit);
+      
+      rows = rows.reverse(); // Return ASC for UI stability
+    } else {
+      // POLLING: only newer than cursor, ordered ASC
       const sinceDate = new Date(since);
-      // (ts > since) OR (ts = since AND id > sinceId)
+      
       if (sinceId) {
-        result = await db
+        // (ts > since) OR (ts = since AND id > sinceId)
+        rows = await db
           .select(listFields)
           .from(articles)
           .where(
             or(
-              sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) > ${sinceDate}`,
+              sql`${tsExpr} > ${sinceDate}`,
               and(
-                sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) = ${sinceDate}`,
+                sql`${tsExpr} = ${sinceDate}`,
                 sql`${articles.id} > ${sinceId}`
               )
             )
           )
-          .orderBy(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) ASC`, sql`${articles.id} ASC`)
-          .limit(limit + 1); // Fetch one extra to check for more
+          .orderBy(tsExpr, articles.id)
+          .limit(limit);
       } else {
-        result = await db
+        rows = await db
           .select(listFields)
           .from(articles)
-          .where(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) > ${sinceDate}`)
-          .orderBy(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) ASC`, sql`${articles.id} ASC`)
-          .limit(limit + 1);
+          .where(sql`${tsExpr} > ${sinceDate}`)
+          .orderBy(tsExpr, articles.id)
+          .limit(limit);
       }
-    } else {
-      // No since param: return oldest articles first (ASC for cursor-based pagination)
-      result = await db
-        .select(listFields)
-        .from(articles)
-        .orderBy(sql`COALESCE(${articles.publishedAt}, ${articles.createdAt}) ASC`, sql`${articles.id} ASC`)
-        .limit(limit + 1);
     }
     
-    // Check if there are more results
-    let nextCursor: { since: string; sinceId: string } | null = null;
-    if (result.length > limit) {
-      result = result.slice(0, limit);
-      const lastArticle = result[result.length - 1];
-      const lastDate = lastArticle.publishedAt || lastArticle.createdAt;
-      if (lastDate) {
-        nextCursor = {
-          since: new Date(lastDate).toISOString(),
-          sinceId: lastArticle.id,
-        };
-      }
-    }
+    // Build nextCursor from last article
+    const last = rows[rows.length - 1];
+    const nextCursor = last
+      ? { 
+          since: new Date(last.publishedAt || last.createdAt!).toISOString(), 
+          sinceId: last.id 
+        }
+      : (since ? { since, sinceId: sinceId || "" } : null);
     
     return {
-      articles: result,
+      articles: rows,
       nextCursor,
       serverTime,
     };

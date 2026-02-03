@@ -1,0 +1,146 @@
+IMPORTANT EXECUTION RULES:
+
+- DO NOT run end-to-end tests
+- DO NOT perform regression testing
+- DO NOT open the browser or record preview videos
+- DO NOT simulate user journeys
+- DO NOT run Playwright/Cypress or any UI automation
+- DO NOT run load tests
+- ONLY modify code files that are directly required for the task
+- ONLY make server-side or frontend code changes explicitly described
+- Stop after implementing the code changes
+
+We need to fix the GET /api/news/updates endpoint.
+
+CURRENT PROBLEM:
+When called without a cursor, it returns the OLDEST articles in the database.
+We want it to return the LATEST articles by default.
+
+GOAL BEHAVIOUR:
+
+1) First call (no `since` param)
+   - Return the LATEST N articles (most recent first in DB query)
+   - But reverse them before sending so the response order is OLDEST → NEWEST
+   - This ensures UI appends correctly
+
+2) Subsequent polling calls (with `since` and `sinceId`)
+   - Return only articles newer than the cursor
+   - Ordered ASC (oldest → newest)
+   - Use stable tiebreaker: (timestamp, id)
+
+3) Always use lightweight fields only (same fields already used for /api/news)
+
+4) Add no-cache headers to prevent browser caching
+
+IMPLEMENTATION DETAILS:
+
+• Timestamp column = COALESCE(publishedAt, createdAt)
+• Cursor comparison logic:
+    (ts > since) OR (ts = since AND id > sinceId)
+
+• Response format must stay:
+
+{
+  "articles": [...],
+  "nextCursor": { "since": "...", "sinceId": "..." },
+  "serverTime": "..."
+}
+
+---
+
+PATCH THE ROUTE LOGIC LIKE THIS:
+
+```ts
+// inside GET /api/news/updates handler
+
+const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 500);
+const since = req.query.since ? new Date(req.query.since as string) : null;
+const sinceId = (req.query.sinceId as string) || null;
+
+// timestamp expression
+const tsExpr = sql`COALESCE(${articles.publishedAt}, ${articles.createdAt})`;
+
+let rows;
+
+if (!since) {
+  // FIRST LOAD: get latest N, then reverse
+  rows = await db
+    .select({
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+      coverImage: articles.coverImage,
+      heroImageCredit: articles.heroImageCredit,
+      authorName: articles.authorName,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      isFeatured: articles.isFeatured,
+      isTrending: articles.isTrending,
+      isBreaking: articles.isBreaking,
+      viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount,
+    })
+    .from(articles)
+    .orderBy(desc(tsExpr), desc(articles.id))
+    .limit(limit);
+
+  rows = rows.reverse(); // return ASC for UI stability
+} else {
+  // POLLING: only newer than cursor
+  rows = await db
+    .select({
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+      coverImage: articles.coverImage,
+      heroImageCredit: articles.heroImageCredit,
+      authorName: articles.authorName,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      isFeatured: articles.isFeatured,
+      isTrending: articles.isTrending,
+      isBreaking: articles.isBreaking,
+      viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount,
+    })
+    .from(articles)
+    .where(
+      sinceId
+        ? sql`(${tsExpr} > ${since.toISOString()} OR (${tsExpr} = ${since.toISOString()} AND ${articles.id} > ${sinceId}))`
+        : sql`${tsExpr} > ${since.toISOString()}`
+    )
+    .orderBy(asc(tsExpr), asc(articles.id))
+    .limit(limit);
+}
+
+// Build next cursor from last article
+const last = rows[rows.length - 1];
+const nextCursor = last
+  ? { since: (last.publishedAt || last.createdAt), sinceId: last.id }
+  : (since ? { since: since.toISOString(), sinceId } : null);
+
+// Prevent caching
+res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+res.setHeader("Pragma", "no-cache");
+res.setHeader("Expires", "0");
+
+res.json({
+  articles: rows,
+  nextCursor,
+  serverTime: new Date().toISOString()
+});
+```
+
+DO NOT change any other endpoints.
+DO NOT add heavy fields (no full article HTML).
+DO NOT change response structure.
+
+Only update the /api/news/updates logic as described.
