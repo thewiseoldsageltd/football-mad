@@ -10901,3 +10901,32 @@ The endpoint should never hang again. Curl should return instantly with 202 Acce
 
 ---
 
+We are debugging Ghost webhooks.
+
+Symptom:
+Ghost shows webhooks are triggered, but our server logs show nothing and no sync occurs. We suspect signature verification is failing because we are not hashing the RAW request body.
+
+IMPORTANT: Do NOT run full regression tests or browser/video tests.
+
+Tasks:
+1) In POST /api/webhooks/ghost:
+   - Add a console.log at the very top BEFORE auth that prints:
+     - timestamp
+     - req.headers['x-ghost-signature'] presence (true/false)
+     - content-type and content-length
+2) Fix signature verification to use the RAW request body bytes:
+   - Ensure this route uses express.raw({ type: 'application/json' }) OR body-parser raw/verify hook so we can access the exact raw Buffer.
+   - Compute HMAC SHA256 using process.env.GHOST_WEBHOOK_SECRET over that raw Buffer.
+   - Accept signature header formats:
+       "sha256=<hex>" AND "<hex>"
+     (strip "sha256=" if present)
+3) If signature fails, return 401 with a clear JSON message:
+   { error: "Invalid signature" }
+4) Keep x-ingest-secret fallback support unchanged.
+5) Do not change /api/news behaviour.
+
+Deliverable:
+Ghost webhook requests should produce a log line even if rejected, and valid signed requests should pass and trigger sync.
+
+---
+

@@ -4922,21 +4922,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Secret: Set GHOST_WEBHOOK_SECRET env var
   
   // Helper to verify Ghost webhook HMAC signature
+  // Accepts formats: "sha256=<hex>", "sha256=<hex>, t=<timestamp>", or just "<hex>"
   const verifyGhostSignature = (rawBody: Buffer, signature: string, secret: string): boolean => {
     try {
-      // Ghost signature format: "sha256=<hex>", timestamp may be included as "sha256=<hex>, t=<timestamp>"
-      const sigParts = signature.split(", ");
-      const hashPart = sigParts.find(p => p.startsWith("sha256="));
-      if (!hashPart) return false;
+      let providedHash: string;
       
-      const providedHash = hashPart.replace("sha256=", "");
+      // Handle formats: "sha256=<hex>, t=123" or "sha256=<hex>" or just "<hex>"
+      if (signature.includes("sha256=")) {
+        const sigParts = signature.split(", ");
+        const hashPart = sigParts.find(p => p.startsWith("sha256="));
+        if (!hashPart) return false;
+        providedHash = hashPart.replace("sha256=", "");
+      } else {
+        // Just hex string
+        providedHash = signature.trim();
+      }
+      
+      // Validate hex format (should be 64 chars for sha256)
+      if (!/^[a-f0-9]{64}$/i.test(providedHash)) {
+        console.log(`[Ghost webhook] Invalid signature format: ${providedHash.substring(0, 20)}...`);
+        return false;
+      }
+      
       const computedHash = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+      
+      console.log(`[Ghost webhook] Computed hash: ${computedHash.substring(0, 16)}... Provided: ${providedHash.substring(0, 16)}...`);
       
       return crypto.timingSafeEqual(
         Buffer.from(providedHash, "hex"),
         Buffer.from(computedHash, "hex")
       );
-    } catch {
+    } catch (e: any) {
+      console.error(`[Ghost webhook] Signature verification error:`, e.message);
       return false;
     }
   };
@@ -5086,21 +5103,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // POST /api/webhooks/ghost - Ghost CMS auto-sync webhook
   // Security: Verifies X-Ghost-Signature HMAC or falls back to x-ingest-secret
+  // Note: This route needs raw body for HMAC verification. We store it via rawBody property.
   app.post("/api/webhooks/ghost", async (req: Request, res: Response) => {
+    // Debug logging at very top - always log incoming webhook requests
+    const timestamp = new Date().toISOString();
+    const hasGhostSig = !!req.headers["x-ghost-signature"];
+    const contentType = req.headers["content-type"] || "unknown";
+    const contentLength = req.headers["content-length"] || "unknown";
+    console.log(`[Ghost webhook] ${timestamp} | sig=${hasGhostSig} | type=${contentType} | len=${contentLength}`);
+    
     const webhookSecret = process.env.GHOST_WEBHOOK_SECRET;
     const ingestSecret = process.env.INGEST_SECRET;
     const allowFallback = process.env.GHOST_WEBHOOK_ALLOW_INGEST_SECRET_FALLBACK === "true";
     const ghostSignature = req.headers["x-ghost-signature"] as string | undefined;
     const providedIngestSecret = req.headers["x-ingest-secret"] as string | undefined;
     
-    // Get raw body for HMAC verification (Express parsed it, so we need to reconstruct)
-    // Note: For production, use express.raw() middleware on this route
-    const rawBody = Buffer.from(JSON.stringify(req.body));
+    // Get raw body for HMAC verification
+    // Express.json middleware stores raw buffer in req.rawBody via verify callback
+    let rawBody: Buffer;
+    const capturedRaw = (req as any).rawBody;
+    if (capturedRaw && Buffer.isBuffer(capturedRaw)) {
+      rawBody = capturedRaw;
+      console.log(`[Ghost webhook] Using captured raw body (${rawBody.length} bytes)`);
+    } else {
+      // Fallback: reconstruct from parsed JSON (may not match exact bytes Ghost sent)
+      rawBody = Buffer.from(JSON.stringify(req.body));
+      console.log(`[Ghost webhook] WARNING: Reconstructed body from JSON (${rawBody.length} bytes) - signature verification may fail if Ghost's formatting differs`);
+    }
     
     let authenticated = false;
     
     // Try HMAC signature verification first
     if (ghostSignature && webhookSecret) {
+      console.log(`[Ghost webhook] Attempting HMAC verification with signature: ${ghostSignature.substring(0, 30)}...`);
       authenticated = verifyGhostSignature(rawBody, ghostSignature, webhookSecret);
       if (!authenticated) {
         console.log("[Ghost webhook] HMAC signature verification failed");
@@ -5127,7 +5162,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     
     if (!authenticated) {
-      console.log("[Ghost webhook] No valid authentication method");
+      console.log("[Ghost webhook] No valid authentication method provided");
       return res.status(401).json({ error: "Unauthorized - provide X-Ghost-Signature or x-ingest-secret" });
     }
     
