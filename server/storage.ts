@@ -252,6 +252,9 @@ export class DatabaseStorage implements IStorage {
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
       publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+      updatedAt: articles.updatedAt,
+      sourceUpdatedAt: articles.sourceUpdatedAt,
       competition: articles.competition,
       contentType: articles.contentType,
       tags: articles.tags,
@@ -261,6 +264,9 @@ export class DatabaseStorage implements IStorage {
       viewCount: articles.viewCount,
       commentsCount: articles.commentsCount,
     };
+    
+    // Freshness timestamp for sorting: prioritize updatedAt to catch edits
+    const freshnessTs = sql`COALESCE(${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     if (teamIds.length > 0) {
       const articleIdsWithTeams = await db
@@ -300,7 +306,8 @@ export class DatabaseStorage implements IStorage {
         orderByClause = desc(articles.commentsCount);
         break;
       default:
-        orderByClause = desc(articles.publishedAt);
+        // Use freshness timestamp to ensure recently-edited articles appear correctly
+        orderByClause = desc(freshnessTs);
     }
     
     // Default limit of 20 articles

@@ -1,0 +1,42 @@
+You are working in a Replit Node/Express + React app.
+
+Problem:
+`/api/news` does NOT include `createdAt`, `updatedAt`, or `sourceUpdatedAt` in its returned article objects, so webhook edits can update the DB but the client cannot reliably detect freshness and may show stale titles. We already updated polling + merge logic to be updatedAt-aware, but the base `/api/news` payload is missing these fields.
+
+Goal:
+Make `/api/news` return timestamps consistently and sort by the correct “freshness” timestamp:
+freshTs = COALESCE(updatedAt, publishedAt, createdAt)
+This ensures:
+- webhook edits appear immediately and remain correct
+- polling only overwrites when truly newer
+- list ordering is stable and correct
+
+Implement changes (server only unless you find more gaps):
+
+1) In `server/storage.ts`, in `getNewsArticles(...)`:
+   - Add these fields to the `listFields` projection:
+     - createdAt
+     - updatedAt
+     - sourceUpdatedAt (if the column exists on the articles table; if it is named differently, use the correct name)
+   - Change the ORDER BY timestamp expression to use:
+     `tsExpr = COALESCE(articles.updatedAt, articles.publishedAt, articles.createdAt)`
+     and use that for sorting (latest desc etc) where applicable.
+
+2) Ensure the response from `getNewsArticles` includes those fields (it will automatically if selected).
+   Confirm by running:
+   `curl -s "http://127.0.0.1:5000/api/news?limit=1" | grep -Eo '"(createdAt|updatedAt|sourceUpdatedAt)":[^,]*' | head`
+
+3) If `articles.updatedAt` is not currently being set anywhere:
+   - In the Ghost sync code (likely in `server/routes.ts` where Ghost posts are inserted/updated):
+     - Map Ghost `updated_at` into a stored field (`sourceUpdatedAt`) AND set `articles.updatedAt` to that value (or `new Date()` if missing).
+     - On updates, ensure `articles.updatedAt` changes so edits are detectable even when `publishedAt` stays the same.
+
+Testing (NO E2E / NO regression testing):
+- Do NOT run end-to-end suites.
+- Only do quick API checks:
+  - curl /api/news?limit=1 and verify createdAt/updatedAt appear
+  - trigger a webhook sync for a known postId and verify `/api/news?limit=20` reflects title changes quickly.
+
+Output:
+- Tell me exactly which files and lines you changed
+- Show the curl output proving `/api/news` includes updatedAt/createdAt now
