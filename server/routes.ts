@@ -5275,7 +5275,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           content: bodyHtml,
           coverImage: heroImageUrl,
           tags: ghostTags,
-          updatedAt: new Date(),
+          updatedAt: sourceUpdatedAt,
           sourcePublishedAt: publishedAt,
           sourceUpdatedAt,
         })
@@ -5361,8 +5361,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
        parsedBody?.post?.current ? "post.edited" :
        "unknown");
     
-    // Ghost sends post.current for publish/update, post.previous for delete
-    const postId = parsedBody?.post?.current?.id ?? parsedBody?.post?.previous?.id ?? parsedBody?.post?.id ?? "unknown";
+    // Robustly extract postId from all common payload shapes
+    const postId = 
+      parsedBody?.post?.current?.id ?? 
+      parsedBody?.post?.previous?.id ?? 
+      parsedBody?.post?.id ?? 
+      parsedBody?.post_id ?? 
+      parsedBody?.postId ?? 
+      null;
+    
+    if (!postId) {
+      const payloadKeys = Object.keys(parsedBody || {}).join(", ");
+      console.log(`[Ghost webhook] Missing postId. Payload keys: ${payloadKeys}`);
+      logWebhookAudit(`missing postId, payload keys: ${payloadKeys}`);
+      return res.status(400).json({ error: "Missing postId in webhook payload" });
+    }
     
     logWebhookAudit(`received event=${eventName} postId=${postId}`);
     

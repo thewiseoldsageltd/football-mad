@@ -11301,3 +11301,82 @@ Output:
 
 ---
 
+You are working in my Replit project (Football Mad MVP). Fix Ghost “edit” sync so that when I change a published post title in Ghost (e.g. adding “- SYNC-TEST”), the MVP updates within seconds and /api/news returns the new title.
+
+IMPORTANT CONSTRAINTS
+- Do NOT run any end-to-end or regression test suites (no Playwright/Cypress “full runs”, no “test all flows”). 
+- Keep verification lightweight: a couple of curl checks + log output is enough.
+
+CURRENT SYMPTOM
+- Ghost front-end + Ghost Admin show the edited title.
+- MVP still shows the old title.
+- We are using Ghost Content API in the sync path.
+- /api/news returns timestamp fields now (createdAt/updatedAt/sourceUpdatedAt), but edits are still not reflected reliably.
+
+WHAT TO DO (IMPLEMENTATION)
+1) Server: make webhook event handling accept Ghost edit events
+   - In the Ghost webhook route (server/routes.ts or wherever the webhook is handled), normalize event names so these are treated as “update” events:
+     - post.edited
+     - post.updated
+     - post.published
+   - If event is post.edited, treat it exactly like post.updated and run the same sync logic.
+   - Log the normalized event and the extracted postId.
+
+2) Server: robustly extract postId from webhook payloads
+   - Support all common shapes:
+     - body.post?.current?.id
+     - body.post?.id
+     - body.post_id / body.postId
+   - If postId is missing, log the payload keys and return 400 (don’t silently “unknown”).
+
+3) Server: ensure the sync fetches the latest Ghost content and persists it
+   - When syncing a post by ID, call Ghost Content API:
+     - GET /ghost/api/content/posts/{id}?key=CONTENT_API_KEY&include=tags,authors
+   - From the returned post, persist these fields on EVERY update (not just insert):
+     - title, slug, excerpt, html/content if stored, coverImage, tags, authorName, competition/contentType mapping, publishedAt, etc.
+   - Crucially: map Ghost timestamps:
+     - sourceUpdatedAt = ghostPost.updated_at (or updated_at equivalent)
+     - publishedAt = ghostPost.published_at (if present)
+     - createdAt = ghostPost.created_at (if present)
+
+4) Server/DB: make freshness reflect Ghost edits
+   - Ensure our DB row’s “updatedAt” is bumped on edits.
+   - Best approach:
+     - set updatedAt = sourceUpdatedAt (Ghost updated_at) when available
+     - else fallback to “now”
+   - This guarantees edits change the freshness cursor and ordering.
+
+5) Storage: ensure list/update queries use the edit-aware timestamp
+   - In server/storage.ts (getNewsArticles + getNewsUpdates), use:
+     - freshnessTs = COALESCE(sourceUpdatedAt, updatedAt, publishedAt, createdAt)
+   - ORDER BY freshnessTs DESC for “latest”.
+   - In getNewsUpdates:
+     - use freshnessTs for comparisons (since cursor)
+     - nextCursor should be based on freshnessTs + last.id
+
+6) Client: DO NOT let polling overwrite newer webhook/base data
+   - In client/src/pages/news.tsx merge logic, compare freshness timestamps using:
+     - sourceUpdatedAt || updatedAt || publishedAt || createdAt
+   - Only overwrite an existing article if the incoming one is strictly newer by freshness timestamp.
+   - Keep newest-first sort stable.
+
+LIGHTWEIGHT VERIFICATION (NO REGRESSION TESTS)
+After changes:
+A) Edit the Strand Larsen post title in Ghost again (append “- SYNC-TEST-2”).
+B) Trigger sync via real webhook OR manually hit our webhook endpoint with event=post.edited and the real postId.
+C) Validate via curl:
+   - curl -s "http://127.0.0.1:5000/api/news?limit=5" | grep -n "SYNC-TEST"
+   - curl -s "http://127.0.0.1:5000/api/news/updates?limit=50" | grep -n "SYNC-TEST"
+D) Confirm logs show:
+   - received event=post.edited (or normalized to post.updated)
+   - sync started postId=...
+   - sync completed inserted=0 updated=1
+   - and the stored timestamps include sourceUpdatedAt / updatedAt.
+
+DELIVERABLE
+- Implement the code changes across server + storage + client.
+- Add minimal, helpful logs (postId, title before/after if available, sourceUpdatedAt).
+- Provide a short summary of files changed and the exact curl commands used to verify.
+
+---
+

@@ -265,8 +265,8 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
     
-    // Freshness timestamp for sorting: prioritize updatedAt to catch edits
-    const freshnessTs = sql`COALESCE(${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
+    // Freshness timestamp for sorting: prioritize sourceUpdatedAt (Ghost's updated_at) to catch edits
+    const freshnessTs = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     if (teamIds.length > 0) {
       const articleIdsWithTeams = await db
@@ -351,6 +351,7 @@ export class DatabaseStorage implements IStorage {
       publishedAt: articles.publishedAt,
       createdAt: articles.createdAt,
       updatedAt: articles.updatedAt,
+      sourceUpdatedAt: articles.sourceUpdatedAt,
       competition: articles.competition,
       contentType: articles.contentType,
       tags: articles.tags,
@@ -361,8 +362,8 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
     
-    // Timestamp expression: prioritize updatedAt to detect edits, fall back to publishedAt/createdAt
-    const tsExpr = sql`COALESCE(${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
+    // Timestamp expression: prioritize sourceUpdatedAt (Ghost's updated_at) to detect edits
+    const tsExpr = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     let rows;
     
@@ -405,11 +406,11 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Build nextCursor from last article - use updatedAt first to detect edits
+    // Build nextCursor from last article - use sourceUpdatedAt first to detect Ghost edits
     const last = rows[rows.length - 1];
     const nextCursor = last
       ? { 
-          since: new Date(last.updatedAt || last.publishedAt || last.createdAt!).toISOString(), 
+          since: new Date(last.sourceUpdatedAt || last.updatedAt || last.publishedAt || last.createdAt!).toISOString(), 
           sinceId: last.id 
         }
       : (since ? { since, sinceId: sinceId || "" } : null);
