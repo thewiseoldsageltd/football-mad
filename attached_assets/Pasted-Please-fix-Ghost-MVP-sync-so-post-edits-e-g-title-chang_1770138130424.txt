@@ -1,0 +1,84 @@
+Please fix Ghost → MVP sync so post edits (e.g. title changes) reliably update on the MVP site.
+
+CURRENT ISSUE
+- When I edit a Ghost post title (e.g. remove “- WH” or change to “- sync”), the Ghost site updates instantly.
+- The MVP Replit site often does NOT update for that post, even though the post exists in our DB.
+- This happens because our polling cursor uses COALESCE(publishedAt, createdAt) — so edits that don’t change publishedAt/createdAt are invisible to polling, and if the webhook event is missed/delayed, the DB never refreshes.
+
+GOAL
+- Webhooks remain the primary “instant” path.
+- Polling stays as a fallback, but it must detect edits too, not just new posts.
+- Polling must never overwrite newer webhook data.
+
+--------------------------------------------------------------------
+1) Add “updatedAt” tracking end-to-end
+--------------------------------------------------------------------
+DB / schema
+- Ensure the articles table has an updatedAt column (datetime/ISO string).
+- If it already exists, use it consistently. If not, add it via migration and include it in the Drizzle schema.
+
+Ghost mapping (syncSingleGhostPost)
+- When fetching a post from Ghost Admin API, map:
+  - publishedAt from Ghost published_at
+  - createdAt from Ghost created_at
+  - updatedAt from Ghost updated_at
+- Always persist updatedAt on every upsert.
+
+--------------------------------------------------------------------
+2) Fix upsert so edits actually update fields
+--------------------------------------------------------------------
+- In the DB upsert/update logic for Ghost posts:
+  - Ensure we UPDATE title/excerpt/coverImage/tags/etc on conflict (not insert-only).
+  - Confirm we match existing rows consistently (recommended: store ghostPostId and use it as a UNIQUE key).
+  - If we currently upsert by internal UUID only, introduce ghostPostId and unique-index it.
+
+Important:
+- A webhook log showing updated=1 must actually update title too.
+
+--------------------------------------------------------------------
+3) Make polling detect edits (not just new posts)
+--------------------------------------------------------------------
+Update getNewsUpdates in server/storage.ts so the polling timestamp expression uses updatedAt.
+
+Replace:
+- tsExpr = COALESCE(publishedAt, createdAt)
+
+With:
+- tsExpr = COALESCE(updatedAt, publishedAt, createdAt)
+
+And ensure:
+- Cursor since uses the same value (updatedAt first, else publishedAt/createdAt).
+- Ordering stays stable and deterministic:
+  - Polling: ORDER BY tsExpr ASC, id ASC
+  - First load: still OK to pull latest N then reverse for UI stability if desired.
+- This ensures a title edit triggers polling pickup even if publishedAt is unchanged.
+
+--------------------------------------------------------------------
+4) Keep webhook-safe merge logic in the client
+--------------------------------------------------------------------
+In client/src/pages/news.tsx:
+- Keep the “timestamp-aware merge” logic.
+- Compare using updatedAt first, then publishedAt, then createdAt.
+- Polled data only overwrites base/webhook article if it is genuinely newer by that composite timestamp.
+
+--------------------------------------------------------------------
+5) Add lightweight debug visibility (optional but helpful)
+--------------------------------------------------------------------
+- Add one debug log line whenever we upsert a Ghost post:
+  - postId, slug, title (short), publishedAt, updatedAt, and whether it was insert/update.
+- Ensure /api/news/updates returns serverTime (already does) and ensure nextCursor uses updatedAt.
+
+--------------------------------------------------------------------
+6) Quick verification checklist
+--------------------------------------------------------------------
+After implementing:
+1) Edit Strand Larsen title in Ghost (“- WH” → “- sync”)
+2) Confirm webhook receives post.updated or post.edited (if configured)
+3) Regardless of webhook, within the poll interval the MVP should update because updatedAt changed
+4) Confirm /api/news?limit=20 returns the new title (DB correct)
+5) Confirm UI shows the updated title and does not flip back
+
+DELIVERABLES
+- PR-quality changes across schema/migration (if needed), server sync/upsert, getNewsUpdates, and client merge compare.
+- Add updatedAt field to the article list payload if missing.
+- Webhooks = instant, polling = safe backup that catches missed events AND edits, no downgrades.

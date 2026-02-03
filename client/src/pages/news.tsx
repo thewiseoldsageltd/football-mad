@@ -127,15 +127,15 @@ export default function NewsPage() {
         continue;
       }
 
-      const existingTs = new Date(existing.publishedAt || existing.createdAt).getTime();
-      const polledTs = new Date(polled.publishedAt || polled.createdAt).getTime();
+      const existingTs = new Date(existing.updatedAt || existing.publishedAt || existing.createdAt).getTime();
+      const polledTs = new Date(polled.updatedAt || polled.publishedAt || polled.createdAt).getTime();
 
       if (polledTs > existingTs) {
         map.set(polled.id, polled);
       }
     }
 
-    // Always return newest-first
+    // Always return newest-first (sort by publishedAt for display order, not updatedAt)
     return Array.from(map.values()).sort(
       (a, b) =>
         new Date(b.publishedAt || b.createdAt).getTime() -

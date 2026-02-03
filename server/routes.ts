@@ -5252,6 +5252,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const bodyHtml = ghostPost.html || "";
     const heroImageUrl = ghostPost.feature_image;
     const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
+    const sourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
     const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
     
     const existing = await db
@@ -5276,10 +5277,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           tags: ghostTags,
           updatedAt: new Date(),
           sourcePublishedAt: publishedAt,
+          sourceUpdatedAt,
         })
         .where(eq(articles.id, articleId));
       updated = 1;
-      console.log(`[Ghost webhook] Updated article ${articleId} for post ${ghostPostId}`);
+      console.log(`[Ghost webhook] Updated article id=${articleId} slug=${ghostPost.slug} title="${title.slice(0, 40)}" publishedAt=${publishedAt.toISOString()} updatedAt=${sourceUpdatedAt.toISOString()}`);
     } else {
       const desiredSlug = ghostPost.slug || `ghost-${Date.now().toString(36)}`;
       const uniqueSlug = await findUniqueSlugForGhost(desiredSlug, ghostPost.id);
@@ -5295,11 +5297,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         tags: ghostTags,
         publishedAt,
         sourcePublishedAt: publishedAt,
+        sourceUpdatedAt,
       }).returning({ id: articles.id });
       
       articleId = result[0].id;
       inserted = 1;
-      console.log(`[Ghost webhook] Inserted article ${articleId} for post ${ghostPostId}`);
+      console.log(`[Ghost webhook] Inserted article id=${articleId} slug=${uniqueSlug} title="${title.slice(0, 40)}" publishedAt=${publishedAt.toISOString()} updatedAt=${sourceUpdatedAt.toISOString()}`);
     }
     
     // Extract and link entities

@@ -343,6 +343,7 @@ export class DatabaseStorage implements IStorage {
       authorName: articles.authorName,
       publishedAt: articles.publishedAt,
       createdAt: articles.createdAt,
+      updatedAt: articles.updatedAt,
       competition: articles.competition,
       contentType: articles.contentType,
       tags: articles.tags,
@@ -353,8 +354,8 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
     
-    // Timestamp expression: ts = COALESCE(publishedAt, createdAt)
-    const tsExpr = sql`COALESCE(${articles.publishedAt}, ${articles.createdAt})`;
+    // Timestamp expression: prioritize updatedAt to detect edits, fall back to publishedAt/createdAt
+    const tsExpr = sql`COALESCE(${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     let rows;
     
@@ -397,11 +398,11 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Build nextCursor from last article
+    // Build nextCursor from last article - use updatedAt first to detect edits
     const last = rows[rows.length - 1];
     const nextCursor = last
       ? { 
-          since: new Date(last.publishedAt || last.createdAt!).toISOString(), 
+          since: new Date(last.updatedAt || last.publishedAt || last.createdAt!).toISOString(), 
           sinceId: last.id 
         }
       : (since ? { since, sinceId: sinceId || "" } : null);
