@@ -4828,7 +4828,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Update existing article - keep its current slug
         articleId = existing[0].id;
         finalSlug = existing[0].slug;
-        const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
+        const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at)
+          : ghostPost.published_at ? new Date(ghostPost.published_at)
+          : ghostPost.created_at ? new Date(ghostPost.created_at)
+          : new Date();
         await db
           .update(articles)
           .set({
@@ -4848,7 +4851,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const desiredSlug = ghostPost.slug || generateSlug(title, Date.now().toString(36));
         finalSlug = await findUniqueSlugForWebhook(desiredSlug, ghostPostId);
         
-        const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
+        const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at)
+          : ghostPost.published_at ? new Date(ghostPost.published_at)
+          : ghostPost.created_at ? new Date(ghostPost.created_at)
+          : new Date();
         const result = await db.insert(articles).values({
           title,
           slug: finalSlug,
@@ -5047,8 +5053,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             
             let articleId: string;
             
-            // Parse Ghost's updated_at timestamp (snake_case)
-            const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
+            // Parse Ghost's updated_at timestamp with fallback chain (snake_case)
+            const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at)
+              : ghostPost.published_at ? new Date(ghostPost.published_at)
+              : ghostPost.created_at ? new Date(ghostPost.created_at)
+              : new Date();
             
             if (existing.length > 0) {
               articleId = existing[0].id;
@@ -5264,7 +5273,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const bodyHtml = ghostPost.html || "";
     const heroImageUrl = ghostPost.feature_image;
     const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
-    const sourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
+    const sourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at)
+      : ghostPost.published_at ? new Date(ghostPost.published_at)
+      : ghostPost.created_at ? new Date(ghostPost.created_at)
+      : new Date();
     const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
     
     const existing = await db

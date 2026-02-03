@@ -265,8 +265,8 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
     
-    // Freshness timestamp for sorting: prioritize sourceUpdatedAt (Ghost's updated_at) to catch edits
-    const freshnessTs = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
+    // Freshness timestamp for sorting: use sourceUpdatedAt or publishedAt (NOT updatedAt, to avoid old articles appearing fresh after re-ingest)
+    const freshnessTs = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     if (teamIds.length > 0) {
       const articleIdsWithTeams = await db
@@ -362,8 +362,8 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
     
-    // Timestamp expression: prioritize sourceUpdatedAt (Ghost's updated_at) to detect edits
-    const tsExpr = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.updatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
+    // Timestamp expression: use sourceUpdatedAt or publishedAt (NOT updatedAt, to avoid old articles appearing fresh after re-ingest)
+    const tsExpr = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     let rows;
     
@@ -410,7 +410,7 @@ export class DatabaseStorage implements IStorage {
     const last = rows[rows.length - 1];
     const nextCursor = last
       ? { 
-          since: new Date(last.sourceUpdatedAt || last.updatedAt || last.publishedAt || last.createdAt!).toISOString(), 
+          since: new Date(last.sourceUpdatedAt || last.publishedAt || last.createdAt!).toISOString(), 
           sinceId: last.id 
         }
       : (since ? { since, sinceId: sinceId || "" } : null);

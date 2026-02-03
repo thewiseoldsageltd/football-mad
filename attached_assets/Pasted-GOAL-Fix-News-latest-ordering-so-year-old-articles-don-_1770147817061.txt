@@ -1,0 +1,37 @@
+GOAL: Fix News “latest” ordering so year-old articles don’t appear in the latest feed just because they were ingested/updated recently. Do NOT run regression tests or E2E.
+
+PROBLEM:
+The News UI shows “about 1 year ago” items mixed into the latest feed and flickers/reverts. This happens because the API ordering uses:
+freshnessTs = COALESCE(sourceUpdatedAt, updatedAt, publishedAt, createdAt)
+Many older Ghost posts have sourceUpdatedAt = null, and our DB updatedAt was set to new Date() during ingest, making them appear “fresh” and pushing them into the top results.
+
+FIX REQUIREMENTS:
+1) server/storage.ts: Remove DB updatedAt from the freshness ordering for news.
+   - Change freshness timestamp to:
+     COALESCE(sourceUpdatedAt, publishedAt, createdAt)
+   - Apply this to both getNewsArticles and getNewsUpdates ordering + cursor logic.
+   - nextCursor should be based on sourceUpdatedAt first, else publishedAt, else createdAt (NOT updatedAt).
+
+2) server/routes.ts (Ghost sync): Ensure sourceUpdatedAt is ALWAYS set on both insert and update paths.
+   - Compute:
+     const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at)
+       : ghostPost.published_at ? new Date(ghostPost.published_at)
+       : ghostPost.created_at ? new Date(ghostPost.created_at)
+       : new Date();
+   - Persist:
+     sourceUpdatedAt: ghostSourceUpdatedAt
+     updatedAt: ghostSourceUpdatedAt   (ok, but ordering must no longer depend on updatedAt)
+   - Make sure there are NO remaining Ghost-post upsert paths that leave sourceUpdatedAt null.
+
+3) client/src/pages/news.tsx: Ensure merge comparison uses:
+   sourceUpdatedAt || publishedAt || createdAt
+   (updatedAt should be last-resort or removed for news freshness comparisons)
+
+4) Do not modify polling interval in this prompt.
+5) Do not run tests, regression, or E2E. Manual verification only.
+
+MANUAL VERIFICATION:
+- In Ghost: edit a recently published post title and confirm:
+  - Ghost updated_at changes
+  - DB /api/news shows updated title within webhook/sweeper/poll window
+- Confirm the “latest” feed no longer includes posts from 2024 unless their Ghost updated_at is genuinely recent.

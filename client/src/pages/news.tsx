@@ -127,8 +127,8 @@ export default function NewsPage() {
         continue;
       }
 
-      const existingTs = new Date(existing.sourceUpdatedAt || existing.updatedAt || existing.publishedAt || existing.createdAt).getTime();
-      const polledTs = new Date(polled.sourceUpdatedAt || polled.updatedAt || polled.publishedAt || polled.createdAt).getTime();
+      const existingTs = new Date(existing.sourceUpdatedAt || existing.publishedAt || existing.createdAt).getTime();
+      const polledTs = new Date(polled.sourceUpdatedAt || polled.publishedAt || polled.createdAt).getTime();
 
       if (polledTs > existingTs) {
         map.set(polled.id, polled);
