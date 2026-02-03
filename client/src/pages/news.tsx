@@ -149,9 +149,9 @@ export default function NewsPage() {
     lastCursorRef.current = null;
   }, [apiQueryString]);
 
-  // 5-minute polling loop for updates
+  // 60-second polling loop for updates (intentional for MVP responsiveness)
   useEffect(() => {
-    const POLL_INTERVAL = 5 * 60 * 1000; // 5 minutes
+    const POLL_INTERVAL = 60_000; // 60 seconds
     const MAX_LOOPS = 5; // Cap loops per poll cycle
     
     const fetchUpdates = async () => {
