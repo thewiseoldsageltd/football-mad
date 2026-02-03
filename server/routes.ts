@@ -5126,6 +5126,203 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     };
   };
 
+  // Helper: Parse webhook body safely
+  const parseWebhookBody = (req: Request): { event: string; post?: { id?: string; current?: any; previous?: any } } => {
+    // Try req.body first (already parsed by express.json)
+    if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+      // Ghost webhook format: { event: "post.published", post: { current: {...}, previous: {...} } }
+      // Also handle: { post: { id: "...", ... } } format
+      const body = req.body as any;
+      return {
+        event: body.event ?? "unknown",
+        post: body.post ?? undefined,
+      };
+    }
+    // Fallback: parse rawBody
+    const capturedRaw = (req as any).rawBody;
+    if (capturedRaw && Buffer.isBuffer(capturedRaw)) {
+      try {
+        const parsed = JSON.parse(capturedRaw.toString("utf8"));
+        return {
+          event: parsed.event ?? "unknown",
+          post: parsed.post ?? undefined,
+        };
+      } catch {
+        return { event: "unknown" };
+      }
+    }
+    return { event: "unknown" };
+  };
+
+  // Helper: Fetch with timeout (15s default)
+  const fetchWithTimeout = async (url: string, timeoutMs = 15000) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      return response;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  // Helper: Find unique slug for Ghost post
+  const findUniqueSlugForGhost = async (desiredSlug: string, ghostPostId: string): Promise<string> => {
+    const existingWithSlug = await db
+      .select({ id: articles.id, source: articles.source, sourceId: articles.sourceId })
+      .from(articles)
+      .where(eq(articles.slug, desiredSlug))
+      .limit(1);
+    
+    if (existingWithSlug.length === 0) return desiredSlug;
+    
+    const existing = existingWithSlug[0];
+    if (existing.source === "ghost" && existing.sourceId === ghostPostId) return desiredSlug;
+    
+    for (let i = 2; i <= 10; i++) {
+      const candidateSlug = `${desiredSlug}-${i}`;
+      const check = await db.select({ id: articles.id }).from(articles).where(eq(articles.slug, candidateSlug)).limit(1);
+      if (check.length === 0) return candidateSlug;
+    }
+    
+    return `${desiredSlug}-${ghostPostId.slice(-6)}`;
+  };
+
+  // Targeted single-post sync for webhook events
+  const syncSingleGhostPost = async (ghostPostId: string, eventName: string): Promise<{ inserted: number; updated: number; deleted: number }> => {
+    const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
+    const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
+    
+    if (!ghostApiUrl || !ghostApiKey) {
+      throw new Error("Ghost API not configured");
+    }
+
+    // Handle delete/unpublish events
+    if (eventName === "post.deleted" || eventName === "post.unpublished") {
+      const existing = await db
+        .select({ id: articles.id })
+        .from(articles)
+        .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPostId)))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        const articleId = existing[0].id;
+        // Delete article and its entity links
+        await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+        await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+        await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+        await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+        await db.delete(articles).where(eq(articles.id, articleId));
+        console.log(`[Ghost webhook] Deleted article for post ${ghostPostId}`);
+        return { inserted: 0, updated: 0, deleted: 1 };
+      }
+      return { inserted: 0, updated: 0, deleted: 0 };
+    }
+
+    // Handle publish/update events - fetch single post from Ghost
+    const url = `${ghostApiUrl}/ghost/api/content/posts/${ghostPostId}/?key=${ghostApiKey}&include=tags`;
+    console.log(`[Ghost webhook] Fetching single post: ${ghostPostId}`);
+    
+    const response = await fetchWithTimeout(url, 15000);
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Post not found in Ghost - might have been deleted
+        console.log(`[Ghost webhook] Post ${ghostPostId} not found in Ghost (404)`);
+        return { inserted: 0, updated: 0, deleted: 0 };
+      }
+      throw new Error(`Ghost API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json() as { posts?: any[] };
+    const ghostPost = data.posts?.[0];
+    
+    if (!ghostPost) {
+      console.log(`[Ghost webhook] No post data returned for ${ghostPostId}`);
+      return { inserted: 0, updated: 0, deleted: 0 };
+    }
+
+    // Upsert the post
+    const title = ghostPost.title;
+    const excerpt = ghostPost.excerpt || ghostPost.custom_excerpt;
+    const bodyHtml = ghostPost.html || "";
+    const heroImageUrl = ghostPost.feature_image;
+    const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
+    const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
+    
+    const existing = await db
+      .select()
+      .from(articles)
+      .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPost.id)))
+      .limit(1);
+    
+    let articleId: string;
+    let inserted = 0;
+    let updated = 0;
+    
+    if (existing.length > 0) {
+      articleId = existing[0].id;
+      await db
+        .update(articles)
+        .set({
+          title,
+          excerpt,
+          content: bodyHtml,
+          coverImage: heroImageUrl,
+          tags: ghostTags,
+          updatedAt: new Date(),
+          sourcePublishedAt: publishedAt,
+        })
+        .where(eq(articles.id, articleId));
+      updated = 1;
+      console.log(`[Ghost webhook] Updated article ${articleId} for post ${ghostPostId}`);
+    } else {
+      const desiredSlug = ghostPost.slug || `ghost-${Date.now().toString(36)}`;
+      const uniqueSlug = await findUniqueSlugForGhost(desiredSlug, ghostPost.id);
+      
+      const result = await db.insert(articles).values({
+        title,
+        slug: uniqueSlug,
+        excerpt,
+        content: bodyHtml,
+        coverImage: heroImageUrl,
+        source: "ghost",
+        sourceId: ghostPost.id,
+        tags: ghostTags,
+        publishedAt,
+        sourcePublishedAt: publishedAt,
+      }).returning({ id: articles.id });
+      
+      articleId = result[0].id;
+      inserted = 1;
+      console.log(`[Ghost webhook] Inserted article ${articleId} for post ${ghostPostId}`);
+    }
+    
+    // Extract and link entities
+    const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
+    const mentions = await extractEntityMentions(combinedText, ghostTags);
+    
+    await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+    await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+    await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+    await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+    
+    for (const team of mentions.teams) {
+      await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+    }
+    for (const player of mentions.players) {
+      await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+    }
+    for (const manager of mentions.managers) {
+      await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+    }
+    for (const competition of mentions.competitions) {
+      await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+    }
+    
+    return { inserted, updated, deleted: 0 };
+  };
+
   // POST /api/webhooks/ghost - Ghost CMS auto-sync webhook
   // Security: Token auth (query/header), HMAC signature, or x-ingest-secret fallback
   // Note: This route needs raw body for HMAC verification. We store it via rawBody property.
@@ -5139,14 +5336,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const contentLength = req.headers["content-length"] || "0";
     logWebhookAudit(`incoming path=${req.path} hasToken=${hasToken} tokenLen=${tokenLen} sigHeader=${sigHeader} contentType=${contentType} len=${contentLength}`);
     
+    // Parse webhook body using helper
+    const body = parseWebhookBody(req);
+    const eventName = body.event;
+    // Ghost sends post.current for publish/update, post.previous for delete
+    const postId = body.post?.current?.id ?? body.post?.previous?.id ?? body.post?.id ?? "unknown";
+    
+    logWebhookAudit(`received event=${eventName} postId=${postId}`);
+    
     // Debug logging to console
     const timestamp = new Date().toISOString();
-    console.log(`[Ghost webhook] ${timestamp} | sig=${sigHeader} | type=${contentType} | len=${contentLength}`);
+    console.log(`[Ghost webhook] ${timestamp} | event=${eventName} | postId=${postId} | sig=${sigHeader} | type=${contentType} | len=${contentLength}`);
     console.log(`[Ghost webhook] Headers: ${JSON.stringify(Object.keys(req.headers).sort())}`);
-    
-    // Parse event name for audit logging
-    const eventName = req.body?.post?.current ? "post.published" : (req.body?.post?.previous ? "post.deleted" : "unknown");
-    logWebhookAudit(`received event=${eventName}`);
     
     const webhookToken = process.env.GHOST_WEBHOOK_TOKEN;
     const webhookSecret = process.env.GHOST_WEBHOOK_SECRET;
@@ -5161,20 +5362,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const providedToken = tokenFromQuery || tokenFromHeader;
     
     // Get raw body for HMAC verification
-    // Express.json middleware stores raw buffer in req.rawBody via verify callback
     let rawBody: Buffer;
     const capturedRaw = (req as any).rawBody;
     if (capturedRaw && Buffer.isBuffer(capturedRaw)) {
       rawBody = capturedRaw;
-      console.log(`[Ghost webhook] Using captured raw body (${rawBody.length} bytes)`);
     } else {
-      // Fallback: reconstruct from parsed JSON (may not match exact bytes Ghost sent)
       rawBody = Buffer.from(JSON.stringify(req.body));
-      console.log(`[Ghost webhook] WARNING: Reconstructed body from JSON (${rawBody.length} bytes) - signature verification may fail if Ghost's formatting differs`);
     }
     
     let authenticated = false;
-    
     let authMethod = "none";
     
     // 1. Token-based auth (most reliable for Ghost webhooks without signature support)
@@ -5182,32 +5378,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (providedToken === webhookToken) {
         authenticated = true;
         authMethod = "token";
-        console.log("[Ghost webhook] Authenticated via webhook token");
       } else {
-        console.log("[Ghost webhook] Token mismatch");
         return res.status(401).json({ error: "Unauthorized" });
       }
     }
     // 2. HMAC signature verification (if x-ghost-signature header exists)
     else if (ghostSignature && webhookSecret) {
-      console.log(`[Ghost webhook] Attempting HMAC verification with signature: ${ghostSignature.substring(0, 30)}...`);
       authenticated = verifyGhostSignature(rawBody, ghostSignature, webhookSecret);
       if (!authenticated) {
-        console.log("[Ghost webhook] HMAC signature verification failed");
         return res.status(401).json({ error: "Unauthorized" });
       }
       authMethod = "signature";
-      console.log("[Ghost webhook] Authenticated via HMAC signature");
     }
     // 3. Ingest secret fallback if enabled
     else if (allowFallback && providedIngestSecret && ingestSecret) {
       authenticated = providedIngestSecret === ingestSecret;
       if (!authenticated) {
-        console.log("[Ghost webhook] Ingest secret mismatch");
         return res.status(401).json({ error: "Unauthorized" });
       }
       authMethod = "ingest-secret";
-      console.log("[Ghost webhook] Authenticated via ingest secret fallback");
     }
     // 4. Dev mode: allow ingest secret without fallback flag
     else if (process.env.NODE_ENV !== "production" && providedIngestSecret && ingestSecret) {
@@ -5216,33 +5405,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(401).json({ error: "Unauthorized" });
       }
       authMethod = "ingest-secret";
-      console.log("[Ghost webhook] Authenticated via dev mode ingest secret");
     }
     
     if (!authenticated) {
-      console.log("[Ghost webhook] No valid authentication method provided");
       return res.status(401).json({ error: "Unauthorized" });
     }
     
     // Audit log: authenticated
     logWebhookAudit(`authed method=${authMethod}`);
     
-    const postId = req.body?.post?.current?.id || req.body?.post?.previous?.id || "unknown";
-    
-    console.log(`[Ghost webhook] Event: ${eventName}, Post ID: ${postId}, Sync started`);
+    console.log(`[Ghost webhook] Authenticated via ${authMethod}, Event: ${eventName}, Post ID: ${postId}`);
     
     // Respond quickly, then sync in background
     res.json({ ok: true, message: "Sync triggered" });
     
     // Audit log: sync started
-    logWebhookAudit(`sync started postId=${postId}`);
+    logWebhookAudit(`sync started postId=${postId} event=${eventName}`);
     
-    // Trigger sync asynchronously with proper error handling
+    // Trigger targeted sync asynchronously with 60s watchdog timeout
     (async () => {
+      const WATCHDOG_TIMEOUT_MS = 60000;
+      
+      const syncPromise = (async () => {
+        // Only do targeted sync if we have a valid postId and it's a post event
+        if (postId !== "unknown" && eventName.startsWith("post.")) {
+          return await syncSingleGhostPost(postId, eventName);
+        } else {
+          // Fallback: for unknown events, just log and skip
+          console.log(`[Ghost webhook] Unknown event or postId, skipping sync`);
+          return { inserted: 0, updated: 0, deleted: 0 };
+        }
+      })();
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sync timeout after 60s")), WATCHDOG_TIMEOUT_MS);
+      });
+      
       try {
-        const result = await triggerGhostSync();
-        console.log(`[Ghost webhook] Sync completed: ${result.message}`);
-        logWebhookAudit(`sync completed postId=${postId} inserted=${result.totalInserted} updated=${result.totalUpdated}`);
+        const result = await Promise.race([syncPromise, timeoutPromise]);
+        console.log(`[Ghost webhook] Sync completed: inserted=${result.inserted} updated=${result.updated} deleted=${result.deleted}`);
+        logWebhookAudit(`sync completed postId=${postId} inserted=${result.inserted} updated=${result.updated}`);
       } catch (err: any) {
         console.error(`[Ghost webhook] Sync error: ${err.message}`);
         logWebhookAudit(`sync failed postId=${postId} error=${err.message}`);

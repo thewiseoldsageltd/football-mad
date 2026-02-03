@@ -11001,3 +11001,41 @@ Inside the async Ghost sync block triggered by /api/webhooks/ghost:
 
 ---
 
+We need to fix Ghost webhook parsing and prevent webhook-triggered sync from hanging.
+
+IMPORTANT: Do NOT run full regression tests or browser/video tests.
+
+In server/routes.ts inside POST /api/webhooks/ghost:
+
+1) Fix event parsing:
+   - Current code derives eventName using req.body.post.current/previous which is wrong.
+   - Use the real webhook payload shape: body.event and body.post.id.
+   - Implement a helper parseWebhookBody() that:
+       a) uses req.body if it is a plain object
+       b) else parses rawBody buffer as JSON safely
+   - Set:
+       const eventName = body.event ?? "unknown"
+       const postId = body.post?.id ?? "unknown"
+   - Update audit log to include: received event=<eventName> postId=<postId>
+
+2) Prevent full sync on every webhook:
+   - If postId is known and eventName starts with "post." then do a targeted sync:
+       - For post.published and post.updated: fetch that single post from Ghost and upsert only that post into the articles table + join tables.
+       - For post.deleted and post.unpublished: mark the article as deleted/unpublished in DB (or remove it) using ghost ID mapping if available.
+   - Keep the existing full pagination sync only for /api/admin/sync/ghost.
+
+3) Add timeouts:
+   - Add a 15s timeout for any HTTP call to Ghost (fetch/axios).
+   - Wrap the webhook-triggered sync in a 60s watchdog using Promise.race so we ALWAYS log either sync completed or sync failed.
+
+4) Audit logging:
+   - After auth success: log 'authed method=...'
+   - Log 'sync started postId=... event=...'
+   - Ensure ONE of these ALWAYS logs:
+       WEBHOOK_AUDIT sync completed postId=<id> inserted=<n> updated=<n>
+       WEBHOOK_AUDIT sync failed postId=<id> error=<message>
+
+Goal: webhook updates should complete quickly (single post), log clearly, and never hang indefinitely.
+
+---
+
