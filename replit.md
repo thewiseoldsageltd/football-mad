@@ -203,3 +203,30 @@ Preferred communication style: Simple, everyday language.
 **Color Meaning:**
 - Red = unavailable
 - Grey = informational only
+
+### Ghost CMS Webhook Configuration
+To enable automatic syncing when Ghost posts are published/updated:
+
+1. **Environment Variables**:
+   - `GHOST_WEBHOOK_SECRET` - Secret key for HMAC signature verification (set in Ghost webhook config)
+   - `GHOST_WEBHOOK_ALLOW_INGEST_SECRET_FALLBACK` - Set to "true" to allow fallback to x-ingest-secret header
+
+2. **Ghost Admin Setup**:
+   - Go to Ghost Admin > Settings > Integrations > Add custom integration
+   - Create webhook with:
+     - Name: "Football Mad Sync"
+     - Event: post.published (also add post.published.edited, post.unpublished, post.deleted)
+     - Target URL: `https://your-domain.replit.app/api/webhooks/ghost`
+     - Secret: Generate a secret and set it as GHOST_WEBHOOK_SECRET env var
+
+3. **Supported Events**:
+   - `post.published` - New post published
+   - `post.published.edited` - Published post updated
+   - `post.unpublished` - Post unpublished
+   - `post.deleted` - Post deleted
+
+4. **Manual Sync** (for testing/backfill):
+   ```bash
+   curl -X POST https://your-domain.replit.app/api/admin/sync/ghost \
+     -H "x-ingest-secret: $INGEST_SECRET"
+   ```

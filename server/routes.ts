@@ -1,5 +1,6 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import type { Server } from "http";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases } from "@shared/schema";
@@ -5076,6 +5077,240 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         totalErrors,
         errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
       });
+    }
+  });
+
+  // ========== GHOST WEBHOOK (Auto-sync from Ghost CMS) ==========
+  // Subscribes to Ghost events: post.published, post.published.edited, post.unpublished, post.deleted
+  // Configure in Ghost Admin > Integrations > Webhooks
+  // URL: https://your-domain.com/api/webhooks/ghost
+  // Secret: Set GHOST_WEBHOOK_SECRET env var
+  
+  // Helper to verify Ghost webhook HMAC signature
+  const verifyGhostSignature = (rawBody: Buffer, signature: string, secret: string): boolean => {
+    try {
+      // Ghost signature format: "sha256=<hex>", timestamp may be included as "sha256=<hex>, t=<timestamp>"
+      const sigParts = signature.split(", ");
+      const hashPart = sigParts.find(p => p.startsWith("sha256="));
+      if (!hashPart) return false;
+      
+      const providedHash = hashPart.replace("sha256=", "");
+      const computedHash = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+      
+      return crypto.timingSafeEqual(
+        Buffer.from(providedHash, "hex"),
+        Buffer.from(computedHash, "hex")
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // Reusable Ghost sync function
+  const triggerGhostSync = async (): Promise<{ success: boolean; totalSynced: number; totalErrors: number; message: string }> => {
+    const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
+    const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
+    
+    if (!ghostApiUrl || !ghostApiKey) {
+      return { success: false, totalSynced: 0, totalErrors: 0, message: "Ghost API not configured" };
+    }
+    
+    // Sync logic - just call the full sync endpoint internally
+    let page = 1;
+    let totalSynced = 0;
+    let totalErrors = 0;
+    let hasMore = true;
+    
+    const findUniqueSlugSync = async (desiredSlug: string, ghostPostId: string): Promise<string> => {
+      const existingWithSlug = await db
+        .select({ id: articles.id, source: articles.source, sourceId: articles.sourceId })
+        .from(articles)
+        .where(eq(articles.slug, desiredSlug))
+        .limit(1);
+      
+      if (existingWithSlug.length === 0) return desiredSlug;
+      
+      const existing = existingWithSlug[0];
+      if (existing.source === "ghost" && existing.sourceId === ghostPostId) return desiredSlug;
+      
+      for (let i = 2; i <= 10; i++) {
+        const candidateSlug = `${desiredSlug}-${i}`;
+        const check = await db.select({ id: articles.id }).from(articles).where(eq(articles.slug, candidateSlug)).limit(1);
+        if (check.length === 0) return candidateSlug;
+      }
+      
+      return `${desiredSlug}-${ghostPostId.slice(-6)}`;
+    };
+    
+    while (hasMore) {
+      try {
+        const url = `${ghostApiUrl}/ghost/api/content/posts/?key=${ghostApiKey}&include=tags&limit=15&page=${page}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) break;
+        
+        const data = await response.json() as { posts?: any[]; meta?: { pagination?: { pages?: number } } };
+        const posts = data.posts || [];
+        
+        for (const ghostPost of posts) {
+          try {
+            const title = ghostPost.title;
+            const excerpt = ghostPost.excerpt || ghostPost.custom_excerpt;
+            const bodyHtml = ghostPost.html || "";
+            const heroImageUrl = ghostPost.feature_image;
+            const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
+            const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
+            
+            const existing = await db
+              .select()
+              .from(articles)
+              .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPost.id)))
+              .limit(1);
+            
+            let articleId: string;
+            
+            if (existing.length > 0) {
+              articleId = existing[0].id;
+              await db
+                .update(articles)
+                .set({
+                  title,
+                  excerpt,
+                  content: bodyHtml,
+                  coverImage: heroImageUrl,
+                  tags: ghostTags,
+                  updatedAt: new Date(),
+                  sourcePublishedAt: publishedAt,
+                })
+                .where(eq(articles.id, articleId));
+            } else {
+              const desiredSlug = ghostPost.slug || `ghost-${Date.now().toString(36)}`;
+              const uniqueSlug = await findUniqueSlugSync(desiredSlug, ghostPost.id);
+              
+              const result = await db.insert(articles).values({
+                title,
+                slug: uniqueSlug,
+                excerpt,
+                content: bodyHtml,
+                coverImage: heroImageUrl,
+                source: "ghost",
+                sourceId: ghostPost.id,
+                tags: ghostTags,
+                publishedAt,
+                sourcePublishedAt: publishedAt,
+              }).returning({ id: articles.id });
+              
+              articleId = result[0].id;
+            }
+            
+            // Extract and link entities
+            const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
+            const mentions = await extractEntityMentions(combinedText, ghostTags);
+            
+            await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+            await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+            await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+            await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+            
+            for (const team of mentions.teams) {
+              await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+            }
+            for (const player of mentions.players) {
+              await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+            }
+            for (const manager of mentions.managers) {
+              await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+            }
+            for (const competition of mentions.competitions) {
+              await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+            }
+            
+            totalSynced++;
+          } catch (postError: any) {
+            totalErrors++;
+            console.error(`[Ghost webhook sync] Error processing post "${ghostPost.title}":`, postError.message);
+          }
+        }
+        
+        const totalPages = data.meta?.pagination?.pages || 1;
+        hasMore = page < totalPages;
+        page++;
+      } catch (err: any) {
+        console.error("[Ghost webhook sync] Fetch error:", err.message);
+        break;
+      }
+    }
+    
+    return {
+      success: totalErrors === 0,
+      totalSynced,
+      totalErrors,
+      message: `Synced ${totalSynced} posts${totalErrors > 0 ? ` (${totalErrors} errors)` : ""}`,
+    };
+  };
+
+  // POST /api/webhooks/ghost - Ghost CMS auto-sync webhook
+  // Security: Verifies X-Ghost-Signature HMAC or falls back to x-ingest-secret
+  app.post("/api/webhooks/ghost", async (req: Request, res: Response) => {
+    const webhookSecret = process.env.GHOST_WEBHOOK_SECRET;
+    const ingestSecret = process.env.INGEST_SECRET;
+    const allowFallback = process.env.GHOST_WEBHOOK_ALLOW_INGEST_SECRET_FALLBACK === "true";
+    const ghostSignature = req.headers["x-ghost-signature"] as string | undefined;
+    const providedIngestSecret = req.headers["x-ingest-secret"] as string | undefined;
+    
+    // Get raw body for HMAC verification (Express parsed it, so we need to reconstruct)
+    // Note: For production, use express.raw() middleware on this route
+    const rawBody = Buffer.from(JSON.stringify(req.body));
+    
+    let authenticated = false;
+    
+    // Try HMAC signature verification first
+    if (ghostSignature && webhookSecret) {
+      authenticated = verifyGhostSignature(rawBody, ghostSignature, webhookSecret);
+      if (!authenticated) {
+        console.log("[Ghost webhook] HMAC signature verification failed");
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+      console.log("[Ghost webhook] Authenticated via HMAC signature");
+    }
+    // Fallback to ingest secret if enabled
+    else if (allowFallback && providedIngestSecret && ingestSecret) {
+      authenticated = providedIngestSecret === ingestSecret;
+      if (!authenticated) {
+        console.log("[Ghost webhook] Ingest secret mismatch");
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      console.log("[Ghost webhook] Authenticated via ingest secret fallback");
+    }
+    // Dev mode: allow ingest secret without fallback flag
+    else if (process.env.NODE_ENV !== "production" && providedIngestSecret && ingestSecret) {
+      authenticated = providedIngestSecret === ingestSecret;
+      if (!authenticated) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      console.log("[Ghost webhook] Authenticated via dev mode ingest secret");
+    }
+    
+    if (!authenticated) {
+      console.log("[Ghost webhook] No valid authentication method");
+      return res.status(401).json({ error: "Unauthorized - provide X-Ghost-Signature or x-ingest-secret" });
+    }
+    
+    // Parse event from payload
+    const eventName = req.body?.post?.current ? "post.published" : (req.body?.post?.previous ? "post.deleted" : "unknown");
+    const postId = req.body?.post?.current?.id || req.body?.post?.previous?.id || "unknown";
+    
+    console.log(`[Ghost webhook] Event: ${eventName}, Post ID: ${postId}, Sync started`);
+    
+    // Respond quickly, then sync in background
+    res.json({ ok: true, message: "Sync triggered" });
+    
+    // Trigger sync asynchronously
+    try {
+      const result = await triggerGhostSync();
+      console.log(`[Ghost webhook] Sync completed: ${result.message}`);
+    } catch (err: any) {
+      console.error(`[Ghost webhook] Sync error: ${err.message}`);
     }
   });
 

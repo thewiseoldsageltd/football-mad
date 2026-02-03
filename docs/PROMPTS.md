@@ -10820,3 +10820,53 @@ DO NOT add heavy fields (no full article HTML).
 DO NOT change response structure.
 
 Only update the /api/news/updates logic as described.
+
+---
+
+You are working on the Football Mad MVP in Replit.
+
+Goal: Implement Ghost webhook automation so new Ghost posts auto-sync into the MVP DB.
+
+Context:
+- Manual sync already works: POST /api/admin/sync/ghost with header x-ingest-secret: <INGEST_SECRET>
+- News reads from MVP DB only (articles table)
+- We now need: POST /api/webhooks/ghost that Ghost can call on post.published and post.published.edited etc.
+- IMPORTANT: Do NOT run end-to-end regression tests, no browser/video tests, and no full test suites. Only run minimal lint/typecheck if needed.
+
+Requirements:
+1) Add env vars:
+   - GHOST_WEBHOOK_SECRET (string)  // used to verify X-Ghost-Signature if present
+   - GHOST_WEBHOOK_ALLOW_INGEST_SECRET_FALLBACK=true/false
+2) Create endpoint: POST /api/webhooks/ghost
+3) Security:
+   - If header X-Ghost-Signature exists and GHOST_WEBHOOK_SECRET is set:
+       - Verify HMAC SHA-256 signature computed over RAW request body equals the provided signature.
+       - If mismatch: respond 401.
+   - Else if fallback enabled:
+       - Require header x-ingest-secret == INGEST_SECRET, else 401.
+   - Else: 401.
+4) Once verified:
+   - Trigger existing Ghost sync logic (reuse the same function used by /api/admin/sync/ghost; do NOT duplicate logic).
+   - Return 200 quickly with { ok: true }.
+5) Subscribe to these Ghost events (document this in code comments):
+   - post.published
+   - post.published.edited
+   - post.unpublished
+   - post.deleted
+6) Add minimal logging:
+   - Log event name, post id if present, and result (sync started / sync completed / error).
+7) Add a small dev-only test helper:
+   - If NODE_ENV != production, allow a local curl with x-ingest-secret to trigger the webhook endpoint.
+
+Implementation notes:
+- If using Express, ensure raw body middleware is used on this route so signature verification uses the raw bytes (e.g., express.raw({ type: 'application/json' })).
+- If using Next.js route handlers, use request.text() to obtain raw body for signature, then JSON.parse after verification.
+- Keep code clean and minimal.
+
+Deliverables:
+- New route implemented
+- Any shared sync function refactored if necessary to be reused by both endpoints
+- A short README section with steps to configure Ghost admin webhook URL + secret
+
+---
+
