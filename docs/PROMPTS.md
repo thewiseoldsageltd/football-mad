@@ -10960,3 +10960,18 @@ Goal: Ghost webhooks authenticate and trigger sync reliably even without any sig
 
 ---
 
+Add a tiny webhook audit logger so I can debug without relying on Replit Console.
+
+Requirements:
+- Create a helper function logWebhookAudit(line: string) that appends to a file at ./logs/webhooks.log
+- Ensure ./logs exists (create if not)
+- Each line should be prefixed with ISO timestamp and a marker "WEBHOOK_AUDIT"
+- In POST /api/webhooks/ghost, write 3 audit lines:
+  1) "WEBHOOK_AUDIT received" + event name if present
+  2) "WEBHOOK_AUDIT authed" + method (token|signature|ingest-secret)
+  3) "WEBHOOK_AUDIT sync started" and later "WEBHOOK_AUDIT sync completed" (or failed)
+- Keep existing behavior (respond quickly, run sync async)
+- Do NOT run full regression tests or videos.
+
+---
+

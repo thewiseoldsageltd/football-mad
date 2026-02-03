@@ -1,7 +1,26 @@
 import type { Express, Request, Response } from "express";
 import type { Server } from "http";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
+
+// Webhook audit logger - writes to ./logs/webhooks.log
+const WEBHOOK_LOG_DIR = "./logs";
+const WEBHOOK_LOG_FILE = path.join(WEBHOOK_LOG_DIR, "webhooks.log");
+
+function logWebhookAudit(line: string): void {
+  try {
+    if (!fs.existsSync(WEBHOOK_LOG_DIR)) {
+      fs.mkdirSync(WEBHOOK_LOG_DIR, { recursive: true });
+    }
+    const timestamp = new Date().toISOString();
+    const entry = `${timestamp} WEBHOOK_AUDIT ${line}\n`;
+    fs.appendFileSync(WEBHOOK_LOG_FILE, entry);
+  } catch (e) {
+    console.error("[Webhook audit] Failed to write log:", e);
+  }
+}
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases } from "@shared/schema";
 import { db } from "./db";
@@ -5113,6 +5132,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     console.log(`[Ghost webhook] ${timestamp} | sig=${hasGhostSig} | type=${contentType} | len=${contentLength}`);
     console.log(`[Ghost webhook] Headers: ${JSON.stringify(Object.keys(req.headers).sort())}`);
     
+    // Parse event name early for audit logging
+    const eventName = req.body?.post?.current ? "post.published" : (req.body?.post?.previous ? "post.deleted" : "unknown");
+    logWebhookAudit(`received event=${eventName}`);
+    
     const webhookToken = process.env.GHOST_WEBHOOK_TOKEN;
     const webhookSecret = process.env.GHOST_WEBHOOK_SECRET;
     const ingestSecret = process.env.INGEST_SECRET;
@@ -5140,10 +5163,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     let authenticated = false;
     
+    let authMethod = "none";
+    
     // 1. Token-based auth (most reliable for Ghost webhooks without signature support)
     if (providedToken && webhookToken) {
       if (providedToken === webhookToken) {
         authenticated = true;
+        authMethod = "token";
         console.log("[Ghost webhook] Authenticated via webhook token");
       } else {
         console.log("[Ghost webhook] Token mismatch");
@@ -5158,6 +5184,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.log("[Ghost webhook] HMAC signature verification failed");
         return res.status(401).json({ error: "Unauthorized" });
       }
+      authMethod = "signature";
       console.log("[Ghost webhook] Authenticated via HMAC signature");
     }
     // 3. Ingest secret fallback if enabled
@@ -5167,6 +5194,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.log("[Ghost webhook] Ingest secret mismatch");
         return res.status(401).json({ error: "Unauthorized" });
       }
+      authMethod = "ingest-secret";
       console.log("[Ghost webhook] Authenticated via ingest secret fallback");
     }
     // 4. Dev mode: allow ingest secret without fallback flag
@@ -5175,6 +5203,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!authenticated) {
         return res.status(401).json({ error: "Unauthorized" });
       }
+      authMethod = "ingest-secret";
       console.log("[Ghost webhook] Authenticated via dev mode ingest secret");
     }
     
@@ -5183,8 +5212,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(401).json({ error: "Unauthorized" });
     }
     
-    // Parse event from payload
-    const eventName = req.body?.post?.current ? "post.published" : (req.body?.post?.previous ? "post.deleted" : "unknown");
+    // Audit log: authenticated
+    logWebhookAudit(`authed method=${authMethod}`);
+    
     const postId = req.body?.post?.current?.id || req.body?.post?.previous?.id || "unknown";
     
     console.log(`[Ghost webhook] Event: ${eventName}, Post ID: ${postId}, Sync started`);
@@ -5192,12 +5222,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Respond quickly, then sync in background
     res.json({ ok: true, message: "Sync triggered" });
     
+    // Audit log: sync started
+    logWebhookAudit(`sync started postId=${postId}`);
+    
     // Trigger sync asynchronously
     try {
       const result = await triggerGhostSync();
       console.log(`[Ghost webhook] Sync completed: ${result.message}`);
+      logWebhookAudit(`sync completed synced=${result.totalSynced} errors=${result.totalErrors}`);
     } catch (err: any) {
       console.error(`[Ghost webhook] Sync error: ${err.message}`);
+      logWebhookAudit(`sync failed error=${err.message}`);
     }
   });
 
