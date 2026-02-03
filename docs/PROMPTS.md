@@ -10975,3 +10975,15 @@ Requirements:
 
 ---
 
+Update POST /api/webhooks/ghost audit logging so it always logs even when unauthorized.
+
+1) At the very top of the handler (before any auth checks), append an audit line:
+   "incoming path=<req.path> hasToken=<true/false> tokenLen=<len or 0> sigHeader=<true/false> contentType=<...> len=<content-length>"
+   - tokenLen should be based on req.query.token if string
+   - sigHeader should check req.headers['x-ghost-signature'] or req.headers['x-ghost-webhook-signature'] if present
+2) Keep existing 'received' / 'authed' / 'sync started' logs for successful auth.
+3) Do NOT log the token value itself.
+4) Do NOT run full regression tests or videos.
+
+---
+

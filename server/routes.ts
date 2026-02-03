@@ -5124,15 +5124,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Security: Token auth (query/header), HMAC signature, or x-ingest-secret fallback
   // Note: This route needs raw body for HMAC verification. We store it via rawBody property.
   app.post("/api/webhooks/ghost", async (req: Request, res: Response) => {
-    // Debug logging at very top - always log incoming webhook requests
-    const timestamp = new Date().toISOString();
-    const hasGhostSig = !!req.headers["x-ghost-signature"];
+    // Audit log at very top - always logs even when unauthorized
+    const tokenFromQueryRaw = req.query.token;
+    const hasToken = typeof tokenFromQueryRaw === "string" && tokenFromQueryRaw.length > 0;
+    const tokenLen = hasToken ? (tokenFromQueryRaw as string).length : 0;
+    const sigHeader = !!(req.headers["x-ghost-signature"] || req.headers["x-ghost-webhook-signature"]);
     const contentType = req.headers["content-type"] || "unknown";
-    const contentLength = req.headers["content-length"] || "unknown";
-    console.log(`[Ghost webhook] ${timestamp} | sig=${hasGhostSig} | type=${contentType} | len=${contentLength}`);
+    const contentLength = req.headers["content-length"] || "0";
+    logWebhookAudit(`incoming path=${req.path} hasToken=${hasToken} tokenLen=${tokenLen} sigHeader=${sigHeader} contentType=${contentType} len=${contentLength}`);
+    
+    // Debug logging to console
+    const timestamp = new Date().toISOString();
+    console.log(`[Ghost webhook] ${timestamp} | sig=${sigHeader} | type=${contentType} | len=${contentLength}`);
     console.log(`[Ghost webhook] Headers: ${JSON.stringify(Object.keys(req.headers).sort())}`);
     
-    // Parse event name early for audit logging
+    // Parse event name for audit logging
     const eventName = req.body?.post?.current ? "post.published" : (req.body?.post?.previous ? "post.deleted" : "unknown");
     logWebhookAudit(`received event=${eventName}`);
     
