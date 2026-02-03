@@ -1,0 +1,40 @@
+You are working in my Replit Football Mad repo. Fix Ghost -> MVP sync so post edits (title changes) reliably update on the MVP site.
+
+Context / proof:
+- Ghost Content API returns updated title + updated_at correctly for post id 69817c3748aa9a00014c4e51:
+  title: "Tuesday's briefing: Strand Larsen headlines quiet deadline day - SYNC-TEST"
+  updated_at: "2026-02-03T17:38:30.000+00:00"
+- MVP /api/news still shows old title and sourceUpdatedAt is null, so the issue is on the MVP sync side (webhook fetch + DB update).
+- Ghost Content API fields are snake_case (updated_at/created_at/published_at). Ensure we map these correctly.
+
+Requirements:
+1) In the Ghost webhook sync handler (server/routes.ts), when we fetch the post from Ghost Content API, map:
+   - sourceUpdatedAt = post.updated_at
+   - publishedAt = post.published_at
+   - createdAt = post.created_at (optional if we already set createdAt locally)
+   - updatedAt in our DB should be set to the same value as sourceUpdatedAt (so DB freshness matches Ghost edit time)
+   IMPORTANT: Do NOT use camelCase fields from Ghost response (post.updatedAt etc). Use snake_case.
+
+2) Ensure webhook events for edits are handled:
+   - treat post.updated and post.edited as “upsert/update this post”
+   - they should follow the same fetch-from-Ghost-by-id path as post.published
+
+3) DB upsert/update:
+   - when an existing article is found by ghostPostId (or slug), update title, excerpt, html/content fields as needed, and sourceUpdatedAt/updatedAt.
+   - confirm that after processing a post.updated webhook, /api/news returns the new title AND sourceUpdatedAt is non-null.
+
+4) Add minimal, targeted logging (no spam):
+   - log postId, slug, title, sourceUpdatedAt, and whether row updated/inserted.
+
+5) Do NOT run any end-to-end or regression testing. No Playwright/Cypress. Only do lightweight validation via curl to /api/news and by triggering the webhook endpoint.
+
+After implementing:
+- Provide the exact curl commands to:
+  a) trigger /api/webhooks/ghost with event=post.updated and the post id above
+  b) confirm /api/news includes the updated title and sourceUpdatedAt/updatedAt updated
+
+Files likely involved:
+- server/routes.ts (webhook handler + Ghost Content API fetch mapping)
+- server/storage.ts only if needed for projections (but it already returns sourceUpdatedAt/updatedAt)
+
+Make the smallest possible change to fix the mapping and update behavior.

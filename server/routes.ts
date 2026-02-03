@@ -4828,6 +4828,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Update existing article - keep its current slug
         articleId = existing[0].id;
         finalSlug = existing[0].slug;
+        const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
         await db
           .update(articles)
           .set({
@@ -4836,16 +4837,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             content: bodyHtml,
             coverImage: heroImageUrl,
             tags: ghostTags,
-            updatedAt: new Date(),
+            updatedAt: ghostSourceUpdatedAt,
             sourcePublishedAt: publishedAt,
-            sourceUpdatedAt: ghostPost.updated_at ? new Date(ghostPost.updated_at) : undefined,
+            sourceUpdatedAt: ghostSourceUpdatedAt,
           })
           .where(eq(articles.id, articleId));
+        console.log(`[Ghost sync] Updated article id=${articleId} slug=${existing[0].slug} title="${title.slice(0, 40)}" sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()}`);
       } else {
         // New article - find a unique slug
         const desiredSlug = ghostPost.slug || generateSlug(title, Date.now().toString(36));
         finalSlug = await findUniqueSlugForWebhook(desiredSlug, ghostPostId);
         
+        const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
         const result = await db.insert(articles).values({
           title,
           slug: finalSlug,
@@ -4857,7 +4860,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           tags: ghostTags,
           publishedAt,
           sourcePublishedAt: publishedAt,
+          sourceUpdatedAt: ghostSourceUpdatedAt,
         }).returning({ id: articles.id });
+        console.log(`[Ghost sync] Inserted article id=${result[0].id} slug=${finalSlug} title="${title.slice(0, 40)}" sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()}`);
         
         articleId = result[0].id;
       }
