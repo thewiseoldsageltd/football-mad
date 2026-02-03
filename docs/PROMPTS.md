@@ -10930,3 +10930,11 @@ Ghost webhook requests should produce a log line even if rejected, and valid sig
 
 ---
 
+Add one more debug log in POST /api/webhooks/ghost:
+
+Right after the existing log line, log:
+Object.keys(req.headers).sort()
+
+Do NOT log header values.
+Do NOT run end-to-end tests or videos.
+

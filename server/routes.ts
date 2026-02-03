@@ -5111,6 +5111,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const contentType = req.headers["content-type"] || "unknown";
     const contentLength = req.headers["content-length"] || "unknown";
     console.log(`[Ghost webhook] ${timestamp} | sig=${hasGhostSig} | type=${contentType} | len=${contentLength}`);
+    console.log(`[Ghost webhook] Headers: ${JSON.stringify(Object.keys(req.headers).sort())}`);
     
     const webhookSecret = process.env.GHOST_WEBHOOK_SECRET;
     const ingestSecret = process.env.INGEST_SECRET;
