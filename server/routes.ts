@@ -5047,6 +5047,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             
             let articleId: string;
             
+            // Parse Ghost's updated_at timestamp (snake_case)
+            const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at) : new Date();
+            
             if (existing.length > 0) {
               articleId = existing[0].id;
               await db
@@ -5057,10 +5060,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   content: bodyHtml,
                   coverImage: heroImageUrl,
                   tags: ghostTags,
-                  updatedAt: new Date(),
+                  updatedAt: ghostSourceUpdatedAt,
+                  sourceUpdatedAt: ghostSourceUpdatedAt,
                   sourcePublishedAt: publishedAt,
                 })
                 .where(eq(articles.id, articleId));
+              console.log(`GHOST_SYNC write timestamps postId=${ghostPost.id} sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()} updatedAt=${ghostSourceUpdatedAt.toISOString()} action=update`);
               totalUpdated++;
             } else {
               const desiredSlug = ghostPost.slug || `ghost-${Date.now().toString(36)}`;
@@ -5077,9 +5082,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 tags: ghostTags,
                 publishedAt,
                 sourcePublishedAt: publishedAt,
+                sourceUpdatedAt: ghostSourceUpdatedAt,
               }).returning({ id: articles.id });
               
               articleId = result[0].id;
+              console.log(`GHOST_SYNC write timestamps postId=${ghostPost.id} sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()} updatedAt=default action=insert`);
               totalInserted++;
             }
             
