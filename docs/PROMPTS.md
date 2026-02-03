@@ -10870,3 +10870,34 @@ Deliverables:
 
 ---
 
+We are working on Football Mad MVP (Express backend on port 5000).
+
+Problem:
+POST /api/admin/sync/ghost currently hangs when the x-ingest-secret is valid. Curl sends the request but receives 0 bytes and times out. Wrong secrets return 401 immediately, so the hang happens inside the Ghost sync logic.
+
+Goal:
+Make /api/admin/sync/ghost respond immediately and run the Ghost sync asynchronously in the background.
+
+IMPORTANT:
+• Do NOT run full regression tests or browser/video tests
+• Do NOT change /api/news endpoints
+
+Tasks:
+
+1) Locate the existing Ghost sync logic used by /api/admin/sync/ghost (the same logic used by the webhook).
+2) Refactor the /api/admin/sync/ghost route so that:
+   - After validating x-ingest-secret, it immediately responds with:
+     res.status(202).json({ ok: true, started: true })
+   - Then it calls the Ghost sync function inside a detached async block:
+     (async () => { try { await runGhostSync(); console.log("Ghost sync completed"); } catch (e) { console.error("Ghost sync failed", e); } })();
+3) Add clear logs:
+   - "Ghost sync started (admin)" with timestamp
+   - "Ghost sync completed (admin)" with insert/update counts if available
+   - Errors should be caught and logged, not crash the server
+4) Ensure no await on the sync function before sending the response.
+
+Result:
+The endpoint should never hang again. Curl should return instantly with 202 Accepted, while sync runs in background.
+
+---
+

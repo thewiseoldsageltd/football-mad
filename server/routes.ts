@@ -4883,7 +4883,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // POST /api/admin/sync/ghost - Full Ghost sync
+  // POST /api/admin/sync/ghost - Full Ghost sync (async, non-blocking)
   app.post("/api/admin/sync/ghost", async (req, res) => {
     const ingestSecret = process.env.INGEST_SECRET;
     const providedSecret = req.headers["x-ingest-secret"];
@@ -4899,185 +4899,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(500).json({ error: "Ghost API not configured" });
     }
     
-    // Helper to find a unique slug
-    const findUniqueSlug = async (desiredSlug: string, ghostPostId: string): Promise<string> => {
-      // Check if the slug is already taken by a different article
-      const existingWithSlug = await db
-        .select({ id: articles.id, source: articles.source, sourceId: articles.sourceId })
-        .from(articles)
-        .where(eq(articles.slug, desiredSlug))
-        .limit(1);
-      
-      if (existingWithSlug.length === 0) {
-        return desiredSlug;
-      }
-      
-      // If it's the same Ghost post, the slug is already assigned to it
-      const existing = existingWithSlug[0];
-      if (existing.source === "ghost" && existing.sourceId === ghostPostId) {
-        return desiredSlug;
-      }
-      
-      // Slug is taken by a different article - generate a unique one
-      console.log(`[Ghost sync] Slug collision: "${desiredSlug}" already taken by article ${existing.id} (source: ${existing.source})`);
-      
-      // Try numbered suffixes first: slug-2, slug-3, etc.
-      for (let i = 2; i <= 10; i++) {
-        const candidateSlug = `${desiredSlug}-${i}`;
-        const check = await db
-          .select({ id: articles.id })
-          .from(articles)
-          .where(eq(articles.slug, candidateSlug))
-          .limit(1);
-        
-        if (check.length === 0) {
-          console.log(`[Ghost sync] Using alternative slug: "${candidateSlug}"`);
-          return candidateSlug;
-        }
-      }
-      
-      // Fallback: use deterministic suffix from Ghost post ID
-      const fallbackSlug = `${desiredSlug}-${ghostPostId.slice(-6)}`;
-      console.log(`[Ghost sync] Using fallback slug: "${fallbackSlug}"`);
-      return fallbackSlug;
-    }
+    // Respond immediately with 202 Accepted
+    const startTime = new Date().toISOString();
+    console.log(`[Ghost sync admin] Started at ${startTime}`);
+    res.status(202).json({ ok: true, started: true, timestamp: startTime });
     
-    let page = 1;
-    let totalSynced = 0;
-    let totalSkipped = 0;
-    let totalErrors = 0;
-    let hasMore = true;
-    const errors: { ghostPostId: string; title: string; error: string }[] = [];
-    
-    try {
-      while (hasMore) {
-        const url = `${ghostApiUrl}/ghost/api/content/posts/?key=${ghostApiKey}&include=tags&limit=15&page=${page}`;
-        const response = await fetch(url);
-        
-        if (!response.ok) {
-          return res.status(502).json({ 
-            error: `Ghost API error: ${response.status}`,
-            totalSynced,
-            totalSkipped,
-            totalErrors,
-          });
-        }
-        
-        const data = await response.json() as { posts?: any[]; meta?: { pagination?: { pages?: number } } };
-        const posts = data.posts || [];
-        
-        for (const ghostPost of posts) {
-          try {
-            const title = ghostPost.title;
-            const excerpt = ghostPost.excerpt || ghostPost.custom_excerpt;
-            const bodyHtml = ghostPost.html || "";
-            const heroImageUrl = ghostPost.feature_image;
-            const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
-            const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
-            
-            // Check if this Ghost post already exists in our DB
-            const existing = await db
-              .select()
-              .from(articles)
-              .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPost.id)))
-              .limit(1);
-            
-            let articleId: string;
-            
-            if (existing.length > 0) {
-              // Update existing article - keep its current slug
-              articleId = existing[0].id;
-              await db
-                .update(articles)
-                .set({
-                  title,
-                  excerpt,
-                  content: bodyHtml,
-                  coverImage: heroImageUrl,
-                  tags: ghostTags,
-                  updatedAt: new Date(),
-                  sourcePublishedAt: publishedAt,
-                })
-                .where(eq(articles.id, articleId));
-            } else {
-              // New article - find a unique slug
-              const desiredSlug = ghostPost.slug || generateSlug(title, Date.now().toString(36));
-              const uniqueSlug = await findUniqueSlug(desiredSlug, ghostPost.id);
-              
-              const result = await db.insert(articles).values({
-                title,
-                slug: uniqueSlug,
-                excerpt,
-                content: bodyHtml,
-                coverImage: heroImageUrl,
-                source: "ghost",
-                sourceId: ghostPost.id,
-                tags: ghostTags,
-                publishedAt,
-                sourcePublishedAt: publishedAt,
-              }).returning({ id: articles.id });
-              
-              articleId = result[0].id;
-            }
-            
-            // Extract and link entities
-            const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
-            const mentions = await extractEntityMentions(combinedText, ghostTags);
-            
-            await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
-            await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
-            await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
-            await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
-            
-            for (const team of mentions.teams) {
-              await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
-            }
-            for (const player of mentions.players) {
-              await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
-            }
-            for (const manager of mentions.managers) {
-              await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
-            }
-            for (const competition of mentions.competitions) {
-              await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
-            }
-            
-            totalSynced++;
-          } catch (postError: any) {
-            totalErrors++;
-            const errorMsg = postError.message || "Unknown error";
-            console.error(`[Ghost sync] Error processing post "${ghostPost.title}" (${ghostPost.id}):`, errorMsg);
-            errors.push({
-              ghostPostId: ghostPost.id,
-              title: ghostPost.title,
-              error: errorMsg,
-            });
-          }
-        }
-        
-        const totalPages = data.meta?.pagination?.pages || 1;
-        hasMore = page < totalPages;
-        page++;
+    // Run sync asynchronously in detached block
+    (async () => {
+      try {
+        const result = await triggerGhostSync();
+        console.log(`[Ghost sync admin] Completed: ${result.message} (synced: ${result.totalSynced}, errors: ${result.totalErrors})`);
+      } catch (e: any) {
+        console.error(`[Ghost sync admin] Failed:`, e.message || e);
       }
-      
-      res.json({
-        success: totalErrors === 0,
-        message: `Synced ${totalSynced} posts from Ghost${totalErrors > 0 ? ` (${totalErrors} errors)` : ""}`,
-        totalSynced,
-        totalSkipped,
-        totalErrors,
-        errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
-      });
-    } catch (error: any) {
-      console.error("Ghost sync error:", error);
-      res.status(500).json({ 
-        error: error.message || "Ghost sync failed",
-        totalSynced,
-        totalSkipped,
-        totalErrors,
-        errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
-      });
-    }
+    })();
   });
 
   // ========== GHOST WEBHOOK (Auto-sync from Ghost CMS) ==========
