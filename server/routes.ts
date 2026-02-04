@@ -75,6 +75,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ========== PLAYERS ==========
+  app.get("/api/players", async (req, res) => {
+    try {
+      const players = await storage.getAllPlayers();
+      res.json(players);
+    } catch (error) {
+      console.error("Error fetching players:", error);
+      res.status(500).json({ error: "Failed to fetch players" });
+    }
+  });
+
   app.get("/api/players/team/:slug", async (req, res) => {
     try {
       const team = await storage.getTeamBySlug(req.params.slug);
@@ -99,6 +109,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching player:", error);
       res.status(500).json({ error: "Failed to fetch player" });
+    }
+  });
+
+  // ========== MANAGERS ==========
+  app.get("/api/managers", async (req, res) => {
+    try {
+      const managers = await storage.getAllManagers();
+      res.json(managers);
+    } catch (error) {
+      console.error("Error fetching managers:", error);
+      res.status(500).json({ error: "Failed to fetch managers" });
+    }
+  });
+
+  app.get("/api/managers/:slug", async (req, res) => {
+    try {
+      const manager = await storage.getManagerBySlug(req.params.slug);
+      if (!manager) {
+        return res.status(404).json({ error: "Manager not found" });
+      }
+      res.json(manager);
+    } catch (error) {
+      console.error("Error fetching manager:", error);
+      res.status(500).json({ error: "Failed to fetch manager" });
     }
   });
 

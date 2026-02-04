@@ -161,6 +161,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Players
+  async getAllPlayers(): Promise<Player[]> {
+    return db.select().from(players).orderBy(players.name);
+  }
+
   async getPlayersByTeam(teamId: string): Promise<Player[]> {
     return db.select().from(players).where(eq(players.teamId, teamId));
   }
@@ -187,6 +191,16 @@ export class DatabaseStorage implements IStorage {
   async createPlayer(data: InsertPlayer): Promise<Player> {
     const [player] = await db.insert(players).values(data).returning();
     return player;
+  }
+
+  // Managers
+  async getAllManagers(): Promise<Manager[]> {
+    return db.select().from(managers).orderBy(managers.name);
+  }
+
+  async getManagerBySlug(slug: string): Promise<Manager | undefined> {
+    const [manager] = await db.select().from(managers).where(eq(managers.slug, slug));
+    return manager;
   }
 
   // Articles

@@ -81,7 +81,7 @@ export function ArticleMetaBar({
   const encodedUrl = encodeURIComponent(shareUrl);
 
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pb-4 border-b">
+    <div className="flex items-center justify-between pb-4 border-b">
       <div className="flex items-center gap-3">
         <Avatar className="h-10 w-10">
           <AvatarFallback className="text-sm">
@@ -106,50 +106,62 @@ export function ArticleMetaBar({
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
-        <div className="hidden sm:flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full hover:bg-muted"
-            onClick={() => window.open(`https://wa.me/?text=${encodedText}%20${encodedUrl}`, "_blank")}
-            data-testid="button-meta-share-whatsapp"
-          >
-            <SiWhatsapp className="h-4 w-4 text-[#25D366]" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full hover:bg-muted"
-            onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`, "_blank")}
-            data-testid="button-meta-share-x"
-          >
-            <SiX className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full hover:bg-muted"
-            onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, "_blank")}
-            data-testid="button-meta-share-facebook"
-          >
-            <SiFacebook className="h-4 w-4 text-[#1877F2]" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full hover:bg-muted"
-            onClick={handleCopy}
-            data-testid="button-meta-copy-link"
-          >
-            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-          </Button>
-        </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-9 w-9 rounded-full hover:bg-muted sm:hidden ml-auto"
+        onClick={handleBookmark}
+        title={isBookmarked ? "Remove bookmark" : "Save article"}
+        aria-label={isBookmarked ? "Remove bookmark" : "Save article"}
+        data-testid="button-meta-bookmark-mobile"
+      >
+        <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-current text-primary" : ""}`} />
+      </Button>
+
+      <div className="hidden sm:flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full hover:bg-muted"
+          onClick={() => window.open(`https://wa.me/?text=${encodedText}%20${encodedUrl}`, "_blank")}
+          data-testid="button-meta-share-whatsapp"
+        >
+          <SiWhatsapp className="h-4 w-4 text-[#25D366]" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full hover:bg-muted"
+          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`, "_blank")}
+          data-testid="button-meta-share-x"
+        >
+          <SiX className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full hover:bg-muted"
+          onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, "_blank")}
+          data-testid="button-meta-share-facebook"
+        >
+          <SiFacebook className="h-4 w-4 text-[#1877F2]" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-full hover:bg-muted"
+          onClick={handleCopy}
+          data-testid="button-meta-copy-link"
+        >
+          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        </Button>
         <Button
           variant="ghost"
           size="icon"
           className="h-9 w-9 rounded-full hover:bg-muted"
           onClick={handleBookmark}
+          title={isBookmarked ? "Remove bookmark" : "Save article"}
+          aria-label={isBookmarked ? "Remove bookmark" : "Save article"}
           data-testid="button-meta-bookmark"
         >
           <Bookmark className={`h-4 w-4 ${isBookmarked ? "fill-current text-primary" : ""}`} />

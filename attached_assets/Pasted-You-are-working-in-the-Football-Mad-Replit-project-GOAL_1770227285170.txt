@@ -1,0 +1,111 @@
+You are working in the Football Mad Replit project.
+
+GOAL
+Fix two regressions on the Article page:
+
+1) “In this article” only shows the Competition pill (Premier League) and no Teams / Players / Managers.
+2) On mobile, the bookmark icon looks orphaned/out of place after hiding the inline share icons.
+
+IMPORTANT
+- Do NOT run end-to-end regression tests, do NOT generate videos, and do NOT run expensive test suites. Keep changes tight and verify with quick manual page refresh + console checks only.
+
+WHAT’S HAPPENING (ROOT CAUSE)
+- We recently switched “In this article” to rely on backend entity arrays: entityTeams/entityPlayers/entityManagers.
+- Those arrays are empty for most articles right now because the junction tables aren’t populated yet (entity links not backfilled), so the UI loses pills.
+- We need a graceful fallback: if backend entity arrays are empty, derive pills from the existing article tags/people/teams fields that already exist on the article payload.
+- On mobile, we hid share icons but left bookmark inside the “actions” area, so it ends up alone and visually weird. We should reposition it into the meta row (right-aligned) on mobile.
+
+IMPLEMENTATION PLAN (SMALL + SAFE)
+A) Restore “In this article” pills with robust fallback
+- File: client/src/pages/article.tsx
+- Create a helper that builds four pill groups:
+  - competitions
+  - teams
+  - players
+  - managers
+- Priority order:
+  1) Use backend entity arrays if they contain any items.
+  2) If ALL backend entity arrays are empty, fall back to legacy fields:
+     - competition + other competitions/cups from article taxonomy/tags if present
+     - teams from article team tags / known team fields (whatever exists in the payload today)
+     - persons from article people tags, then split players vs managers by role if available; if role is NOT available, keep as “People” (or put all in Players for now but NOT mixing teams into players).
+- Ensure we never mix Team pills into Players.
+- Dedupe pills by `${type}:${slug}`.
+- Keep ordering stable: Competitions → Teams → Players → Managers (only render a group if it has at least 1 pill).
+
+B) Fix bookmark placement on mobile
+- File: client/src/components/article-meta-bar.tsx
+- On desktop (md+): keep the current layout (meta left, share+copy+bookmark right).
+- On mobile (<md):
+  - Hide share icons (as you already did), BUT render the bookmark button inline on the same row as the author/meta, aligned right (ml-auto).
+  - It should not sit on a separate row by itself.
+  - Add a subtle tooltip/title + aria-label for accessibility.
+
+C) Quick verification
+- Manually open one known article that has teams/people tags (e.g. the Jurrien Timber one).
+- Confirm “In this article” shows:
+  - Competitions: Premier League (+ Carabao Cup if available)
+  - Teams: Arsenal, Chelsea
+  - Players: Jurrien Timber, Kai Havertz
+  - Managers: Mikel Arteta
+- Confirm on mobile:
+  - Meta row shows author/time/read/views on left; bookmark icon on the right.
+  - No duplicate “Share this article” block (sticky share bar is enough).
+
+DETAILED CODE CHANGES
+
+1) client/src/pages/article.tsx
+- Find where we currently build the “In this article” groups from:
+  - article.competition
+  - article.entityTeams / entityPlayers / entityManagers
+- Replace that logic with something like:
+
+  - const backendHasEntities =
+      (article.entityTeams?.length || 0) +
+      (article.entityPlayers?.length || 0) +
+      (article.entityManagers?.length || 0) > 0;
+
+  - Build pill arrays from backend if backendHasEntities.
+  - Else build from legacy fields:
+      - teams: derive from article.teams / article.teamTags / article.taxonomy?.teams (whatever exists)
+      - people: derive from article.people / article.personTags / taxonomy persons
+        - split managers vs players using role if present.
+        - If role is missing, put into Players but only if it’s actually a person entity.
+      - competitions: include article.competition plus any extra comps/cups present in taxonomy
+
+- Convert everything into the same EntityData shape used by EntityPill:
+  { type, name, slug, href, iconUrl?, fallbackText?, color? }
+
+- Ensure hrefs match your routing:
+  - Competition: `/competitions/${slug}` (or whatever your competition hub route is)
+  - Team: `/teams/${slug}`
+  - Player: `/players/${slug}`
+  - Manager: `/managers/${slug}`
+  (If your current app uses `/entity/...` routes, use those instead. Follow existing patterns in the codebase.)
+
+- Dedupe function:
+  - function dedupe(list) => Map key `${type}:${slug}`
+
+- Render groups:
+  - Competitions
+  - Teams
+  - Players
+  - Managers
+
+2) client/src/components/article-meta-bar.tsx
+- Adjust the JSX so that on mobile the bookmark is part of the left meta row, not in a hidden right-side action row.
+- Example approach:
+  - Wrap the “left” portion in a flex row
+  - Add bookmark button with `className="ml-auto md:hidden"` so it shows on mobile and aligns right.
+  - Keep the full action button set wrapped in `className="hidden md:flex ..."` for desktop.
+
+- Result:
+  - Mobile: author/meta left, bookmark right
+  - Desktop: author/meta left, share/copy/bookmark right
+
+DO NOT TOUCH
+- Backend schema or backfills in this prompt.
+- Any long-running data jobs.
+- Any E2E/regression suites.
+
+Now implement A + B exactly as above, keeping the diff minimal and focused.

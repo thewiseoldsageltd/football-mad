@@ -511,6 +511,14 @@ export default function ArticlePage() {
     queryKey: ["/api/teams"],
   });
 
+  const { data: players = [] } = useQuery<Player[]>({
+    queryKey: ["/api/players"],
+  });
+
+  const { data: managers = [] } = useQuery<Manager[]>({
+    queryKey: ["/api/managers"],
+  });
+
   const { data: followedTeamIdsRaw } = useQuery<string[] | null>({
     queryKey: ["/api/follows"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -592,33 +600,116 @@ export default function ArticlePage() {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const readingTime = calculateReadingTime(article.content);
   
-  // Use backend entity data (preferred) or fall back to tag-based for legacy articles
-  const entityTeams = article.entityTeams || [];
-  const entityPlayers = article.entityPlayers || [];
-  const entityManagers = article.entityManagers || [];
+  // Check if backend has any entity data
+  const backendHasEntities = 
+    (article.entityTeams?.length || 0) +
+    (article.entityPlayers?.length || 0) +
+    (article.entityManagers?.length || 0) > 0;
   
-  // For header pills, use entityTeams or fall back to tag-based lookup
-  const articleTeams = entityTeams.length > 0 
-    ? entityTeams 
-    : teams.filter(t => article.tags?.includes(t.slug));
-  
-  // Build player pills from backend entities
-  const playerPills: EntityData[] = entityPlayers.map(p => ({
-    type: "player" as const,
-    name: p.name,
-    slug: p.slug,
-    href: `/news?player=${p.slug}`,
-    fallbackText: p.name.slice(0, 2).toUpperCase(),
-  }));
-  
-  // Build manager pills from backend entities
-  const managerPills: EntityData[] = entityManagers.map(m => ({
-    type: "manager" as const,
-    name: m.name,
-    slug: m.slug,
-    href: `/news?manager=${m.slug}`,
-    fallbackText: m.name.slice(0, 2).toUpperCase(),
-  }));
+  // Build entity pill arrays with fallback to tags when backend is empty
+  const { articleTeams, competitionPills, playerPills, managerPills } = useMemo(() => {
+    const tags = article.tags || [];
+    
+    // Helper to slugify a tag name for comparison
+    const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    
+    // Helper to normalize text (remove accents, lowercase)
+    const normalize = (text: string) => 
+      text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    // Build team list
+    let resolvedTeams: typeof teams = [];
+    if (backendHasEntities && article.entityTeams?.length) {
+      resolvedTeams = article.entityTeams as typeof teams;
+    } else {
+      // Fallback: match tags against known teams (by name or slug)
+      resolvedTeams = teams.filter(t => 
+        tags.some(tag => 
+          t.name.toLowerCase() === tag.toLowerCase() || 
+          t.slug === slugify(tag)
+        )
+      );
+    }
+    
+    // Build player pills
+    let resolvedPlayerPills: EntityData[] = [];
+    if (backendHasEntities && article.entityPlayers?.length) {
+      resolvedPlayerPills = article.entityPlayers.map(p => ({
+        type: "player" as const,
+        name: p.name,
+        slug: p.slug,
+        href: `/news?player=${p.slug}`,
+        fallbackText: p.name.slice(0, 2).toUpperCase(),
+      }));
+    } else {
+      // Fallback: match tags against known players (by name, normalized)
+      const matchedPlayers = players.filter(p =>
+        tags.some(tag => normalize(p.name) === normalize(tag))
+      );
+      resolvedPlayerPills = matchedPlayers.map(p => ({
+        type: "player" as const,
+        name: p.name,
+        slug: p.slug,
+        href: `/news?player=${p.slug}`,
+        fallbackText: p.name.slice(0, 2).toUpperCase(),
+      }));
+    }
+    
+    // Build manager pills
+    let resolvedManagerPills: EntityData[] = [];
+    if (backendHasEntities && article.entityManagers?.length) {
+      resolvedManagerPills = article.entityManagers.map(m => ({
+        type: "manager" as const,
+        name: m.name,
+        slug: m.slug,
+        href: `/news?manager=${m.slug}`,
+        fallbackText: m.name.slice(0, 2).toUpperCase(),
+      }));
+    } else {
+      // Fallback: match tags against known managers (by name, normalized)
+      const matchedManagers = managers.filter(m =>
+        tags.some(tag => normalize(m.name) === normalize(tag))
+      );
+      resolvedManagerPills = matchedManagers.map(m => ({
+        type: "manager" as const,
+        name: m.name,
+        slug: m.slug,
+        href: `/news?manager=${m.slug}`,
+        fallbackText: m.name.slice(0, 2).toUpperCase(),
+      }));
+    }
+    
+    // Build competition pills (always from article.competition + tag matches)
+    const knownCompetitions = ["Premier League", "Carabao Cup", "FA Cup", "Champions League", "Europa League", "La Liga", "Serie A", "Bundesliga", "Ligue 1"];
+    const competitionSet = new Set<string>();
+    
+    if (article.competition) {
+      competitionSet.add(article.competition);
+    }
+    
+    // Add any competition-like tags
+    tags.forEach(tag => {
+      if (knownCompetitions.some(c => c.toLowerCase() === tag.toLowerCase())) {
+        competitionSet.add(tag);
+      }
+    });
+    
+    const resolvedCompetitionPills: EntityData[] = Array.from(competitionSet).map(comp => ({
+      type: "competition" as const,
+      name: comp,
+      slug: slugifyCompetition(comp),
+      href: `/news?competition=${slugifyCompetition(comp)}`,
+      iconUrl: `/crests/comps/${slugifyCompetition(comp)}.svg`,
+      fallbackText: comp.slice(0, 2),
+    }));
+    
+    return {
+      articleTeams: resolvedTeams,
+      competitionPills: resolvedCompetitionPills,
+      playerPills: resolvedPlayerPills,
+      managerPills: resolvedManagerPills,
+    };
+  }, [article, teams, players, managers, backendHasEntities]);
   
   // Check if excerpt should be shown (not empty and not duplicate of body start)
   const showExcerpt = article.excerpt?.trim() && !isExcerptDuplicate(article.excerpt, article.content);
@@ -636,18 +727,11 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              {(articleTeams.length > 0 || article.competition) && (
+              {(articleTeams.length > 0 || competitionPills.length > 0) && (
                 <div className="flex items-center gap-2 flex-wrap mb-4">
-                  {article.competition && (
+                  {competitionPills[0] && (
                     <EntityPill
-                      entity={{
-                        type: "competition",
-                        name: article.competition,
-                        slug: slugifyCompetition(article.competition),
-                        href: `/news?competition=${slugifyCompetition(article.competition)}`,
-                        iconUrl: `/crests/comps/${slugifyCompetition(article.competition)}.svg`,
-                        fallbackText: article.competition.slice(0, 2),
-                      }}
+                      entity={competitionPills[0]}
                       size="default"
                       data-testid="pill-competition"
                     />
@@ -718,26 +802,22 @@ export default function ArticlePage() {
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
-            {(article.competition || articleTeams.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
+            {(competitionPills.length > 0 || articleTeams.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
               <section className="mb-8 py-6 border-t">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
-                  {article.competition && (
+                  {competitionPills.length > 0 && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Competitions</p>
                       <div className="flex flex-wrap gap-2">
-                        <EntityPill
-                          entity={{
-                            type: "competition",
-                            name: article.competition,
-                            slug: slugifyCompetition(article.competition),
-                            href: `/news?competition=${slugifyCompetition(article.competition)}`,
-                            iconUrl: `/crests/comps/${slugifyCompetition(article.competition)}.svg`,
-                            fallbackText: article.competition.slice(0, 2),
-                          }}
-                          size="small"
-                          data-testid="pill-bottom-competition"
-                        />
+                        {competitionPills.map((pill) => (
+                          <EntityPill
+                            key={pill.slug}
+                            entity={pill}
+                            size="small"
+                            data-testid={`pill-bottom-competition-${pill.slug}`}
+                          />
+                        ))}
                       </div>
                     </div>
                   )}
