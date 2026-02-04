@@ -11702,3 +11702,41 @@ Do not change any other behaviour. No tests. No videos.
 
 ---
 
+Implement the Football Mad Entity Pill design system (premium pills with circular icons).
+
+Constraints:
+- Implementation only. No regression/E2E tests. No videos.
+- Use existing Tailwind/shadcn patterns if present. Keep it consistent.
+
+1) Create a reusable component:
+- client/src/components/EntityPill.tsx (or similar existing components folder)
+Props:
+- entity: { type, name, slug, href, iconUrl?: string, fallbackText?: string }
+- size?: "default" | "small" (default)
+- active?: boolean
+
+2) Pill design (Tailwind):
+- Height: default h-7 (28px), small h-6 (24-26px)
+- Rounded full, subtle border, neutral bg
+- Padding: px-2.5 py-1
+- Text: text-sm (default), text-xs/13px for small
+- Icon container: 18x18 circle, overflow-hidden, flex centered
+- Icon image: w-[18px] h-[18px] object-cover
+- If iconUrl missing, render fallback badge (initials)
+
+3) Interaction:
+- hover: slightly darker bg and border
+- focus-visible ring
+- active state: slightly stronger border/bg
+
+4) Update usages:
+- Update article page pills and news page pills to use EntityPill.
+- News cards: show only competition + up to 2 teams (max 3 pills).
+- Article page top: show competition + up to 2 teams.
+- Article page bottom: grouped sections for Teams/Players/Managers using EntityPill.
+
+Return:
+- Summary of files changed and what was updated.
+
+---
+

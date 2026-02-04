@@ -7,14 +7,13 @@ import {
 } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { NewsletterForm } from "@/components/newsletter-form";
-import { TaxonomyPill } from "@/components/taxonomy-pill";
+import { EntityPill, type EntityData } from "@/components/entity-pill";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
@@ -593,9 +592,12 @@ export default function ArticlePage() {
     tag !== slugifyCompetition(article.competition || "") &&
     !CATEGORY_TAGS.has(tag.toLowerCase())
   );
-  const playerPills = playerTags.map(tag => ({
-    label: tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
+  const playerPills: EntityData[] = playerTags.map(tag => ({
+    type: "player" as const,
+    name: tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
     slug: tag,
+    href: `/news?player=${tag}`,
+    fallbackText: tag.slice(0, 2).toUpperCase(),
   }));
 
   return (
@@ -611,39 +613,37 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              {(articleTeams.length > 0 || article.competition || playerPills.length > 0) && (
+              {(articleTeams.length > 0 || article.competition) && (
                 <div className="flex items-center gap-2 flex-wrap mb-4">
                   {article.competition && (
-                    <TaxonomyPill
-                      label={article.competition}
-                      variant="competition"
-                      href={`/news?competition=${slugifyCompetition(article.competition)}`}
-                      crestUrl={`/crests/comps/${slugifyCompetition(article.competition)}.svg`}
+                    <EntityPill
+                      entity={{
+                        type: "competition",
+                        name: article.competition,
+                        slug: slugifyCompetition(article.competition),
+                        href: `/news?competition=${slugifyCompetition(article.competition)}`,
+                        iconUrl: `/crests/comps/${slugifyCompetition(article.competition)}.svg`,
+                        fallbackText: article.competition.slice(0, 2),
+                      }}
+                      size="default"
                       data-testid="pill-competition"
                     />
                   )}
-                  {articleTeams.map((team) => (
-                    <TaxonomyPill
+                  {articleTeams.slice(0, 2).map((team) => (
+                    <EntityPill
                       key={team.id}
-                      label={team.name}
-                      variant="team"
-                      href={`/teams/${team.slug}`}
-                      teamColor={team.primaryColor}
-                      crestUrl={`/crests/teams/${team.slug}.svg`}
+                      entity={{
+                        type: "team",
+                        name: team.name,
+                        slug: team.slug,
+                        href: `/teams/${team.slug}`,
+                        iconUrl: `/crests/teams/${team.slug}.svg`,
+                        fallbackText: (team.shortName || team.name).slice(0, 2),
+                        color: team.primaryColor,
+                      }}
+                      size="default"
                       data-testid={`pill-team-${team.slug}`}
                     />
-                  ))}
-                  {playerPills.map((player) => (
-                    <Link key={player.slug} href={`/news?player=${player.slug}`}>
-                      <Badge
-                        variant="secondary"
-                        className="gap-1 cursor-pointer hover-elevate"
-                        data-testid={`pill-player-${player.slug}`}
-                      >
-                        <span className="w-2 h-2 rounded-full bg-current opacity-50" />
-                        {player.label}
-                      </Badge>
-                    </Link>
                   ))}
                 </div>
               )}
@@ -785,6 +785,52 @@ export default function ArticlePage() {
                     </Button>
                   </CardContent>
                 </Card>
+              </section>
+            )}
+
+            {(articleTeams.length > 0 || playerPills.length > 0) && (
+              <section className="mb-8 py-6 border-t">
+                <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
+                <div className="space-y-4">
+                  {articleTeams.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Teams</p>
+                      <div className="flex flex-wrap gap-2">
+                        {articleTeams.map((team) => (
+                          <EntityPill
+                            key={team.id}
+                            entity={{
+                              type: "team",
+                              name: team.name,
+                              slug: team.slug,
+                              href: `/teams/${team.slug}`,
+                              iconUrl: `/crests/teams/${team.slug}.svg`,
+                              fallbackText: (team.shortName || team.name).slice(0, 2),
+                              color: team.primaryColor,
+                            }}
+                            size="small"
+                            data-testid={`pill-bottom-team-${team.slug}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {playerPills.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Players</p>
+                      <div className="flex flex-wrap gap-2">
+                        {playerPills.map((player) => (
+                          <EntityPill
+                            key={player.slug}
+                            entity={player}
+                            size="small"
+                            data-testid={`pill-bottom-player-${player.slug}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </section>
             )}
 
