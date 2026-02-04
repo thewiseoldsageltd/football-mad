@@ -1,0 +1,80 @@
+FOOTBALL MAD — Fix article page hierarchy, excerpt, entity grouping, and mobile share UX (NO E2E / NO video regression runs).
+
+Context:
+- Article page is /news/:slug (React + Tailwind)
+- Entity pills exist (EntityPill component)
+- Current problems:
+  1) Excerpt is being cut off/truncated — must show full excerpt
+  2) “In this article” grouping is wrong: Teams + Managers appear under Players
+  3) Mobile UX: share icons appear in meta row AND there is a “Share this article” block AND sticky share bar (overkill)
+  4) Mobile: “In this article” appears below newsletter/signup/share blocks — it must appear immediately after article body
+  5) Cards only show competition pill — should show competition + up to 2 teams when available
+
+Hard requirements:
+- Do NOT add any hardcoded KNOWN_MANAGERS lists.
+- Do NOT rely on Ghost tags for entity typing. Use our extracted entities / Goalserve-backed entity types.
+- Do NOT run end-to-end/regression testing tools (Playwright/Cypress) or generate videos.
+- Keep changes minimal and well-structured.
+
+Tasks:
+
+A) Make entity typing first-class (backend)
+1) Update the server-side article/entity extraction so every pill entity includes a reliable type:
+   - competition | team | player | manager
+2) Ensure article payload includes these grouped arrays (or a single entities[] array with type field):
+   - competition?: EntityData
+   - teams: EntityData[]
+   - players: EntityData[]
+   - managers: EntityData[]
+3) The typing source of truth:
+   - If we already have an entities table with type/role, use that.
+   - If we store people with a role (player/manager), use that role.
+   - If we only have Goalserve IDs, infer via Goalserve entity category mapping (player vs coach/manager).
+4) Ensure the News list API and Article API both return enough data for pills:
+   - competition + up to 2 teams for cards
+   - full grouped entities for article page
+
+B) Fix excerpt truncation (frontend)
+1) Find the excerpt rendering in client/src/pages/article.tsx.
+2) Remove any tailwind classes like line-clamp-*, truncate, max-h, overflow-hidden that cause cut-off.
+3) Render the excerpt as full text.
+4) Add a rule: only show excerpt if it exists AND it is not effectively the same as the first paragraph of the body (simple heuristic is fine: compare normalized first ~140 chars). If duplicate, hide excerpt.
+
+C) Correct article page layout and dividers
+Desktop order:
+- Pills row (competition + teamA + teamB)
+- Title
+- Divider
+- Meta row with inline share icons + bookmark (Substack-style) (keep as-is on desktop)
+- Hero
+- Excerpt (if shown) styled muted + italic
+- Divider (only if excerpt shown)
+- Body
+- Divider
+- “In this article” grouped: Competitions, Teams, Players, Managers (only show group if it has items)
+- Related articles
+
+Mobile rules:
+1) Hide the inline share icons/bookmark in the meta row on small screens (keep only author/time/read/views).
+2) Remove the bottom “Share this article” block entirely on mobile (or remove it globally if redundant).
+3) Keep the sticky bottom share bar as the ONLY share CTA on mobile.
+4) Ensure “In this article” section appears immediately after the article body on mobile (before any newsletter/signup blocks).
+   - If newsletter/signup is in right rail on desktop, keep it there; but on mobile it stacks, so position “In this article” before that stack.
+
+D) Fix “cards only show competition pill”
+1) In article-card.tsx (or wherever pills are computed), render:
+   - competition pill always if present
+   - plus up to 2 team pills if present (home/away or first two teams)
+2) Use EntityPill with iconUrl when available.
+
+E) Add small debug aids (optional)
+- Add console.debug only behind a simple DEV guard (import.meta.env.DEV) if you need it. Remove noisy logs.
+
+Deliverables:
+- Implement changes with clean types in shared/schema.ts
+- No hacks, no hardcoded manager lists
+- Verify manually by loading:
+  - /news page cards show competition + teams
+  - An article shows correct grouping (Teams separate, Managers separate)
+  - Excerpt not truncated
+  - Mobile shows no inline share icons; sticky share remains; “In this article” is above newsletter/signup

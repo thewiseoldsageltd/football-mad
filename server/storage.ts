@@ -3,7 +3,7 @@ import { eq, and, desc, ilike, sql, or, inArray, gte, lt } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
-  fplPlayerAvailability,
+  fplPlayerAvailability, managers, articleManagers, articlePlayers,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -18,10 +18,28 @@ import {
   type Order, type InsertOrder,
   type Subscriber, type InsertSubscriber,
   type FplPlayerAvailability,
+  type Manager,
   NEWS_COMPETITIONS,
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
 } from "@shared/schema";
+
+// Minimal entity data for article pills
+export interface ArticleEntityPill {
+  type: "competition" | "team" | "player" | "manager";
+  id: string;
+  name: string;
+  slug: string;
+  iconUrl?: string;
+  fallbackText: string;
+  color?: string;
+}
+
+export interface ArticleWithEntities extends Article {
+  entityTeams: Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor">[];
+  entityPlayers: Pick<Player, "id" | "name" | "slug">[];
+  entityManagers: Pick<Manager, "id" | "name" | "slug">[];
+}
 
 export interface NewsFilterParams {
   comp: string;
@@ -61,6 +79,7 @@ export interface IStorage {
   // Articles
   getArticles(category?: string): Promise<Article[]>;
   getArticleBySlug(slug: string): Promise<Article | undefined>;
+  getArticleWithEntities(slug: string): Promise<ArticleWithEntities | undefined>;
   getArticlesByTeam(teamSlug: string): Promise<Article[]>;
   createArticle(data: InsertArticle): Promise<Article>;
   incrementArticleViews(id: string): Promise<void>;
@@ -183,6 +202,53 @@ export class DatabaseStorage implements IStorage {
   async getArticleBySlug(slug: string): Promise<Article | undefined> {
     const [article] = await db.select().from(articles).where(eq(articles.slug, slug));
     return article;
+  }
+
+  async getArticleWithEntities(slug: string): Promise<ArticleWithEntities | undefined> {
+    const [article] = await db.select().from(articles).where(eq(articles.slug, slug));
+    if (!article) return undefined;
+
+    // Fetch linked teams
+    const teamRows = await db
+      .select({
+        id: teams.id,
+        name: teams.name,
+        slug: teams.slug,
+        shortName: teams.shortName,
+        primaryColor: teams.primaryColor,
+      })
+      .from(articleTeams)
+      .innerJoin(teams, eq(articleTeams.teamId, teams.id))
+      .where(eq(articleTeams.articleId, article.id));
+
+    // Fetch linked players
+    const playerRows = await db
+      .select({
+        id: players.id,
+        name: players.name,
+        slug: players.slug,
+      })
+      .from(articlePlayers)
+      .innerJoin(players, eq(articlePlayers.playerId, players.id))
+      .where(eq(articlePlayers.articleId, article.id));
+
+    // Fetch linked managers
+    const managerRows = await db
+      .select({
+        id: managers.id,
+        name: managers.name,
+        slug: managers.slug,
+      })
+      .from(articleManagers)
+      .innerJoin(managers, eq(articleManagers.managerId, managers.id))
+      .where(eq(articleManagers.articleId, article.id));
+
+    return {
+      ...article,
+      entityTeams: teamRows,
+      entityPlayers: playerRows,
+      entityManagers: managerRows,
+    };
   }
 
   async getArticlesByTeam(teamSlug: string): Promise<Article[]> {

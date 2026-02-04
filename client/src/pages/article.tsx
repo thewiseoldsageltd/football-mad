@@ -17,25 +17,31 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
-import type { Article, Team } from "@shared/schema";
+import type { Article, Team, Player, Manager } from "@shared/schema";
 
-const CATEGORY_TAGS = new Set([
-  "transfers", "trending", "analysis", "news", "breaking", "editors-pick",
-  "match-report", "preview", "review", "opinion", "feature", "interview",
-  "rumour", "rumor", "injury", "injuries", "suspension", "discipline",
-  "fpl", "fantasy", "tactics", "stats", "statistics", "highlights",
-  "goal", "goals", "assist", "assists", "clean-sheet", "results",
-  "fixtures", "table", "standings", "awards", "signing", "signings",
-  "loan", "loans", "contract", "debut", "retirement", "sacked", "appointed",
-]);
+// Extended article type with entity data from backend
+interface ArticleWithEntities extends Article {
+  entityTeams?: Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor">[];
+  entityPlayers?: Pick<Player, "id" | "name" | "slug">[];
+  entityManagers?: Pick<Manager, "id" | "name" | "slug">[];
+}
 
-const KNOWN_MANAGERS = new Set([
-  "mikel-arteta", "pep-guardiola", "enzo-maresca", "arne-slot", "erik-ten-hag",
-  "unai-emery", "eddie-howe", "gary-oneill", "andoni-iraola", "marco-silva",
-  "nuno-espirito-santo", "oliver-glasner", "julen-lopetegui", "thomas-frank",
-  "russell-martin", "fabian-hurzeler", "steve-cooper", "sean-dyche",
-  "david-moyes", "rob-edwards", "kieran-mckenna",
-]);
+// Normalize text for comparison (lowercase, strip HTML, collapse whitespace)
+function normalizeText(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Check if excerpt duplicates the first paragraph of body
+function isExcerptDuplicate(excerpt: string, body: string): boolean {
+  const normExcerpt = normalizeText(excerpt).slice(0, 140);
+  const normBody = normalizeText(body).slice(0, 140);
+  if (!normExcerpt || !normBody) return false;
+  return normBody.startsWith(normExcerpt) || normExcerpt.startsWith(normBody);
+}
 
 function calculateReadingTime(content: string): number {
   const text = content.replace(/<[^>]*>/g, "");
@@ -493,7 +499,7 @@ export default function ArticlePage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const { data: article, isLoading } = useQuery<Article>({
+  const { data: article, isLoading } = useQuery<ArticleWithEntities>({
     queryKey: ["/api/articles", slug],
   });
 
@@ -585,34 +591,37 @@ export default function ArticlePage() {
 
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const readingTime = calculateReadingTime(article.content);
-  const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
   
-  const teamSlugs = teams.map(t => t.slug);
-  const personTags = (article.tags || []).filter(tag => 
-    !teamSlugs.includes(tag) && 
-    tag !== slugifyCompetition(article.competition || "") &&
-    !CATEGORY_TAGS.has(tag.toLowerCase())
-  );
+  // Use backend entity data (preferred) or fall back to tag-based for legacy articles
+  const entityTeams = article.entityTeams || [];
+  const entityPlayers = article.entityPlayers || [];
+  const entityManagers = article.entityManagers || [];
   
-  const playerPills: EntityData[] = [];
-  const managerPills: EntityData[] = [];
+  // For header pills, use entityTeams or fall back to tag-based lookup
+  const articleTeams = entityTeams.length > 0 
+    ? entityTeams 
+    : teams.filter(t => article.tags?.includes(t.slug));
   
-  personTags.forEach(tag => {
-    const isManager = KNOWN_MANAGERS.has(tag.toLowerCase());
-    const name = tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-    const pill: EntityData = {
-      type: isManager ? "manager" : "player",
-      name,
-      slug: tag,
-      href: `/news?${isManager ? "manager" : "player"}=${tag}`,
-      fallbackText: tag.slice(0, 2).toUpperCase(),
-    };
-    if (isManager) {
-      managerPills.push(pill);
-    } else {
-      playerPills.push(pill);
-    }
-  });
+  // Build player pills from backend entities
+  const playerPills: EntityData[] = entityPlayers.map(p => ({
+    type: "player" as const,
+    name: p.name,
+    slug: p.slug,
+    href: `/news?player=${p.slug}`,
+    fallbackText: p.name.slice(0, 2).toUpperCase(),
+  }));
+  
+  // Build manager pills from backend entities
+  const managerPills: EntityData[] = entityManagers.map(m => ({
+    type: "manager" as const,
+    name: m.name,
+    slug: m.slug,
+    href: `/news?manager=${m.slug}`,
+    fallbackText: m.name.slice(0, 2).toUpperCase(),
+  }));
+  
+  // Check if excerpt should be shown (not empty and not duplicate of body start)
+  const showExcerpt = article.excerpt?.trim() && !isExcerptDuplicate(article.excerpt, article.content);
 
   return (
     <MainLayout>
@@ -695,7 +704,7 @@ export default function ArticlePage() {
               </div>
             )}
 
-            {article.excerpt?.trim() && (
+            {showExcerpt && (
               <>
                 <p className="text-lg md:text-xl text-muted-foreground italic leading-relaxed mb-6">
                   {article.excerpt}
@@ -708,87 +717,6 @@ export default function ArticlePage() {
               className="prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3"
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
-
-            <section className="py-6 border-t mb-8 lg:hidden">
-              <p className="text-sm text-muted-foreground mb-3">Share this article</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(article.title + " - Football Mad " + articleUrl)}`, "_blank")}
-                  className="gap-2"
-                  data-testid="button-share-whatsapp-full"
-                >
-                  <SiWhatsapp className="h-4 w-4 text-[#25D366]" />
-                  WhatsApp
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(article.title)}&url=${encodeURIComponent(articleUrl)}`, "_blank")}
-                  className="gap-2"
-                  data-testid="button-share-x-full"
-                >
-                  <SiX className="h-4 w-4" />
-                  X
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(articleUrl)}`, "_blank")}
-                  className="gap-2"
-                  data-testid="button-share-facebook-full"
-                >
-                  <SiFacebook className="h-4 w-4 text-[#1877F2]" />
-                  Facebook
-                </Button>
-              </div>
-            </section>
-
-            <section className="mb-12 lg:hidden">
-              <NewsletterForm />
-            </section>
-
-            {articleTeams.length > 0 && !followedTeamIds.includes(articleTeams[0].id) && isAuthenticated && (
-              <section className="mb-12 lg:hidden">
-                <Card className="bg-gradient-to-r from-primary/10 to-transparent">
-                  <CardContent className="p-6 flex items-center justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden"
-                        style={{ backgroundColor: articleTeams[0].primaryColor || "#333" }}
-                      >
-                        <img 
-                          src={`/crests/teams/${articleTeams[0].slug}.svg`}
-                          alt={articleTeams[0].name}
-                          className="w-8 h-8 object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                          }}
-                        />
-                        <span className="text-white font-bold">
-                          {articleTeams[0].shortName?.[0] || articleTeams[0].name[0]}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-semibold">Follow {articleTeams[0].name}</p>
-                        <p className="text-sm text-muted-foreground">Get more updates</p>
-                      </div>
-                    </div>
-                    <Button 
-                      className="gap-2"
-                      onClick={() => followMutation.mutate(articleTeams[0].id)}
-                      disabled={followMutation.isPending}
-                      data-testid="button-follow-team-inline"
-                    >
-                      <Heart className="h-4 w-4" />
-                      Follow
-                    </Button>
-                  </CardContent>
-                </Card>
-              </section>
-            )}
 
             {(article.competition || articleTeams.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
               <section className="mb-8 py-6 border-t">
@@ -867,6 +795,51 @@ export default function ArticlePage() {
                     </div>
                   )}
                 </div>
+              </section>
+            )}
+
+            <section className="mb-12 lg:hidden">
+              <NewsletterForm />
+            </section>
+
+            {articleTeams.length > 0 && !followedTeamIds.includes(articleTeams[0].id) && isAuthenticated && (
+              <section className="mb-12 lg:hidden">
+                <Card className="bg-gradient-to-r from-primary/10 to-transparent">
+                  <CardContent className="p-6 flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden"
+                        style={{ backgroundColor: articleTeams[0].primaryColor || "#333" }}
+                      >
+                        <img 
+                          src={`/crests/teams/${articleTeams[0].slug}.svg`}
+                          alt={articleTeams[0].name}
+                          className="w-8 h-8 object-contain"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = "none";
+                          }}
+                        />
+                        <span className="text-white font-bold">
+                          {articleTeams[0].shortName?.[0] || articleTeams[0].name[0]}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-semibold">Follow {articleTeams[0].name}</p>
+                        <p className="text-sm text-muted-foreground">Get more updates</p>
+                      </div>
+                    </div>
+                    <Button 
+                      className="gap-2"
+                      onClick={() => followMutation.mutate(articleTeams[0].id)}
+                      disabled={followMutation.isPending}
+                      data-testid="button-follow-team-inline"
+                    >
+                      <Heart className="h-4 w-4" />
+                      Follow
+                    </Button>
+                  </CardContent>
+                </Card>
               </section>
             )}
 
