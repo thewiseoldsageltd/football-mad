@@ -12060,3 +12060,61 @@ Now implement A + B exactly as above, keeping the diff minimal and focused.
 
 ---
 
+We hit a React hook-order crash: “Rendered more hooks than during the previous render” at client/src/pages/article.tsx around line ~610 where useMemo is called.
+
+CAUSE
+A hook (useMemo and/or new useQuery hooks) is being called conditionally or after an early return. On one render path the component returns before reaching that hook; on another render it reaches it, changing hook count/order.
+
+GOAL
+Fix hook order by ensuring ALL hooks (useQuery/useMemo/useEffect/etc) are invoked unconditionally at the top of the ArticlePage component before any returns.
+
+CONSTRAINTS
+- Keep changes minimal.
+- Do NOT run end-to-end/regression tests.
+- No video generation.
+- Verify via quick refresh only.
+
+DO THIS
+
+1) Open client/src/pages/article.tsx and find the ArticlePage component.
+2) Identify any early returns like:
+   - if (isLoading) return ...
+   - if (error) return ...
+   - if (!article) return ...
+3) Ensure every hook call is ABOVE those returns, including:
+   - the useMemo that builds pills
+   - any new useQuery calls for /api/players or /api/managers
+   - any useEffect added for fallback logic
+
+4) If we currently call useQuery conditionally (e.g. only when backend entities empty), refactor to call it ALWAYS but gate network with enabled:
+   - const playersQuery = useQuery({ queryKey: ["players"], queryFn: fetchPlayers, enabled: !!article });
+   - const managersQuery = useQuery({ queryKey: ["managers"], queryFn: fetchManagers, enabled: !!article });
+
+5) Move the pills useMemo so it is ALWAYS executed:
+   Example pattern:
+
+   const article = articleQuery.data?.article;
+
+   const players = playersQuery.data ?? [];
+   const managers = managersQuery.data ?? [];
+
+   const { articleTeams, competitionPills, playerPills, managerPills } = useMemo(() => {
+     const tags = article?.tags ?? [];
+     // build pills safely even if article is undefined
+     return { articleTeams: [], competitionPills: [], playerPills: [], managerPills: [] };
+   }, [article, players, managers]);
+
+6) After hooks are defined, keep the render guards (loading/error/not found) as-is BELOW the hooks.
+
+7) Make sure no hook is inside a block like:
+   - if (article) { useMemo(...) }
+   - if (fallback) { useQuery(...) }
+   - return (...) before a hook later
+
+RESULT
+The overlay should disappear, and the article page should render again.
+
+Finally, quickly refresh the Jurrien Timber article page and confirm it loads without the hook-order error.
+
+---
+

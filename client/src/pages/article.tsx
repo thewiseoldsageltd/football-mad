@@ -589,25 +589,19 @@ export default function ArticlePage() {
       .slice(0, 6);
   }, [allArticles]);
 
-  if (isLoading) {
-    return <ArticleSkeleton />;
-  }
-
-  if (!article) {
-    return <ArticleNotFound popularArticles={popularArticles} />;
-  }
-
-  const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
-  const readingTime = calculateReadingTime(article.content);
-  
-  // Check if backend has any entity data
+  // Check if backend has any entity data (safe when article is undefined)
   const backendHasEntities = 
-    (article.entityTeams?.length || 0) +
-    (article.entityPlayers?.length || 0) +
-    (article.entityManagers?.length || 0) > 0;
+    (article?.entityTeams?.length || 0) +
+    (article?.entityPlayers?.length || 0) +
+    (article?.entityManagers?.length || 0) > 0;
   
   // Build entity pill arrays with fallback to tags when backend is empty
+  // Must be called unconditionally (before early returns) per React hook rules
   const { articleTeams, competitionPills, playerPills, managerPills } = useMemo(() => {
+    if (!article) {
+      return { articleTeams: [], competitionPills: [], playerPills: [], managerPills: [] };
+    }
+    
     const tags = article.tags || [];
     
     // Helper to slugify a tag name for comparison
@@ -710,6 +704,18 @@ export default function ArticlePage() {
       managerPills: resolvedManagerPills,
     };
   }, [article, teams, players, managers, backendHasEntities]);
+
+  // Early returns AFTER all hooks
+  if (isLoading) {
+    return <ArticleSkeleton />;
+  }
+
+  if (!article) {
+    return <ArticleNotFound popularArticles={popularArticles} />;
+  }
+
+  const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
+  const readingTime = calculateReadingTime(article.content);
   
   // Check if excerpt should be shown (not empty and not duplicate of body start)
   const showExcerpt = article.excerpt?.trim() && !isExcerptDuplicate(article.excerpt, article.content);
