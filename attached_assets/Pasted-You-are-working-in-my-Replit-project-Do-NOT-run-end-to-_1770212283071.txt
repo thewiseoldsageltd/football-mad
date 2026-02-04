@@ -1,0 +1,47 @@
+You are working in my Replit project. Do NOT run end-to-end/regression tests. Do NOT generate videos. Only implement the changes and explain what you changed.
+
+Goal: Fix /news “Load more posts” UX where user sees a flicker and then nothing loads. Backend cursor pagination works. Improve frontend reliability, error visibility, and logging.
+
+In `client/src/pages/news.tsx`:
+
+1) In the load-more logic (the function that fetches the next page; likely `handleLoadMore`):
+   - Always build the URL using `URL` + `URLSearchParams` (never string concat).
+   - Always include `limit=15` and `cursor=<nextCursor>` when nextCursor exists.
+   - Add `console.debug` logs:
+     - before request: `"[news] loadMore start", { nextCursor, url: url.toString() }`
+     - after response headers: `"[news] loadMore resp", { ok: res.ok, status: res.status }`
+     - after JSON parse: `"[news] loadMore data", { count: data.articles?.length, hasMore: data.hasMore, nextCursor: data.nextCursor }`
+   - If `!res.ok`, read `await res.text()` and throw `new Error("Load more failed: " + status + " " + text.slice(0,200))`
+   - Validate JSON shape: if `!Array.isArray(data.articles)` throw a clear Error.
+
+2) Abort/timeout handling:
+   - Use `AbortController` with a 20s timeout if you already added it, BUT:
+     - Ensure `isLoadingMore` is set back to false in a `finally`.
+     - Ensure `loadingMoreRef.current = false` in a `finally`.
+     - If aborted (`err.name === "AbortError"`), set a user-facing error message like:
+       “Still working… the request timed out. Please try again.”
+
+3) UI/UX:
+   - Add state: `loadMoreError: string | null`
+   - When load-more starts: `setLoadMoreError(null)`
+   - If error: show an inline error block directly above the button:
+     - Text of the error (truncate to ~140 chars)
+     - A “Retry” button that calls `handleLoadMore()`
+   - Keep the “Load more posts” button enabled again after an error (don’t leave it disabled).
+   - While loading: show the button label “Loading…” and disable it (disabled only while loading or when !hasMore).
+
+4) Data updates:
+   - On success:
+     - Append new articles, de-duping by `id` to avoid accidental duplicates.
+     - Update `nextCursor` from the response.
+     - Update `hasMore` from the response.
+
+5) Optional but recommended:
+   - Guard against “no progress” responses:
+     - If `data.nextCursor === nextCursor` (same cursor returned), set an error:
+       “Pagination returned the same cursor (no progress). Please retry.” and stop.
+
+After implementing, provide:
+- A short summary of what changed
+- The exact places (function name / rough line area) you edited
+- Any new state variables added

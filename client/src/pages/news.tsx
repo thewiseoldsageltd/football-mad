@@ -150,36 +150,66 @@ export default function NewsPage() {
     const timeoutId = setTimeout(() => controller.abort(), 20000);
     
     try {
-      const params = new URLSearchParams();
-      params.set("limit", "15");
-      if (nextCursor) params.set("cursor", nextCursor);
+      // Build URL using URL + URLSearchParams (never string concat)
+      const url = new URL("/api/news", window.location.origin);
+      url.searchParams.set("limit", "15");
+      if (nextCursor) url.searchParams.set("cursor", nextCursor);
       
       // Add existing filter params
       if (apiQueryString) {
         const existingParams = new URLSearchParams(apiQueryString.replace("?", ""));
         existingParams.forEach((value, key) => {
           if (key !== "limit" && key !== "cursor") {
-            params.set(key, value);
+            url.searchParams.set(key, value);
           }
         });
       }
       
-      const res = await fetch(`/api/news?${params.toString()}`, { signal: controller.signal });
-      const j = await res.json();
+      console.debug("[news] loadMore start", { nextCursor, url: url.toString() });
       
-      if (!res.ok) throw new Error(j?.error || "Failed to load more");
+      const res = await fetch(url.toString(), { signal: controller.signal });
       
-      setPaginatedArticles(prev => [...prev, ...(j.articles || [])]);
-      setNextCursor(j.nextCursor ?? null);
-      setHasMore(!!j.hasMore);
+      console.debug("[news] loadMore resp", { ok: res.ok, status: res.status });
+      
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Load more failed: ${res.status} ${text.slice(0, 200)}`);
+      }
+      
+      const data = await res.json();
+      
+      console.debug("[news] loadMore data", { 
+        count: data.articles?.length, 
+        hasMore: data.hasMore, 
+        nextCursor: data.nextCursor 
+      });
+      
+      // Validate JSON shape
+      if (!Array.isArray(data.articles)) {
+        throw new Error("Invalid response: articles is not an array");
+      }
+      
+      // Guard against "no progress" responses
+      if (data.nextCursor && data.nextCursor === nextCursor) {
+        throw new Error("Pagination returned the same cursor (no progress). Please retry.");
+      }
+      
+      // Append new articles, de-duping by id
+      setPaginatedArticles(prev => {
+        const existingIds = new Set(prev.map(a => a.id));
+        const uniqueNew = data.articles.filter((a: any) => !existingIds.has(a.id));
+        return [...prev, ...uniqueNew];
+      });
+      setNextCursor(data.nextCursor ?? null);
+      setHasMore(!!data.hasMore);
       setLoadMoreError(null);
     } catch (e: any) {
       if (e.name === "AbortError") {
-        console.error("Load more timed out after 20s");
-        setLoadMoreError("Request timed out. Please try again.");
+        console.error("[news] Load more timed out after 20s");
+        setLoadMoreError("Still working… the request timed out. Please try again.");
       } else {
-        console.error("Load more failed:", e);
-        setLoadMoreError("Failed to load more posts. Please try again.");
+        console.error("[news] Load more failed:", e);
+        setLoadMoreError(e.message?.slice(0, 140) || "Failed to load more posts. Please try again.");
       }
     } finally {
       clearTimeout(slowTimer);
@@ -694,36 +724,43 @@ export default function NewsPage() {
                   </div>
                   {hasMore && (
                     <div className="mt-8">
-                      {isLoadingMore ? (
-                        <>
-                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
-                            {Array.from({ length: 15 }).map((_, i) => (
-                              <ArticleCardSkeleton key={`skeleton-${i}`} />
-                            ))}
-                          </div>
-                          {loadMoreSlowMessage && (
-                            <p className="text-center text-muted-foreground text-sm">
-                              Still working...
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <div className="flex flex-col items-center gap-3">
-                          {loadMoreError && (
-                            <p className="text-destructive text-sm" data-testid="text-load-more-error">
-                              {loadMoreError}
-                            </p>
-                          )}
-                          <Button
-                            variant="outline"
-                            onClick={handleLoadMore}
-                            disabled={!hasMore}
-                            data-testid="button-load-more"
-                          >
-                            {loadMoreError ? "Try again" : "Load more posts"}
-                          </Button>
+                      {isLoadingMore && (
+                        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+                          {Array.from({ length: 15 }).map((_, i) => (
+                            <ArticleCardSkeleton key={`skeleton-${i}`} />
+                          ))}
                         </div>
                       )}
+                      <div className="flex flex-col items-center gap-3">
+                        {loadMoreError && !isLoadingMore && (
+                          <div className="text-center p-3 rounded-md bg-destructive/10 border border-destructive/20 max-w-md">
+                            <p className="text-destructive text-sm mb-2" data-testid="text-load-more-error">
+                              {loadMoreError}
+                            </p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleLoadMore}
+                              data-testid="button-retry"
+                            >
+                              Retry
+                            </Button>
+                          </div>
+                        )}
+                        {isLoadingMore && loadMoreSlowMessage && (
+                          <p className="text-center text-muted-foreground text-sm">
+                            Still working...
+                          </p>
+                        )}
+                        <Button
+                          variant="outline"
+                          onClick={handleLoadMore}
+                          disabled={isLoadingMore}
+                          data-testid="button-load-more"
+                        >
+                          {isLoadingMore ? "Loading…" : "Load more posts"}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </>
