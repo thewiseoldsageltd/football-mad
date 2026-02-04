@@ -199,9 +199,7 @@ export default function NewsPage() {
       setArticles(prev => {
         const existingIds = new Set(prev.map(a => a.id));
         const uniqueNew = data.articles.filter((a: any) => !existingIds.has(a.id));
-        const next = [...prev, ...uniqueNew];
-        console.debug("[news] loadMore appended", { before: prev.length, added: uniqueNew.length, after: next.length });
-        return next;
+        return [...prev, ...uniqueNew];
       });
       setNextCursor(data.nextCursor ?? null);
       setHasMore(!!data.hasMore);

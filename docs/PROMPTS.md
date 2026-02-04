@@ -11697,3 +11697,8 @@ After implementing, briefly describe:
 
 ---
 
+Remove the temporary console.debug "[news] loadMore appended" log from client/src/pages/news.tsx.
+Do not change any other behaviour. No tests. No videos.
+
+---
+
