@@ -93,14 +93,59 @@ export default function NewsPage() {
 
   const apiQueryString = buildApiQueryString();
   
+  // Pagination state
+  const [paginatedArticles, setPaginatedArticles] = useState<any[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  
   const { data: newsResponse, isLoading } = useQuery<NewsFiltersResponse>({
     queryKey: ["/api/news", apiQueryString],
     queryFn: async () => {
-      const res = await fetch(`/api/news${apiQueryString}`);
+      const separator = apiQueryString ? "&" : "?";
+      const res = await fetch(`/api/news${apiQueryString}${separator}limit=15`);
       if (!res.ok) throw new Error("Failed to fetch news");
       return res.json();
     },
   });
+  
+  // Reset pagination when filters change and sync from initial response
+  useEffect(() => {
+    if (newsResponse) {
+      setPaginatedArticles(newsResponse.articles);
+      setNextCursor(newsResponse.nextCursor);
+      setHasMore(newsResponse.hasMore);
+    }
+  }, [newsResponse]);
+  
+  // Reset pagination state when filters change
+  useEffect(() => {
+    setPaginatedArticles([]);
+    setNextCursor(null);
+    setHasMore(false);
+  }, [apiQueryString]);
+  
+  // Load more handler
+  const handleLoadMore = async () => {
+    if (!nextCursor || isLoadingMore) return;
+    
+    setIsLoadingMore(true);
+    try {
+      const separator = apiQueryString ? "&" : "?";
+      const cursorParam = `&cursor=${encodeURIComponent(nextCursor)}`;
+      const res = await fetch(`/api/news${apiQueryString}${separator}limit=15${cursorParam}`);
+      if (!res.ok) throw new Error("Failed to load more");
+      
+      const data: NewsFiltersResponse = await res.json();
+      setPaginatedArticles(prev => [...prev, ...data.articles]);
+      setNextCursor(data.nextCursor);
+      setHasMore(data.hasMore);
+    } catch (err) {
+      console.error("Load more error:", err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   // Polling state for incremental updates
   const [polledArticles, setPolledArticles] = useState<any[]>([]);
@@ -108,7 +153,7 @@ export default function NewsPage() {
 
   // Merge base articles with polled updates (webhook-safe)
   const mergedArticles = useMemo(() => {
-    const base = newsResponse?.articles ?? [];
+    const base = paginatedArticles.length > 0 ? paginatedArticles : (newsResponse?.articles ?? []);
     if (polledArticles.length === 0) return base;
 
     const map = new Map<string, any>();
@@ -593,16 +638,30 @@ export default function NewsPage() {
 
               {isLoading ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {Array.from({ length: 9 }).map((_, i) => (
+                  {Array.from({ length: 15 }).map((_, i) => (
                     <ArticleCardSkeleton key={i} />
                   ))}
                 </div>
               ) : regularArticles.length > 0 ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {regularArticles.map((article) => (
-                    <ArticleCard key={article.id} article={article} teams={teams} />
-                  ))}
-                </div>
+                <>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {regularArticles.map((article) => (
+                      <ArticleCard key={article.id} article={article} teams={teams} />
+                    ))}
+                  </div>
+                  {hasMore && (
+                    <div className="flex justify-center mt-8">
+                      <Button
+                        variant="outline"
+                        onClick={handleLoadMore}
+                        disabled={isLoadingMore}
+                        data-testid="button-load-more"
+                      >
+                        {isLoadingMore ? "Loading..." : "Load more posts"}
+                      </Button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div className="text-center py-16">
                   <p className="text-muted-foreground text-lg">

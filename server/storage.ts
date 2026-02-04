@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, ilike, sql, or, inArray, gte } from "drizzle-orm";
+import { eq, and, desc, ilike, sql, or, inArray, gte, lt } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
@@ -30,6 +30,8 @@ export interface NewsFilterParams {
   sort: string;
   range: string;
   breaking: boolean;
+  limit?: number;
+  cursor?: string; // ISO timestamp from COALESCE(sourceUpdatedAt, publishedAt, createdAt)
 }
 
 export interface NewsUpdatesParams {
@@ -209,7 +211,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse> {
-    const { comp, type, teamSlugs, sort, range, breaking } = params;
+    const { comp, type, teamSlugs, sort, range, breaking, limit: limitParam, cursor } = params;
+    const limit = limitParam ?? 15; // Default to 15 (5 rows of 3)
     
     const conditions: any[] = [];
     
@@ -291,8 +294,16 @@ export class DatabaseStorage implements IStorage {
             breaking,
             total: 0,
           },
+          nextCursor: null,
+          hasMore: false,
         };
       }
+    }
+    
+    // Add cursor condition if provided (for pagination)
+    if (cursor) {
+      const cursorDate = new Date(cursor);
+      conditions.push(lt(freshnessTs, cursorDate));
     }
     
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -310,18 +321,27 @@ export class DatabaseStorage implements IStorage {
         orderByClause = desc(freshnessTs);
     }
     
-    // Default limit of 20 articles
-    const limit = 20;
-    
+    // Fetch limit + 1 to check if there are more results
     let result;
     if (whereClause) {
-      result = await db.select(listFields).from(articles).where(whereClause).orderBy(orderByClause).limit(limit);
+      result = await db.select(listFields).from(articles).where(whereClause).orderBy(orderByClause).limit(limit + 1);
     } else {
-      result = await db.select(listFields).from(articles).orderBy(orderByClause).limit(limit);
+      result = await db.select(listFields).from(articles).orderBy(orderByClause).limit(limit + 1);
+    }
+    
+    const hasMore = result.length > limit;
+    const articlesToReturn = hasMore ? result.slice(0, limit) : result;
+    
+    // Build nextCursor from the last article's freshness timestamp
+    let nextCursor: string | null = null;
+    if (hasMore && articlesToReturn.length > 0) {
+      const lastArticle = articlesToReturn[articlesToReturn.length - 1];
+      const ts = lastArticle.sourceUpdatedAt || lastArticle.publishedAt || lastArticle.createdAt;
+      nextCursor = ts ? new Date(ts).toISOString() : null;
     }
     
     return {
-      articles: result,
+      articles: articlesToReturn,
       appliedFilters: {
         comp,
         type,
@@ -330,8 +350,10 @@ export class DatabaseStorage implements IStorage {
         sort,
         range,
         breaking,
-        total: result.length,
+        total: articlesToReturn.length,
       },
+      nextCursor,
+      hasMore,
     };
   }
 

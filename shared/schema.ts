@@ -581,6 +581,8 @@ export type NewsFiltersResponse = {
     breaking: boolean;
     total: number;
   };
+  nextCursor: string | null;
+  hasMore: boolean;
 };
 
 // ============ STANDINGS ============

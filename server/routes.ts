@@ -137,6 +137,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         teamSlugs = teamsParam.split(",").filter(Boolean);
       }
       
+      const limitParam = parseInt(req.query.limit as string) || 15;
+      const limit = Math.min(Math.max(1, limitParam), 50); // Clamp to 1-50
+      const cursor = req.query.cursor as string | undefined;
+      
       const result = await storage.getNewsArticles({
         comp,
         type,
@@ -144,6 +148,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         sort,
         range,
         breaking,
+        limit,
+        cursor,
       });
       
       result.appliedFilters.myTeams = myTeams;

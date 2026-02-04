@@ -11446,3 +11446,28 @@ Do not log secrets.
 
 ---
 
+Update news feed pagination to be layout-aware.
+
+BACKEND:
+- Change default /api/news limit from 20 to 15
+- Ensure limit param is respected (limit=15)
+- Pagination cursor should be based on:
+  COALESCE(sourceUpdatedAt, publishedAt, createdAt)
+- Response should include:
+  { articles: [], nextCursor: string | null, hasMore: boolean }
+
+FRONTEND:
+- Initial fetch should request limit=15
+- Add "Load more posts" button under the grid
+- On click:
+  - fetch /api/news?limit=15&cursor=<nextCursor>
+  - append new articles to state
+  - update nextCursor and hasMore
+- Hide button if hasMore is false
+- Preserve sort order using freshness timestamp
+- Do not reset scroll position when loading more
+
+Goal: Always load articles in multiples of 3 rows (15 at a time).
+
+---
+
