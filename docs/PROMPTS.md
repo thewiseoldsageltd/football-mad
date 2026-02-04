@@ -11435,3 +11435,14 @@ After implementing, print a single startup log line stating that catch-up sync i
 
 ---
 
+In server/routes.ts, update the catch-up sync job and POST /api/news/sync/run so they call logWebhookAudit.
+
+Add audit lines:
+- "catchup started"
+- "catchup completed fetched=... inserted=... updated=... failed=..."
+- on error: "catchup failed error=..."
+
+Do not log secrets.
+
+---
+

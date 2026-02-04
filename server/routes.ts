@@ -5761,18 +5761,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (catchupSyncRunning) return; // Prevent overlapping runs
     
     catchupSyncRunning = true;
-    console.log("[Catchup sync] Started");
+    logWebhookAudit("catchup started");
     
     try {
       const summary = await runCatchupSync();
       lastCatchupRunAt = new Date().toISOString();
       lastCatchupSummary = summary;
       lastCatchupError = null;
-      console.log(`[Catchup sync] Completed: fetched=${summary.fetched} inserted=${summary.inserted} updated=${summary.updated} failed=${summary.failed}`);
+      logWebhookAudit(`catchup completed fetched=${summary.fetched} inserted=${summary.inserted} updated=${summary.updated} failed=${summary.failed}`);
     } catch (err: any) {
       lastCatchupRunAt = new Date().toISOString();
       lastCatchupError = err.message;
-      console.error("[Catchup sync] Failed:", err.message);
+      logWebhookAudit(`catchup failed error=${err.message}`);
     } finally {
       catchupSyncRunning = false;
     }
@@ -5799,19 +5799,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     
     catchupSyncRunning = true;
-    console.log("[Catchup sync] Manual run started");
+    logWebhookAudit("catchup started manual=true");
     
     try {
       const summary = await runCatchupSync();
       lastCatchupRunAt = new Date().toISOString();
       lastCatchupSummary = summary;
       lastCatchupError = null;
-      console.log(`[Catchup sync] Manual run completed: fetched=${summary.fetched} inserted=${summary.inserted} updated=${summary.updated} failed=${summary.failed}`);
+      logWebhookAudit(`catchup completed fetched=${summary.fetched} inserted=${summary.inserted} updated=${summary.updated} failed=${summary.failed}`);
       res.json({ ok: true, summary });
     } catch (err: any) {
       lastCatchupRunAt = new Date().toISOString();
       lastCatchupError = err.message;
-      console.error("[Catchup sync] Manual run failed:", err.message);
+      logWebhookAudit(`catchup failed error=${err.message}`);
       res.status(500).json({ error: err.message });
     } finally {
       catchupSyncRunning = false;
