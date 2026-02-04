@@ -11826,3 +11826,40 @@ Make the changes, ensure build passes, and provide a brief summary of what chang
 
 ---
 
+Update the article page layout + entity grouping (no E2E tests, no videos, keep changes minimal and focused).
+
+1) Add subtle dividers in client/src/pages/article.tsx:
+- Add a thin horizontal divider between the Title and the Meta row (ArticleMetaBar).
+- If an excerpt/standfirst is rendered, add a divider between the excerpt and the start of the article body.
+
+2) Excerpt/standfirst rules:
+- Only render the excerpt block if article.excerpt exists AND has non-whitespace content.
+- Keep the current styling (slightly muted text + italic), but remove any truncation/line-clamp so it displays full text.
+- If excerpt is empty, do not render the excerpt section at all (no blank spacing).
+
+3) Fix “In this article” grouping so Teams and Managers appear correctly:
+- In client/src/pages/article.tsx, build grouped arrays from a single normalized entities list.
+- Use entity.type to bucket into:
+  - competitions (type === "competition")
+  - teams (type === "team")
+  - players (type === "player")
+  - managers (type === "manager")
+- If current data uses inconsistent type values, add a lightweight normalization function that maps common variants:
+  - "club" -> "team"
+  - "person" -> if entity.role === "manager" then "manager" else "player"
+  - "coach" -> "manager"
+  - "league" or "tournament" -> "competition"
+- Ensure Arsenal/Chelsea render under Teams, and Mikel Arteta renders under Managers (not Players).
+- De-dupe entities by slug (or id) within each group.
+- Render group headings in this order: Competitions, Teams, Players, Managers.
+- Only render a group if it has at least 1 pill.
+
+4) Keep mobile order sensible:
+- “In this article” should remain above Related Articles.
+- Do not move it below newsletter signup / share on mobile.
+
+After changes:
+- /news/:slug shows Title -> divider -> Meta row -> Hero -> Excerpt (if present) -> divider -> Body -> In this article (grouped correctly) -> Related Articles.
+
+---
+

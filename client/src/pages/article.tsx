@@ -29,6 +29,14 @@ const CATEGORY_TAGS = new Set([
   "loan", "loans", "contract", "debut", "retirement", "sacked", "appointed",
 ]);
 
+const KNOWN_MANAGERS = new Set([
+  "mikel-arteta", "pep-guardiola", "enzo-maresca", "arne-slot", "erik-ten-hag",
+  "unai-emery", "eddie-howe", "gary-oneill", "andoni-iraola", "marco-silva",
+  "nuno-espirito-santo", "oliver-glasner", "julen-lopetegui", "thomas-frank",
+  "russell-martin", "fabian-hurzeler", "steve-cooper", "sean-dyche",
+  "david-moyes", "rob-edwards", "kieran-mckenna",
+]);
+
 function calculateReadingTime(content: string): number {
   const text = content.replace(/<[^>]*>/g, "");
   const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -580,18 +588,31 @@ export default function ArticlePage() {
   const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
   
   const teamSlugs = teams.map(t => t.slug);
-  const playerTags = (article.tags || []).filter(tag => 
+  const personTags = (article.tags || []).filter(tag => 
     !teamSlugs.includes(tag) && 
     tag !== slugifyCompetition(article.competition || "") &&
     !CATEGORY_TAGS.has(tag.toLowerCase())
   );
-  const playerPills: EntityData[] = playerTags.map(tag => ({
-    type: "player" as const,
-    name: tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" "),
-    slug: tag,
-    href: `/news?player=${tag}`,
-    fallbackText: tag.slice(0, 2).toUpperCase(),
-  }));
+  
+  const playerPills: EntityData[] = [];
+  const managerPills: EntityData[] = [];
+  
+  personTags.forEach(tag => {
+    const isManager = KNOWN_MANAGERS.has(tag.toLowerCase());
+    const name = tag.split("-").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+    const pill: EntityData = {
+      type: isManager ? "manager" : "player",
+      name,
+      slug: tag,
+      href: `/news?${isManager ? "manager" : "player"}=${tag}`,
+      fallbackText: tag.slice(0, 2).toUpperCase(),
+    };
+    if (isManager) {
+      managerPills.push(pill);
+    } else {
+      playerPills.push(pill);
+    }
+  });
 
   return (
     <MainLayout>
@@ -645,6 +666,8 @@ export default function ArticlePage() {
                 {article.title}
               </h1>
 
+              <div className="border-t my-4" />
+
               <ArticleMetaBar
                 articleId={article.id}
                 articleSlug={article.slug}
@@ -672,10 +695,13 @@ export default function ArticlePage() {
               </div>
             )}
 
-            {article.excerpt && (
-              <p className="text-lg md:text-xl text-muted-foreground italic leading-relaxed mb-8">
-                {article.excerpt}
-              </p>
+            {article.excerpt?.trim() && (
+              <>
+                <p className="text-lg md:text-xl text-muted-foreground italic leading-relaxed mb-6">
+                  {article.excerpt}
+                </p>
+                <div className="border-t mb-8" />
+              </>
             )}
 
             <div
@@ -764,7 +790,7 @@ export default function ArticlePage() {
               </section>
             )}
 
-            {(article.competition || articleTeams.length > 0 || playerPills.length > 0) && (
+            {(article.competition || articleTeams.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
               <section className="mb-8 py-6 border-t">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
@@ -820,6 +846,21 @@ export default function ArticlePage() {
                             entity={player}
                             size="small"
                             data-testid={`pill-bottom-player-${player.slug}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {managerPills.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Managers</p>
+                      <div className="flex flex-wrap gap-2">
+                        {managerPills.map((manager) => (
+                          <EntityPill
+                            key={manager.slug}
+                            entity={manager}
+                            size="small"
+                            data-testid={`pill-bottom-manager-${manager.slug}`}
                           />
                         ))}
                       </div>
