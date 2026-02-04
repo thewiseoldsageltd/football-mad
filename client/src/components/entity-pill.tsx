@@ -13,6 +13,7 @@ export interface EntityData {
   iconUrl?: string;
   fallbackText?: string;
   color?: string | null;
+  shortLabel?: string;
 }
 
 interface EntityPillProps {
@@ -20,6 +21,8 @@ interface EntityPillProps {
   size?: "default" | "small";
   active?: boolean;
   className?: string;
+  shortLabel?: string;
+  responsiveLabel?: boolean;
   "data-testid"?: string;
 }
 
@@ -83,8 +86,22 @@ export function EntityPill({
   size = "small",
   active = false,
   className,
+  shortLabel,
+  responsiveLabel = false,
   "data-testid": testId,
 }: EntityPillProps) {
+  const effectiveShortLabel = shortLabel || entity.shortLabel;
+  const useResponsive = responsiveLabel && effectiveShortLabel;
+
+  const labelContent = useResponsive ? (
+    <>
+      <span className="md:hidden text-foreground font-medium whitespace-nowrap">{effectiveShortLabel}</span>
+      <span className="hidden md:inline text-foreground font-medium whitespace-nowrap">{entity.name}</span>
+    </>
+  ) : (
+    <span className="text-foreground font-medium whitespace-nowrap">{entity.name}</span>
+  );
+
   const content = (
     <div
       className={cn(
@@ -99,6 +116,8 @@ export function EntityPill({
         className
       )}
       data-testid={testId}
+      title={entity.name}
+      aria-label={entity.name}
     >
       <IconWithFallback
         src={entity.iconUrl}
@@ -107,12 +126,12 @@ export function EntityPill({
         size={size}
         entityType={entity.type}
       />
-      <span className="text-foreground font-medium whitespace-nowrap">{entity.name}</span>
+      {labelContent}
     </div>
   );
 
   if (entity.href) {
-    return <Link href={entity.href}>{content}</Link>;
+    return <Link href={entity.href} title={entity.name} aria-label={entity.name}>{content}</Link>;
   }
 
   return content;

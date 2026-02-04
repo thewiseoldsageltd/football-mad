@@ -12118,3 +12118,69 @@ Finally, quickly refresh the Jurrien Timber article page and confirm it loads wi
 
 ---
 
+You are working in the Football Mad Replit project.
+
+Goal
+On MOBILE only, shorten EntityPill labels for competitions + teams (e.g. [EPL] [ARS] [CHE]) while keeping full names on desktop/tablet. Keep accessibility: screen readers should still get the full entity name.
+
+Implement with minimal risk:
+- Extend the shared EntityPill component so it can optionally render a short label on small screens.
+- Compute short codes for Team + Competition pills (prefer real codes from data if present; otherwise fallback).
+- Apply this to the Article page header pills AND the “In this article” section.
+
+Requirements
+1) Update `client/src/components/entity-pill.tsx`
+   - Add optional props:
+     - `shortLabel?: string`
+     - `responsiveLabel?: boolean` (default true when shortLabel is provided)
+   - Rendering:
+     - If `responsiveLabel && shortLabel`:
+       - On small screens (<md): show `shortLabel`
+       - On md+: show `entity.name`
+     - Always set `title={entity.name}` and `aria-label={entity.name}` on the link/button wrapper.
+     - Don’t change styling/layout otherwise (keep current pill sizing).
+   - Example pattern:
+     - `<span className="md:hidden">{shortLabel}</span>`
+     - `<span className="hidden md:inline">{entity.name}</span>`
+     - If no shortLabel, just render `entity.name` as today.
+
+2) Update `client/src/pages/article.tsx`
+   - Wherever you build the pill arrays (competitionPills, team pills, etc), add `shortLabel` values for:
+     a) Teams:
+        - Prefer any existing code/shortCode fields already available from backend entities if present (e.g. `team.shortCode`, `team.code`, `team.abbr` etc)
+        - Else fallback to:
+          - If name contains spaces, use first letter of first 3 words (e.g. “Manchester City” => “MCI”)
+          - Else take first 3 letters uppercased (e.g. “Arsenal” => “ARS”)
+     b) Competitions:
+        - Add a small mapping for common comps (keep it local in article.tsx):
+          - “Premier League” => “EPL”
+          - “Championship” => “EFL”
+          - “League One” => “L1”
+          - “League Two” => “L2”
+          - “Carabao Cup” => “CC”
+          - “FA Cup” => “FAC”
+          - “Champions League” => “UCL”
+          - “Europa League” => “UEL”
+          - “Conference League” => “UECL”
+        - Fallback if not in map: create a 3–4 char acronym from first letters of words (ignore “the”, “and”, “of”)
+   - Attach the computed shortLabel onto the `EntityData` you pass into EntityPill (you can extend the local `EntityData` type to include `shortLabel?: string` without breaking other uses).
+   - When rendering EntityPill for competition/team pills (header + “In this article”), pass:
+     - `shortLabel={entity.shortLabel}`
+     - `responsiveLabel={true}`
+   - Do NOT shorten Player/Manager names on mobile (keep full names).
+
+3) Verify
+   - Desktop: pills show full names exactly as now.
+   - Mobile:
+     - Header pills show e.g. EPL / ARS / CHE
+     - “In this article” competition + teams show short codes
+     - Players remain full names
+   - Hover/links still work, titles show full names.
+
+4) Keep changes scoped
+   - Only touch `entity-pill.tsx` and `article.tsx` unless TypeScript forces a tiny shared type tweak.
+   - No visual redesign; just label text switching.
+
+After implementation, add a quick `console.debug` (temporary) in article.tsx that logs computed shortLabels for header pills, then remove it before finishing.
+
+Make the changes now. Do NOT run end-to-end/regression tests. No video generation.

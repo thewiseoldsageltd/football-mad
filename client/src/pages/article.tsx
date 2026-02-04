@@ -597,9 +597,9 @@ export default function ArticlePage() {
   
   // Build entity pill arrays with fallback to tags when backend is empty
   // Must be called unconditionally (before early returns) per React hook rules
-  const { articleTeams, competitionPills, playerPills, managerPills } = useMemo(() => {
+  const { articleTeams, teamPills, competitionPills, playerPills, managerPills } = useMemo(() => {
     if (!article) {
-      return { articleTeams: [], competitionPills: [], playerPills: [], managerPills: [] };
+      return { articleTeams: [], teamPills: [], competitionPills: [], playerPills: [], managerPills: [] };
     }
     
     const tags = article.tags || [];
@@ -610,6 +610,49 @@ export default function ArticlePage() {
     // Helper to normalize text (remove accents, lowercase)
     const normalize = (text: string) => 
       text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    // Competition short code mapping
+    const compShortCodes: Record<string, string> = {
+      "Premier League": "EPL",
+      "Championship": "EFL",
+      "League One": "L1",
+      "League Two": "L2",
+      "Carabao Cup": "CC",
+      "FA Cup": "FAC",
+      "Champions League": "UCL",
+      "UEFA Champions League": "UCL",
+      "Europa League": "UEL",
+      "UEFA Europa League": "UEL",
+      "Conference League": "UECL",
+      "UEFA Europa Conference League": "UECL",
+      "La Liga": "LaLi",
+      "Serie A": "SerA",
+      "Bundesliga": "BuLi",
+      "Ligue 1": "L1",
+    };
+    
+    // Helper to generate short code for competition
+    const getCompShortCode = (name: string): string => {
+      if (compShortCodes[name]) return compShortCodes[name];
+      // Fallback: first letters of words (ignore "the", "and", "of")
+      const ignore = ["the", "and", "of"];
+      const words = name.split(/\s+/).filter(w => !ignore.includes(w.toLowerCase()));
+      return words.map(w => w[0]?.toUpperCase() || "").join("").slice(0, 4);
+    };
+    
+    // Helper to generate short code for team
+    const getTeamShortCode = (team: { name: string; shortName?: string | null }): string => {
+      // Use shortName if available (e.g., "ARS" for Arsenal)
+      if (team.shortName && team.shortName.length <= 4) return team.shortName.toUpperCase();
+      const name = team.name;
+      const words = name.split(/\s+/);
+      if (words.length >= 2) {
+        // First letter of first 3 words (e.g., "Manchester City" => "MCI")
+        return words.slice(0, 3).map(w => w[0]?.toUpperCase() || "").join("");
+      }
+      // Single word: first 3 letters
+      return name.slice(0, 3).toUpperCase();
+    };
     
     // Build team list
     let resolvedTeams: typeof teams = [];
@@ -625,7 +668,19 @@ export default function ArticlePage() {
       );
     }
     
-    // Build player pills
+    // Convert teams to EntityData with shortLabel
+    const resolvedTeamPills: EntityData[] = resolvedTeams.map(t => ({
+      type: "team" as const,
+      name: t.name,
+      slug: t.slug,
+      href: `/teams/${t.slug}`,
+      iconUrl: `/crests/teams/${t.slug}.svg`,
+      fallbackText: t.name.slice(0, 2).toUpperCase(),
+      color: t.primaryColor,
+      shortLabel: getTeamShortCode(t),
+    }));
+    
+    // Build player pills (no shortLabel - players keep full names)
     let resolvedPlayerPills: EntityData[] = [];
     if (backendHasEntities && article.entityPlayers?.length) {
       resolvedPlayerPills = article.entityPlayers.map(p => ({
@@ -649,7 +704,7 @@ export default function ArticlePage() {
       }));
     }
     
-    // Build manager pills
+    // Build manager pills (no shortLabel - managers keep full names)
     let resolvedManagerPills: EntityData[] = [];
     if (backendHasEntities && article.entityManagers?.length) {
       resolvedManagerPills = article.entityManagers.map(m => ({
@@ -695,10 +750,12 @@ export default function ArticlePage() {
       href: `/news?competition=${slugifyCompetition(comp)}`,
       iconUrl: `/crests/comps/${slugifyCompetition(comp)}.svg`,
       fallbackText: comp.slice(0, 2),
+      shortLabel: getCompShortCode(comp),
     }));
     
     return {
       articleTeams: resolvedTeams,
+      teamPills: resolvedTeamPills,
       competitionPills: resolvedCompetitionPills,
       playerPills: resolvedPlayerPills,
       managerPills: resolvedManagerPills,
@@ -733,29 +790,23 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              {(articleTeams.length > 0 || competitionPills.length > 0) && (
+              {(teamPills.length > 0 || competitionPills.length > 0) && (
                 <div className="flex items-center gap-2 flex-wrap mb-4">
                   {competitionPills[0] && (
                     <EntityPill
                       entity={competitionPills[0]}
                       size="default"
+                      responsiveLabel
                       data-testid="pill-competition"
                     />
                   )}
-                  {articleTeams.slice(0, 2).map((team) => (
+                  {teamPills.slice(0, 2).map((pill) => (
                     <EntityPill
-                      key={team.id}
-                      entity={{
-                        type: "team",
-                        name: team.name,
-                        slug: team.slug,
-                        href: `/teams/${team.slug}`,
-                        iconUrl: `/crests/teams/${team.slug}.svg`,
-                        fallbackText: (team.shortName || team.name).slice(0, 2),
-                        color: team.primaryColor,
-                      }}
+                      key={pill.slug}
+                      entity={pill}
                       size="default"
-                      data-testid={`pill-team-${team.slug}`}
+                      responsiveLabel
+                      data-testid={`pill-team-${pill.slug}`}
                     />
                   ))}
                 </div>
@@ -808,7 +859,7 @@ export default function ArticlePage() {
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
-            {(competitionPills.length > 0 || articleTeams.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
+            {(competitionPills.length > 0 || teamPills.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
               <section className="mb-8 py-6 border-t">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
@@ -821,30 +872,24 @@ export default function ArticlePage() {
                             key={pill.slug}
                             entity={pill}
                             size="small"
+                            responsiveLabel
                             data-testid={`pill-bottom-competition-${pill.slug}`}
                           />
                         ))}
                       </div>
                     </div>
                   )}
-                  {articleTeams.length > 0 && (
+                  {teamPills.length > 0 && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Teams</p>
                       <div className="flex flex-wrap gap-2">
-                        {articleTeams.map((team) => (
+                        {teamPills.map((pill) => (
                           <EntityPill
-                            key={team.id}
-                            entity={{
-                              type: "team",
-                              name: team.name,
-                              slug: team.slug,
-                              href: `/teams/${team.slug}`,
-                              iconUrl: `/crests/teams/${team.slug}.svg`,
-                              fallbackText: (team.shortName || team.name).slice(0, 2),
-                              color: team.primaryColor,
-                            }}
+                            key={pill.slug}
+                            entity={pill}
                             size="small"
-                            data-testid={`pill-bottom-team-${team.slug}`}
+                            responsiveLabel
+                            data-testid={`pill-bottom-team-${pill.slug}`}
                           />
                         ))}
                       </div>
