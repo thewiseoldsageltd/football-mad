@@ -5636,4 +5636,197 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ error: "Failed to fetch article" });
     }
   });
+
+  // ========== GHOST CATCH-UP SYNC JOB ==========
+  
+  // State for catch-up sync
+  let catchupSyncRunning = false;
+  let lastCatchupRunAt: string | null = null;
+  let lastCatchupSummary: { fetched: number; inserted: number; updated: number; failed: number } | null = null;
+  let lastCatchupError: string | null = null;
+  
+  const CATCHUP_INTERVAL_MS = 120000; // 2 minutes
+  
+  // Helper to upsert a single Ghost post (reuses same mapping as webhook sync)
+  const upsertGhostPostForCatchup = async (ghostPost: any): Promise<"inserted" | "updated" | "skipped"> => {
+    const title = ghostPost.title;
+    const excerpt = ghostPost.excerpt || ghostPost.custom_excerpt;
+    const bodyHtml = ghostPost.html || "";
+    const heroImageUrl = ghostPost.feature_image;
+    const publishedAt = ghostPost.published_at ? new Date(ghostPost.published_at) : new Date();
+    const ghostSourceUpdatedAt = ghostPost.updated_at ? new Date(ghostPost.updated_at)
+      : ghostPost.published_at ? new Date(ghostPost.published_at)
+      : ghostPost.created_at ? new Date(ghostPost.created_at)
+      : new Date();
+    const ghostTags = (ghostPost.tags || []).map((t: any) => t.name);
+    
+    const existing = await db
+      .select()
+      .from(articles)
+      .where(and(eq(articles.source, "ghost"), eq(articles.sourceId, ghostPost.id)))
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Check if Ghost post is newer than DB
+      const dbSourceUpdatedAt = existing[0].sourceUpdatedAt;
+      if (dbSourceUpdatedAt && ghostSourceUpdatedAt <= dbSourceUpdatedAt) {
+        return "skipped"; // Already up to date
+      }
+      
+      await db
+        .update(articles)
+        .set({
+          title,
+          excerpt,
+          content: bodyHtml,
+          coverImage: heroImageUrl,
+          tags: ghostTags,
+          updatedAt: ghostSourceUpdatedAt,
+          sourcePublishedAt: publishedAt,
+          sourceUpdatedAt: ghostSourceUpdatedAt,
+        })
+        .where(eq(articles.id, existing[0].id));
+      return "updated";
+    } else {
+      const desiredSlug = ghostPost.slug || `ghost-${Date.now().toString(36)}`;
+      // Find unique slug
+      let uniqueSlug = desiredSlug;
+      let suffix = 1;
+      while (true) {
+        const existingSlug = await db.select().from(articles).where(eq(articles.slug, uniqueSlug)).limit(1);
+        if (existingSlug.length === 0) break;
+        if (existingSlug[0].source === "ghost" && existingSlug[0].sourceId === ghostPost.id) break;
+        uniqueSlug = `${desiredSlug}-${suffix++}`;
+      }
+      
+      await db.insert(articles).values({
+        title,
+        slug: uniqueSlug,
+        excerpt,
+        content: bodyHtml,
+        coverImage: heroImageUrl,
+        source: "ghost",
+        sourceId: ghostPost.id,
+        tags: ghostTags,
+        publishedAt,
+        sourcePublishedAt: publishedAt,
+        sourceUpdatedAt: ghostSourceUpdatedAt,
+      });
+      return "inserted";
+    }
+  };
+  
+  // Run catch-up sync
+  const runCatchupSync = async (): Promise<{ fetched: number; inserted: number; updated: number; failed: number }> => {
+    const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
+    const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
+    
+    if (!ghostApiUrl || !ghostApiKey) {
+      throw new Error("Ghost API not configured");
+    }
+    
+    // Fetch latest 50 posts ordered by updated_at desc
+    const url = `${ghostApiUrl}/ghost/api/content/posts/?key=${ghostApiKey}&limit=50&order=updated_at%20desc&include=tags`;
+    const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    
+    if (!response.ok) {
+      throw new Error(`Ghost API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json() as { posts?: any[] };
+    const posts = data.posts || [];
+    
+    let inserted = 0, updated = 0, failed = 0;
+    
+    for (const post of posts) {
+      try {
+        const result = await upsertGhostPostForCatchup(post);
+        if (result === "inserted") inserted++;
+        else if (result === "updated") updated++;
+      } catch (err) {
+        failed++;
+        console.error(`[Catchup sync] Failed to upsert post ${post.id}:`, err);
+      }
+    }
+    
+    return { fetched: posts.length, inserted, updated, failed };
+  };
+  
+  // Scheduled catch-up sync job
+  const scheduledCatchupSync = async () => {
+    const ghostApiUrl = process.env.GHOST_CONTENT_API_URL;
+    const ghostApiKey = process.env.GHOST_CONTENT_API_KEY;
+    
+    if (!ghostApiUrl || !ghostApiKey) return; // Silently skip if not configured
+    if (catchupSyncRunning) return; // Prevent overlapping runs
+    
+    catchupSyncRunning = true;
+    console.log("[Catchup sync] Started");
+    
+    try {
+      const summary = await runCatchupSync();
+      lastCatchupRunAt = new Date().toISOString();
+      lastCatchupSummary = summary;
+      lastCatchupError = null;
+      console.log(`[Catchup sync] Completed: fetched=${summary.fetched} inserted=${summary.inserted} updated=${summary.updated} failed=${summary.failed}`);
+    } catch (err: any) {
+      lastCatchupRunAt = new Date().toISOString();
+      lastCatchupError = err.message;
+      console.error("[Catchup sync] Failed:", err.message);
+    } finally {
+      catchupSyncRunning = false;
+    }
+  };
+  
+  // Start scheduled catch-up sync if Ghost API is configured
+  if (process.env.GHOST_CONTENT_API_URL && process.env.GHOST_CONTENT_API_KEY) {
+    setInterval(scheduledCatchupSync, CATCHUP_INTERVAL_MS);
+    console.log(`[Catchup sync] Enabled with interval ${CATCHUP_INTERVAL_MS / 1000}s`);
+  }
+  
+  // Manual trigger endpoint: POST /api/news/sync/run
+  app.post("/api/news/sync/run", async (req, res) => {
+    const ingestSecret = process.env.INGEST_SECRET;
+    const headerSecret = req.headers["x-ingest-secret"] as string | undefined;
+    const querySecret = req.query.secret as string | undefined;
+    
+    if (!ingestSecret || (headerSecret !== ingestSecret && querySecret !== ingestSecret)) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    if (catchupSyncRunning) {
+      return res.status(409).json({ error: "Catch-up sync already running" });
+    }
+    
+    catchupSyncRunning = true;
+    console.log("[Catchup sync] Manual run started");
+    
+    try {
+      const summary = await runCatchupSync();
+      lastCatchupRunAt = new Date().toISOString();
+      lastCatchupSummary = summary;
+      lastCatchupError = null;
+      console.log(`[Catchup sync] Manual run completed: fetched=${summary.fetched} inserted=${summary.inserted} updated=${summary.updated} failed=${summary.failed}`);
+      res.json({ ok: true, summary });
+    } catch (err: any) {
+      lastCatchupRunAt = new Date().toISOString();
+      lastCatchupError = err.message;
+      console.error("[Catchup sync] Manual run failed:", err.message);
+      res.status(500).json({ error: err.message });
+    } finally {
+      catchupSyncRunning = false;
+    }
+  });
+  
+  // Status endpoint: GET /api/news/sync/status
+  app.get("/api/news/sync/status", (req, res) => {
+    res.json({
+      enabled: !!(process.env.GHOST_CONTENT_API_URL && process.env.GHOST_CONTENT_API_KEY),
+      intervalMs: CATCHUP_INTERVAL_MS,
+      isRunning: catchupSyncRunning,
+      lastCatchupRunAt,
+      lastCatchupSummary,
+      lastCatchupError,
+    });
+  });
 }

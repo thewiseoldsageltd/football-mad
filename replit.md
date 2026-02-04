@@ -237,3 +237,20 @@ To enable automatic syncing when Ghost posts are published/updated:
    curl -X POST https://your-domain.replit.app/api/admin/sync/ghost \
      -H "x-ingest-secret: $INGEST_SECRET"
    ```
+
+### Ghost Catch-Up Sync Job
+Automatic background sync to catch missed webhooks (e.g., when Replit sleeps):
+
+- **Interval**: Every 2 minutes (120000 ms)
+- **Behavior**: Fetches latest 50 Ghost posts by `updated_at desc`, upserts if newer than DB
+- **Guardrails**: Mutex prevents overlapping runs, env var check, per-post error handling
+- **Startup log**: `[Catchup sync] Enabled with interval 120s`
+
+**Endpoints**:
+- `POST /api/news/sync/run` - Manual trigger (requires `x-ingest-secret` header or `?secret=...`)
+- `GET /api/news/sync/status` - Returns `{ enabled, intervalMs, isRunning, lastCatchupRunAt, lastCatchupSummary, lastCatchupError }`
+
+**Timestamp handling**:
+- `sourceUpdatedAt` = Ghost's `updated_at` (fallback: `published_at` → `created_at` → now)
+- News ordering: `sourceUpdatedAt || publishedAt || createdAt` (NOT internal `updatedAt`)
+- Catch-up skips posts where `ghostSourceUpdatedAt <= dbSourceUpdatedAt`

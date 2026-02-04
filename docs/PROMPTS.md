@@ -11405,3 +11405,33 @@ Do not change auth logic or sync logic yet. This is a minimal safe fix.
 
 ---
 
+Implement a catch-up sync job for Ghost posts so the DB stays up to date even when webhooks miss (e.g., Replit sleeping).
+
+Project facts:
+- Ghost Content API env vars exist: GHOST_CONTENT_API_URL and GHOST_CONTENT_API_KEY.
+- News is served from DB via /api/news.
+- We already store sourceUpdatedAt (Ghost updated_at).
+- Webhook route exists: POST /api/webhooks/ghost and sync logic already exists inside routes.ts (there is a function in scope that performs the upsert for a postId and returns {inserted, updated, deleted}).
+
+Required changes (minimal):
+1) In server/routes.ts, add an in-process scheduler using setInterval that runs every 2 minutes (120000 ms).
+2) The job should:
+   - Fetch latest 50 posts from Ghost Content API ordered by updated_at desc.
+   - For each post returned, call the existing upsert logic (reuse the same mapping used in webhook sync so sourceUpdatedAt/publishedAt/createdAt are set properly, and DO NOT set updatedAt = now()).
+   - Log a summary via logWebhookAudit (or console) like:
+     "catchup started" and "catchup completed fetched=X inserted=Y updated=Z failed=K"
+3) Guardrails:
+   - If env vars missing, do nothing.
+   - Prevent overlapping runs with a mutex boolean.
+   - On per-post errors, continue (count failed).
+4) Add a manual endpoint to trigger catch-up:
+   - POST /api/news/sync/run protected by header x-ingest-secret == INGEST_SECRET (or query secret=...).
+   - Returns JSON summary.
+5) Add a status endpoint:
+   - GET /api/news/sync/status returns lastCatchupRunAt and lastCatchupSummary, plus lastCatchupError if any.
+6) Do NOT add tests. Keep code concise and production-safe.
+
+After implementing, print a single startup log line stating that catch-up sync is enabled and its interval.
+
+---
+
