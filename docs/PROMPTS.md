@@ -11740,3 +11740,89 @@ Return:
 
 ---
 
+You are working in the Football Mad Replit codebase.
+
+GOAL
+Update the Article page layout so the social share buttons sit inline with the meta row (Substack-style), and remove the redundant desktop sidebar Share card. Also ensure the excerpt is NOT clipped (no line-clamp) on the article page, and move “In this article” above Related Articles. Mobile should keep the sticky bottom Share bar as the primary share mechanism.
+
+FILES LIKELY TO TOUCH
+- client/src/pages/article.tsx
+- (new) client/src/components/article-meta-bar.tsx (or place inline if you prefer)
+- any existing share utils (search for “Share” section, “navigator.share”, “copy link”, “bookmark”)
+- any existing bookmark state (if none, implement localStorage MVP)
+
+REQUIREMENTS (DESKTOP)
+1) Header order becomes:
+   - Pills row (competition + up to 2 teams) [existing EntityPill logic]
+   - Title
+   - Meta + Actions row (single line)
+     LEFT: Author avatar + author name + time + read time + views
+     RIGHT: WhatsApp, X, Facebook, Copy Link, Bookmark icons/buttons
+   - Hero image
+   - Excerpt (full, styled)
+   - Article body
+   - In this article (grouped)
+   - Related articles
+
+2) Remove/disable the RIGHT SIDEBAR “Share” card on desktop (since actions now live in meta row).
+   - Keep “Stay in the loop” and “More like this” as desired, but Share card should not render on desktop.
+   - If easiest: delete the Share card entirely and keep only sticky share on mobile.
+
+3) Excerpt must not be cut off on article page:
+   - Remove any line-clamp classes or max-height applied to excerpt on article.tsx.
+   - Cards can keep line-clamp, but article page excerpt must render in full.
+
+4) Move “In this article” above Related Articles.
+   - Also fix the grouping: show separate sections with headings:
+     “Competitions”, “Teams”, “Players”, “Managers”
+   - Each section renders its own EntityPills.
+   - Don’t label everything under “Players”.
+
+REQUIREMENTS (MOBILE)
+5) Keep the sticky bottom Share bar (existing green bar) as primary share.
+   - The new Meta+Actions row may show actions too, but it must not conflict with sticky bar.
+   - On mobile, allow the meta row to wrap: actions can sit on a new line under meta if needed.
+
+IMPLEMENTATION DETAILS
+A) Create a reusable component ArticleMetaBar:
+   - Props:
+     authorName, authorInitial?, publishedLabel (e.g. “about 3 hours ago”), readTimeLabel, viewCount,
+     shareUrl (canonical article URL),
+     initialBookmarked? (optional)
+   - Layout:
+     wrapper: flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between
+     left: avatar + author + meta text (small muted)
+     right: icon buttons group
+
+B) Actions (Right side):
+   - WhatsApp share: open URL like https://wa.me/?text=${encodeURIComponent(title + " " + url)}
+   - X share: https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}
+   - Facebook share: https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}
+   - Copy: navigator.clipboard.writeText(url) + toast/snackbar (“Link copied”)
+   - Bookmark: toggle state; for MVP store in localStorage keyed by article id or slug
+     localStorage key suggestion: footballmad:bookmarks (JSON array of ids/slugs)
+     Icon changes (outline vs filled) and toast (“Saved” / “Removed”)
+
+C) Styling
+   - Icon buttons: 36–40px rounded-full, hover:bg-muted, focus ring
+   - Keep minimal and consistent with existing design system
+
+D) Hook up in article.tsx
+   - After Title, render <ArticleMetaBar ... />
+   - Remove old Share card from sidebar (desktop)
+   - Ensure excerpt block uses full text (no clamp) and optionally italic / tinted:
+     class suggestion: text-muted-foreground italic leading-relaxed
+   - Ensure “In this article” sections appear BEFORE Related Articles
+
+E) Don’t trigger end-to-end regression runs or video recording; focus only on implementation and light local sanity checks.
+   - Validate by running the app and visually confirming:
+     - Desktop: actions inline with meta row, sidebar share card gone
+     - Mobile: sticky share still works and doesn’t overlap content badly
+     - Excerpt shows full text
+     - In this article grouped correctly and positioned above related
+
+DELIVERABLE
+Make the changes, ensure build passes, and provide a brief summary of what changed and where.
+
+---
+

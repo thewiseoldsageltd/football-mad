@@ -2,9 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
-import { 
-  Clock, Eye, ArrowLeft, Bookmark, Heart, Copy, Check, Share2, ChevronRight
-} from "lucide-react";
+import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +12,7 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { NewsletterForm } from "@/components/newsletter-form";
 import { EntityPill, type EntityData } from "@/components/entity-pill";
+import { ArticleMetaBar } from "@/components/article-meta-bar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
@@ -316,12 +315,6 @@ function RightRail({
           </Card>
         )}
 
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground mb-2">Share</p>
-            <ShareButtonsInline title={article.title} url={articleUrl} />
-          </CardContent>
-        </Card>
       </div>
     </aside>
   );
@@ -652,44 +645,21 @@ export default function ArticlePage() {
                 {article.title}
               </h1>
 
-              {article.excerpt && (
-                <p className="text-lg md:text-xl text-muted-foreground mb-6">
-                  {article.excerpt}
-                </p>
-              )}
-
-              <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b">
-                <div className="flex items-center gap-3">
-                  <Avatar>
-                    <AvatarFallback>
-                      {article.authorName?.[0] || "F"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-medium">{article.authorName || "Football Mad"}</p>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
-                      <span>{formatDistanceToNow(publishedAt, { addSuffix: true })}</span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {readingTime} min read
-                      </span>
-                      {article.viewCount != null && article.viewCount > 0 && (
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-3 w-3" />
-                          {article.viewCount.toLocaleString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <Button variant="ghost" size="icon" data-testid="button-bookmark">
-                  <Bookmark className="h-5 w-5" />
-                </Button>
-              </div>
+              <ArticleMetaBar
+                articleId={article.id}
+                articleSlug={article.slug}
+                authorName={article.authorName || "Football Mad"}
+                authorInitial={article.authorName?.[0]}
+                publishedLabel={formatDistanceToNow(publishedAt, { addSuffix: true })}
+                readTimeLabel={`${readingTime} min read`}
+                viewCount={article.viewCount ?? undefined}
+                shareUrl={articleUrl}
+                shareTitle={article.title}
+              />
             </header>
 
             {article.coverImage ? (
-              <figure className="mb-8">
+              <figure className="my-8">
                 <img
                   src={article.coverImage}
                   alt={article.title}
@@ -697,9 +667,15 @@ export default function ArticlePage() {
                 />
               </figure>
             ) : (
-              <div className="mb-8 aspect-[16/9] w-full rounded-lg bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
+              <div className="my-8 aspect-[16/9] w-full rounded-lg bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
                 <span className="text-8xl font-bold text-primary/30">F</span>
               </div>
+            )}
+
+            {article.excerpt && (
+              <p className="text-lg md:text-xl text-muted-foreground italic leading-relaxed mb-8">
+                {article.excerpt}
+              </p>
             )}
 
             <div
@@ -788,10 +764,29 @@ export default function ArticlePage() {
               </section>
             )}
 
-            {(articleTeams.length > 0 || playerPills.length > 0) && (
+            {(article.competition || articleTeams.length > 0 || playerPills.length > 0) && (
               <section className="mb-8 py-6 border-t">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
+                  {article.competition && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Competitions</p>
+                      <div className="flex flex-wrap gap-2">
+                        <EntityPill
+                          entity={{
+                            type: "competition",
+                            name: article.competition,
+                            slug: slugifyCompetition(article.competition),
+                            href: `/news?competition=${slugifyCompetition(article.competition)}`,
+                            iconUrl: `/crests/comps/${slugifyCompetition(article.competition)}.svg`,
+                            fallbackText: article.competition.slice(0, 2),
+                          }}
+                          size="small"
+                          data-testid="pill-bottom-competition"
+                        />
+                      </div>
+                    </div>
+                  )}
                   {articleTeams.length > 0 && (
                     <div>
                       <p className="text-xs text-muted-foreground mb-2">Teams</p>
