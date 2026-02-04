@@ -11471,3 +11471,72 @@ Goal: Always load articles in multiples of 3 rows (15 at a time).
 
 ---
 
+We need to fix duplicate pagination requests and slow “Load more posts” behaviour on the /news page.
+
+DO NOT run end-to-end tests.
+DO NOT generate videos.
+Only modify the files mentioned.
+
+GOAL
+The “Load more posts” button is currently loading 30 posts instead of 15. This is caused by handleLoadMore firing twice. We need to make it single-flight so only one request runs at a time.
+
+CHANGES TO MAKE
+
+File: client/src/pages/news.tsx
+
+1) At the top of the component (with other hooks), add:
+
+import { useRef } from "react";
+
+const loadingMoreRef = useRef(false);
+
+2) Replace the existing handleLoadMore function with this:
+
+const handleLoadMore = async () => {
+  if (!hasMore) return;
+
+  // Prevent duplicate requests
+  if (loadingMoreRef.current) return;
+  loadingMoreRef.current = true;
+
+  try {
+    setIsLoadingMore(true);
+
+    const params = new URLSearchParams();
+    params.set("limit", "15");
+    if (nextCursor) params.set("cursor", nextCursor);
+
+    // If filters are already included elsewhere, keep that logic unchanged
+
+    const res = await fetch(`/api/news?${params.toString()}`);
+    const j = await res.json();
+
+    if (!res.ok) throw new Error(j?.error || "Failed to load more");
+
+    setPaginatedArticles(prev => [...prev, ...(j.articles || [])]);
+    setNextCursor(j.nextCursor ?? null);
+    setHasMore(!!j.hasMore);
+  } catch (e) {
+    console.error("Load more failed:", e);
+  } finally {
+    setIsLoadingMore(false);
+    loadingMoreRef.current = false;
+  }
+};
+
+3) Ensure the “Load more posts” button is disabled while loading:
+
+<button
+  disabled={!hasMore || isLoadingMore}
+  onClick={handleLoadMore}
+>
+  {isLoadingMore ? "Loading..." : "Load more posts"}
+</button>
+
+RESULT
+Each click should now load exactly 15 more posts.
+The button should not trigger multiple requests.
+Pagination should feel faster and consistent.
+
+---
+

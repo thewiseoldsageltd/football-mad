@@ -98,6 +98,7 @@ export default function NewsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
   
   const { data: newsResponse, isLoading } = useQuery<NewsFiltersResponse>({
     queryKey: ["/api/news", apiQueryString],
@@ -125,25 +126,44 @@ export default function NewsPage() {
     setHasMore(false);
   }, [apiQueryString]);
   
-  // Load more handler
+  // Load more handler (single-flight to prevent duplicate requests)
   const handleLoadMore = async () => {
-    if (!nextCursor || isLoadingMore) return;
+    if (!hasMore) return;
     
-    setIsLoadingMore(true);
+    // Prevent duplicate requests
+    if (loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    
     try {
-      const separator = apiQueryString ? "&" : "?";
-      const cursorParam = `&cursor=${encodeURIComponent(nextCursor)}`;
-      const res = await fetch(`/api/news${apiQueryString}${separator}limit=15${cursorParam}`);
-      if (!res.ok) throw new Error("Failed to load more");
+      setIsLoadingMore(true);
       
-      const data: NewsFiltersResponse = await res.json();
-      setPaginatedArticles(prev => [...prev, ...data.articles]);
-      setNextCursor(data.nextCursor);
-      setHasMore(data.hasMore);
-    } catch (err) {
-      console.error("Load more error:", err);
+      const params = new URLSearchParams();
+      params.set("limit", "15");
+      if (nextCursor) params.set("cursor", nextCursor);
+      
+      // Add existing filter params
+      if (apiQueryString) {
+        const existingParams = new URLSearchParams(apiQueryString.replace("?", ""));
+        existingParams.forEach((value, key) => {
+          if (key !== "limit" && key !== "cursor") {
+            params.set(key, value);
+          }
+        });
+      }
+      
+      const res = await fetch(`/api/news?${params.toString()}`);
+      const j = await res.json();
+      
+      if (!res.ok) throw new Error(j?.error || "Failed to load more");
+      
+      setPaginatedArticles(prev => [...prev, ...(j.articles || [])]);
+      setNextCursor(j.nextCursor ?? null);
+      setHasMore(!!j.hasMore);
+    } catch (e) {
+      console.error("Load more failed:", e);
     } finally {
       setIsLoadingMore(false);
+      loadingMoreRef.current = false;
     }
   };
 
@@ -654,7 +674,7 @@ export default function NewsPage() {
                       <Button
                         variant="outline"
                         onClick={handleLoadMore}
-                        disabled={isLoadingMore}
+                        disabled={!hasMore || isLoadingMore}
                         data-testid="button-load-more"
                       >
                         {isLoadingMore ? "Loading..." : "Load more posts"}
