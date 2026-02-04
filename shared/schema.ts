@@ -94,12 +94,14 @@ export const articles = pgTable("articles", {
   sourceVersion: text("source_version"),
   sourcePublishedAt: timestamp("source_published_at"),
   sourceUpdatedAt: timestamp("source_updated_at"),
+  sortAt: timestamp("sort_at").defaultNow(), // Indexed column for fast pagination: COALESCE(sourceUpdatedAt, publishedAt, createdAt)
 }, (table) => [
   index("articles_published_at_idx").on(table.publishedAt),
   index("articles_category_idx").on(table.category),
   index("articles_competition_idx").on(table.competition),
   index("articles_content_type_idx").on(table.contentType),
   index("articles_source_source_id_idx").on(table.source, table.sourceId),
+  index("articles_sort_at_id_idx").on(table.sortAt, table.id), // Composite index for cursor pagination
 ]);
 
 export const articlesRelations = relations(articles, ({ many }) => ({

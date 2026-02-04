@@ -11540,3 +11540,75 @@ Pagination should feel faster and consistent.
 
 ---
 
+We need to improve /news pagination performance and UX.
+
+DO NOT run end-to-end tests.
+DO NOT generate videos.
+Keep changes focused to the files mentioned.
+
+PROBLEM
+- Load more now correctly adds 15 posts, but it takes ~1 minute to respond.
+- UX feels like the button is dead, causing repeated clicks and frustration.
+- Backend uses ORDER BY COALESCE(sourceUpdatedAt, publishedAt, createdAt), which is hard to index and can be slow.
+
+GOALS
+1) Frontend: immediate visible feedback when clicking "Load more" (instant loading state + skeleton placeholders), plus a timeout + clear error message.
+2) Backend: make pagination query fast via a single indexed sort column (sortAt) and a stable cursor using (sortAt, id).
+
+IMPLEMENTATION
+
+A) BACKEND PERFORMANCE
+
+1) shared/schema.ts (or wherever the article table is defined)
+- Add a new column on articles table:
+  sortAt: timestamp (or datetime string consistent with your DB)
+- Ensure it is populated for ALL articles:
+  sortAt = sourceUpdatedAt ?? publishedAt ?? createdAt
+- Add an index on sortAt (and ideally a composite index on (sortAt, id) if supported).
+
+2) server/storage.ts (news query)
+- Stop ordering by COALESCE(...) directly.
+- Order by sortAt DESC, then id DESC as tiebreaker.
+- Cursor should include both sortAt and id for stability.
+  Example cursor encoding: `${sortAt}|${id}` (URL-encoded)
+- For next page:
+  WHERE (sortAt < cursorSortAt) OR (sortAt = cursorSortAt AND id < cursorId)
+- Fetch limit + 1 to compute hasMore.
+
+3) server/routes.ts
+- Parse cursor into sortAt + id.
+- Validate format; if invalid, return 400 with helpful message.
+
+4) Ensure upsert logic (Ghost sync + webhook sync) sets sortAt correctly whenever sourceUpdatedAt/publishedAt/createdAt changes.
+
+B) FRONTEND UX
+
+File: client/src/pages/news.tsx
+
+1) Add clear instant visual feedback:
+- When user clicks Load more:
+  - immediately set loading state
+  - immediately append 15 skeleton placeholders to the grid (so it looks responsive)
+- When response arrives:
+  - remove the 15 skeletons
+  - append real articles
+
+2) Add a timeout with AbortController:
+- Abort fetch after 20 seconds.
+- If aborted/failed:
+  - remove skeletons
+  - show a small inline error message near the button: "Couldn’t load more posts. Try again."
+  - re-enable button
+
+3) Add "Still working..." helper text if loading exceeds 3 seconds.
+
+4) Ensure we do NOT allow multiple concurrent loadMore calls (keep the ref guard already added).
+
+DELIVERABLES
+- Code changes applied.
+- No secrets logged.
+- No E2E tests or videos.
+- After change, clicking "Load more" should feel instant (skeletons), and API should return much faster due to indexed sortAt pagination.
+
+---
+

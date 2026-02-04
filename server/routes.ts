@@ -4849,6 +4849,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             updatedAt: ghostSourceUpdatedAt,
             sourcePublishedAt: publishedAt,
             sourceUpdatedAt: ghostSourceUpdatedAt,
+            sortAt: ghostSourceUpdatedAt,
           })
           .where(eq(articles.id, articleId));
         console.log(`[Ghost sync] Updated article id=${articleId} slug=${existing[0].slug} title="${title.slice(0, 40)}" sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()}`);
@@ -4873,6 +4874,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           publishedAt,
           sourcePublishedAt: publishedAt,
           sourceUpdatedAt: ghostSourceUpdatedAt,
+          sortAt: ghostSourceUpdatedAt,
         }).returning({ id: articles.id });
         console.log(`[Ghost sync] Inserted article id=${result[0].id} slug=${finalSlug} title="${title.slice(0, 40)}" sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()}`);
         
@@ -5078,6 +5080,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                   updatedAt: ghostSourceUpdatedAt,
                   sourceUpdatedAt: ghostSourceUpdatedAt,
                   sourcePublishedAt: publishedAt,
+                  sortAt: ghostSourceUpdatedAt,
                 })
                 .where(eq(articles.id, articleId));
               console.log(`GHOST_SYNC write timestamps postId=${ghostPost.id} sourceUpdatedAt=${ghostSourceUpdatedAt.toISOString()} updatedAt=${ghostSourceUpdatedAt.toISOString()} action=update`);
@@ -5098,6 +5101,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                 publishedAt,
                 sourcePublishedAt: publishedAt,
                 sourceUpdatedAt: ghostSourceUpdatedAt,
+                sortAt: ghostSourceUpdatedAt,
               }).returning({ id: articles.id });
               
               articleId = result[0].id;
@@ -5690,6 +5694,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           updatedAt: ghostSourceUpdatedAt,
           sourcePublishedAt: publishedAt,
           sourceUpdatedAt: ghostSourceUpdatedAt,
+          sortAt: ghostSourceUpdatedAt, // Indexed column for fast pagination
         })
         .where(eq(articles.id, existing[0].id));
       return "updated";
@@ -5717,6 +5722,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         publishedAt,
         sourcePublishedAt: publishedAt,
         sourceUpdatedAt: ghostSourceUpdatedAt,
+        sortAt: ghostSourceUpdatedAt, // Indexed column for fast pagination
       });
       return "inserted";
     }

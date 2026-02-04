@@ -31,7 +31,7 @@ export interface NewsFilterParams {
   range: string;
   breaking: boolean;
   limit?: number;
-  cursor?: string; // ISO timestamp from COALESCE(sourceUpdatedAt, publishedAt, createdAt)
+  cursor?: string; // Format: "sortAt|id" for stable cursor pagination
 }
 
 export interface NewsUpdatesParams {
@@ -258,6 +258,7 @@ export class DatabaseStorage implements IStorage {
       createdAt: articles.createdAt,
       updatedAt: articles.updatedAt,
       sourceUpdatedAt: articles.sourceUpdatedAt,
+      sortAt: articles.sortAt, // Indexed column for fast pagination
       competition: articles.competition,
       contentType: articles.contentType,
       tags: articles.tags,
@@ -267,9 +268,6 @@ export class DatabaseStorage implements IStorage {
       viewCount: articles.viewCount,
       commentsCount: articles.commentsCount,
     };
-    
-    // Freshness timestamp for sorting: use sourceUpdatedAt or publishedAt (NOT updatedAt, to avoid old articles appearing fresh after re-ingest)
-    const freshnessTs = sql`COALESCE(${articles.sourceUpdatedAt}, ${articles.publishedAt}, ${articles.createdAt})`;
     
     if (teamIds.length > 0) {
       const articleIdsWithTeams = await db
@@ -300,44 +298,57 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    // Add cursor condition if provided (for pagination)
+    // Add cursor condition if provided (for pagination using sortAt|id format)
     if (cursor) {
-      const cursorDate = new Date(cursor);
-      conditions.push(lt(freshnessTs, cursorDate));
+      const parts = cursor.split("|");
+      if (parts.length === 2) {
+        const [cursorSortAt, cursorId] = parts;
+        const cursorDate = new Date(cursorSortAt);
+        // WHERE (sortAt < cursorSortAt) OR (sortAt = cursorSortAt AND id < cursorId)
+        conditions.push(
+          or(
+            lt(articles.sortAt, cursorDate),
+            and(eq(articles.sortAt, cursorDate), lt(articles.id, cursorId))
+          )
+        );
+      }
     }
     
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     
-    let orderByClause;
+    // Order by sortAt DESC, id DESC for stable cursor pagination (uses composite index)
+    let orderByClauses;
     switch (sort) {
       case "trending":
-        orderByClause = desc(articles.viewCount);
+        orderByClauses = [desc(articles.viewCount), desc(articles.sortAt), desc(articles.id)];
         break;
       case "discussed":
-        orderByClause = desc(articles.commentsCount);
+        orderByClauses = [desc(articles.commentsCount), desc(articles.sortAt), desc(articles.id)];
         break;
       default:
-        // Use freshness timestamp to ensure recently-edited articles appear correctly
-        orderByClause = desc(freshnessTs);
+        // Use indexed sortAt column for fast pagination
+        orderByClauses = [desc(articles.sortAt), desc(articles.id)];
     }
     
     // Fetch limit + 1 to check if there are more results
     let result;
     if (whereClause) {
-      result = await db.select(listFields).from(articles).where(whereClause).orderBy(orderByClause).limit(limit + 1);
+      result = await db.select(listFields).from(articles).where(whereClause).orderBy(...orderByClauses).limit(limit + 1);
     } else {
-      result = await db.select(listFields).from(articles).orderBy(orderByClause).limit(limit + 1);
+      result = await db.select(listFields).from(articles).orderBy(...orderByClauses).limit(limit + 1);
     }
     
     const hasMore = result.length > limit;
     const articlesToReturn = hasMore ? result.slice(0, limit) : result;
     
-    // Build nextCursor from the last article's freshness timestamp
+    // Build nextCursor from last article's sortAt and id (stable cursor)
     let nextCursor: string | null = null;
     if (hasMore && articlesToReturn.length > 0) {
       const lastArticle = articlesToReturn[articlesToReturn.length - 1];
-      const ts = lastArticle.sourceUpdatedAt || lastArticle.publishedAt || lastArticle.createdAt;
-      nextCursor = ts ? new Date(ts).toISOString() : null;
+      const sortAtValue = lastArticle.sortAt || lastArticle.sourceUpdatedAt || lastArticle.publishedAt || lastArticle.createdAt;
+      if (sortAtValue) {
+        nextCursor = `${new Date(sortAtValue).toISOString()}|${lastArticle.id}`;
+      }
     }
     
     return {
