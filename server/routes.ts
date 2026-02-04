@@ -5378,11 +5378,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Only use parsedBody.event if it's a real event (not "unknown")
     const bodyEvent = parsedBody?.event !== "unknown" ? parsedBody?.event : undefined;
     
+    // Improved event inference based on post.current and post.previous presence
+    const hasCurrent = !!parsedBody?.post?.current;
+    const hasPrevious = !!parsedBody?.post?.previous;
+    
     const eventName =
       bodyEvent ||
       headerEvent ||
-      (parsedBody?.post?.previous ? "post.deleted" :
-       parsedBody?.post?.current ? "post.edited" :
+      (hasPrevious && !hasCurrent ? "post.deleted" :
+       hasCurrent && hasPrevious ? "post.updated" :
+       hasCurrent ? "post.updated" :
        "unknown");
     
     // Robustly extract postId from all common payload shapes
@@ -5401,7 +5406,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ error: "Missing postId in webhook payload" });
     }
     
-    logWebhookAudit(`received event=${eventName} postId=${postId}`);
+    logWebhookAudit(`received event=${eventName} postId=${postId} hasCurrent=${hasCurrent} hasPrevious=${hasPrevious} bodyEvent=${bodyEvent || "none"} headerEvent=${headerEvent || "none"}`);
     
     // Debug logging to console
     const timestamp = new Date().toISOString();

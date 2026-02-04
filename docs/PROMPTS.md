@@ -11380,3 +11380,28 @@ DELIVERABLE
 
 ---
 
+In server/routes.ts inside POST /api/webhooks/ghost (around the eventName calculation), fix event inference.
+
+Current buggy fallback:
+(parsedBody?.post?.previous ? "post.deleted" : parsedBody?.post?.current ? "post.edited" : "unknown")
+
+Replace the entire eventName calculation with:
+
+const hasCurrent = !!parsedBody?.post?.current;
+const hasPrevious = !!parsedBody?.post?.previous;
+
+const eventName =
+  bodyEvent ||
+  headerEvent ||
+  (hasPrevious && !hasCurrent ? "post.deleted" :
+   hasCurrent && hasPrevious ? "post.updated" :
+   hasCurrent ? "post.updated" :
+   "unknown");
+
+Also enhance the audit log line after postId extraction to include hasCurrent/hasPrevious/bodyEvent/headerEvent, e.g.
+logWebhookAudit(`received event=${eventName} postId=${postId} hasCurrent=${hasCurrent} hasPrevious=${hasPrevious} bodyEvent=${bodyEvent||"none"} headerEvent=${headerEvent||"none"}`);
+
+Do not change auth logic or sync logic yet. This is a minimal safe fix.
+
+---
+
