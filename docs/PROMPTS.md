@@ -11662,3 +11662,38 @@ After implementing, provide:
 
 ---
 
+Do NOT run end-to-end/regression tests. Do NOT generate videos. Only implement the changes.
+
+We still see a brief skeleton flicker when clicking "Load more posts" but no new posts appear. Backend cursor pagination works, so likely the UI is rendering a different array than the one being appended to (duplicate state like articles vs paginatedArticles).
+
+Fix by making a SINGLE source of truth for the rendered list.
+
+In `client/src/pages/news.tsx`:
+
+1) Identify the array that the JSX grid maps over to render cards (e.g. `articles.map(...)` or `paginatedArticles.map(...)`).
+2) Ensure that SAME array is the one that:
+   - gets set on initial fetch (page 1)
+   - gets appended to on load more
+
+Preferred approach (simple):
+- Use `const [articles, setArticles] = useState<Article[]>([])` as the ONLY rendered list.
+- On initial fetch success: `setArticles(data.articles || [])`, plus set `nextCursor` and `hasMore`.
+- On load more success: `setArticles(prev => dedupeById([...prev, ...(data.articles||[])]))`
+  - keep existing de-dupe by id.
+
+3) Remove/stop using any parallel “paginatedArticles” / “filteredArticles” list if it exists.
+   - If you still need “raw” vs “filtered”, then render the paginated list and apply filters server-side or apply filters to the same list in a derived variable, but do not keep two independent lists.
+
+4) Add a temporary debug log after appending:
+   `console.debug("[news] loadMore appended", { before: prev.length, added: data.articles.length, after: next.length })`
+   so we can confirm the UI list length grows.
+
+5) Keep the existing load-more error UI and logs.
+
+After implementing, briefly describe:
+- Which state variable is now the single source of truth
+- Where the JSX renders from
+- Where initial fetch sets it and load more appends to it
+
+---
+

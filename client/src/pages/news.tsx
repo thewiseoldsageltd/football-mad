@@ -93,8 +93,8 @@ export default function NewsPage() {
 
   const apiQueryString = buildApiQueryString();
   
-  // Pagination state
-  const [paginatedArticles, setPaginatedArticles] = useState<any[]>([]);
+  // Single source of truth for rendered articles list
+  const [articles, setArticles] = useState<any[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -110,18 +110,19 @@ export default function NewsPage() {
     },
   });
   
-  // Reset pagination when filters change and sync from initial response
+  // Set articles from initial fetch response
   useEffect(() => {
     if (newsResponse) {
-      setPaginatedArticles(newsResponse.articles);
+      console.debug("[news] initial fetch", { count: newsResponse.articles?.length, hasMore: newsResponse.hasMore });
+      setArticles(newsResponse.articles || []);
       setNextCursor(newsResponse.nextCursor);
       setHasMore(newsResponse.hasMore);
     }
   }, [newsResponse]);
   
-  // Reset pagination state when filters change
+  // Reset state when filters change
   useEffect(() => {
-    setPaginatedArticles([]);
+    setArticles([]);
     setNextCursor(null);
     setHasMore(false);
   }, [apiQueryString]);
@@ -195,10 +196,12 @@ export default function NewsPage() {
       }
       
       // Append new articles, de-duping by id
-      setPaginatedArticles(prev => {
+      setArticles(prev => {
         const existingIds = new Set(prev.map(a => a.id));
         const uniqueNew = data.articles.filter((a: any) => !existingIds.has(a.id));
-        return [...prev, ...uniqueNew];
+        const next = [...prev, ...uniqueNew];
+        console.debug("[news] loadMore appended", { before: prev.length, added: uniqueNew.length, after: next.length });
+        return next;
       });
       setNextCursor(data.nextCursor ?? null);
       setHasMore(!!data.hasMore);
@@ -220,105 +223,40 @@ export default function NewsPage() {
     }
   };
 
-  // Polling state for incremental updates
-  const [polledArticles, setPolledArticles] = useState<any[]>([]);
-  const lastCursorRef = useRef<{ since: string; sinceId: string } | null>(null);
-
-  // Merge base articles with polled updates (webhook-safe)
-  const mergedArticles = useMemo(() => {
-    const base = paginatedArticles.length > 0 ? paginatedArticles : (newsResponse?.articles ?? []);
-    if (polledArticles.length === 0) return base;
-
-    const map = new Map<string, any>();
-
-    // Start with base articles (these may already include webhook updates)
-    for (const article of base) {
-      map.set(article.id, article);
-    }
-
-    // Only overwrite if the polled version is actually newer
-    for (const polled of polledArticles) {
-      const existing = map.get(polled.id);
-
-      if (!existing) {
-        map.set(polled.id, polled);
-        continue;
-      }
-
-      const existingTs = new Date(existing.sourceUpdatedAt || existing.publishedAt || existing.createdAt).getTime();
-      const polledTs = new Date(polled.sourceUpdatedAt || polled.publishedAt || polled.createdAt).getTime();
-
-      if (polledTs > existingTs) {
-        map.set(polled.id, polled);
-      }
-    }
-
-    // Always return newest-first (sort by publishedAt for display order, not updatedAt)
-    return Array.from(map.values()).sort(
-      (a, b) =>
-        new Date(b.publishedAt || b.createdAt).getTime() -
-        new Date(a.publishedAt || a.createdAt).getTime()
-    );
-  }, [newsResponse?.articles, polledArticles]);
-
-  // Reset polled articles when filters change
-  useEffect(() => {
-    setPolledArticles([]);
-    lastCursorRef.current = null;
-  }, [apiQueryString]);
-
-  // 60-second polling loop for updates (intentional for MVP responsiveness)
+  // Polling for incremental updates - merges into main articles list
   useEffect(() => {
     const POLL_INTERVAL = 60_000; // 60 seconds
-    const MAX_LOOPS = 5; // Cap loops per poll cycle
     
     const fetchUpdates = async () => {
-      // Get cursor from newest article in current state
-      const allArticles = mergedArticles;
-      if (allArticles.length === 0) return;
+      if (articles.length === 0) return;
       
-      const newestArticle = allArticles[0];
+      const newestArticle = articles[0];
       const since = newestArticle.publishedAt || newestArticle.createdAt;
       if (!since) return;
       
-      let cursor = { since: new Date(since).toISOString(), sinceId: newestArticle.id };
-      let newArticles: any[] = [];
-      let loops = 0;
-      
-      while (loops < MAX_LOOPS) {
-        try {
-          const url = `/api/news/updates?since=${encodeURIComponent(cursor.since)}&sinceId=${encodeURIComponent(cursor.sinceId)}&limit=200`;
-          const res = await fetch(url);
-          if (!res.ok) break;
-          
-          const data = await res.json();
-          if (data.articles && data.articles.length > 0) {
-            newArticles = [...newArticles, ...data.articles];
-          }
-          
-          if (!data.nextCursor) break;
-          cursor = data.nextCursor;
-          loops++;
-        } catch (err) {
-          console.error("Polling error:", err);
-          break;
+      try {
+        const url = `/api/news/updates?since=${encodeURIComponent(new Date(since).toISOString())}&sinceId=${encodeURIComponent(newestArticle.id)}&limit=50`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        if (data.articles && data.articles.length > 0) {
+          setArticles(prev => {
+            const existingIds = new Set(prev.map(a => a.id));
+            const uniqueNew = data.articles.filter((a: any) => !existingIds.has(a.id));
+            if (uniqueNew.length === 0) return prev;
+            // Prepend new articles at the top
+            return [...uniqueNew, ...prev];
+          });
         }
-      }
-      
-      if (newArticles.length > 0) {
-        setPolledArticles(prev => {
-          // Dedupe with existing polled
-          const seen = new Set(prev.map(a => a.id));
-          const unique = newArticles.filter(a => !seen.has(a.id));
-          return [...unique, ...prev];
-        });
+      } catch (err) {
+        console.error("Polling error:", err);
       }
     };
     
     const intervalId = setInterval(fetchUpdates, POLL_INTERVAL);
-    
     return () => clearInterval(intervalId);
-  }, [mergedArticles]);
+  }, [articles]);
 
   const { data: teams } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
@@ -396,7 +334,6 @@ export default function NewsPage() {
     return teams.filter(t => followedTeamIds.includes(t.id));
   }, [teams, followedTeamIds]);
 
-  const articles = mergedArticles;
   const featuredArticle = articles.find(a => a.isFeatured);
   const regularArticles = articles.filter(a => a.id !== featuredArticle?.id);
 
