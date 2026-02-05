@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useState, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -39,6 +40,8 @@ const MOCK_PLAYERS = [
 ];
 
 export default function NewsPage() {
+  const [location] = useLocation();
+  const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuth();
   const { 
     filters, 
@@ -52,6 +55,12 @@ export default function NewsPage() {
     canonicalUrl,
     buildApiQueryString
   } = useNewsFilters();
+  
+  // DEV: mount/unmount logging
+  useEffect(() => {
+    if (import.meta.env.DEV) console.log("[news] mount");
+    return () => { if (import.meta.env.DEV) console.log("[news] unmount"); };
+  }, []);
   
   const [teamSearch, setTeamSearch] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
@@ -102,12 +111,14 @@ export default function NewsPage() {
   
   const queryKey = ["/api/news", apiQueryString] as const;
   
-  const { data: newsResponse, isLoading, isFetching, isError, error } = useQuery<NewsFiltersResponse>({
+  const { data: newsResponse, isLoading, isFetching, isError, error, status } = useQuery<NewsFiltersResponse>({
     queryKey,
     queryFn: async () => {
       const separator = apiQueryString ? "&" : "?";
       const url = `/api/news${apiQueryString}${separator}limit=15`;
+      if (import.meta.env.DEV) console.log("[news] queryFn fetching:", url);
       const res = await fetch(url);
+      if (import.meta.env.DEV) console.log("[news] queryFn response:", res.status);
       if (!res.ok) throw new Error("Failed to fetch news");
       return res.json();
     },
@@ -130,10 +141,17 @@ export default function NewsPage() {
     return [...baseArticles, ...uniqueExtra];
   }, [baseArticles, extraArticles]);
   
-  // DEV diagnostics
+  // DEV diagnostics on render
   if (import.meta.env.DEV) {
-    console.log("[news]", { apiQueryString, isLoading, isFetching, count: articles.length });
+    console.log("[news] render", { location, isLoading, isFetching, status, count: articles.length });
   }
+  
+  // Force refetch when /news route becomes active (client-side navigation)
+  useEffect(() => {
+    if (!location.startsWith("/news")) return;
+    if (import.meta.env.DEV) console.log("[news] activated route -> invalidate /api/news", location);
+    queryClient.invalidateQueries({ queryKey: ["/api/news"] });
+  }, [location, queryClient]);
   
   // Sync pagination state from query response (only when we get fresh data, not on filter change)
   const prevQueryKeyRef = useRef(apiQueryString);
@@ -631,13 +649,34 @@ export default function NewsPage() {
                 </section>
               )}
 
-              {(isLoading || isFetching) && articles.length === 0 ? (
+              {/* Loading state: show skeleton */}
+              {isLoading ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {Array.from({ length: 15 }).map((_, i) => (
                     <ArticleCardSkeleton key={i} />
                   ))}
                 </div>
+              ) : isFetching && articles.length === 0 ? (
+                /* Fetching with no cached data: show skeleton */
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {Array.from({ length: 15 }).map((_, i) => (
+                    <ArticleCardSkeleton key={i} />
+                  ))}
+                </div>
+              ) : isError ? (
+                /* Error state: show error banner */
+                <div className="text-center py-16">
+                  <div className="mx-auto max-w-md p-4 rounded-md bg-destructive/10 border border-destructive/20">
+                    <p className="text-destructive text-lg mb-2" data-testid="text-news-error">
+                      Failed to load news
+                    </p>
+                    <p className="text-muted-foreground text-sm">
+                      {error?.message || "An unexpected error occurred"}
+                    </p>
+                  </div>
+                </div>
               ) : regularArticles.length > 0 ? (
+                /* Articles: show cards */
                 <>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {regularArticles.map((article) => (
@@ -687,6 +726,7 @@ export default function NewsPage() {
                   )}
                 </>
               ) : (
+                /* No articles: only show when not loading/fetching */
                 <div className="text-center py-16">
                   <p className="text-muted-foreground text-lg">
                     No articles found matching your filters.

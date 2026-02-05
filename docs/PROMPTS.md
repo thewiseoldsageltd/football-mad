@@ -12940,4 +12940,55 @@ After changes:
 
 ---
 
+We need to fix /news showing “No articles…” when navigating away and back (no /api/news request appears in Network). The QueryClient is module-scope and provider wraps app, so focus on: (1) query defaults, (2) route activation refetch, (3) UI state conditions, (4) diagnostics.
+
+Please do the following:
+
+A) Make Query defaults sane (NOT stale forever)
+- Find client/src/lib/queryClient.ts (or wherever queryClient is created).
+- If defaultOptions.queries.staleTime is Infinity, change it to something sane like 0 or 30_000.
+- Also set:
+  - refetchOnReconnect: true
+  - refetchOnWindowFocus: false (keep false)
+  - retry: 1
+- Add DEV-only log when QueryClient is created: console.log("[rq] queryClient created").
+
+B) In NewsPage, force refetch when /news becomes active (client-side navigation)
+- In client/src/pages/news.tsx:
+  - import { useLocation } from "wouter";
+  - import { useQueryClient } from "@tanstack/react-query";
+  - const [location] = useLocation();
+  - const queryClient = useQueryClient();
+  - Add effect:
+    useEffect(() => {
+      if (!location.startsWith("/news")) return;
+      if (import.meta.env.DEV) console.log("[news] activated route -> invalidate /api/news", location);
+      queryClient.invalidateQueries({ queryKey: ["/api/news"] });
+    }, [location, queryClient]);
+  This ensures we fetch again even if React Query thinks it’s fresh.
+
+C) Fix rendering so we don’t show “No articles” while fetching/transitioning
+- Use these rules:
+  - If isLoading -> show skeleton
+  - Else if isFetching and current articles list is empty -> show skeleton
+  - Else if isError -> show an error banner with error.message
+  - Else if articles.length === 0 -> show “No articles…”
+  - Else render cards
+
+D) Add explicit diagnostics in NewsPage
+- Add a mount/unmount log:
+  useEffect(() => { console.log("[news] mount"); return () => console.log("[news] unmount"); }, []);
+- In the queryFn log (DEV only): url + response status.
+- On render log (DEV only): location, isLoading, isFetching, status, articles count.
+
+E) Build check
+- Run npm run build and ensure it passes.
+
+Finally, summarise:
+- Which file changed for query defaults
+- Which file changed for /news invalidation
+- The exact logic for when we show skeleton vs “No articles”
+
+---
+
 
