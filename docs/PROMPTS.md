@@ -12908,4 +12908,36 @@ Important:
 
 ---
 
+We still have an issue: /news shows articles on hard refresh, but when navigating away and back to /news it shows “No articles found…”. Sometimes the Network tab shows no /api/news fetch at all on return.
+
+This likely means React Query cache is being reset because QueryClientProvider (or the QueryClient instance) is being recreated/remounted on navigation.
+
+Please do the following:
+
+1) Find where QueryClient is created and where <QueryClientProvider> is mounted.
+   - Search for: QueryClientProvider, new QueryClient, QueryClient
+   - Identify the file(s) and whether queryClient is created inside a React component render (BAD) vs module scope (GOOD).
+
+2) Fix it so QueryClient is a singleton for the whole SPA lifetime:
+   - create: const queryClient = new QueryClient(...) at module scope (top-level), NOT inside a component.
+   - ensure <QueryClientProvider client={queryClient}> wraps the entire app once (main.tsx / root entry), NOT per-page or per-layout that can remount on route change.
+
+3) Add DEV-only diagnostics to prove it:
+   - In the root where queryClient is created, log once: “[rq] queryClient created” (DEV only).
+   - In NewsPage, add DEV-only mount/unmount logs:
+     useEffect(() => { console.log("[news] mount"); return () => console.log("[news] unmount"); }, []);
+   - In NewsPage queryFn, log the fetch URL and status (DEV only).
+
+4) Ensure NewsPage shows errors (not silently empty):
+   - If isError, render an error banner with error.message.
+
+5) Run: npm run build to confirm.
+
+After changes:
+- Explain exactly where QueryClientProvider now lives.
+- Confirm queryClient is not re-created during navigation.
+- Provide the exact diff summary.
+
+---
+
 

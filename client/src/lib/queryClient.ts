@@ -1,5 +1,9 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+if (import.meta.env.DEV) {
+  console.log("[rq] queryClient module loaded");
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -47,7 +51,7 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: 5 * 60 * 1000, // 5 minutes - allow refetch while keeping reasonable cache
       retry: false,
     },
     mutations: {
@@ -55,3 +59,7 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+if (import.meta.env.DEV) {
+  console.log("[rq] queryClient created");
+}
