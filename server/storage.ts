@@ -4,6 +4,7 @@ import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
+  competitions, articleCompetitions,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -19,6 +20,7 @@ import {
   type Subscriber, type InsertSubscriber,
   type FplPlayerAvailability,
   type Manager,
+  type Competition,
   NEWS_COMPETITIONS,
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
@@ -35,10 +37,19 @@ export interface ArticleEntityPill {
   color?: string;
 }
 
+export interface EntityWithProvenance {
+  id: string;
+  name: string;
+  slug: string;
+  source: string;
+  salienceScore: number;
+}
+
 export interface ArticleWithEntities extends Article {
-  entityTeams: Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor">[];
-  entityPlayers: Pick<Player, "id" | "name" | "slug">[];
-  entityManagers: Pick<Manager, "id" | "name" | "slug">[];
+  entityTeams: (Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor" | "logoUrl"> & { source: string; salienceScore: number })[];
+  entityPlayers: (Pick<Player, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
+  entityManagers: (Pick<Manager, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
+  entityCompetitions: (Pick<Competition, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
 }
 
 export interface NewsFilterParams {
@@ -316,7 +327,7 @@ export class DatabaseStorage implements IStorage {
     const [article] = await db.select().from(articles).where(eq(articles.slug, slug));
     if (!article) return undefined;
 
-    // Fetch linked teams
+    // Fetch linked teams with provenance
     const teamRows = await db
       .select({
         id: teams.id,
@@ -324,38 +335,63 @@ export class DatabaseStorage implements IStorage {
         slug: teams.slug,
         shortName: teams.shortName,
         primaryColor: teams.primaryColor,
+        logoUrl: teams.logoUrl,
+        source: articleTeams.source,
+        salienceScore: articleTeams.salienceScore,
       })
       .from(articleTeams)
       .innerJoin(teams, eq(articleTeams.teamId, teams.id))
-      .where(eq(articleTeams.articleId, article.id));
+      .where(eq(articleTeams.articleId, article.id))
+      .orderBy(desc(articleTeams.salienceScore));
 
-    // Fetch linked players
+    // Fetch linked players with provenance
     const playerRows = await db
       .select({
         id: players.id,
         name: players.name,
         slug: players.slug,
+        source: articlePlayers.source,
+        salienceScore: articlePlayers.salienceScore,
       })
       .from(articlePlayers)
       .innerJoin(players, eq(articlePlayers.playerId, players.id))
-      .where(eq(articlePlayers.articleId, article.id));
+      .where(eq(articlePlayers.articleId, article.id))
+      .orderBy(desc(articlePlayers.salienceScore));
 
-    // Fetch linked managers
+    // Fetch linked managers with provenance
     const managerRows = await db
       .select({
         id: managers.id,
         name: managers.name,
         slug: managers.slug,
+        source: articleManagers.source,
+        salienceScore: articleManagers.salienceScore,
       })
       .from(articleManagers)
       .innerJoin(managers, eq(articleManagers.managerId, managers.id))
-      .where(eq(articleManagers.articleId, article.id));
+      .where(eq(articleManagers.articleId, article.id))
+      .orderBy(desc(articleManagers.salienceScore));
+
+    // Fetch linked competitions with provenance
+    const competitionRows = await db
+      .select({
+        id: competitions.id,
+        name: competitions.name,
+        slug: competitions.slug,
+        source: articleCompetitions.source,
+        salienceScore: articleCompetitions.salienceScore,
+      })
+      .from(articleCompetitions)
+      .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
+      .where(eq(articleCompetitions.articleId, article.id))
+      .orderBy(desc(articleCompetitions.salienceScore));
 
     return {
       ...article,
       entityTeams: teamRows,
       entityPlayers: playerRows,
       entityManagers: managerRows,
+      entityCompetitions: competitionRows,
     };
   }
 

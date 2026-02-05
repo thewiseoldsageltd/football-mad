@@ -121,7 +121,13 @@ export const articleTeams = pgTable("article_teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   teamId: varchar("team_id").references(() => teams.id, { onDelete: "cascade" }).notNull(),
-});
+  source: text("source").default("tag").notNull(),
+  sourceText: text("source_text"),
+  salienceScore: integer("salience_score").default(0).notNull(),
+}, (table) => [
+  index("article_teams_article_idx").on(table.articleId),
+  index("article_teams_team_idx").on(table.teamId),
+]);
 
 export const articleTeamsRelations = relations(articleTeams, ({ one }) => ({
   article: one(articles, { fields: [articleTeams.articleId], references: [articles.id] }),
@@ -149,8 +155,12 @@ export type Competition = typeof competitions.$inferSelect;
 
 // ============ ARTICLE-COMPETITIONS JUNCTION ============
 export const articleCompetitions = pgTable("article_competitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   competitionId: varchar("competition_id").references(() => competitions.id, { onDelete: "cascade" }).notNull(),
+  source: text("source").default("tag").notNull(),
+  sourceText: text("source_text"),
+  salienceScore: integer("salience_score").default(0).notNull(),
 }, (table) => [
   index("article_competitions_article_idx").on(table.articleId),
   index("article_competitions_competition_idx").on(table.competitionId),
@@ -163,8 +173,12 @@ export const articleCompetitionsRelations = relations(articleCompetitions, ({ on
 
 // ============ ARTICLE-PLAYERS JUNCTION ============
 export const articlePlayers = pgTable("article_players", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
+  source: text("source").default("tag").notNull(),
+  sourceText: text("source_text"),
+  salienceScore: integer("salience_score").default(0).notNull(),
 }, (table) => [
   index("article_players_article_idx").on(table.articleId),
   index("article_players_player_idx").on(table.playerId),
@@ -710,8 +724,12 @@ export type Manager = typeof managers.$inferSelect;
 
 // ============ ARTICLE-MANAGERS JUNCTION ============
 export const articleManagers = pgTable("article_managers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   articleId: varchar("article_id").references(() => articles.id, { onDelete: "cascade" }).notNull(),
   managerId: varchar("manager_id").references(() => managers.id, { onDelete: "cascade" }).notNull(),
+  source: text("source").default("tag").notNull(),
+  sourceText: text("source_text"),
+  salienceScore: integer("salience_score").default(0).notNull(),
   confidence: integer("confidence"),
 }, (table) => [
   index("article_managers_article_idx").on(table.articleId),

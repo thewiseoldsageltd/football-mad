@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight } from "lucide-react";
+import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,13 +17,130 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
-import type { Article, Team, Player, Manager } from "@shared/schema";
+import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
-// Extended article type with entity data from backend
+interface EntityWithProvenance {
+  id: string;
+  name: string;
+  slug: string;
+  source: string;
+  salienceScore: number;
+}
+
 interface ArticleWithEntities extends Article {
-  entityTeams?: Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor">[];
-  entityPlayers?: Pick<Player, "id" | "name" | "slug">[];
-  entityManagers?: Pick<Manager, "id" | "name" | "slug">[];
+  entityTeams?: (Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor" | "logoUrl"> & { source: string; salienceScore: number })[];
+  entityPlayers?: (Pick<Player, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
+  entityManagers?: (Pick<Manager, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
+  entityCompetitions?: (Pick<Competition, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
+}
+
+function CollapsibleEntityGroup({
+  title,
+  pills,
+  testIdPrefix,
+}: {
+  title: string;
+  pills: EntityData[];
+  testIdPrefix: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [clampHeight, setClampHeight] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Measure pill height dynamically and compute row-based clamp
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    const container = containerRef.current;
+    const firstPill = container.querySelector('[data-testid^="pill-bottom"]') as HTMLElement;
+    
+    if (firstPill) {
+      const pillHeight = firstPill.offsetHeight;
+      const gap = 8; // gap-2 = 0.5rem = 8px
+      const isMobile = window.innerWidth < 640;
+      
+      // Mobile: 1 row, Desktop: 2 rows
+      const rows = isMobile ? 1 : 2;
+      const height = rows * pillHeight + (rows - 1) * gap;
+      setClampHeight(height);
+      
+      // Check if full content exceeds clamped height
+      requestAnimationFrame(() => {
+        const fullHeight = container.scrollHeight;
+        setIsOverflowing(fullHeight > height);
+      });
+    }
+    
+    // Re-check on resize using ResizeObserver
+    const observer = new ResizeObserver(() => {
+      const firstPill = container.querySelector('[data-testid^="pill-bottom"]') as HTMLElement;
+      if (firstPill) {
+        const pillHeight = firstPill.offsetHeight;
+        const gap = 8;
+        const isMobile = window.innerWidth < 640;
+        const rows = isMobile ? 1 : 2;
+        const height = rows * pillHeight + (rows - 1) * gap;
+        setClampHeight(height);
+        
+        requestAnimationFrame(() => {
+          const fullHeight = container.scrollHeight;
+          setIsOverflowing(fullHeight > height);
+        });
+      }
+    });
+    
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [pills]);
+  
+  if (pills.length === 0) return null;
+  
+  // Dynamic row-based clamp using measured pill height
+  const containerStyle = !expanded && clampHeight 
+    ? { maxHeight: `${clampHeight}px`, overflow: 'hidden' as const }
+    : {};
+  
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground mb-2">{title}</p>
+      <div 
+        ref={containerRef}
+        className="flex flex-wrap gap-2 transition-[max-height] duration-200"
+        style={containerStyle}
+        data-testid={`entity-group-${testIdPrefix}`}
+      >
+        {pills.map((pill) => (
+          <EntityPill
+            key={pill.slug}
+            entity={pill}
+            size="small"
+            responsiveLabel={pill.type === "competition" || pill.type === "team"}
+            data-testid={`pill-bottom-${testIdPrefix}-${pill.slug}`}
+          />
+        ))}
+      </div>
+      {(isOverflowing || expanded) && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="mt-2 text-xs text-primary hover:underline flex items-center gap-1"
+          data-testid={`toggle-${testIdPrefix}`}
+        >
+          {expanded ? (
+            <>
+              <ChevronUp className="w-3 h-3" />
+              Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-3 h-3" />
+              Show more ({pills.length})
+            </>
+          )}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Normalize text for comparison (lowercase, strip HTML, collapse whitespace)
@@ -593,7 +710,8 @@ export default function ArticlePage() {
   const backendHasEntities = 
     (article?.entityTeams?.length || 0) +
     (article?.entityPlayers?.length || 0) +
-    (article?.entityManagers?.length || 0) > 0;
+    (article?.entityManagers?.length || 0) +
+    (article?.entityCompetitions?.length || 0) > 0;
   
   // Build entity pill arrays with fallback to tags when backend is empty
   // Must be called unconditionally (before early returns) per React hook rules
@@ -654,19 +772,15 @@ export default function ArticlePage() {
       return name.slice(0, 3).toUpperCase();
     };
     
-    // Build team list
-    let resolvedTeams: typeof teams = [];
-    if (backendHasEntities && article.entityTeams?.length) {
-      resolvedTeams = article.entityTeams as typeof teams;
-    } else {
-      // Fallback: match tags against known teams (by name or slug)
-      resolvedTeams = teams.filter(t => 
-        tags.some(tag => 
-          t.name.toLowerCase() === tag.toLowerCase() || 
-          t.slug === slugify(tag)
-        )
-      );
-    }
+    // Build team list (always from tags - match tags against known teams by name or slug)
+    // Note: Backend entityTeams are available but we use tags as source-of-truth for teams
+    type TeamForPill = Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor" | "logoUrl">;
+    const resolvedTeams: TeamForPill[] = teams.filter(t => 
+      tags.some(tag => 
+        t.name.toLowerCase() === tag.toLowerCase() || 
+        t.slug === slugify(tag)
+      )
+    );
     
     // Convert teams to EntityData with shortLabel
     const resolvedTeamPills: EntityData[] = resolvedTeams.map(t => ({
@@ -728,7 +842,8 @@ export default function ArticlePage() {
       }));
     }
     
-    // Build competition pills (always from article.competition + tag matches)
+    // Build competition pills (always from tags - competition field + competition-like tags)
+    // Note: Backend entityCompetitions are available but we use tags as source-of-truth for competitions
     const knownCompetitions = ["Premier League", "Carabao Cup", "FA Cup", "Champions League", "Europa League", "La Liga", "Serie A", "Bundesliga", "Ligue 1"];
     const competitionSet = new Set<string>();
     
@@ -860,71 +975,29 @@ export default function ArticlePage() {
             />
 
             {(competitionPills.length > 0 || teamPills.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
-              <section className="mb-8 py-6 border-t">
+              <section className="mb-8 py-6 border-t" data-testid="in-this-article-section">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
-                  {competitionPills.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2">Competitions</p>
-                      <div className="flex flex-wrap gap-2">
-                        {competitionPills.map((pill) => (
-                          <EntityPill
-                            key={pill.slug}
-                            entity={pill}
-                            size="small"
-                            responsiveLabel
-                            data-testid={`pill-bottom-competition-${pill.slug}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {teamPills.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2">Teams</p>
-                      <div className="flex flex-wrap gap-2">
-                        {teamPills.map((pill) => (
-                          <EntityPill
-                            key={pill.slug}
-                            entity={pill}
-                            size="small"
-                            responsiveLabel
-                            data-testid={`pill-bottom-team-${pill.slug}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {playerPills.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2">Players</p>
-                      <div className="flex flex-wrap gap-2">
-                        {playerPills.map((player) => (
-                          <EntityPill
-                            key={player.slug}
-                            entity={player}
-                            size="small"
-                            data-testid={`pill-bottom-player-${player.slug}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {managerPills.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-2">Managers</p>
-                      <div className="flex flex-wrap gap-2">
-                        {managerPills.map((manager) => (
-                          <EntityPill
-                            key={manager.slug}
-                            entity={manager}
-                            size="small"
-                            data-testid={`pill-bottom-manager-${manager.slug}`}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  <CollapsibleEntityGroup
+                    title="Competitions"
+                    pills={competitionPills}
+                    testIdPrefix="competition"
+                  />
+                  <CollapsibleEntityGroup
+                    title="Teams"
+                    pills={teamPills}
+                    testIdPrefix="team"
+                  />
+                  <CollapsibleEntityGroup
+                    title="Players"
+                    pills={playerPills}
+                    testIdPrefix="player"
+                  />
+                  <CollapsibleEntityGroup
+                    title="Managers"
+                    pills={managerPills}
+                    testIdPrefix="manager"
+                  />
                 </div>
               </section>
             )}

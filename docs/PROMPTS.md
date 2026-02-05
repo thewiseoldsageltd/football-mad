@@ -12365,3 +12365,93 @@ Implement now.
 
 ---
 
+Implement “unlimited” entity pills in the Article footer, sorted by salience, with a clean UX (collapsed groups + “Show more”), while keeping card/header pills as [Competition][Team A][Team B] sourced from TAGS ONLY.
+
+REQUIREMENTS (do exactly this):
+
+A) Card pills + Article header pills (NO CHANGE IN BEHAVIOUR)
+- Continue to render: [Competition] [Team A] [Team B]
+- These MUST be derived from TAGS ONLY (via entityAliases → competitions + teams).
+- Do NOT pull players/managers into the header/card pills.
+
+B) “In this article” footer (UNLIMITED lists)
+- Render 4 groups (only if group has items):
+  1) Competitions
+  2) Teams
+  3) Players
+  4) Managers
+- Competitions/Teams: primarily from TAGS (via entityAliases).
+- Players/Managers: from MENTION EXTRACTION (title + excerpt + body) matched against DB entities.
+- No hard cap on number of pills in any footer group.
+
+C) Salience sorting (so big lists still feel smart)
+Compute a “salienceScore” per linked entity on the article:
+- Base rules:
+  +50 if entity name appears in TITLE (normalized match, accent-insensitive)
+  +25 if appears in EXCERPT
+  +10 if appears in first 300 words of BODY
+  + (min(30, count * 3)) where count is number of occurrences in BODY (normalized, accent-insensitive)
+- Use this score to sort within Players and Managers descending.
+- For Teams and Competitions, sort tagged ones first; within tagged, optionally apply the same scoring; tie-break alphabetically.
+- De-dupe by entity id.
+
+D) Persist provenance + score on junction tables (so it’s fast + auditable)
+For each junction table (articleTeams/articlePlayers/articleManagers/articleCompetitions):
+- Ensure these columns exist (add via migration / drizzle):
+  - source TEXT NOT NULL DEFAULT 'tag'   (values: 'tag' | 'mention' | 'manual')
+  - sourceText TEXT NULL
+  - salienceScore INTEGER NOT NULL DEFAULT 0
+  - confidence REAL NULL (keep if already added; ok if unused for now)
+- When linking from tags:
+  - source='tag', sourceText=<original tag name>, salienceScore=0
+- When linking from mentions:
+  - source='mention', sourceText=<matched entity name>, salienceScore=<computed score>
+
+E) Where to compute + store links
+1) In the Ghost upsert/article processing pipeline in server/routes.ts (where we already:
+   - upsert the article
+   - call extractEntityMentions
+   - insert into junction tables)
+Do:
+   i) Tag-based linking first (competitions + teams; and optionally players if tags include people)
+  ii) Mention-based linking second for players/managers (and optionally teams/competitions if you want later; for now players+managers is enough)
+ iii) Use onConflictDoUpdate to update salienceScore/source/sourceText when a link already exists.
+      - Precedence: if an existing row is source='tag', DO NOT downgrade to 'mention'
+      - But DO allow salienceScore to update if mention score is higher (store max).
+
+2) Update /api/articles/:slug (or the existing article endpoint used by client/src/pages/article.tsx) to return:
+- entityCompetitions[] with { id, name, slug, iconUrl?, shortName?, source, salienceScore }
+- entityTeams[] same
+- entityPlayers[] same
+- entityManagers[] same
+(Keep existing fields; just add these properties.)
+
+F) Frontend UX: collapsed groups with “Show more”
+In client/src/pages/article.tsx:
+- “In this article” should appear immediately after the article body (already desired).
+- For each group:
+  - Show a single “collapsed” view by default:
+    - desktop: show up to ~2 rows worth of pills using CSS line-clamp style layout (NOT a data cap)
+    - mobile: show up to ~1 row worth
+  - Then show a small button link: “Show more (N)” / “Show less”
+    - This expands that group only.
+- IMPORTANT: This is NOT a hard cap; it’s progressive disclosure.
+- Keep your existing EntityPill component.
+- Keep the new shortcodes on mobile (EPL/ARS/CHE etc) working as it currently does.
+
+G) Verification steps (add to replit.md)
+Provide curl commands to verify:
+1) Article endpoint returns entityPlayers/entityManagers with non-zero salienceScore.
+2) A known long roundup article shows many pills in each group.
+3) Header pills remain comp+teams only.
+
+CONSTRAINTS:
+- Do NOT add E2E/regression tests.
+- Do NOT enable Replit video/test generation.
+- Keep diffs minimal and follow existing project patterns (storage.ts, routes.ts, schema.ts, migrations).
+- Ensure all matching is accent-insensitive and case-insensitive (use the existing normalize helper if present; otherwise add a small normalizeText util used consistently).
+
+Implement now.
+
+---
+

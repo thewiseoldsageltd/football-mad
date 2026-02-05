@@ -65,3 +65,63 @@ Preferred communication style: Simple, everyday language.
 - **Font**: Inter (Google Fonts).
 - **Color Scheme**: HSL-based CSS variables, primary green accent.
 - **Responsiveness**: Tailwind CSS breakpoints.
+
+## Verification Commands
+
+### Entity Salience Scoring System
+Test the salience scoring and provenance tracking for article entity links:
+
+```bash
+# Check article entities with salience scores (shows teams, players, managers, competitions)
+curl -s "http://localhost:5000/api/articles/<slug>" | jq '{
+  title: .title,
+  teams: [.entityTeams[]? | {name, source, salienceScore}],
+  players: [.entityPlayers[]? | {name, source, salienceScore}],
+  managers: [.entityManagers[]? | {name, source, salienceScore}],
+  competitions: [.entityCompetitions[]? | {name, source, salienceScore}]
+}'
+
+# Verify salience ordering (highest scores first)
+curl -s "http://localhost:5000/api/articles/<slug>" | jq '.entityTeams | sort_by(-.salienceScore)'
+
+# Verify non-zero salience scores on players and managers
+curl -s "http://localhost:5000/api/articles/<slug>" | jq '{
+  playersWithSalience: [.entityPlayers[]? | select(.salienceScore > 0) | {name, salienceScore}],
+  managersWithSalience: [.entityManagers[]? | select(.salienceScore > 0) | {name, salienceScore}]
+}'
+
+# Check that header pills remain tag-only (competition field + tags)
+# Header pills should only show article.competition and matched tags, NOT backend entityTeams/entityPlayers
+curl -s "http://localhost:5000/api/articles/<slug>" | jq '{
+  competition: .competition,
+  tags: .tags
+}'
+```
+
+### Schema Verification
+```sql
+-- Check junction table columns include provenance fields
+SELECT column_name FROM information_schema.columns 
+WHERE table_name = 'article_teams' 
+AND column_name IN ('source', 'source_text', 'salience_score');
+
+-- View sample entity links with provenance
+SELECT at.*, t.name as team_name
+FROM article_teams at
+JOIN teams t ON at.team_id = t.id
+ORDER BY at.salience_score DESC
+LIMIT 10;
+
+-- Find articles with many entity links (roundup articles)
+SELECT a.title, 
+  (SELECT COUNT(*) FROM article_teams WHERE article_id = a.id) as team_count,
+  (SELECT COUNT(*) FROM article_players WHERE article_id = a.id) as player_count
+FROM articles a
+ORDER BY team_count + player_count DESC
+LIMIT 5;
+```
+
+### Frontend Behavior Notes
+- **Footer entity pills**: Competitions and teams are derived from article tags (tag-based). Players and managers use backend entityPlayers/entityManagers with salience scoring.
+- **Header pills**: Use article.competition field and matched tags only (tag-based, no backend entities).
+- **Collapsible groups**: CSS-based height clamp with overflow detection. Mobile shows ~1 row, desktop shows ~2 rows when collapsed. "Show more" button appears only when content overflows.

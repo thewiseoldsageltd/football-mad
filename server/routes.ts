@@ -41,6 +41,7 @@ import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
 import { backfillStandings } from "./jobs/backfill-standings";
+import { normalizeText, computeSalienceScore } from "./utils/text";
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -4448,6 +4449,126 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
 
   // Helper: Extract entity mentions from text using alias dictionary
+  type EntityLink = {
+    id: string;
+    name: string;
+    source: 'tag' | 'mention';
+    sourceText: string;
+    salienceScore: number;
+    confidence: number;
+  };
+  
+  type ExtractedEntities = {
+    teams: EntityLink[];
+    players: EntityLink[];
+    managers: EntityLink[];
+    competitions: EntityLink[];
+  };
+  
+  const extractEntityMentionsWithSalience = async (
+    title: string,
+    excerpt: string | null,
+    body: string | null,
+    tags: string[] = []
+  ): Promise<ExtractedEntities> => {
+    const result: ExtractedEntities = {
+      teams: [],
+      players: [],
+      managers: [],
+      competitions: [],
+    };
+    
+    const normalizedTags = tags.map(t => normalizeText(t));
+    const combinedMentionText = [title, excerpt || '', body || ''].join(' ');
+    
+    const aliases = await db.select().from(entityAliases);
+    
+    const entityNameMap = new Map<string, Map<string, string>>();
+    for (const alias of aliases) {
+      if (alias.isPrimary) {
+        if (!entityNameMap.has(alias.entityType)) {
+          entityNameMap.set(alias.entityType, new Map());
+        }
+        entityNameMap.get(alias.entityType)!.set(alias.entityId, alias.alias);
+      }
+    }
+    
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeText(alias.alias);
+      const entityName = entityNameMap.get(alias.entityType)?.get(alias.entityId) || alias.alias;
+      
+      const isTagMatch = normalizedTags.some(tag => tag.includes(normalizedAlias) || normalizedAlias.includes(tag));
+      
+      const pattern = new RegExp(`\\b${alias.alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      const isMentionMatch = pattern.test(combinedMentionText);
+      
+      if (!isTagMatch && !isMentionMatch) continue;
+      
+      const salienceScore = isMentionMatch 
+        ? computeSalienceScore(alias.alias, title, excerpt, body)
+        : 0;
+      
+      const source: 'tag' | 'mention' = isTagMatch ? 'tag' : 'mention';
+      const confidence = alias.isPrimary ? 100 : 80;
+      
+      const addOrUpdate = (arr: EntityLink[], entityId: string) => {
+        const existing = arr.find(e => e.id === entityId);
+        if (existing) {
+          if (source === 'tag' && existing.source !== 'tag') {
+            existing.source = 'tag';
+            existing.sourceText = alias.alias;
+          }
+          if (salienceScore > existing.salienceScore) {
+            existing.salienceScore = salienceScore;
+          }
+        } else {
+          arr.push({
+            id: entityId,
+            name: entityName,
+            source,
+            sourceText: alias.alias,
+            salienceScore,
+            confidence,
+          });
+        }
+      };
+      
+      switch (alias.entityType) {
+        case 'team':
+          addOrUpdate(result.teams, alias.entityId);
+          break;
+        case 'player':
+          addOrUpdate(result.players, alias.entityId);
+          break;
+        case 'manager':
+          addOrUpdate(result.managers, alias.entityId);
+          break;
+        case 'competition':
+          addOrUpdate(result.competitions, alias.entityId);
+          break;
+      }
+    }
+    
+    result.teams.sort((a, b) => {
+      if (a.source === 'tag' && b.source !== 'tag') return -1;
+      if (a.source !== 'tag' && b.source === 'tag') return 1;
+      if (b.salienceScore !== a.salienceScore) return b.salienceScore - a.salienceScore;
+      return a.name.localeCompare(b.name);
+    });
+    
+    result.competitions.sort((a, b) => {
+      if (a.source === 'tag' && b.source !== 'tag') return -1;
+      if (a.source !== 'tag' && b.source === 'tag') return 1;
+      if (b.salienceScore !== a.salienceScore) return b.salienceScore - a.salienceScore;
+      return a.name.localeCompare(b.name);
+    });
+    
+    result.players.sort((a, b) => b.salienceScore - a.salienceScore || a.name.localeCompare(b.name));
+    result.managers.sort((a, b) => b.salienceScore - a.salienceScore || a.name.localeCompare(b.name));
+    
+    return result;
+  };
+  
   const extractEntityMentions = async (
     text: string,
     tags: string[] = []
@@ -4755,9 +4876,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         articleId = result[0].id;
       }
       
-      // Extract entity mentions from title, excerpt, body, and tags
-      const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
-      const mentions = await extractEntityMentions(combinedText, tags);
+      // Extract entity mentions with salience scoring
+      const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, tags);
       
       // Clear existing entity links
       await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
@@ -4765,18 +4885,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
       await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
       
-      // Insert new entity links
+      // Insert new entity links with provenance
       for (const team of mentions.teams) {
-        await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+        await db.insert(articleTeams).values({
+          articleId,
+          teamId: team.id,
+          source: team.source,
+          sourceText: team.sourceText,
+          salienceScore: team.salienceScore,
+        }).onConflictDoNothing();
       }
       for (const player of mentions.players) {
-        await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+        await db.insert(articlePlayers).values({
+          articleId,
+          playerId: player.id,
+          source: player.source,
+          sourceText: player.sourceText,
+          salienceScore: player.salienceScore,
+        }).onConflictDoNothing();
       }
       for (const manager of mentions.managers) {
-        await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+        await db.insert(articleManagers).values({
+          articleId,
+          managerId: manager.id,
+          source: manager.source,
+          sourceText: manager.sourceText,
+          salienceScore: manager.salienceScore,
+          confidence: manager.confidence,
+        }).onConflictDoNothing();
       }
       for (const competition of mentions.competitions) {
-        await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+        await db.insert(articleCompetitions).values({
+          articleId,
+          competitionId: competition.id,
+          source: competition.source,
+          sourceText: competition.sourceText,
+          salienceScore: competition.salienceScore,
+        }).onConflictDoNothing();
       }
       
       res.json({
@@ -4943,27 +5088,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         articleId = result[0].id;
       }
       
-      // Extract entity mentions
-      const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
-      const mentions = await extractEntityMentions(combinedText, ghostTags);
+      // Extract entity mentions with salience scoring
+      const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
       
-      // Clear and re-link entities
+      // Clear and re-link entities with provenance
       await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
       await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
       await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
       await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
       
       for (const team of mentions.teams) {
-        await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+        await db.insert(articleTeams).values({
+          articleId,
+          teamId: team.id,
+          source: team.source,
+          sourceText: team.sourceText,
+          salienceScore: team.salienceScore,
+        }).onConflictDoNothing();
       }
       for (const player of mentions.players) {
-        await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+        await db.insert(articlePlayers).values({
+          articleId,
+          playerId: player.id,
+          source: player.source,
+          sourceText: player.sourceText,
+          salienceScore: player.salienceScore,
+        }).onConflictDoNothing();
       }
       for (const manager of mentions.managers) {
-        await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+        await db.insert(articleManagers).values({
+          articleId,
+          managerId: manager.id,
+          source: manager.source,
+          sourceText: manager.sourceText,
+          salienceScore: manager.salienceScore,
+          confidence: manager.confidence,
+        }).onConflictDoNothing();
       }
       for (const competition of mentions.competitions) {
-        await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+        await db.insert(articleCompetitions).values({
+          articleId,
+          competitionId: competition.id,
+          source: competition.source,
+          sourceText: competition.sourceText,
+          salienceScore: competition.salienceScore,
+        }).onConflictDoNothing();
       }
       
       res.json({
@@ -5289,9 +5458,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               totalInserted++;
             }
             
-            // Extract and link entities
-            const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
-            const mentions = await extractEntityMentions(combinedText, ghostTags);
+            // Extract and link entities with salience scoring
+            const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
             
             await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
             await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -5299,16 +5467,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
             
             for (const team of mentions.teams) {
-              await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+              await db.insert(articleTeams).values({
+                articleId,
+                teamId: team.id,
+                source: team.source,
+                sourceText: team.sourceText,
+                salienceScore: team.salienceScore,
+              }).onConflictDoNothing();
             }
             for (const player of mentions.players) {
-              await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+              await db.insert(articlePlayers).values({
+                articleId,
+                playerId: player.id,
+                source: player.source,
+                sourceText: player.sourceText,
+                salienceScore: player.salienceScore,
+              }).onConflictDoNothing();
             }
             for (const manager of mentions.managers) {
-              await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+              await db.insert(articleManagers).values({
+                articleId,
+                managerId: manager.id,
+                source: manager.source,
+                sourceText: manager.sourceText,
+                salienceScore: manager.salienceScore,
+                confidence: manager.confidence,
+              }).onConflictDoNothing();
             }
             for (const competition of mentions.competitions) {
-              await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+              await db.insert(articleCompetitions).values({
+                articleId,
+                competitionId: competition.id,
+                source: competition.source,
+                sourceText: competition.sourceText,
+                salienceScore: competition.salienceScore,
+              }).onConflictDoNothing();
             }
             
             totalSynced++;
@@ -5519,9 +5712,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.log(`[Ghost webhook] Inserted article id=${articleId} slug=${uniqueSlug} title="${title.slice(0, 40)}" publishedAt=${publishedAt.toISOString()} updatedAt=${sourceUpdatedAt.toISOString()}`);
     }
     
-    // Extract and link entities
-    const combinedText = `${title} ${excerpt || ""} ${bodyHtml}`;
-    const mentions = await extractEntityMentions(combinedText, ghostTags);
+    // Extract and link entities with salience scoring
+    const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
     
     await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
     await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -5529,16 +5721,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
     
     for (const team of mentions.teams) {
-      await db.insert(articleTeams).values({ articleId, teamId: team.id }).onConflictDoNothing();
+      await db.insert(articleTeams).values({
+        articleId,
+        teamId: team.id,
+        source: team.source,
+        sourceText: team.sourceText,
+        salienceScore: team.salienceScore,
+      }).onConflictDoNothing();
     }
     for (const player of mentions.players) {
-      await db.insert(articlePlayers).values({ articleId, playerId: player.id }).onConflictDoNothing();
+      await db.insert(articlePlayers).values({
+        articleId,
+        playerId: player.id,
+        source: player.source,
+        sourceText: player.sourceText,
+        salienceScore: player.salienceScore,
+      }).onConflictDoNothing();
     }
     for (const manager of mentions.managers) {
-      await db.insert(articleManagers).values({ articleId, managerId: manager.id, confidence: manager.confidence }).onConflictDoNothing();
+      await db.insert(articleManagers).values({
+        articleId,
+        managerId: manager.id,
+        source: manager.source,
+        sourceText: manager.sourceText,
+        salienceScore: manager.salienceScore,
+        confidence: manager.confidence,
+      }).onConflictDoNothing();
     }
     for (const competition of mentions.competitions) {
-      await db.insert(articleCompetitions).values({ articleId, competitionId: competition.id }).onConflictDoNothing();
+      await db.insert(articleCompetitions).values({
+        articleId,
+        competitionId: competition.id,
+        source: competition.source,
+        sourceText: competition.sourceText,
+        salienceScore: competition.salienceScore,
+      }).onConflictDoNothing();
     }
     
     return { inserted, updated, deleted: 0 };
