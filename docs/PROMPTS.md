@@ -12184,3 +12184,130 @@ Requirements
 After implementation, add a quick `console.debug` (temporary) in article.tsx that logs computed shortLabels for header pills, then remove it before finishing.
 
 Make the changes now. Do NOT run end-to-end/regression tests. No video generation.
+
+---
+
+You are working in the Football Mad MVP Replit project. Implement Goalserve-powered MANAGER (coach) entities end-to-end (ingestion + DB + API + entity linking surface), following the existing patterns already used for competitions/teams/players.
+
+GOALS
+1) Ingest managers/coaches from the Goalserve feed (per team) and upsert them into the DB.
+2) Maintain a relationship between managers and teams (current club).
+3) Expose managers via API (list + by team).
+4) Ensure article entity payloads can include entityManagers (already supported by the frontend) once junction rows exist.
+5) Do NOT add E2E tests. Keep changes small, consistent with existing code style.
+
+STEPS (DO THESE IN ORDER)
+
+A) AUDIT EXISTING STRUCTURE
+- Locate where Goalserve data is fetched + parsed (likely backend ingestion jobs/services).
+- Identify how teams + players are currently seeded (e.g., “squads”, “teams”, “competition teams” ingestion).
+- Identify DB layer (drizzle schema + storage.ts repository methods).
+- Identify existing API routes file(s) where /api/news, /api/teams etc are defined.
+
+B) DATABASE: MANAGERS TABLE + TEAM RELATION
+1) If a managers table does NOT exist, create it using the same approach as teams/players:
+   - columns (minimum):
+     - id (string) => Goalserve manager/coach id if available; otherwise derive a stable id (see fallback rules below)
+     - name (string, required)
+     - country (string, nullable)
+     - teamId (string, nullable) => current team (Goalserve team id)
+     - slug (string, required) => slugified name (plus id suffix if needed for uniqueness)
+     - updatedAt (timestamp)
+     - createdAt (timestamp)
+   - indexes:
+     - unique on id
+     - index teamId
+     - index slug
+
+2) If schema/migrations exist, add the migration; if project uses “drizzle push” style, update the schema accordingly.
+
+C) INGESTION: EXTRACT MANAGER FROM GOALSERVE TEAM FEED
+1) Find the existing team/squad ingestion that iterates teams.
+2) For each team record fetched from Goalserve, attempt to extract coach/manager using these flexible rules (because Goalserve format can differ):
+   - Look for fields/paths commonly used:
+     - coach, manager, head_coach, trainer
+     - within <team> node: <coach>, <manager>
+     - sometimes nested: team.coach.name / team.manager.name
+   - Capture:
+     - managerId (Goalserve coach id if present)
+     - managerName (string)
+     - managerCountry (string if present)
+3) UPSERT into managers table:
+   - If managerId exists: use it as primary id.
+   - If managerId is missing: derive id as:
+     - `mgr_${teamId}_${normalizedName}` where normalizedName is slugified, ascii-normalized (strip accents), lowercased.
+   - Always set teamId = current team’s Goalserve id.
+   - Always compute slug:
+     - slugify(name)
+     - if slug already used by a different id, suffix with `-${id.slice(-6)}` or similar stable suffix.
+4) Ensure ingestion is idempotent and safe:
+   - If a manager changes team, update teamId (this is the whole point).
+   - If a team feed returns no manager, do NOT delete existing managers; just skip update for that team.
+
+D) STORAGE LAYER METHODS
+In storage.ts (or equivalent repository):
+- add methods:
+  - upsertManager(manager)
+  - upsertManagers(managers[])
+  - getAllManagers()
+  - getManagersByTeamId(teamId)
+  - (optional) getManagerBySlug(slug)
+Follow existing patterns used for players/teams (drizzle insert ... onConflictDoUpdate if available).
+
+E) API ROUTES
+In the API routes file:
+- Add:
+  - GET /api/managers => returns all managers (optionally supports ?teamId=)
+  - GET /api/teams/:teamId/managers => returns managers for a team (or just support query param on /api/managers)
+- Return minimal JSON:
+  - [{ id, name, country, teamId, slug }]
+
+F) ARTICLE ENTITY SUPPORT (DON’T GUESS MANAGERS)
+- Remove any hardcoded KNOWN_MANAGERS logic if it still exists.
+- Article page already expects entityManagers arrays when present.
+- Ensure the article API response for a single article continues to include:
+  - entityTeams, entityPlayers, entityManagers
+- If a junction table for article-managers exists, leave as-is.
+- If it does NOT exist, create article_managers junction table:
+  - articleId, managerId
+  - unique constraint on (articleId, managerId)
+  - add storage methods to attach managers when importing/processing article tags (see next step).
+
+G) OPTIONAL (BUT VERY VALUABLE): AUTO-LINK MANAGERS TO ARTICLES VIA TAG MATCHING
+When building article entities (where you already link teams/players via tags):
+- Add manager linking:
+  - Normalize strings (lowercase + strip accents) so “Mikel Arteta” matches reliably.
+  - Match tags against managers.name
+  - Insert into article_managers junction (de-dupe)
+This will immediately populate entityManagers for existing articles without manual work.
+
+H) LOGGING + SAFETY
+- Add console.debug logs behind an environment guard if one exists (e.g., DEBUG_INGESTION).
+- Avoid breaking existing ingestion; if manager extraction fails for a team, catch and continue.
+
+I) QUICK VERIFICATION (NO E2E)
+- Add a quick manual check:
+  - Run ingestion once
+  - Hit /api/managers and confirm non-empty list (assuming Goalserve provides coach fields for at least some teams)
+  - Verify a known team returns a manager (e.g., Arsenal => Arteta) if present in feed
+  - Confirm no runtime errors in article page.
+
+DELIVERABLES
+- Implement code changes across:
+  - drizzle schema/migration (if needed)
+  - ingestion job/service
+  - storage.ts methods
+  - routes
+  - article entity linking (optional step G highly recommended)
+- Keep diffs clean and consistent with existing style.
+- After implementation, print a short summary of files changed and how to verify (endpoints + sample curl).
+
+IMPORTANT
+- Do not invent fake Goalserve endpoints. Inspect the existing Goalserve fetch code and extend it to parse manager fields from the responses you already have.
+- If the feed is XML, parse with the project’s existing XML parser. If JSON, follow that structure.
+- Use accent-stripping normalization when matching names.
+
+Now implement this.
+
+---
+

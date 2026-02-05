@@ -33,6 +33,7 @@ import { testGoalserveConnection } from "./jobs/test-goalserve";
 import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
+import { syncGoalserveManagers } from "./jobs/sync-goalserve-managers";
 import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
@@ -115,7 +116,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== MANAGERS ==========
   app.get("/api/managers", async (req, res) => {
     try {
-      const managers = await storage.getAllManagers();
+      const { teamId } = req.query;
+      let managers;
+      if (teamId && typeof teamId === "string") {
+        managers = await storage.getManagersByTeamId(teamId);
+      } else {
+        managers = await storage.getAllManagers();
+      }
       res.json(managers);
     } catch (error) {
       console.error("Error fetching managers:", error);
@@ -133,6 +140,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching manager:", error);
       res.status(500).json({ error: "Failed to fetch manager" });
+    }
+  });
+
+  app.get("/api/teams/:teamId/managers", async (req, res) => {
+    try {
+      const managers = await storage.getManagersByTeamId(req.params.teamId);
+      res.json(managers);
+    } catch (error) {
+      console.error("Error fetching team managers:", error);
+      res.status(500).json({ error: "Failed to fetch team managers" });
     }
   });
 
@@ -1419,6 +1436,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const leagueId = String(req.query.leagueId || "1204");
       const result = await syncGoalservePlayers(leagueId);
+      res.json(result);
+    }
+  );
+
+  // ========== GOALSERVE MANAGERS SYNC ==========
+  app.post(
+    "/api/jobs/sync-goalserve-managers",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = String(req.query.leagueId || "1204");
+      const result = await syncGoalserveManagers(leagueId);
       res.json(result);
     }
   );

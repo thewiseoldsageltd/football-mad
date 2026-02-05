@@ -203,6 +203,100 @@ export class DatabaseStorage implements IStorage {
     return manager;
   }
 
+  async getManagersByTeamId(teamId: string): Promise<Manager[]> {
+    return db.select().from(managers).where(eq(managers.currentTeamId, teamId)).orderBy(managers.name);
+  }
+
+  async upsertManager(data: {
+    id?: string;
+    name: string;
+    slug: string;
+    nationality?: string | null;
+    imageUrl?: string | null;
+    currentTeamId?: string | null;
+    goalserveManagerId?: string | null;
+  }): Promise<Manager> {
+    const [manager] = await db
+      .insert(managers)
+      .values(data)
+      .onConflictDoUpdate({
+        target: managers.slug,
+        set: {
+          name: data.name,
+          nationality: data.nationality,
+          currentTeamId: data.currentTeamId,
+          goalserveManagerId: data.goalserveManagerId,
+        },
+      })
+      .returning();
+    return manager;
+  }
+
+  async upsertManagerByGoalserveId(data: {
+    name: string;
+    slug: string;
+    nationality?: string | null;
+    imageUrl?: string | null;
+    currentTeamId?: string | null;
+    goalserveManagerId: string;
+  }): Promise<Manager> {
+    const existing = await db.select().from(managers).where(eq(managers.goalserveManagerId, data.goalserveManagerId)).limit(1);
+    
+    if (existing.length > 0) {
+      const [updated] = await db
+        .update(managers)
+        .set({
+          name: data.name,
+          nationality: data.nationality,
+          currentTeamId: data.currentTeamId,
+        })
+        .where(eq(managers.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    
+    const [inserted] = await db
+      .insert(managers)
+      .values(data)
+      .onConflictDoNothing()
+      .returning();
+    
+    if (!inserted) {
+      const [found] = await db.select().from(managers).where(eq(managers.slug, data.slug)).limit(1);
+      if (found) {
+        const [updated] = await db
+          .update(managers)
+          .set({
+            currentTeamId: data.currentTeamId,
+            goalserveManagerId: data.goalserveManagerId,
+          })
+          .where(eq(managers.id, found.id))
+          .returning();
+        return updated;
+      }
+      throw new Error(`Manager with slug ${data.slug} not found after conflict`);
+    }
+    return inserted;
+  }
+
+  async upsertManagers(managerList: Array<{
+    name: string;
+    slug: string;
+    nationality?: string | null;
+    imageUrl?: string | null;
+    currentTeamId?: string | null;
+    goalserveManagerId: string;
+  }>): Promise<Manager[]> {
+    if (managerList.length === 0) return [];
+    
+    const results: Manager[] = [];
+    for (const data of managerList) {
+      const manager = await this.upsertManagerByGoalserveId(data);
+      results.push(manager);
+    }
+    return results;
+  }
+
   // Articles
   async getArticles(category?: string): Promise<Article[]> {
     if (category && category !== "all") {
