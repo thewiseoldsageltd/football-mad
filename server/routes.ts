@@ -5015,6 +5015,124 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     })();
   });
 
+  // GET /api/admin/inspect-goalserve-managers - Inspect Goalserve payloads for manager fields
+  app.get("/api/admin/inspect-goalserve-managers", async (req, res) => {
+    const ingestSecret = process.env.INGEST_SECRET;
+    const providedSecret = req.headers["x-ingest-secret"];
+    
+    if (!ingestSecret || providedSecret !== ingestSecret) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    try {
+      const { goalserveFetch } = await import("./integrations/goalserve/client");
+      const limit = Math.min(parseInt(req.query.limit as string) || 5, 20);
+      const leagueId = (req.query.leagueId as string) || "1204"; // Default: Premier League
+      
+      const response = await goalserveFetch(`soccerleague/${leagueId}`);
+      const teamData = response?.league?.team;
+      
+      if (!teamData) {
+        return res.json({
+          ok: false,
+          leagueId,
+          error: "No team data found at response.league.team",
+          availableKeys: response ? Object.keys(response) : [],
+          leagueKeys: response?.league ? Object.keys(response.league) : [],
+        });
+      }
+      
+      const teamArray = Array.isArray(teamData) ? teamData : [teamData];
+      const inspectionResults: any[] = [];
+      
+      const managerPaths = ["coach", "manager", "head_coach", "trainer", "@coach", "@manager"];
+      
+      for (const team of teamArray.slice(0, limit)) {
+        const teamId = String(team["@id"] ?? team.id ?? "");
+        const teamName = String(team["@name"] ?? team.name ?? "");
+        
+        const candidatePaths: { path: string; value: any; type: string }[] = [];
+        
+        for (const path of managerPaths) {
+          if (team[path] !== undefined && team[path] !== null) {
+            const val = team[path];
+            let extracted: any;
+            
+            if (typeof val === "string") {
+              extracted = { name: val };
+            } else if (typeof val === "object") {
+              extracted = {
+                id: val["@id"] ?? val.id ?? null,
+                name: val["@name"] ?? val.name ?? null,
+                nationality: val["@nationality"] ?? val.nationality ?? val.country ?? null,
+              };
+            } else {
+              extracted = val;
+            }
+            
+            candidatePaths.push({
+              path: `team.${path}`,
+              value: extracted,
+              type: typeof val,
+            });
+          }
+        }
+        
+        inspectionResults.push({
+          teamId,
+          teamName,
+          managerCandidatePathsFound: candidatePaths,
+          hasManagerData: candidatePaths.length > 0,
+        });
+      }
+      
+      const teamsWithManagers = inspectionResults.filter(r => r.hasManagerData).length;
+      
+      res.json({
+        ok: true,
+        leagueId,
+        teamsInspected: inspectionResults.length,
+        teamsWithManagerData: teamsWithManagers,
+        pathsChecked: managerPaths,
+        results: inspectionResults,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Inspection failed" });
+    }
+  });
+
+  // GET /api/admin/verify-managers - Verify managers are populated in database
+  app.get("/api/admin/verify-managers", async (req, res) => {
+    const ingestSecret = process.env.INGEST_SECRET;
+    const providedSecret = req.headers["x-ingest-secret"];
+    
+    if (!ingestSecret || providedSecret !== ingestSecret) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    try {
+      const allManagers = await db.select().from(managers);
+      const managersWithTeam = allManagers.filter(m => m.currentTeamId !== null);
+      
+      const sample = allManagers.slice(0, 10).map(m => ({
+        id: m.id,
+        name: m.name,
+        slug: m.slug,
+        currentTeamId: m.currentTeamId,
+        goalserveManagerId: m.goalserveManagerId,
+      }));
+      
+      res.json({
+        ok: true,
+        managersCount: allManagers.length,
+        managersWithTeamCount: managersWithTeam.length,
+        sample,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Verification failed" });
+    }
+  });
+
   // ========== GHOST WEBHOOK (Auto-sync from Ghost CMS) ==========
   // Subscribes to Ghost events: post.published, post.published.edited, post.unpublished, post.deleted
   // Configure in Ghost Admin > Integrations > Webhooks

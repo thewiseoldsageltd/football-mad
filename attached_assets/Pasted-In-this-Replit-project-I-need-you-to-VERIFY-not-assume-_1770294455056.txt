@@ -1,0 +1,51 @@
+In this Replit project, I need you to VERIFY (not assume) that Goalserve provides manager/coach data and that our sync job ingests it correctly.
+
+DO THIS:
+
+1) Add a small “Goalserve inspector” utility that fetches ONE known team payload and ONE league payload (whatever endpoints we already use for teams/players) and logs ONLY the relevant manager/coach fields.
+   - Do NOT invent new endpoints. Find the exact Goalserve fetch code currently used for team/player ingestion and reuse those same functions/config/env vars.
+   - For each fetched payload, console.log a compact object like:
+     {
+       teamId,
+       teamName,
+       managerCandidatePathsFound: [
+         { path: "team.coach.name", value: "..." },
+         { path: "team.manager", value: "..." }
+       ]
+     }
+   - Search for common variants: coach, manager, head_coach, trainer (including nested name/id/country).
+
+2) Add an admin-only API endpoint to run the inspector for a list of 5 Premier League teams (use existing team IDs already in our DB if possible).
+   - Example: GET /api/admin/inspect-goalserve-managers?limit=5
+   - Response should include the compact objects above.
+   - Keep it safe: hide secrets; don’t dump full payloads.
+
+3) Update the manager sync job so it uses the exact same parsing logic as the inspector:
+   - Extract goalserveManagerId if present, else derive deterministic id.
+   - Upsert managers and set currentTeamId/teamId.
+   - Must be idempotent and must update teamId when a manager changes clubs.
+
+4) Add a verification endpoint:
+   - GET /api/admin/verify-managers
+   - Returns:
+     {
+       managersCount,
+       managersWithTeamCount,
+       sample: [
+         { id, name, currentTeamId/teamId, slug }
+       ]
+     }
+
+5) After changes:
+   - Run the inspector first and confirm manager fields exist in Goalserve responses.
+   - Then run the sync job.
+   - Then call /api/admin/verify-managers and confirm managersCount > 0.
+   - If manager fields are NOT found in the responses we’re using, stop and report exactly what Goalserve returned (paths checked, none found) and recommend the correct existing feed in our codebase to use instead (team/squad endpoint).
+
+IMPORTANT:
+- Do not add E2E tests.
+- Keep diffs minimal and follow existing patterns in routes/storage/jobs.
+- Do not break existing team/player ingestion.
+- Do not print full Goalserve payloads; only log/return the small extracted structures and found paths.
+
+Implement now.
