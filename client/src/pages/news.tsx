@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
@@ -41,6 +41,7 @@ const MOCK_PLAYERS = [
 
 export default function NewsPage() {
   const [location] = useLocation();
+  const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuth();
   const { 
     filters, 
@@ -102,21 +103,46 @@ export default function NewsPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   
-  const { data: newsResponse, isLoading, refetch } = useQuery<NewsFiltersResponse>({
-    queryKey: ["/api/news", apiQueryString],
+  const queryKey = ["/api/news", apiQueryString] as const;
+  
+  const { data: newsResponse, isLoading, isFetching, status, error, refetch } = useQuery<NewsFiltersResponse>({
+    queryKey,
     queryFn: async () => {
       const separator = apiQueryString ? "&" : "?";
-      const res = await fetch(`/api/news${apiQueryString}${separator}limit=15`);
+      const url = `/api/news${apiQueryString}${separator}limit=15`;
+      if (import.meta.env.DEV) console.log("[news] queryFn: fetching", url);
+      const res = await fetch(url);
+      if (import.meta.env.DEV) console.log("[news] queryFn: response", res.status, res.ok);
       if (!res.ok) throw new Error("Failed to fetch news");
       return res.json();
     },
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnReconnect: true,
+    refetchOnWindowFocus: false,
+    retry: 1,
   });
+  
+  // DEV diagnostics on render
+  if (import.meta.env.DEV) {
+    console.log("[news] render", {
+      location,
+      apiQueryString,
+      queryKey,
+      status,
+      isLoading,
+      isFetching,
+      error: error?.message,
+      articlesCount: newsResponse?.articles?.length ?? null,
+    });
+  }
   
   // Refetch when navigating back to /news route
   useEffect(() => {
-    if (import.meta.env.DEV) console.log("[news] route changed, refetching", location);
+    if (import.meta.env.DEV) console.log("[news] location changed, invalidating + refetching", location);
+    queryClient.invalidateQueries({ queryKey: ["/api/news"] });
     refetch();
-  }, [location, refetch]);
+  }, [location, queryClient, refetch]);
   
   // Set articles from initial fetch response
   useEffect(() => {
@@ -652,7 +678,7 @@ export default function NewsPage() {
                 </section>
               )}
 
-              {isLoading ? (
+              {(isLoading || isFetching) && articles.length === 0 ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {Array.from({ length: 15 }).map((_, i) => (
                     <ArticleCardSkeleton key={i} />

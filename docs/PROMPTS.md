@@ -12798,3 +12798,43 @@ OUTPUT
 
 ---
 
+We still have the /news SPA bug: navigating away and back shows “No articles found…” until hard refresh. A prior change added useLocation + refetch() on location changes, but the bug persists (often no Network entries, no Console errors).
+
+TASK
+1) In client/src/pages/news.tsx (NewsPage), add proper diagnostics:
+   - log these values (DEV only) whenever the component renders and whenever location changes:
+     location, apiQueryString, queryKey, query status (status/isLoading/isFetching), error, and the number of articles in the response (if present).
+   - Add a DEV-only console.log inside the queryFn right before fetch() to prove whether it runs.
+   - Add a DEV-only console.log right after fetch resolves with status code.
+
+2) Make the data refresh deterministic when returning to /news:
+   - Import useQueryClient from @tanstack/react-query.
+   - On location change, call:
+       queryClient.invalidateQueries({ queryKey: ["/api/news"] });
+     then call refetch().
+   - Also set React Query options on the news query:
+       staleTime: 0,
+       refetchOnMount: "always",
+       refetchOnReconnect: true,
+       refetchOnWindowFocus: false,
+       retry: 1
+   - Keep changes minimal; do not refactor unrelated logic.
+
+3) Improve UX during refetch:
+   - Use isFetching to show a subtle “Loading…” state (or keep previous data visible) so it doesn’t instantly show “No articles…” while a fetch is pending.
+   - IMPORTANT: The “No articles found…” empty state should only show when:
+       !isLoading && !isFetching && (articles.length === 0)
+     (not when data is undefined during initial/transition fetch).
+
+4) Run `npm run build` and report success.
+
+OUTPUT
+- Show the minimal diff for client/src/pages/news.tsx (and any other file only if absolutely required).
+- Tell me what the debug logs should look like in the browser when:
+   a) first visiting /news
+   b) navigating away and back to /news
+
+No E2E tests. No videos.
+
+---
+
