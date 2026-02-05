@@ -1,6 +1,27 @@
 node_modules
 dist
+build
 .DS_Store
-server/public
-vite.config.ts.*
-*.tar.gz
+.env
+.env.*
+*.log
+.replit
+replit.nix
+.upm
+
+# Replit / runtime caches (can contain env + secrets)
+.cache
+.config
+.local
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Replit system folders
+attached_assets
+logs
+
+# Optional: keep repo clean
+*.sqlite
+*.db
