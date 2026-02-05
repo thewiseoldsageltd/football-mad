@@ -12838,3 +12838,42 @@ No E2E tests. No videos.
 
 ---
 
+You are working in a Replit workspace with a Git repo that can no longer `git push` to GitHub over HTTPS (error: Invalid username or token / password auth not supported). Fix GitHub auth for pushing, preferably using SSH keys.
+
+1) Show current Git remotes:
+   - run: git remote -v
+
+2) Set up SSH auth (preferred):
+   - If ~/.ssh/id_ed25519 does not exist, generate it:
+     ssh-keygen -t ed25519 -C "replit-football-mad" -f ~/.ssh/id_ed25519 -N ""
+   - Start ssh-agent and add the key:
+     eval "$(ssh-agent -s)"
+     ssh-add ~/.ssh/id_ed25519
+   - Print the public key and tell me to add it to GitHub:
+     cat ~/.ssh/id_ed25519.pub
+     (Explain: GitHub → Settings → SSH and GPG keys → New SSH key)
+   - Create/update ~/.ssh/config to avoid host prompts:
+     Host github.com
+       HostName github.com
+       User git
+       IdentityFile ~/.ssh/id_ed25519
+       IdentitiesOnly yes
+
+3) Switch the repo remote from HTTPS to SSH:
+   - run: git remote set-url origin git@github.com:thewiseoldsageltd/football-mad.git
+   - Verify: git remote -v
+
+4) Test SSH connection:
+   - run: ssh -T git@github.com
+   (If it asks to trust host, accept)
+
+5) Push the pending commits:
+   - run: git status
+   - run: git push -u origin main
+
+If SSH is blocked for any reason, fall back to PAT:
+- Ask me to create a GitHub Personal Access Token (classic) with repo scope.
+- Configure it via credential helper (don’t print the token), then push.
+
+---
+
