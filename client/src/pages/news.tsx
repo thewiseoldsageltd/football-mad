@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useState, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -39,6 +40,7 @@ const MOCK_PLAYERS = [
 ];
 
 export default function NewsPage() {
+  const [location] = useLocation();
   const { user, isAuthenticated } = useAuth();
   const { 
     filters, 
@@ -100,7 +102,7 @@ export default function NewsPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
   
-  const { data: newsResponse, isLoading } = useQuery<NewsFiltersResponse>({
+  const { data: newsResponse, isLoading, refetch } = useQuery<NewsFiltersResponse>({
     queryKey: ["/api/news", apiQueryString],
     queryFn: async () => {
       const separator = apiQueryString ? "&" : "?";
@@ -109,6 +111,12 @@ export default function NewsPage() {
       return res.json();
     },
   });
+  
+  // Refetch when navigating back to /news route
+  useEffect(() => {
+    if (import.meta.env.DEV) console.log("[news] route changed, refetching", location);
+    refetch();
+  }, [location, refetch]);
   
   // Set articles from initial fetch response
   useEffect(() => {

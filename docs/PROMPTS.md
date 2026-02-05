@@ -12777,3 +12777,24 @@ After applying the changes, confirm:
 
 ---
 
+You are working in a Node + React (Vite) app using wouter for routing. We have a bug on the /news page: if the user navigates away and then back to /news, there are no posts until a hard refresh. In Chrome DevTools, when the bug happens there are no Network requests and no Console errors. This suggests the News page fetch only runs on first mount (useEffect([])) and does not re-run when returning to the route in the SPA.
+
+TASK
+1) Find the News page component (likely client/src/pages/News.tsx or similar). Locate where it fetches articles (e.g. calling /api/news or using a query hook).
+2) Fix so the news fetch re-runs whenever the route changes back to /news (including query params like /news?comp=...).
+   - Since we use wouter, use `useLocation()` and include `location` in the dependency array of the effect that triggers the fetch.
+   - If the data fetch is abstracted behind a function like loadNews()/fetchNews()/refetch(), call that in the effect.
+3) Ensure the fix does NOT cause an infinite loop (e.g. avoid depending on state that the fetch updates).
+4) Add a small debug log in development only, like:
+   if (import.meta.env.DEV) console.log("[news] route changed, refetching", location);
+5) Run local checks:
+   - `npm run build` (or at minimum ensure TypeScript compiles and the app boots)
+   - Start dev server and verify: open /news, navigate to another page, then back to /news -> posts appear without hard refresh and a network call to /api/news is visible.
+
+OUTPUT
+- Tell me exactly which file(s) you changed and show the minimal diff.
+- Keep changes minimal; do not refactor unrelated code.
+- No E2E tests, no videos.
+
+---
+
