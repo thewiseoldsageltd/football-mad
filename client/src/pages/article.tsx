@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +35,7 @@ interface ArticleWithEntities extends Article {
   entityCompetitions?: (Pick<Competition, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
 }
 
-function CollapsibleEntityGroup({
+function EntityGroup({
   title,
   pills,
   testIdPrefix,
@@ -44,71 +44,13 @@ function CollapsibleEntityGroup({
   pills: EntityData[];
   testIdPrefix: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-  const [clampHeight, setClampHeight] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Measure pill height dynamically and compute row-based clamp
-  useEffect(() => {
-    if (!containerRef.current) return;
-    
-    const container = containerRef.current;
-    const firstPill = container.querySelector('[data-testid^="pill-bottom"]') as HTMLElement;
-    
-    if (firstPill) {
-      const pillHeight = firstPill.offsetHeight;
-      const gap = 8; // gap-2 = 0.5rem = 8px
-      const isMobile = window.innerWidth < 640;
-      
-      // Mobile: 1 row, Desktop: 2 rows
-      const rows = isMobile ? 1 : 2;
-      const height = rows * pillHeight + (rows - 1) * gap;
-      setClampHeight(height);
-      
-      // Check if full content exceeds clamped height
-      requestAnimationFrame(() => {
-        const fullHeight = container.scrollHeight;
-        setIsOverflowing(fullHeight > height);
-      });
-    }
-    
-    // Re-check on resize using ResizeObserver
-    const observer = new ResizeObserver(() => {
-      const firstPill = container.querySelector('[data-testid^="pill-bottom"]') as HTMLElement;
-      if (firstPill) {
-        const pillHeight = firstPill.offsetHeight;
-        const gap = 8;
-        const isMobile = window.innerWidth < 640;
-        const rows = isMobile ? 1 : 2;
-        const height = rows * pillHeight + (rows - 1) * gap;
-        setClampHeight(height);
-        
-        requestAnimationFrame(() => {
-          const fullHeight = container.scrollHeight;
-          setIsOverflowing(fullHeight > height);
-        });
-      }
-    });
-    
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, [pills]);
-  
   if (pills.length === 0) return null;
-  
-  // Dynamic row-based clamp using measured pill height
-  const containerStyle = !expanded && clampHeight 
-    ? { maxHeight: `${clampHeight}px`, overflow: 'hidden' as const }
-    : {};
   
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-2">{title}</p>
       <div 
-        ref={containerRef}
-        className="flex flex-wrap gap-2 transition-[max-height] duration-200"
-        style={containerStyle}
+        className="flex flex-wrap gap-2"
         data-testid={`entity-group-${testIdPrefix}`}
       >
         {pills.map((pill) => (
@@ -116,30 +58,11 @@ function CollapsibleEntityGroup({
             key={pill.slug}
             entity={pill}
             size="small"
-            responsiveLabel={pill.type === "competition" || pill.type === "team"}
+            labelMode="full"
             data-testid={`pill-bottom-${testIdPrefix}-${pill.slug}`}
           />
         ))}
       </div>
-      {(isOverflowing || expanded) && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="mt-2 text-xs text-primary hover:underline flex items-center gap-1"
-          data-testid={`toggle-${testIdPrefix}`}
-        >
-          {expanded ? (
-            <>
-              <ChevronUp className="w-3 h-3" />
-              Show less
-            </>
-          ) : (
-            <>
-              <ChevronDown className="w-3 h-3" />
-              Show more ({pills.length})
-            </>
-          )}
-        </button>
-      )}
     </div>
   );
 }
@@ -851,7 +774,7 @@ export default function ArticlePage() {
                     <EntityPill
                       entity={competitionPills[0]}
                       size="default"
-                      responsiveLabel
+                      labelMode="responsive"
                       data-testid="pill-competition"
                     />
                   )}
@@ -860,7 +783,7 @@ export default function ArticlePage() {
                       key={pill.slug}
                       entity={pill}
                       size="default"
-                      responsiveLabel
+                      labelMode="responsive"
                       data-testid={`pill-team-${pill.slug}`}
                     />
                   ))}
@@ -918,22 +841,22 @@ export default function ArticlePage() {
               <section className="mb-8 py-6 border-t" data-testid="in-this-article-section">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
-                  <CollapsibleEntityGroup
+                  <EntityGroup
                     title="Competitions"
                     pills={competitionPills}
                     testIdPrefix="competition"
                   />
-                  <CollapsibleEntityGroup
+                  <EntityGroup
                     title="Teams"
                     pills={teamPills}
                     testIdPrefix="team"
                   />
-                  <CollapsibleEntityGroup
+                  <EntityGroup
                     title="Players"
                     pills={playerPills}
                     testIdPrefix="player"
                   />
-                  <CollapsibleEntityGroup
+                  <EntityGroup
                     title="Managers"
                     pills={managerPills}
                     testIdPrefix="manager"
