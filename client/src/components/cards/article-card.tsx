@@ -47,9 +47,8 @@ function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
   
   if (topPills.optionalThirdPill) {
     const entity = topPills.optionalThirdPill;
-    const isPlayer = entity.source === "mention" || entity.source === "tag";
     pills.push({
-      type: isPlayer ? "player" : "manager",
+      type: entity.entityType === "manager" ? "manager" : "player",
       name: entity.name,
       slug: entity.slug,
       fallbackText: entity.name.slice(0, 2).toUpperCase(),

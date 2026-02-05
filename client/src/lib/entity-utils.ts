@@ -9,6 +9,7 @@ export interface ScoredEntity {
   logoUrl?: string | null;
   source: "tag" | "mention" | "fallback";
   score: number;
+  entityType?: "competition" | "team" | "player" | "manager";
 }
 
 export interface EntitySets {
@@ -120,29 +121,42 @@ export function buildEntitySets(
           slug,
           source: "tag",
           score: 100 - tagIndex,
+          entityType: "competition",
         });
       }
     }
   }
   
-  // Check if article.competition is mentioned in body/excerpt (for fallback)
+  // Check article.competition for mention or fallback addition
   const articleComp = article.competition;
   if (articleComp) {
     const compSlug = slugify(articleComp);
-    const hasCompetitionTags = result.competitions.length > 0;
     const isMentioned = 
       (article.excerpt && textContains(article.excerpt, articleComp)) ||
       (article.content && textContains(article.content, articleComp));
     
-    // Only add as fallback if no competition tags AND it's mentioned
-    if (!hasCompetitionTags && isMentioned && !seenCompetitions.has(compSlug)) {
-      seenCompetitions.add(compSlug);
-      result.competitions.push({
-        name: articleComp,
-        slug: compSlug,
-        source: "fallback",
-        score: 10,
-      });
+    if (!seenCompetitions.has(compSlug)) {
+      if (isMentioned) {
+        // If mentioned in body/excerpt, add with score=60 (mention)
+        seenCompetitions.add(compSlug);
+        result.competitions.push({
+          name: articleComp,
+          slug: compSlug,
+          source: "mention",
+          score: 60,
+          entityType: "competition",
+        });
+      } else {
+        // Pure fallback (not tagged, not mentioned) - only for header pill selection
+        seenCompetitions.add(compSlug);
+        result.competitions.push({
+          name: articleComp,
+          slug: compSlug,
+          source: "fallback",
+          score: 10,
+          entityType: "competition",
+        });
+      }
     }
   }
   
@@ -164,6 +178,7 @@ export function buildEntitySets(
         logoUrl: team.logoUrl,
         source: "tag",
         score: 100 - tagIndex,
+        entityType: "team",
       });
     }
   }
@@ -179,6 +194,7 @@ export function buildEntitySets(
           slug: p.slug,
           source: "mention",
           score: 60,
+          entityType: "player",
         });
       }
     }
@@ -197,6 +213,7 @@ export function buildEntitySets(
           slug: player.slug,
           source: "tag",
           score: 100 - tagIndex,
+          entityType: "player",
         });
       }
     }
@@ -213,6 +230,7 @@ export function buildEntitySets(
           slug: m.slug,
           source: "mention",
           score: 60,
+          entityType: "manager",
         });
       }
     }
@@ -231,6 +249,7 @@ export function buildEntitySets(
           slug: manager.slug,
           source: "tag",
           score: 100 - tagIndex,
+          entityType: "manager",
         });
       }
     }

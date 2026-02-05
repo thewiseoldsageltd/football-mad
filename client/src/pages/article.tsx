@@ -341,7 +341,7 @@ function ShareButtonsInline({
 
 function RightRail({
   article,
-  teams,
+  articleTeams,
   relatedArticles,
   articleUrl,
   followedTeamIds,
@@ -350,7 +350,7 @@ function RightRail({
   isAuthenticated,
 }: {
   article: Article;
-  teams: Team[];
+  articleTeams: Team[];
   relatedArticles: Article[];
   articleUrl: string;
   followedTeamIds: string[];
@@ -358,7 +358,6 @@ function RightRail({
   isFollowing: boolean;
   isAuthenticated: boolean;
 }) {
-  const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
   const primaryTeam = articleTeams[0];
   const isFollowed = primaryTeam ? followedTeamIds.includes(primaryTeam.id) : false;
 
@@ -454,7 +453,7 @@ function RightRail({
 
 function MobileBottomBar({
   article,
-  teams,
+  articleTeams,
   articleUrl,
   followedTeamIds,
   onFollow,
@@ -462,7 +461,7 @@ function MobileBottomBar({
   isAuthenticated,
 }: {
   article: Article;
-  teams: Team[];
+  articleTeams: Team[];
   articleUrl: string;
   followedTeamIds: string[];
   onFollow: (teamId: string) => void;
@@ -478,7 +477,6 @@ function MobileBottomBar({
     setHasNativeShare(typeof navigator !== "undefined" && !!navigator.share);
   }, []);
 
-  const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
   const primaryTeam = articleTeams[0];
   const isFollowed = primaryTeam ? followedTeamIds.includes(primaryTeam.id) : false;
 
@@ -1010,7 +1008,7 @@ export default function ArticlePage() {
 
           <RightRail
             article={article}
-            teams={teams}
+            articleTeams={articleTeams}
             relatedArticles={relatedArticles}
             articleUrl={articleUrl}
             followedTeamIds={followedTeamIds}
@@ -1023,7 +1021,7 @@ export default function ArticlePage() {
 
       <MobileBottomBar
         article={article}
-        teams={teams}
+        articleTeams={articleTeams}
         articleUrl={articleUrl}
         followedTeamIds={followedTeamIds}
         onFollow={(teamId) => followMutation.mutate(teamId)}

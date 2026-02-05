@@ -121,7 +121,35 @@ ORDER BY team_count + player_count DESC
 LIMIT 5;
 ```
 
+### Entity Selection Utilities
+The shared utility `client/src/lib/entity-utils.ts` provides consistent entity pill logic:
+
+```typescript
+// Scoring system (higher = more prominent)
+tag = 100       // Entity appears in article tags
+mention = 60    // Entity mentioned in body/excerpt
+fallback = 10   // Fallback only (e.g., article.competition)
+
+// API functions
+buildEntitySets(article, teams, players, managers, backendPlayers, backendManagers)
+  → { competitions, teams, players, managers } with source/score
+
+selectTopPills(entitySets)
+  → { competitionPill, teamPills, personPill } for card/header use
+```
+
 ### Frontend Behavior Notes
-- **Footer entity pills**: Competitions and teams are derived from article tags (tag-based). Players and managers use backend entityPlayers/entityManagers with salience scoring.
-- **Header pills**: Use article.competition field and matched tags only (tag-based, no backend entities).
+- **Footer entity pills**: Show all entities from each group, sorted by score (highest first) then alphabetically. Exclude fallback competitions (e.g., Premier League not in tags).
+- **Header/card pills**: Use `selectTopPills` for consistent behavior: 1 competition + up to 2 teams + optional player/manager (if score >= 60).
+- **Fallback competition exclusion**: Competitions only appear in footer if they're tagged (score >= 100) or explicitly mentioned in body (score = 60). The `article.competition` field alone (score = 10) is insufficient.
 - **Collapsible groups**: CSS-based height clamp with overflow detection. Mobile shows ~1 row, desktop shows ~2 rows when collapsed. "Show more" button appears only when content overflows.
+
+### Verification: Entity Selection
+```bash
+# Check that fallback competitions are excluded (Premier League not in tags = excluded)
+curl -s "http://localhost:5000/api/articles?limit=5" | jq '[ .[] | select(.competition == "Premier League") | {
+  slug: .slug[0:60],
+  competition: .competition,
+  competitionInTags: (.tags | any(. | ascii_downcase | contains("premier")))
+}][:3]'
+```
