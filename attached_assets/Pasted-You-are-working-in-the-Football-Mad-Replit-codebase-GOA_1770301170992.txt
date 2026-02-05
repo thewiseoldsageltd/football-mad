@@ -1,0 +1,96 @@
+You are working in the Football Mad Replit codebase.
+
+GOAL
+Fix “Premier League” showing as a default pill on /news (even for Scottish articles), and ensure article pages/cards do NOT show any pills if we genuinely can’t determine them from tags/mentions. Scottish articles currently show zero pills because we’re over-relying on DB-backed entities; we need a tags-first fallback that can render competition/team pills from tags even when we don’t have those entities seeded in the DB.
+
+CONTEXT
+- We have entities for Competitions/Teams/Players/Managers (Goalserve-backed), and we also have Ghost/PA editorial tags mapped into article.tags.
+- Current bug: “Premier League” appears everywhere (pollution/default).
+- Also: some Scottish articles show no pills at all (header/footer/cards).
+
+REQUIREMENTS
+1) Remove “Premier League” as a default/fallback pill everywhere (cards/header/footer).
+   - Only show a competition pill if it is:
+     a) explicitly present as a tag (preferred), OR
+     b) explicitly mentioned in title/excerpt/body (mention-extraction), OR
+     c) backed by DB entity links (entityCompetitions) with non-fallback score.
+   - If none of the above, show NO competition pill (do not default to PL).
+
+2) Tags-first competition & team fallback (even when DB entities are missing)
+   - For CARDS and ARTICLE HEADER:
+     - Derive pills from tags first:
+       - Competition(s): competition-like tags (e.g., “Carabao Cup”, “SPFL Premiership”, “Scottish Cup”, “UEFA Champions League”, etc.)
+       - Teams: team-like tags where possible (e.g., “Man City”, “Hibernian”, “Dundee United”)
+     - If tags don’t provide enough, then use DB entity links (entityTeams/entityPlayers/entityManagers) and mention-extraction.
+   - For “In this article” footer:
+     - Competitions + Teams: prefer tags and then DB links, then mention-extraction.
+     - Players + Managers: prefer DB links / mention-extraction (as we already do).
+
+3) Shortcodes:
+   - Keep current behavior: header pills use shortcodes on mobile, full labels on desktop.
+   - Cards should ALWAYS show full labels (desktop & mobile).
+   - Footer should show FULL labels (no clamping, no “Show more”).
+
+4) Ordering:
+   - Cards/header order: [Competition] then [Team A] [Team B] then (optionally) 1 player if no teams found.
+   - “In this article” groups: Competitions, Teams, Players, Managers.
+   - Within groups: prefer tag-derived first, then entity-linked, then mention-derived; sort by score desc then alpha.
+
+IMPLEMENTATION PLAN
+A) Audit where “Premier League” is being defaulted
+- Search across client/server for any fallback like:
+  - “Premier League” hardcoded
+  - article.league default
+  - article.competition default
+  - buildEntitySets/addFallbackCompetition logic
+- Fix at the SOURCE if possible:
+  - In ingestion/webhook mapping: do not set competition to “Premier League” when unknown. Use null/undefined.
+  - Keep article.league if it’s a separate metadata field, but do NOT automatically turn it into a competition pill.
+
+B) Update client/src/lib/entity-utils.ts
+- Ensure buildEntitySets does NOT inject fallbackCompetition = “Premier League”.
+- Add helpers:
+  1) normalizeText(s) (already have accents normalization in places; reuse)
+  2) extractCompetitionTags(article.tags): returns an array of { name, slug?, shortCode?, source:"tag", score:100, entityType:"competition" }
+  3) extractTeamTags(article.tags): returns an array of { name, slug?, shortCode?, source:"tag", score:100, entityType:"team" }
+- Competition tag detection:
+  - Prefer explicit structured tags if present (e.g., tag group/type field). If tags are plain strings, implement a robust heuristic list:
+    - Known competition names and common patterns:
+      - contains “Premier League”, “Championship”, “League One”, “League Two”
+      - contains “SPFL”, “Scottish”, “FA Cup”, “Carabao”, “EFL Cup”, “Europa”, “Champions League”, “Conference League”, “Copa”, “La Liga”, etc.
+    - Maintain a constant COMPETITION_TAG_ALIASES mapping for shortcodes (EPL, UCL, UEL, UECL, CC, FAC, SC, SPL, etc.) but do NOT require it to match; if no shortcode known, still show full label on desktop.
+- Team tag detection:
+  - If you have team entities loaded on the page (teams query exists), match tags against known teams (normalize both sides).
+  - If you don’t have teams list on /news, still attempt a heuristic:
+    - Detect tags that match common club names from the teams endpoint (fetch teams once in /news and cache via react-query).
+    - If no match, don’t guess (avoid false positives).
+- IMPORTANT: Avoid using article.competition or article.league as a pill unless it is also:
+  - in tags OR mentioned in the content OR backed by entity link with score >= 60.
+
+C) Apply unified selection to:
+- client/src/components/article-card.tsx (cards)
+- client/src/pages/article.tsx (header pills + footer groups)
+
+D) Verify Scottish articles:
+- If they have competition tags like “SPFL Premiership” or “Scottish Cup”, cards/header should show those instead of PL.
+- If they have team tags (Hibernian, Dundee United), show them; otherwise show just the competition.
+
+E) Add verification commands in replit.md
+- Include curls to fetch a Scottish article JSON and confirm tags include competition string.
+- Provide manual checks for /news and an SPFL article page.
+
+DELIVERABLE
+Make the code changes with minimal disruption and ensure builds pass.
+
+AFTER IMPLEMENTING, VERIFY THESE CASES
+1) Marc Guehi Carabao Cup article:
+- Card pills: Carabao Cup, Man City (full labels on desktop)
+- Header pills: CC + MCI on mobile; full on desktop
+- Footer: Competitions includes Carabao Cup (full), Teams includes Man City (full), Players/Managers from mentions/entities.
+
+2) A Scottish article like “Hibernian leave it late…”:
+- Card pills should NOT show Premier League.
+- If tag exists: show “SPFL Premiership” (or correct Scottish competition) as competition pill.
+- Header/footer should have competition pills; teams only if tags/entities can reliably identify them.
+
+Please implement now. Do not add new “Overall” UI or extra dropdowns. Keep changes focused to pill selection + ingestion default removal. No E2E testing or videos.

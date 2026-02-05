@@ -34,16 +34,31 @@ function slugify(name: string): string {
 }
 
 const KNOWN_COMPETITIONS = [
+  // English
   "Premier League", "Championship", "League One", "League Two",
   "Carabao Cup", "FA Cup", "EFL Cup", "League Cup",
+  // Scottish
+  "SPFL Premiership", "Scottish Premiership", "SPL",
+  "Scottish Championship", "Scottish League One", "Scottish League Two",
+  "Scottish Cup", "Scottish League Cup",
+  // European
   "Champions League", "UEFA Champions League",
   "Europa League", "UEFA Europa League",
   "Conference League", "UEFA Europa Conference League",
+  // Other major leagues
   "La Liga", "Serie A", "Bundesliga", "Ligue 1",
-  "DFB Pokal", "Copa del Rey", "Coppa Italia", "Coupe de France"
+  "Eredivisie", "Primeira Liga", "Portuguese Primeira Liga",
+  // Domestic cups
+  "DFB Pokal", "Copa del Rey", "Coppa Italia", "Coupe de France",
+  "KNVB Cup", "Taca de Portugal",
+  // International
+  "World Cup", "FIFA World Cup", "Euros", "European Championship",
+  "Nations League", "UEFA Nations League",
+  "Copa America", "Africa Cup of Nations", "AFCON",
 ];
 
 const COMP_SHORT_CODES: Record<string, string> = {
+  // English
   "Premier League": "EPL",
   "Championship": "EFL",
   "League One": "L1",
@@ -52,16 +67,44 @@ const COMP_SHORT_CODES: Record<string, string> = {
   "EFL Cup": "CC",
   "League Cup": "CC",
   "FA Cup": "FAC",
+  // Scottish
+  "SPFL Premiership": "SPFL",
+  "Scottish Premiership": "SPFL",
+  "SPL": "SPL",
+  "Scottish Championship": "SCH",
+  "Scottish League One": "SL1",
+  "Scottish League Two": "SL2",
+  "Scottish Cup": "SC",
+  "Scottish League Cup": "SLC",
+  // European
   "Champions League": "UCL",
   "UEFA Champions League": "UCL",
   "Europa League": "UEL",
   "UEFA Europa League": "UEL",
   "Conference League": "UECL",
   "UEFA Europa Conference League": "UECL",
+  // Other leagues
   "La Liga": "LaLi",
   "Serie A": "SerA",
   "Bundesliga": "BuLi",
-  "Ligue 1": "L1",
+  "Ligue 1": "Lg1",
+  "Eredivisie": "ERE",
+  "Primeira Liga": "PrLi",
+  // Cups
+  "DFB Pokal": "DFB",
+  "Copa del Rey": "CdR",
+  "Coppa Italia": "CIt",
+  "Coupe de France": "CdF",
+  // International
+  "World Cup": "WC",
+  "FIFA World Cup": "WC",
+  "Euros": "EUR",
+  "European Championship": "EUR",
+  "Nations League": "NL",
+  "UEFA Nations League": "UNL",
+  "Copa America": "CA",
+  "Africa Cup of Nations": "AFCON",
+  "AFCON": "AFCON",
 };
 
 export function getCompShortCode(name: string): string {
@@ -109,6 +152,7 @@ export function buildEntitySets(
   const seenManagers = new Set<string>();
   
   // 1. COMPETITIONS: Tag matches first (score=100)
+  // First pass: exact matches against known competitions
   for (const comp of KNOWN_COMPETITIONS) {
     const normalizedComp = normalizeText(comp);
     const tagIndex = normalizedTags.findIndex(t => t === normalizedComp);
@@ -123,6 +167,46 @@ export function buildEntitySets(
           score: 100 - tagIndex,
           entityType: "competition",
         });
+      }
+    }
+  }
+  
+  // Second pass: pattern-based detection for tags containing competition keywords
+  const COMP_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
+    { pattern: /\bspfl\b/i, name: "SPFL Premiership" },
+    { pattern: /\bscottish\s+premiership\b/i, name: "Scottish Premiership" },
+    { pattern: /\bscottish\s+cup\b/i, name: "Scottish Cup" },
+    { pattern: /\bscottish\s+league\s+cup\b/i, name: "Scottish League Cup" },
+    { pattern: /\bchampions\s+league\b/i, name: "Champions League" },
+    { pattern: /\beuropa\s+league\b/i, name: "Europa League" },
+    { pattern: /\bconference\s+league\b/i, name: "Conference League" },
+    { pattern: /\bcarabao\s+cup\b/i, name: "Carabao Cup" },
+    { pattern: /\befl\s+cup\b/i, name: "Carabao Cup" },
+    { pattern: /\bleague\s+cup\b/i, name: "Carabao Cup" },
+    { pattern: /\bfa\s+cup\b/i, name: "FA Cup" },
+    { pattern: /\bpremier\s+league\b/i, name: "Premier League" },
+    { pattern: /\bla\s+liga\b/i, name: "La Liga" },
+    { pattern: /\bserie\s+a\b/i, name: "Serie A" },
+    { pattern: /\bbundesliga\b/i, name: "Bundesliga" },
+    { pattern: /\bligue\s+1\b/i, name: "Ligue 1" },
+  ];
+  
+  for (let tagIdx = 0; tagIdx < tags.length; tagIdx++) {
+    const tag = tags[tagIdx];
+    for (const { pattern, name } of COMP_PATTERNS) {
+      if (pattern.test(tag)) {
+        const slug = slugify(name);
+        if (!seenCompetitions.has(slug)) {
+          seenCompetitions.add(slug);
+          result.competitions.push({
+            name,
+            slug,
+            source: "tag",
+            score: 100 - tagIdx,
+            entityType: "competition",
+          });
+        }
+        break; // Only match one pattern per tag
       }
     }
   }
@@ -276,7 +360,9 @@ export interface TopPills {
 }
 
 export function selectTopPills(entitySets: EntitySets): TopPills {
-  const competitionPill = entitySets.competitions[0] || null;
+  // Filter out fallback competitions (only show if tagged or mentioned)
+  const nonFallbackCompetitions = entitySets.competitions.filter(c => c.source !== "fallback");
+  const competitionPill = nonFallbackCompetitions[0] || null;
   const teamPills = entitySets.teams.slice(0, 2);
   
   // Optional third pill: highest-scoring player or manager with score >= 60
