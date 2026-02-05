@@ -1,6 +1,5 @@
 import { useMemo, useEffect, useState, useRef, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -40,8 +39,6 @@ const MOCK_PLAYERS = [
 ];
 
 export default function NewsPage() {
-  const [location] = useLocation();
-  const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuth();
   const { 
     filters, 
@@ -96,8 +93,8 @@ export default function NewsPage() {
 
   const apiQueryString = buildApiQueryString();
   
-  // Single source of truth for rendered articles list
-  const [articles, setArticles] = useState<any[]>([]);
+  // Extra articles loaded via "Load More" - appended to baseArticles from query
+  const [extraArticles, setExtraArticles] = useState<any[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -105,14 +102,12 @@ export default function NewsPage() {
   
   const queryKey = ["/api/news", apiQueryString] as const;
   
-  const { data: newsResponse, isLoading, isFetching, status, error, refetch } = useQuery<NewsFiltersResponse>({
+  const { data: newsResponse, isLoading, isFetching, isError, error } = useQuery<NewsFiltersResponse>({
     queryKey,
     queryFn: async () => {
       const separator = apiQueryString ? "&" : "?";
       const url = `/api/news${apiQueryString}${separator}limit=15`;
-      if (import.meta.env.DEV) console.log("[news] queryFn: fetching", url);
       const res = await fetch(url);
-      if (import.meta.env.DEV) console.log("[news] queryFn: response", res.status, res.ok);
       if (!res.ok) throw new Error("Failed to fetch news");
       return res.json();
     },
@@ -121,45 +116,38 @@ export default function NewsPage() {
     refetchOnReconnect: true,
     refetchOnWindowFocus: false,
     retry: 1,
+    placeholderData: (prev) => prev,
   });
   
-  // DEV diagnostics on render
+  // Derive articles directly from query response - React Query is single source of truth
+  const baseArticles = newsResponse?.articles ?? [];
+  
+  // Combine base articles with extra loaded articles (from "Load More")
+  const articles = useMemo(() => {
+    if (extraArticles.length === 0) return baseArticles;
+    const baseIds = new Set(baseArticles.map(a => a.id));
+    const uniqueExtra = extraArticles.filter(a => !baseIds.has(a.id));
+    return [...baseArticles, ...uniqueExtra];
+  }, [baseArticles, extraArticles]);
+  
+  // DEV diagnostics
   if (import.meta.env.DEV) {
-    console.log("[news] render", {
-      location,
-      apiQueryString,
-      queryKey,
-      status,
-      isLoading,
-      isFetching,
-      error: error?.message,
-      articlesCount: newsResponse?.articles?.length ?? null,
-    });
+    console.log("[news]", { apiQueryString, isLoading, isFetching, count: articles.length });
   }
   
-  // Refetch when navigating back to /news route
-  useEffect(() => {
-    if (import.meta.env.DEV) console.log("[news] location changed, invalidating + refetching", location);
-    queryClient.invalidateQueries({ queryKey: ["/api/news"] });
-    refetch();
-  }, [location, queryClient, refetch]);
-  
-  // Set articles from initial fetch response
+  // Sync pagination state from query response (only when we get fresh data, not on filter change)
+  const prevQueryKeyRef = useRef(apiQueryString);
   useEffect(() => {
     if (newsResponse) {
-      console.debug("[news] initial fetch", { count: newsResponse.articles?.length, hasMore: newsResponse.hasMore });
-      setArticles(newsResponse.articles || []);
+      // If filters changed, reset pagination state for the new query
+      if (prevQueryKeyRef.current !== apiQueryString) {
+        setExtraArticles([]);
+        prevQueryKeyRef.current = apiQueryString;
+      }
       setNextCursor(newsResponse.nextCursor);
       setHasMore(newsResponse.hasMore);
     }
-  }, [newsResponse]);
-  
-  // Reset state when filters change
-  useEffect(() => {
-    setArticles([]);
-    setNextCursor(null);
-    setHasMore(false);
-  }, [apiQueryString]);
+  }, [newsResponse, apiQueryString]);
   
   // Load more handler (single-flight to prevent duplicate requests)
   const [loadMoreSlowMessage, setLoadMoreSlowMessage] = useState(false);
@@ -229,12 +217,10 @@ export default function NewsPage() {
         throw new Error("Pagination returned the same cursor (no progress). Please retry.");
       }
       
-      // Append new articles, de-duping by id
-      setArticles(prev => {
-        const existingIds = new Set(prev.map(a => a.id));
-        const uniqueNew = data.articles.filter((a: any) => !existingIds.has(a.id));
-        return [...prev, ...uniqueNew];
-      });
+      // Append new articles to extraArticles, de-duping by id against all articles
+      const allExistingIds = new Set([...baseArticles.map(a => a.id), ...extraArticles.map(a => a.id)]);
+      const uniqueNew = data.articles.filter((a: any) => !allExistingIds.has(a.id));
+      setExtraArticles(prev => [...prev, ...uniqueNew]);
       setNextCursor(data.nextCursor ?? null);
       setHasMore(!!data.hasMore);
       setLoadMoreError(null);
@@ -255,40 +241,7 @@ export default function NewsPage() {
     }
   };
 
-  // Polling for incremental updates - merges into main articles list
-  useEffect(() => {
-    const POLL_INTERVAL = 60_000; // 60 seconds
-    
-    const fetchUpdates = async () => {
-      if (articles.length === 0) return;
-      
-      const newestArticle = articles[0];
-      const since = newestArticle.publishedAt || newestArticle.createdAt;
-      if (!since) return;
-      
-      try {
-        const url = `/api/news/updates?since=${encodeURIComponent(new Date(since).toISOString())}&sinceId=${encodeURIComponent(newestArticle.id)}&limit=50`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        
-        const data = await res.json();
-        if (data.articles && data.articles.length > 0) {
-          setArticles(prev => {
-            const existingIds = new Set(prev.map(a => a.id));
-            const uniqueNew = data.articles.filter((a: any) => !existingIds.has(a.id));
-            if (uniqueNew.length === 0) return prev;
-            // Prepend new articles at the top
-            return [...uniqueNew, ...prev];
-          });
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
-    };
-    
-    const intervalId = setInterval(fetchUpdates, POLL_INTERVAL);
-    return () => clearInterval(intervalId);
-  }, [articles]);
+  // Note: Polling removed - React Query's refetchOnMount handles refresh on navigation
 
   const { data: teams } = useQuery<Team[]>({
     queryKey: ["/api/teams"],

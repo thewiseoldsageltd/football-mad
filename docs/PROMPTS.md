@@ -12877,3 +12877,74 @@ If SSH is blocked for any reason, fall back to PAT:
 
 ---
 
+You are working in the repo at /home/runner/workspace.
+
+Problem:
+On /news, articles show on hard refresh but when navigating away and back via client-side routing, the page often shows "No articles found matching your filters." Network tab often shows no /api/news fetch. This suggests local UI state is being cleared on navigation and/or React Query is not keeping previous data, so the empty state wins.
+
+Goal:
+Make /news reliable on client-side navigation:
+- Always show the last known articles while refetching.
+- Never show "No articles..." unless the API truly returned zero for the current filters.
+- Avoid manual invalidate/refetch hacks that can race with filter reset effects.
+- Prefer React Query as the single source of truth.
+
+Tasks (implement in client/src/pages/news.tsx):
+1) Remove any local `articles` state that is derived from the query response IF it’s being cleared/reset in effects on navigation.
+   - If local state is needed for pagination/append, do NOT clear it on route changes; only update it when new query data arrives.
+
+2) Use a stable queryKey and enable "keep previous data" behaviour:
+   - Use TanStack Query v5 `placeholderData: (prev) => prev` to keep prior data visible when the queryKey changes (filters, route re-entry).
+   - Set `staleTime: 0` and `refetchOnMount: "always"` so returning to /news triggers a refetch, but without flashing empty.
+
+Example shape:
+
+const queryKey = ["/api/news", apiQueryString] as const;
+
+const {
+  data: newsResponse,
+  isLoading,
+  isFetching,
+  isError,
+  error
+} = useQuery<NewsFiltersResponse>({
+  queryKey,
+  queryFn: async () => {
+    const separator = apiQueryString ? "&" : "?";
+    const url = `/api/news${apiQueryString}${separator}limit=15`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Failed to fetch news");
+    return res.json();
+  },
+  staleTime: 0,
+  refetchOnMount: "always",
+  refetchOnReconnect: true,
+  refetchOnWindowFocus: false,
+  retry: 1,
+  placeholderData: (prev) => prev,
+});
+
+3) Derive the render lists directly from newsResponse (memoized if you like):
+   - const articles = newsResponse?.articles ?? [];
+   - Do NOT setArticles([]) in any effect tied to location/filter resets.
+   - If you have a "reset filters" effect, ensure it resets only filter UI state, not the query data.
+
+4) Fix the empty / loading UI conditions:
+   - Show skeleton when (isLoading && articles.length === 0)
+   - Keep articles visible when (isFetching && articles.length > 0)
+   - Only show "No articles..." when (!isLoading && !isFetching && articles.length === 0)
+
+5) Remove the location-based manual invalidateQueries/refetch useEffect if present.
+   - With refetchOnMount:"always" + staleTime:0, navigation back to /news should refetch naturally.
+   - Manual invalidation often causes races with filter-reset effects.
+
+6) Add small console diagnostics (DEV only) so we can see what’s happening:
+if (import.meta.env.DEV) console.log("[news]", { apiQueryString, isLoading, isFetching, count: articles.length });
+
+Then:
+- Run `npm run build` to ensure compilation.
+- Do not change server code.
+- No E2E tests. No videos.
+
+Finally, tell me exactly what you changed and show a minimal diff summary.
+
