@@ -12717,3 +12717,63 @@ AFTER IMPLEMENTING, VERIFY THESE CASES
 - Header/footer should have competition pills; teams only if tags/entities can reliably identify them.
 
 Please implement now. Do not add new “Overall” UI or extra dropdowns. Keep changes focused to pill selection + ingestion default removal. No E2E testing or videos.
+
+---
+
+We are deploying this app outside of Replit and the server is crashing at startup with:
+
+TypeError: "clientId" must be a non-empty string
+(from openid-client)
+
+This happens because Replit OIDC auth is being initialized even when the required environment variables (like REPL_ID / clientId) are not set.
+
+We want to make authentication OPTIONAL so the server can boot normally even if auth is not configured yet.
+
+Please do the following:
+
+1️⃣ Locate this file:
+server/replit_integrations/auth/replitAuth.ts
+
+2️⃣ Modify it so that OIDC auth is ONLY initialized if the required env vars exist.
+
+Specifically:
+- Before calling Issuer.discover()
+- Before creating new issuer.Client(...)
+- Before registering any passport Strategy
+
+Add a guard like this:
+
+--------------------------------
+const clientId = process.env.REPL_ID?.trim();
+
+if (!clientId) {
+  console.log("[auth] Replit OIDC not configured (missing REPL_ID). Skipping auth setup.");
+  return;
+}
+--------------------------------
+
+3️⃣ Keep all existing auth logic exactly the same AFTER that guard.
+Do NOT remove auth — just prevent it from running when not configured.
+
+4️⃣ Then find where this auth setup function is called (likely in server/index.ts).
+
+Wrap the call safely so it never crashes the server:
+
+--------------------------------
+try {
+  await configureReplitAuth(/* existing args */);
+} catch (err) {
+  console.error("[auth] Failed to init auth. Continuing without auth.", err);
+}
+--------------------------------
+
+5️⃣ Do NOT change any other functionality.
+We only want to:
+- Prevent crashes when REPL_ID (clientId) is missing
+- Allow the server to start without auth configured
+
+After applying the changes, confirm:
+"Auth is now optional. Server will start without OIDC configured."
+
+---
+

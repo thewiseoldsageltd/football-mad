@@ -49,8 +49,12 @@ const shareClickSchema = z.object({
 });
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
-  // Auth routes
-  await setupAuth(app);
+  // Auth routes - optional, server can start without auth configured
+  try {
+    await setupAuth(app);
+  } catch (err) {
+    console.error("[auth] Failed to init auth. Continuing without auth.", err);
+  }
 
   // ========== TEAMS ==========
   app.get("/api/teams", async (req, res) => {

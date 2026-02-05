@@ -61,6 +61,13 @@ async function upsertUser(claims: any) {
 }
 
 export async function setupAuth(app: Express) {
+  const clientId = process.env.REPL_ID?.trim();
+
+  if (!clientId) {
+    console.log("[auth] Replit OIDC not configured (missing REPL_ID). Skipping auth setup.");
+    return;
+  }
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
