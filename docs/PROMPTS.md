@@ -12455,3 +12455,86 @@ Implement now.
 
 ---
 
+You are working on Football Mad (React + Node/Express + DB). We have entity pills: Competitions, Teams, Players, Managers.
+
+PROBLEM:
+Premier League is showing as a default pill across /news cards, article header, and footer even when the article is about another competition (e.g. Carabao Cup) and "Premier League" is not mentioned. Also, pill order is inconsistent (mixed order).
+
+GOAL:
+Implement consistent, tag-first entity selection for cards + header, and tag-first + mention-supplemented grouping for the "In this article" footer.
+Remove "league fallback pollution" so Premier League only shows when supported by tags or mentions.
+Enforce stable ordering: Competitions → Teams → Players → Managers.
+
+REQUIREMENTS / RULES:
+
+A) NORMALIZATION + MATCHING
+- Add a shared normalizeText(str) helper used everywhere:
+  - lowercases
+  - trims
+  - removes diacritics (NFD) and non-alphanumerics except spaces
+  - collapses whitespace
+- Use it to match tags against known entity names/aliases.
+
+B) BUILD ENTITY SETS (SOURCES + SCORING)
+Create a single function on the server (preferred) or client (acceptable) that returns:
+{
+  competitions: Array<{id,name,slug,source,score}>,
+  teams: Array<{id,name,slug,shortName,source,score}>,
+  players: Array<{id,name,slug,source,score}>,
+  managers: Array<{id,name,slug,source,score}>
+}
+
+Sources and scores:
+- tag match: source="tag", score=100
+- extracted entity mention (existing entity linking / articleEntities): source="mention", score=60
+- article.competition fallback: source="fallback", score=10 (ONLY allowed if there are NO competition tags AND the competition is mentioned in body OR excerpt; otherwise DO NOT include it)
+- NEVER include Premier League (or any competition) solely due to article.competition if it is not supported by tag or mention.
+
+C) CARD + HEADER PILL SELECTION
+Implement a helper selectTopPills(articleEntities):
+- competitionPill: pick highest score competition (prefer tags). If multiple competitions have same score, pick the one that appears in tags first order.
+- teamPills: pick up to 2 teams, highest score first (prefer tags). Stable order using score desc then name asc.
+- optionalThirdPill: pick top player OR manager with highest score >=60 (mentions/tags only), else none.
+Return pills in strict order: [Competition] [Team A] [Team B] [Optional Player/Manager].
+On mobile, keep shortcodes (already implemented).
+
+D) FOOTER ("IN THIS ARTICLE") GROUPS
+Render 4 sections in this exact order, only if non-empty:
+Competitions, Teams, Players, Managers.
+Data rules:
+- Competitions: include tag competitions + mention competitions. Exclude fallback competitions unless supported as per rule B.
+- Teams: include tag teams + mention teams.
+- Players/Managers: include mention entities; include tag entities only if they match real players/managers.
+
+E) ORDER + DEDUPE
+- Deduplicate by entity id (preferred) or normalized name fallback.
+- Sorting within each group: score desc, then name asc.
+
+F) FIX CURRENT REGRESSION:
+- /news cards currently show Premier League as default. Remove this behavior.
+- Article header currently shows Premier League even when Carabao Cup is the tag. Fix so Carabao Cup wins if tagged.
+- Footer currently shows Premier League even when not mentioned. Fix using scoring rules above.
+
+G) IMPLEMENTATION LOCATION
+Preferred: do entity assembly server-side in the article API (e.g. getArticleWithEntities) so client only renders.
+If you keep any logic client-side, keep it in one place and reuse for cards/header/footer.
+
+H) TESTS / VERIFICATION (provide curl commands + expected behavior)
+Add/confirm endpoints:
+- GET /api/articles/:id (or slug) returns entities with sources+scores.
+- Use existing INGEST_SECRET auth header for admin endpoints if needed.
+
+Provide verification steps:
+1) For the "Marc Guehi unable to play..." article, ensure:
+   - Cards + Header show: [Carabao Cup] [Man City] [Marc Guehi] (player optional if detected strongly; if not, omit player)
+   - NOT Premier League unless it is in tags or mentioned.
+2) For a normal Arsenal Premier League article:
+   - Shows [Premier League] [Arsenal] [Opponent if tagged] and footer includes relevant players/managers.
+
+DELIVERABLES:
+- Implement the fix.
+- Point out the exact files changed.
+- Provide 3-5 curl commands and what I should see.
+- Ensure build passes and no hook-order errors (avoid conditional hooks; keep hooks stable).
+
+Proceed without asking me questions. No E2E tests or videos.

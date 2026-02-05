@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
+import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
 interface EntityWithProvenance {
@@ -713,77 +714,67 @@ export default function ArticlePage() {
     (article?.entityManagers?.length || 0) +
     (article?.entityCompetitions?.length || 0) > 0;
   
-  // Build entity pill arrays with fallback to tags when backend is empty
+  // Build entity pill arrays using shared utility with proper scoring
   // Must be called unconditionally (before early returns) per React hook rules
-  const { articleTeams, teamPills, competitionPills, playerPills, managerPills } = useMemo(() => {
+  const { teamPills, competitionPills, playerPills, managerPills, headerPills, articleTeams } = useMemo(() => {
     if (!article) {
-      return { articleTeams: [], teamPills: [], competitionPills: [], playerPills: [], managerPills: [] };
+      return { teamPills: [], competitionPills: [], playerPills: [], managerPills: [], headerPills: [], articleTeams: [] as Team[] };
     }
     
-    const tags = article.tags || [];
-    
-    // Helper to slugify a tag name for comparison
-    const slugify = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-    
-    // Helper to normalize text (remove accents, lowercase)
-    const normalize = (text: string) => 
-      text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    
-    // Competition short code mapping
-    const compShortCodes: Record<string, string> = {
-      "Premier League": "EPL",
-      "Championship": "EFL",
-      "League One": "L1",
-      "League Two": "L2",
-      "Carabao Cup": "CC",
-      "FA Cup": "FAC",
-      "Champions League": "UCL",
-      "UEFA Champions League": "UCL",
-      "Europa League": "UEL",
-      "UEFA Europa League": "UEL",
-      "Conference League": "UECL",
-      "UEFA Europa Conference League": "UECL",
-      "La Liga": "LaLi",
-      "Serie A": "SerA",
-      "Bundesliga": "BuLi",
-      "Ligue 1": "L1",
-    };
-    
-    // Helper to generate short code for competition
-    const getCompShortCode = (name: string): string => {
-      if (compShortCodes[name]) return compShortCodes[name];
-      // Fallback: first letters of words (ignore "the", "and", "of")
-      const ignore = ["the", "and", "of"];
-      const words = name.split(/\s+/).filter(w => !ignore.includes(w.toLowerCase()));
-      return words.map(w => w[0]?.toUpperCase() || "").join("").slice(0, 4);
-    };
-    
-    // Helper to generate short code for team
-    const getTeamShortCode = (team: { name: string; shortName?: string | null }): string => {
-      // Use shortName if available (e.g., "ARS" for Arsenal)
-      if (team.shortName && team.shortName.length <= 4) return team.shortName.toUpperCase();
-      const name = team.name;
-      const words = name.split(/\s+/);
-      if (words.length >= 2) {
-        // First letter of first 3 words (e.g., "Manchester City" => "MCI")
-        return words.slice(0, 3).map(w => w[0]?.toUpperCase() || "").join("");
-      }
-      // Single word: first 3 letters
-      return name.slice(0, 3).toUpperCase();
-    };
-    
-    // Build team list (always from tags - match tags against known teams by name or slug)
-    // Note: Backend entityTeams are available but we use tags as source-of-truth for teams
-    type TeamForPill = Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor" | "logoUrl">;
-    const resolvedTeams: TeamForPill[] = teams.filter(t => 
-      tags.some(tag => 
-        t.name.toLowerCase() === tag.toLowerCase() || 
-        t.slug === slugify(tag)
-      )
+    // Build entity sets with scoring (tag=100, mention=60, fallback=10)
+    const entitySets = buildEntitySets(
+      article,
+      teams,
+      players,
+      managers,
+      article.entityPlayers,
+      article.entityManagers
     );
     
-    // Convert teams to EntityData with shortLabel
-    const resolvedTeamPills: EntityData[] = resolvedTeams.map(t => ({
+    // Header pills: use selectTopPills for consistent card/header behavior
+    const topPills = selectTopPills(entitySets);
+    const resolvedHeaderPills: EntityData[] = [];
+    
+    if (topPills.competitionPill) {
+      const comp = topPills.competitionPill;
+      resolvedHeaderPills.push({
+        type: "competition" as const,
+        name: comp.name,
+        slug: comp.slug,
+        href: `/news?competition=${comp.slug}`,
+        iconUrl: `/crests/comps/${comp.slug}.svg`,
+        fallbackText: comp.name.slice(0, 2),
+        shortLabel: getCompShortCode(comp.name),
+      });
+    }
+    
+    for (const team of topPills.teamPills) {
+      resolvedHeaderPills.push({
+        type: "team" as const,
+        name: team.name,
+        slug: team.slug,
+        href: `/teams/${team.slug}`,
+        iconUrl: `/crests/teams/${team.slug}.svg`,
+        fallbackText: team.name.slice(0, 2).toUpperCase(),
+        color: team.primaryColor,
+        shortLabel: getTeamShortCode({ name: team.name, shortName: team.shortName }),
+      });
+    }
+    
+    // Footer pills: all entities from each group (excluding fallback for competitions)
+    const resolvedCompetitionPills: EntityData[] = entitySets.competitions
+      .filter(c => c.source !== "fallback") // Exclude fallback competitions from footer
+      .map(c => ({
+        type: "competition" as const,
+        name: c.name,
+        slug: c.slug,
+        href: `/news?competition=${c.slug}`,
+        iconUrl: `/crests/comps/${c.slug}.svg`,
+        fallbackText: c.name.slice(0, 2),
+        shortLabel: getCompShortCode(c.name),
+      }));
+    
+    const resolvedTeamPills: EntityData[] = entitySets.teams.map(t => ({
       type: "team" as const,
       name: t.name,
       slug: t.slug,
@@ -791,91 +782,42 @@ export default function ArticlePage() {
       iconUrl: `/crests/teams/${t.slug}.svg`,
       fallbackText: t.name.slice(0, 2).toUpperCase(),
       color: t.primaryColor,
-      shortLabel: getTeamShortCode(t),
+      shortLabel: getTeamShortCode({ name: t.name, shortName: t.shortName }),
     }));
     
-    // Build player pills (no shortLabel - players keep full names)
-    let resolvedPlayerPills: EntityData[] = [];
-    if (backendHasEntities && article.entityPlayers?.length) {
-      resolvedPlayerPills = article.entityPlayers.map(p => ({
-        type: "player" as const,
-        name: p.name,
-        slug: p.slug,
-        href: `/news?player=${p.slug}`,
-        fallbackText: p.name.slice(0, 2).toUpperCase(),
-      }));
-    } else {
-      // Fallback: match tags against known players (by name, normalized)
-      const matchedPlayers = players.filter(p =>
-        tags.some(tag => normalize(p.name) === normalize(tag))
-      );
-      resolvedPlayerPills = matchedPlayers.map(p => ({
-        type: "player" as const,
-        name: p.name,
-        slug: p.slug,
-        href: `/news?player=${p.slug}`,
-        fallbackText: p.name.slice(0, 2).toUpperCase(),
-      }));
-    }
-    
-    // Build manager pills (no shortLabel - managers keep full names)
-    let resolvedManagerPills: EntityData[] = [];
-    if (backendHasEntities && article.entityManagers?.length) {
-      resolvedManagerPills = article.entityManagers.map(m => ({
-        type: "manager" as const,
-        name: m.name,
-        slug: m.slug,
-        href: `/news?manager=${m.slug}`,
-        fallbackText: m.name.slice(0, 2).toUpperCase(),
-      }));
-    } else {
-      // Fallback: match tags against known managers (by name, normalized)
-      const matchedManagers = managers.filter(m =>
-        tags.some(tag => normalize(m.name) === normalize(tag))
-      );
-      resolvedManagerPills = matchedManagers.map(m => ({
-        type: "manager" as const,
-        name: m.name,
-        slug: m.slug,
-        href: `/news?manager=${m.slug}`,
-        fallbackText: m.name.slice(0, 2).toUpperCase(),
-      }));
-    }
-    
-    // Build competition pills (always from tags - competition field + competition-like tags)
-    // Note: Backend entityCompetitions are available but we use tags as source-of-truth for competitions
-    const knownCompetitions = ["Premier League", "Carabao Cup", "FA Cup", "Champions League", "Europa League", "La Liga", "Serie A", "Bundesliga", "Ligue 1"];
-    const competitionSet = new Set<string>();
-    
-    if (article.competition) {
-      competitionSet.add(article.competition);
-    }
-    
-    // Add any competition-like tags
-    tags.forEach(tag => {
-      if (knownCompetitions.some(c => c.toLowerCase() === tag.toLowerCase())) {
-        competitionSet.add(tag);
-      }
-    });
-    
-    const resolvedCompetitionPills: EntityData[] = Array.from(competitionSet).map(comp => ({
-      type: "competition" as const,
-      name: comp,
-      slug: slugifyCompetition(comp),
-      href: `/news?competition=${slugifyCompetition(comp)}`,
-      iconUrl: `/crests/comps/${slugifyCompetition(comp)}.svg`,
-      fallbackText: comp.slice(0, 2),
-      shortLabel: getCompShortCode(comp),
+    const resolvedPlayerPills: EntityData[] = entitySets.players.map(p => ({
+      type: "player" as const,
+      name: p.name,
+      slug: p.slug,
+      href: `/news?player=${p.slug}`,
+      fallbackText: p.name.slice(0, 2).toUpperCase(),
     }));
+    
+    const resolvedManagerPills: EntityData[] = entitySets.managers.map(m => ({
+      type: "manager" as const,
+      name: m.name,
+      slug: m.slug,
+      href: `/news?manager=${m.slug}`,
+      fallbackText: m.name.slice(0, 2).toUpperCase(),
+    }));
+    
+    // Get teams from tags for the "Follow Team" CTA
+    const resolvedArticleTeams = teams.filter(t => 
+      (article.tags || []).some(tag => 
+        t.name.toLowerCase() === tag.toLowerCase() || 
+        t.slug === tag.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+      )
+    );
     
     return {
-      articleTeams: resolvedTeams,
       teamPills: resolvedTeamPills,
       competitionPills: resolvedCompetitionPills,
       playerPills: resolvedPlayerPills,
       managerPills: resolvedManagerPills,
+      headerPills: resolvedHeaderPills,
+      articleTeams: resolvedArticleTeams,
     };
-  }, [article, teams, players, managers, backendHasEntities]);
+  }, [article, teams, players, managers]);
 
   // Early returns AFTER all hooks
   if (isLoading) {

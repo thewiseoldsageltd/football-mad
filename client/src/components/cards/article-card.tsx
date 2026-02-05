@@ -5,6 +5,7 @@ import { EntityPill, type EntityData } from "@/components/entity-pill";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
+import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode } from "@/lib/entity-utils";
 
 interface ArticleCardProps {
   article: Article;
@@ -17,29 +18,42 @@ interface ArticleCardProps {
 function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
   const pills: EntityData[] = [];
   
-  if (article.competition) {
-    const compSlug = article.competition.toLowerCase().replace(/\s+/g, "-");
+  const entitySets = buildEntitySets(article, teams || []);
+  const topPills = selectTopPills(entitySets);
+  
+  if (topPills.competitionPill) {
+    const comp = topPills.competitionPill;
     pills.push({
       type: "competition",
-      name: article.competition,
-      slug: compSlug,
-      iconUrl: `/crests/comps/${compSlug}.svg`,
-      fallbackText: article.competition.slice(0, 2),
+      name: comp.name,
+      slug: comp.slug,
+      iconUrl: `/crests/comps/${comp.slug}.svg`,
+      fallbackText: comp.name.slice(0, 2),
+      shortLabel: getCompShortCode(comp.name),
     });
   }
   
-  if (teams && article.tags) {
-    const articleTeams = teams.filter(t => article.tags?.includes(t.slug));
-    for (const team of articleTeams.slice(0, 2)) {
-      pills.push({
-        type: "team",
-        name: team.shortName || team.name,
-        slug: team.slug,
-        iconUrl: `/crests/teams/${team.slug}.svg`,
-        fallbackText: (team.shortName || team.name).slice(0, 2),
-        color: team.primaryColor,
-      });
-    }
+  for (const team of topPills.teamPills) {
+    pills.push({
+      type: "team",
+      name: team.shortName || team.name,
+      slug: team.slug,
+      iconUrl: `/crests/teams/${team.slug}.svg`,
+      fallbackText: (team.shortName || team.name).slice(0, 2),
+      color: team.primaryColor,
+      shortLabel: getTeamShortCode({ name: team.name, shortName: team.shortName }),
+    });
+  }
+  
+  if (topPills.optionalThirdPill) {
+    const entity = topPills.optionalThirdPill;
+    const isPlayer = entity.source === "mention" || entity.source === "tag";
+    pills.push({
+      type: isPlayer ? "player" : "manager",
+      name: entity.name,
+      slug: entity.slug,
+      fallbackText: entity.name.slice(0, 2).toUpperCase(),
+    });
   }
   
   return pills.slice(0, 3);
