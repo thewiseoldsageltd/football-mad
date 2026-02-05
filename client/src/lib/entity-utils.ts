@@ -37,6 +37,7 @@ const KNOWN_COMPETITIONS = [
   // English
   "Premier League", "Championship", "League One", "League Two",
   "Carabao Cup", "FA Cup", "EFL Cup", "League Cup",
+  "National League", "National League North", "National League South",
   // Scottish
   "SPFL Premiership", "Scottish Premiership", "SPL",
   "Scottish Championship", "Scottish League One", "Scottish League Two",
@@ -90,6 +91,10 @@ const COMP_SHORT_CODES: Record<string, string> = {
   "Ligue 1": "Lg1",
   "Eredivisie": "ERE",
   "Primeira Liga": "PrLi",
+  // Lower leagues
+  "National League": "NL",
+  "National League North": "NLN",
+  "National League South": "NLS",
   // Cups
   "DFB Pokal": "DFB",
   "Copa del Rey": "CdR",
@@ -173,22 +178,37 @@ export function buildEntitySets(
   
   // Second pass: pattern-based detection for tags containing competition keywords
   const COMP_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
-    { pattern: /\bspfl\b/i, name: "SPFL Premiership" },
+    // Scottish - specific patterns first (more specific = higher priority)
+    { pattern: /\bspfl\s+premiership\b/i, name: "SPFL Premiership" },
+    { pattern: /\bspfl\s+championship\b/i, name: "Scottish Championship" },
+    { pattern: /\bspfl\s+league\s+one\b/i, name: "Scottish League One" },
+    { pattern: /\bspfl\s+league\s+two\b/i, name: "Scottish League Two" },
     { pattern: /\bscottish\s+premiership\b/i, name: "Scottish Premiership" },
+    { pattern: /\bscottish\s+championship\b/i, name: "Scottish Championship" },
+    { pattern: /\bscottish\s+league\s+one\b/i, name: "Scottish League One" },
+    { pattern: /\bscottish\s+league\s+two\b/i, name: "Scottish League Two" },
     { pattern: /\bscottish\s+cup\b/i, name: "Scottish Cup" },
     { pattern: /\bscottish\s+league\s+cup\b/i, name: "Scottish League Cup" },
+    // European
     { pattern: /\bchampions\s+league\b/i, name: "Champions League" },
     { pattern: /\beuropa\s+league\b/i, name: "Europa League" },
     { pattern: /\bconference\s+league\b/i, name: "Conference League" },
+    // English cups
     { pattern: /\bcarabao\s+cup\b/i, name: "Carabao Cup" },
     { pattern: /\befl\s+cup\b/i, name: "Carabao Cup" },
-    { pattern: /\bleague\s+cup\b/i, name: "Carabao Cup" },
     { pattern: /\bfa\s+cup\b/i, name: "FA Cup" },
+    // English leagues
     { pattern: /\bpremier\s+league\b/i, name: "Premier League" },
+    { pattern: /\bchampionship\b/i, name: "Championship" },
+    { pattern: /\bleague\s+one\b/i, name: "League One" },
+    { pattern: /\bleague\s+two\b/i, name: "League Two" },
+    { pattern: /\bnational\s+league\b/i, name: "National League" },
+    // Other major leagues
     { pattern: /\bla\s+liga\b/i, name: "La Liga" },
     { pattern: /\bserie\s+a\b/i, name: "Serie A" },
     { pattern: /\bbundesliga\b/i, name: "Bundesliga" },
     { pattern: /\bligue\s+1\b/i, name: "Ligue 1" },
+    { pattern: /\beredivisie\b/i, name: "Eredivisie" },
   ];
   
   for (let tagIdx = 0; tagIdx < tags.length; tagIdx++) {

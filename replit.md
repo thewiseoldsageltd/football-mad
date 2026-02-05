@@ -140,9 +140,10 @@ selectTopPills(entitySets)
 
 ### Frontend Behavior Notes
 - **Footer entity pills**: Show all entities from each group, sorted by score (highest first) then alphabetically. Exclude fallback competitions (e.g., Premier League not in tags).
-- **Header/card pills**: Use `selectTopPills` for consistent behavior: 1 competition + up to 2 teams + optional player/manager (if score >= 60).
-- **Fallback competition exclusion**: Competitions only appear in footer if they're tagged (score >= 100) or explicitly mentioned in body (score = 60). The `article.competition` field alone (score = 10) is insufficient.
-- **Collapsible groups**: CSS-based height clamp with overflow detection. Mobile shows ~1 row, desktop shows ~2 rows when collapsed. "Show more" button appears only when content overflows.
+- **Header/card pills**: Use `selectTopPills` for consistent behavior: 1 competition + up to 2 teams + optional player/manager (if score >= 60). Fallback competitions are filtered out.
+- **Fallback competition exclusion**: Competitions only appear in header/cards/footer if they're tagged (score >= 100) or explicitly mentioned in body (score = 60). The `article.competition` field alone (score = 10) is insufficient and filtered out.
+- **Tags-first competition detection**: Uses pattern-based matching for competition tags (e.g., "SPFL Premiership", "Carabao Cup", "Scottish Cup") to detect competitions even with varied formatting.
+- **Entity groups in footer**: Fully expanded with `labelMode="full"`, no row clamping or "Show more" functionality.
 
 ### Verification: Entity Selection
 ```bash
@@ -152,4 +153,20 @@ curl -s "http://localhost:5000/api/articles?limit=5" | jq '[ .[] | select(.compe
   competition: .competition,
   competitionInTags: (.tags | any(. | ascii_downcase | contains("premier")))
 }][:3]'
+
+# Verify Scottish articles show SPFL competition from tags (not Premier League fallback)
+curl -s "http://localhost:5000/api/articles?limit=20" | jq '[ .[] | select(.tags | any(. | ascii_downcase | contains("spfl"))) | {
+  slug: .slug[0:60],
+  dbCompetition: .competition,
+  tags: .tags[:4],
+  willShowPill: "SPFL from tags (not PL fallback)"
+}][:3]'
+
+# Verify Carabao Cup article shows Carabao Cup (not Premier League)
+curl -s "http://localhost:5000/api/articles?limit=10" | jq '[ .[] | select(.tags | any(. | ascii_downcase | contains("carabao"))) | {
+  slug: .slug[0:60],
+  dbCompetition: .competition,
+  tags: .tags[:4],
+  willShowPill: "Carabao Cup from tags"
+}][:2]'
 ```
