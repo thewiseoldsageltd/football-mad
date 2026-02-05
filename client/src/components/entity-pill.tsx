@@ -22,7 +22,7 @@ interface EntityPillProps {
   active?: boolean;
   className?: string;
   shortLabel?: string;
-  responsiveLabel?: boolean;
+  labelMode?: "full" | "short" | "responsive";
   "data-testid"?: string;
 }
 
@@ -87,20 +87,29 @@ export function EntityPill({
   active = false,
   className,
   shortLabel,
-  responsiveLabel = false,
+  labelMode = "full",
   "data-testid": testId,
 }: EntityPillProps) {
   const effectiveShortLabel = shortLabel || entity.shortLabel;
-  const useResponsive = responsiveLabel && effectiveShortLabel;
 
-  const labelContent = useResponsive ? (
-    <>
-      <span className="md:hidden text-foreground font-medium whitespace-nowrap">{effectiveShortLabel}</span>
-      <span className="hidden md:inline text-foreground font-medium whitespace-nowrap">{entity.name}</span>
-    </>
-  ) : (
-    <span className="text-foreground font-medium whitespace-nowrap">{entity.name}</span>
-  );
+  let labelContent: React.ReactNode;
+  
+  if (labelMode === "short" && effectiveShortLabel) {
+    labelContent = (
+      <span className="text-foreground font-medium whitespace-nowrap">{effectiveShortLabel}</span>
+    );
+  } else if (labelMode === "responsive" && effectiveShortLabel) {
+    labelContent = (
+      <>
+        <span className="md:hidden text-foreground font-medium whitespace-nowrap">{effectiveShortLabel}</span>
+        <span className="hidden md:inline text-foreground font-medium whitespace-nowrap">{entity.name}</span>
+      </>
+    );
+  } else {
+    labelContent = (
+      <span className="text-foreground font-medium whitespace-nowrap">{entity.name}</span>
+    );
+  }
 
   const content = (
     <div

@@ -1,0 +1,77 @@
+You are working in the Football Mad Replit codebase.
+
+GOAL
+Fix 3 UX issues around entity pills:
+1) Desktop news cards should show FULL pill labels (e.g. “Carabao Cup”, “Man City”) — NOT shortcodes.
+2) Article header pills should remain SHORTCODES on mobile only (e.g. “CC”, “MCI”), but show FULL labels on desktop.
+3) “In this article” footer:
+   - Remove ALL “Show more” / clamping / collapsible behaviour (always show all pills).
+   - Competitions + Teams should display FULL labels even on mobile.
+   - Players + Managers can remain full labels (also fine).
+
+CONSTRAINTS
+- Do not change the entity selection/scoring logic (tag=100, mention=60, fallback=10 etc). Only change DISPLAY + footer behaviour.
+- Keep the existing EntityPill look/shape; only adjust what text it renders.
+
+IMPLEMENTATION PLAN
+A) Add display options to EntityPill
+- Update the EntityPill component to accept optional props:
+  - `labelMode?: "full" | "short"`
+  - `shortLabel?: string | null` (already often available as team.shortName; competitions may have a shortcode field or we can derive a fallback)
+- Behaviour:
+  - If labelMode === "short" and shortLabel exists => render shortLabel
+  - Else render the full label (existing behaviour)
+- Default labelMode should be "full" (so desktop naturally shows full unless explicitly set)
+
+B) Create a tiny responsive hook/helper for “isMobile”
+- Add `useIsMobile()` hook in `client/src/hooks/use-is-mobile.ts` (or similar) that returns boolean using `matchMedia("(max-width: 640px)")`
+- Use it only where we need conditional labelMode (article header pills). Avoid using it everywhere.
+
+C) Fix News card pills (desktop full)
+- In `client/src/components/article-card.tsx` (or wherever your news card lives), ensure you DO NOT force labelMode="short".
+- If you currently use shortcodes globally, remove that.
+- Result: card pills render full labels on desktop; on mobile, it’s okay if they remain short OR full, but per requirement: desktop must be full.
+
+D) Fix Article header pills (mobile shortcodes only)
+- In `client/src/pages/article.tsx` where header pills are rendered:
+  - Use `const isMobile = useIsMobile();`
+  - Pass `labelMode={isMobile ? "short" : "full"}` to Competition + Team pills in the header.
+  - Provide `shortLabel`:
+    - Teams: use `team.shortName` if present, otherwise derive 3-letter from name.
+    - Competitions: use existing shortcode if you have one; otherwise:
+      - “Carabao Cup” => “CC”
+      - “Premier League” => “EPL”
+      - “Champions League” => “UCL”
+      - “Europa League” => “UEL”
+      - “Conference League” => “UECL”
+      - Else derive initials (first letters of words, max 4)
+  - IMPORTANT: This mobile-only shortcode behaviour is ONLY for the header pills row.
+
+E) Remove “Show more” / clamping in “In this article”
+- Locate the collapsible/clamping component introduced earlier (e.g. `CollapsibleEntityGroup` or any ResizeObserver overflow logic).
+- Delete it OR refactor it to a simple `EntityGroup` that:
+  - Renders group title + all pills, no measurement, no state, no toggles.
+- In the footer:
+  - Competitions group pills: force FULL labels always => `labelMode="full"`
+  - Teams group pills: force FULL labels always => `labelMode="full"`
+  - Players & Managers: render full labels (default) (no shortcodes)
+
+FILES TO TOUCH (expected)
+- `client/src/components/entity-pill.tsx` (or wherever EntityPill is)
+- `client/src/hooks/use-is-mobile.ts`
+- `client/src/components/article-card.tsx`
+- `client/src/pages/article.tsx`
+- Remove/refactor any footer clamping component (wherever it currently lives)
+
+ACCEPTANCE TESTS
+1) Desktop /news:
+- Marc Guehi card shows pills: “Carabao Cup” and “Man City” (NOT “CC”, “MCI”).
+2) Mobile article header:
+- Header pills show shortcodes (e.g. “CC”, “MCI”).
+3) Desktop article header:
+- Header pills show full labels.
+4) Mobile “In this article”:
+- Competitions shows “Carabao Cup” (full), Teams shows “Man City” (full), Players/Managers show full names.
+- No “Show more” links anywhere.
+
+After changes, run the app and verify with the Marc Guehi article and /news list. No end to end testing, and no videos. 
