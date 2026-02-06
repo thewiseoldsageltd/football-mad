@@ -1559,6 +1559,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ========== LIST GOALSERVE LEAGUES ==========
+  app.post("/api/jobs/list-goalserve-leagues", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    try {
+      const response = await goalserveFetch("soccernew/home");
+      const categories = response?.scores?.category;
+      if (!categories || !Array.isArray(categories)) {
+        return res.json({ ok: false, error: "No scores.category array found", topLevelKeys: Object.keys(response || {}) });
+      }
+      const leagues = categories.map((cat: any) => {
+        const rawName = String(cat["@name"] ?? "");
+        const colonIdx = rawName.indexOf(":");
+        const country = colonIdx >= 0 ? rawName.slice(0, colonIdx).trim() : rawName.trim();
+        const leagueName = colonIdx >= 0 ? rawName.slice(colonIdx + 1).trim() : "";
+        return {
+          country,
+          leagueName,
+          leagueId: String(cat["@gid"] ?? ""),
+          isCup: cat["@iscup"] === "True",
+        };
+      });
+      res.json({ ok: true, count: leagues.length, leagues });
+    } catch (err) {
+      res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ========== GOALSERVE COMPETITIONS SYNC ==========
   app.post("/api/jobs/sync-goalserve-competitions", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
     const result = await syncGoalserveCompetitions();

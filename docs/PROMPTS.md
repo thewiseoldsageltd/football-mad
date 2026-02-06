@@ -13628,4 +13628,31 @@ After changes, the sync for leagueId=1204 should report hundreds of totalFromGoa
 
 ---
 
+Add a new job endpoint:
+
+POST /api/jobs/list-goalserve-leagues
+Protected with requireJobSecret("GOALSERVE_SYNC_SECRET")
+
+Implementation:
+- Fetch Goalserve feed "soccernew/home" using existing helper
+- Parse scores.category array
+- Return an array of:
+  {
+    country: string (text before colon in @name),
+    leagueName: string (text after colon),
+    leagueId: category["@gid"],
+    isCup: category["@iscup"] === "True"
+  }
+
+Return JSON:
+{
+  ok: true,
+  count: number,
+  leagues: [...]
+}
+
+No changes to existing endpoints. No E2E tests.
+
+---
+
 
