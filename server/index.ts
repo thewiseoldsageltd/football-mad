@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
+import { isStagingHost } from "./middleware/environment";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +23,23 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use((req, res, next) => {
+  const host = req.hostname || req.headers.host || "";
+  if (isStagingHost(host)) {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+  }
+  next();
+});
+
+app.get("/robots.txt", (req, res) => {
+  const host = req.hostname || req.headers.host || "";
+  if (isStagingHost(host)) {
+    res.type("text/plain").send("User-agent: *\nDisallow: /");
+  } else {
+    res.type("text/plain").send("User-agent: *\nAllow: /");
+  }
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

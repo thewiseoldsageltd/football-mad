@@ -12991,4 +12991,51 @@ Finally, summarise:
 
 ---
 
+You are working in the Football Mad Node/Express app.
+
+We are introducing environment-aware SEO behaviour for Production vs Staging.
+
+GOAL:
+• Production (footballmad.co.uk) → indexable
+• Staging (onrender.com + staging subdomain) → NOT indexable
+
+TASKS:
+
+1) Create a helper function in the server (e.g. server/middleware/environment.ts):
+
+export function isStagingHost(host?: string) {
+  if (!host) return false;
+  const h = host.toLowerCase();
+  return h.includes("onrender.com") || h.startsWith("staging.");
+}
+
+2) Add middleware early in Express app setup (before routes):
+
+import { isStagingHost } from "./middleware/environment";
+
+app.use((req, res, next) => {
+  const host = req.hostname || req.headers.host || "";
+  if (isStagingHost(host)) {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+  }
+  next();
+});
+
+3) Add a robots.txt route:
+
+app.get("/robots.txt", (req, res) => {
+  const host = req.hostname || req.headers.host || "";
+  if (isStagingHost(host)) {
+    res.type("text/plain").send("User-agent: *\nDisallow: /");
+  } else {
+    res.type("text/plain").send("User-agent: *\nAllow: /");
+  }
+});
+
+4) Do NOT change any existing routes or break the API.
+
+5) Show me the diff of all files changed.
+
+---
+
 
