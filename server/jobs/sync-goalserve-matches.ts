@@ -137,6 +137,17 @@ interface ExtractedLeague {
 }
 
 function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): ExtractedLeague | null {
+  if (resp?.results?.tournament) {
+    const t = resp.results.tournament;
+    const weekData = t?.week ?? t?.match;
+    if (weekData) {
+      return {
+        name: String(t?.["@name"] ?? t?.name ?? "Unknown"),
+        weeks: Array.isArray(weekData) ? weekData : [weekData],
+      };
+    }
+  }
+
   if (resp?.leagues?.league) {
     const ld = resp.leagues.league;
     const weekData = ld?.week ?? ld?.match;
@@ -302,7 +313,11 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
 
         const goalserveMatchId = String(match["@id"] ?? match.id ?? "").trim();
 
-        const formattedDate = String(match["@formatted_date"] ?? match.formatted_date ?? weekFormattedDate);
+        const formattedDate = String(
+          match["@formatted_date"] ?? match.formatted_date ??
+          match["@date"] ?? match.date ??
+          weekFormattedDate
+        );
         const timeStr = String(match["@time"] ?? match.time ?? match["@status"] ?? "");
 
         const kickoffTime = parseKickoffTime(formattedDate, timeStr);

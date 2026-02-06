@@ -13589,4 +13589,43 @@ Do NOT add E2E tests. Keep changes minimal and consistent with current code styl
 
 ---
 
+Update server/jobs/sync-goalserve-matches.ts to parse Goalserve soccerfixtures payloads shaped like:
+{ results: { tournament: { week: [ { "@number": "...", match: [ ... ] } ] } } }
+
+We have confirmed staging debug-goalserve-fetch for path soccerfixtures/leagueid/1204 returns:
+topLevelKeys ["?xml","results"] and matches under results.tournament.week[].match[].
+
+Requirements:
+1) Implement helper extractMatchesFromGoalserveResponse(resp) that returns a flat array of normalized match objects.
+   - Support both shapes:
+     A) resp.results.tournament.week[].match[]
+     B) existing/legacy shapes already attempted (keep them as fallback)
+2) Normalize fields from the XML-JSON attributes:
+   - goalserve_match_id: match["@id"] as string
+   - goalserve_static_id: match["@static_id"] as string
+   - goalserve_round: week["@number"] as string (store round/week number)
+   - status: map match["@status"] to one of:
+       - "scheduled" if status in ["", "NS", "TBD", "Postp.", "PST", "CANC"]? (keep simple)
+       - "live" if status indicates in-play (e.g. "1H","2H","HT","LIVE")
+       - "finished" if status in ["FT","AET","PEN"]
+       - otherwise store the raw status string
+   - venue: match["@venue"] (optional)
+   - kickoff_time: parse match["@date"] (dd.mm.yyyy) + match["@time"] (HH:MM) into a UTC timestamp string compatible with DB (use a safe parser; if missing, skip kickoff)
+   - home_goalserve_team_id: localteam["@id"]
+   - away_goalserve_team_id: visitorteam["@id"]
+   - home_score: integer from localteam["@score"] if present and numeric, else null
+   - away_score: integer from visitorteam["@score"] if present and numeric, else null
+3) Keep upsert key as goalserve_static_id (canonical). Do not allow duplicates; keep existing logic.
+4) Ensure the job sets:
+   - goalserve_competition_id = leagueId (as string)
+   - competition_id looked up from competitions.goalserve_competition_id == leagueId
+   - season_key from competitions.season
+5) Return counters: totalFromGoalserve, inserted, updated, skippedNoStaticId, skippedNoKickoff, competitionId, seasonKey.
+6) Do NOT change route path or secrets.
+7) Do NOT run E2E tests.
+
+After changes, the sync for leagueId=1204 should report hundreds of totalFromGoalserve and insert/update matches.
+
+---
+
 
