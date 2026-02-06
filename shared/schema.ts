@@ -142,6 +142,10 @@ export const competitions = pgTable("competitions", {
   goalserveCompetitionId: text("goalserve_competition_id").unique(),
   type: text("type").default("league"),
   country: text("country"),
+  season: text("season"),
+  dateStart: text("date_start"),
+  dateEnd: text("date_end"),
+  isCup: boolean("is_cup").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

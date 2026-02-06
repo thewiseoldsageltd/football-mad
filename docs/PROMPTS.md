@@ -13237,4 +13237,206 @@ echo "Tip: if the patch landed in the wrong place, search for 'Phase 2: Upsert c
 
 ---
 
+# ⚠️ REPLIT AI INSTRUCTIONS — READ FIRST
+# This task is CODE + DATABASE CHANGES ONLY.
+# DO NOT:
+# - Run end-to-end tests or regression sweeps
+# - Open Preview tabs / click around the UI
+# - Crawl pages / audit routes
+# - Generate videos/screenshots
+# Only edit the files and run the commands explicitly listed below.
+# ============================================
+
+set -euo pipefail
+cd ~/workspace
+
+echo "=== 1) Add season fields to competitions (DB) if missing ==="
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='competitions' AND column_name='season'
+  ) THEN
+    ALTER TABLE competitions ADD COLUMN season text;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='competitions' AND column_name='date_start'
+  ) THEN
+    ALTER TABLE competitions ADD COLUMN date_start text;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='competitions' AND column_name='date_end'
+  ) THEN
+    ALTER TABLE competitions ADD COLUMN date_end text;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='competitions' AND column_name='is_cup'
+  ) THEN
+    ALTER TABLE competitions ADD COLUMN is_cup boolean DEFAULT false;
+  END IF;
+END $$;
+
+COMMIT;
+SQL
+
+echo "=== 2) Update shared/schema.ts competitions + keep typings consistent ==="
+# NOTE: adjust this to your schema style; it will insert columns if they don't exist.
+python - <<'PY'
+import pathlib, re
+p = pathlib.Path("shared/schema.ts")
+txt = p.read_text()
+
+# Ensure imports include boolean if not present
+if 'boolean' not in txt.split('from "drizzle-orm/pg-core"')[0]:
+    pass
+
+# Add fields to competitions table block (best-effort pattern)
+if "season: text(\"season\")" not in txt:
+    txt = re.sub(
+        r'(export const competitions = pgTable\(\s*"competitions",\s*\{\s*[\s\S]*?)(\n\}\s*,?\s*\(t\)\s*=>|\n\}\s*\);)',
+        lambda m: m.group(1)
+        + '\n    season: text("season"),'
+        + '\n    dateStart: text("date_start"),'
+        + '\n    dateEnd: text("date_end"),'
+        + '\n    isCup: boolean("is_cup").default(false),'
+        + m.group(2),
+        txt,
+        count=1
+    )
+
+p.write_text(txt)
+print("✅ Patched competitions schema (season/dateStart/dateEnd/isCup) in shared/schema.ts")
+PY
+
+echo "=== 3) Patch sync-goalserve-teams.ts: seasonKey from competition.season + create missing teams + cleanup isCurrent ==="
+python - <<'PY'
+import pathlib, re
+p = pathlib.Path("server/jobs/sync-goalserve-teams.ts")
+txt = p.read_text()
+
+# A) competition select should include season
+txt = re.sub(
+    r'\.select\(\{\s*id:\s*competitions\.id\s*\}\)',
+    '.select({ id: competitions.id, season: competitions.season })',
+    txt,
+    count=1
+)
+
+# B) seasonKey assignment
+txt = re.sub(
+    r'const seasonKey = new Date\(\)\.getFullYear\(\)\.toString\(\);',
+    'const seasonKey = competitionRow?.season && String(competitionRow.season).trim() ? String(competitionRow.season).trim() : "unknown";',
+    txt,
+    count=1
+)
+
+# C) Add helper to insert missing team (if not present)
+if "async function ensureTeam(" not in txt:
+    insert_after = txt.find("function generateAbbreviations")
+    insert_at = txt.find("}\n\ninterface GoalserveTeam", insert_after)
+    helper = """
+async function ensureTeam(goalserveTeamId: string, name: string): Promise<DbTeam> {
+  const safeId = String(goalserveTeamId).trim();
+  const safeName = String(name).trim() || `Team ${safeId}`;
+  const slug = slugify(safeName) || `team-${safeId}`;
+
+  // Try existing by goalserveTeamId
+  const [existing] = await db
+    .select({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId })
+    .from(teams)
+    .where(eq(teams.goalserveTeamId, safeId))
+    .limit(1);
+
+  if (existing) return existing as any;
+
+  // Insert new
+  const [inserted] = await db
+    .insert(teams)
+    .values({ name: safeName, slug, goalserveTeamId: safeId })
+    .onConflictDoNothing()
+    .returning({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId });
+
+  if (inserted) return inserted as any;
+
+  // If conflict happened, select again
+  const [found] = await db
+    .select({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId })
+    .from(teams)
+    .where(eq(teams.goalserveTeamId, safeId))
+    .limit(1);
+
+  if (!found) throw new Error(`Failed to ensure team for goalserveTeamId=${safeId}`);
+  return found as any;
+}
+"""
+    if insert_at != -1:
+        txt = txt[:insert_at] + helper + "\n" + txt[insert_at:]
+
+# D) Track seen team IDs for cleanup
+if "const seenTeamIds" not in txt:
+    txt = re.sub(
+        r'let matched = 0;',
+        'let matched = 0;\n    const seenTeamIds: string[] = [];',
+        txt,
+        count=1
+    )
+
+# E) When unmatched, create team + treat as matched
+# Replace the else branch that pushes unmatched sample
+txt = re.sub(
+    r'else\s*\{\s*unmatched\.push\(\{ id: gsTeam\.goalserveTeamId, name: gsTeam\.name \}\);\s*\}',
+    r'''else {
+        // Create the missing team so the platform can ingest everything Goalserve has
+        const created = await ensureTeam(gsTeam.goalserveTeamId, gsTeam.name);
+        matchedDbTeam = created;
+        matched++;
+      }''',
+    txt,
+    count=1
+)
+
+# F) Ensure we push seen teamIds when we have a matchedDbTeam
+# Add just before membership insert block
+txt = txt.replace(
+    "if (competitionDbId) {",
+    "seenTeamIds.push(matchedDbTeam.id);\n\n        if (competitionDbId) {",
+    1
+)
+
+# G) After loop, cleanup: mark not-seen as not current (only if competitionDbId exists)
+cleanup_block = """
+    // Mark memberships not seen in this sync run as not current (automated promotion/relegation etc.)
+    if (competitionDbId && seenTeamIds.length > 0) {
+      await db.execute(
+        // drizzle raw SQL is simplest here; keep it scoped by competition+season
+        // NOTE: this is safe because we only touch rows for this competition+season.
+        // @ts-ignore
+        `UPDATE competition_team_memberships
+         SET is_current = false
+         WHERE competition_id = '${competitionDbId}'
+           AND season_key = '${seasonKey}'
+           AND team_id NOT IN (${seenTeamIds.map((id) => `'${id}'`).join(",")})`
+      );
+    }
+"""
+if "Mark memberships not seen in this sync run" not in txt:
+    txt = txt.replace("return {", cleanup_block + "\n    return {", 1)
+
+p.write_text(txt)
+print("✅ Patched sync-goalserve-teams.ts (seasonKey, ensureTeam, cleanup)")
+PY
+
+echo "✅ Done. No UI tests were run."
+
+---
+
 

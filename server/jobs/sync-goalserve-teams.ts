@@ -25,6 +25,37 @@ function generateAbbreviations(name: string): string[] {
   return abbrevs;
 }
 
+async function ensureTeam(goalserveTeamId: string, name: string): Promise<DbTeam> {
+  const safeId = String(goalserveTeamId).trim();
+  const safeName = String(name).trim() || `Team ${safeId}`;
+  const slug = slugify(safeName) || `team-${safeId}`;
+
+  const [existing] = await db
+    .select({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId })
+    .from(teams)
+    .where(eq(teams.goalserveTeamId, safeId))
+    .limit(1);
+
+  if (existing) return existing;
+
+  const [inserted] = await db
+    .insert(teams)
+    .values({ name: safeName, slug, goalserveTeamId: safeId })
+    .onConflictDoNothing()
+    .returning({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId });
+
+  if (inserted) return inserted;
+
+  const [found] = await db
+    .select({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId })
+    .from(teams)
+    .where(eq(teams.goalserveTeamId, safeId))
+    .limit(1);
+
+  if (!found) throw new Error(`Failed to ensure team for goalserveTeamId=${safeId}`);
+  return found;
+}
+
 interface GoalserveTeam {
   goalserveTeamId: string;
   name: string;
@@ -98,20 +129,21 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       }
     }
 
-    // Resolve the competition DB record for this Goalserve league
     const [competitionRow] = await db
-      .select({ id: competitions.id })
+      .select({ id: competitions.id, season: competitions.season })
       .from(competitions)
       .where(eq(competitions.goalserveCompetitionId, leagueId))
       .limit(1);
 
     const competitionDbId = competitionRow?.id ?? null;
-    const seasonKey = new Date().getFullYear().toString();
+    const seasonKey = competitionRow?.season && String(competitionRow.season).trim()
+      ? String(competitionRow.season).trim()
+      : "unknown";
 
     let matched = 0;
     let updated = 0;
     let membershipsUpserted = 0;
-    const unmatched: { id: string; name: string }[] = [];
+    const seenTeamIds: string[] = [];
 
     for (const gsTeam of goalserveTeamsList) {
       let matchedDbTeam: DbTeam | undefined;
@@ -148,35 +180,50 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
             .where(eq(teams.id, matchedDbTeam.id));
           updated++;
         }
-
-        if (competitionDbId) {
-          await db
-            .insert(competitionTeamMemberships)
-            .values({
-              competitionId: competitionDbId,
-              teamId: matchedDbTeam.id,
-              seasonKey,
-              membershipType: "league",
-              isCurrent: true,
-              source: "goalserve",
-              lastSeenAt: new Date(),
-            })
-            .onConflictDoUpdate({
-              target: [
-                competitionTeamMemberships.competitionId,
-                competitionTeamMemberships.teamId,
-                competitionTeamMemberships.seasonKey,
-              ],
-              set: {
-                isCurrent: true,
-                lastSeenAt: new Date(),
-              },
-            });
-          membershipsUpserted++;
-        }
       } else {
-        unmatched.push({ id: gsTeam.goalserveTeamId, name: gsTeam.name });
+        const created = await ensureTeam(gsTeam.goalserveTeamId, gsTeam.name);
+        matchedDbTeam = created;
+        matched++;
       }
+
+      seenTeamIds.push(matchedDbTeam.id);
+
+      if (competitionDbId) {
+        await db
+          .insert(competitionTeamMemberships)
+          .values({
+            competitionId: competitionDbId,
+            teamId: matchedDbTeam.id,
+            seasonKey,
+            membershipType: "league",
+            isCurrent: true,
+            source: "goalserve",
+            lastSeenAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              competitionTeamMemberships.competitionId,
+              competitionTeamMemberships.teamId,
+              competitionTeamMemberships.seasonKey,
+            ],
+            set: {
+              isCurrent: true,
+              lastSeenAt: new Date(),
+            },
+          });
+        membershipsUpserted++;
+      }
+    }
+
+    if (competitionDbId && seenTeamIds.length > 0) {
+      const placeholders = seenTeamIds.map((id) => `'${id}'`).join(",");
+      await db.execute(
+        `UPDATE competition_team_memberships
+         SET is_current = false
+         WHERE competition_id = '${competitionDbId}'
+           AND season_key = '${seasonKey}'
+           AND team_id NOT IN (${placeholders})`
+      );
     }
 
     return {
@@ -186,7 +233,7 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       matched,
       updated,
       membershipsUpserted,
-      unmatchedSample: unmatched.slice(0, 15),
+      unmatchedSample: [],
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
