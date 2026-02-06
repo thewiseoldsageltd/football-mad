@@ -8,13 +8,6 @@ import { matches, teams, competitions } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
 function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
   if (!formattedDate) return null;
 
@@ -237,6 +230,11 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
 
       const matchList = Array.isArray(matchData) ? matchData : [matchData];
 
+      const weekFormattedDate = String(
+        week?.matches?.["@formatted_date"] ?? week?.matches?.formatted_date ??
+        week?.["@formatted_date"] ?? week?.formatted_date ?? ""
+      );
+
       for (const match of matchList) {
         totalFromGoalserve++;
 
@@ -248,7 +246,7 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
 
         const goalserveMatchId = String(match["@id"] ?? match.id ?? "").trim();
 
-        const formattedDate = String(match["@formatted_date"] ?? match.formatted_date ?? "");
+        const formattedDate = String(match["@formatted_date"] ?? match.formatted_date ?? weekFormattedDate);
         const timeStr = String(match["@time"] ?? match.time ?? match["@status"] ?? "");
 
         const kickoffTime = parseKickoffTime(formattedDate, timeStr);
@@ -301,16 +299,25 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
     }
 
     for (const row of allRows) {
-      const [existing] = await db
+      let [existing] = await db
         .select({ id: matches.id, homeScore: matches.homeScore, awayScore: matches.awayScore })
         .from(matches)
         .where(eq(matches.goalserveStaticId, row.goalserveStaticId))
         .limit(1);
 
+      if (!existing && row.goalserveMatchId) {
+        [existing] = await db
+          .select({ id: matches.id, homeScore: matches.homeScore, awayScore: matches.awayScore })
+          .from(matches)
+          .where(eq(matches.goalserveMatchId, row.goalserveMatchId))
+          .limit(1);
+      }
+
       if (existing) {
         await db
           .update(matches)
           .set({
+            goalserveStaticId: row.goalserveStaticId,
             goalserveMatchId: row.goalserveMatchId,
             goalserveCompetitionId: row.goalserveCompetitionId,
             competitionId: row.competitionId,
@@ -330,8 +337,44 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
           .where(eq(matches.id, existing.id));
         updated++;
       } else {
-        await db.insert(matches).values(row).onConflictDoNothing();
-        inserted++;
+        try {
+          await db.insert(matches).values(row);
+          inserted++;
+        } catch (e: any) {
+          if (e?.code === "23505") {
+            const [bySlug] = await db
+              .select({ id: matches.id, homeScore: matches.homeScore, awayScore: matches.awayScore })
+              .from(matches)
+              .where(eq(matches.slug, row.slug))
+              .limit(1);
+            if (bySlug) {
+              await db
+                .update(matches)
+                .set({
+                  goalserveStaticId: row.goalserveStaticId,
+                  goalserveMatchId: row.goalserveMatchId,
+                  goalserveCompetitionId: row.goalserveCompetitionId,
+                  competitionId: row.competitionId,
+                  seasonKey: row.seasonKey,
+                  goalserveRound: row.goalserveRound,
+                  homeGoalserveTeamId: row.homeGoalserveTeamId,
+                  awayGoalserveTeamId: row.awayGoalserveTeamId,
+                  homeTeamId: row.homeTeamId,
+                  awayTeamId: row.awayTeamId,
+                  homeScore: row.homeScore !== null ? row.homeScore : bySlug.homeScore,
+                  awayScore: row.awayScore !== null ? row.awayScore : bySlug.awayScore,
+                  competition: row.competition,
+                  venue: row.venue,
+                  status: row.status,
+                  kickoffTime: row.kickoffTime,
+                })
+                .where(eq(matches.id, bySlug.id));
+              updated++;
+            }
+          } else {
+            throw e;
+          }
+        }
       }
     }
 
