@@ -37,6 +37,7 @@ import { syncGoalserveManagers } from "./jobs/sync-goalserve-managers";
 import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
+import { syncGoalserveMatches } from "./jobs/sync-goalserve-matches";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
@@ -1670,6 +1671,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const message = error instanceof Error ? error.message : "Unknown error";
         res.status(500).json({ error: message });
       }
+    }
+  );
+
+  // ========== GOALSERVE MATCHES SYNC (by league, static_id upsert) ==========
+  app.post(
+    "/api/jobs/sync-goalserve-matches",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
+      }
+      const result = await syncGoalserveMatches(leagueId);
+      res.json(result);
     }
   );
 
