@@ -131,6 +131,62 @@ function extractScore(match: any, teamObj: any, side: "home" | "away"): number |
   return null;
 }
 
+interface ExtractedLeague {
+  name: string;
+  weeks: any[];
+}
+
+function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): ExtractedLeague | null {
+  if (resp?.leagues?.league) {
+    const ld = resp.leagues.league;
+    const weekData = ld?.week ?? ld?.match;
+    if (weekData) {
+      return {
+        name: String(ld?.["@name"] ?? ld?.name ?? "Unknown"),
+        weeks: Array.isArray(weekData) ? weekData : [weekData],
+      };
+    }
+  }
+
+  if (resp?.fixtures?.league) {
+    const ld = resp.fixtures.league;
+    const weekData = ld?.week ?? ld?.match;
+    if (weekData) {
+      return {
+        name: String(ld?.["@name"] ?? ld?.name ?? "Unknown"),
+        weeks: Array.isArray(weekData) ? weekData : [weekData],
+      };
+    }
+  }
+
+  if (resp?.scores?.category) {
+    const categories = Array.isArray(resp.scores.category)
+      ? resp.scores.category
+      : [resp.scores.category];
+
+    for (const cat of categories) {
+      if (!cat?.league) continue;
+      const leagues = Array.isArray(cat.league) ? cat.league : [cat.league];
+      for (const lg of leagues) {
+        const matchData = lg?.match ?? lg?.week;
+        if (matchData) {
+          const weeks = Array.isArray(matchData) ? matchData : [matchData];
+          const syntheticWeeks = weeks.map((item: any) => {
+            if (item?.matches?.match || item?.match) return item;
+            return { match: item };
+          });
+          return {
+            name: String(lg?.["@name"] ?? lg?.name ?? cat?.["@name"] ?? cat?.name ?? "Unknown"),
+            weeks: syntheticWeeks,
+          };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
 interface SyncResult {
   ok: boolean;
   leagueId: string;
@@ -141,11 +197,12 @@ interface SyncResult {
   skippedNoKickoff: number;
   competitionId: string | null;
   seasonKey: string | null;
+  responsePath?: string;
   error?: string;
 }
 
 export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult> {
-  const emptyResult = (error?: string): SyncResult => ({
+  const emptyResult = (error?: string, extra?: Partial<SyncResult>): SyncResult => ({
     ok: !error,
     leagueId,
     totalFromGoalserve: 0,
@@ -156,6 +213,7 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
     competitionId: null,
     seasonKey: null,
     error,
+    ...extra,
   });
 
   try {
@@ -172,17 +230,16 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
 
     const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`);
 
-    const leagueData = response?.leagues?.league;
-    if (!leagueData) {
-      return emptyResult("No league data in response.leagues.league");
+    const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
+    if (!extracted) {
+      const topKeys = Object.keys(response ?? {}).join(", ");
+      return emptyResult(
+        `Could not find matches in response. Top-level keys: [${topKeys}]`,
+        { competitionId: competitionDbId, seasonKey }
+      );
     }
 
-    const weekData = leagueData?.week;
-    if (!weekData) {
-      return emptyResult("No week data in response.leagues.league.week");
-    }
-
-    const weeks = Array.isArray(weekData) ? weekData : [weekData];
+    const { name: competitionName, weeks } = extracted;
 
     const dbTeams = await db
       .select({ id: teams.id, goalserveTeamId: teams.goalserveTeamId })
@@ -221,7 +278,6 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
     let inserted = 0;
     let updated = 0;
 
-    const competitionName = String(leagueData?.["@name"] ?? leagueData?.name ?? "Unknown");
     const allRows: MatchRow[] = [];
 
     for (const week of weeks) {

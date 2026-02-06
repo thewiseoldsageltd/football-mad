@@ -30,6 +30,7 @@ import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
 import { requireJobSecret } from "./jobs/requireJobSecret";
 import { testGoalserveConnection } from "./jobs/test-goalserve";
+import { goalserveFetch } from "./integrations/goalserve/client";
 import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
@@ -1412,10 +1413,145 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true, message: "PA Media ingest stub" });
   });
 
+  // ========== DB FINGERPRINT (debug) ==========
+  app.post("/api/jobs/db-fingerprint", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    try {
+      const nowResult = await db.execute(drizzleSql`SELECT now() AS now`);
+      const nowRows = nowResult as unknown as any[];
+      const databaseNow = nowRows?.[0]?.now ?? null;
+
+      const plRows = await db
+        .select({ id: competitions.id, season: competitions.season })
+        .from(competitions)
+        .where(eq(competitions.goalserveCompetitionId, "1204"));
+
+      const matchCountResult = await db.execute(
+        drizzleSql`SELECT count(*)::int AS cnt FROM matches WHERE goalserve_competition_id = '1204'`
+      );
+      const matchCountRows = matchCountResult as unknown as any[];
+      const matchesPLCount = matchCountRows?.[0]?.cnt ?? 0;
+
+      res.json({
+        ok: true,
+        databaseNow,
+        premierLeague: {
+          count: plRows.length,
+          id: plRows[0]?.id ?? null,
+          season: plRows[0]?.season ?? null,
+        },
+        matchesPLCount,
+      });
+    } catch (err) {
+      res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ========== DEBUG GOALSERVE FETCH ==========
+  app.post("/api/jobs/debug-goalserve-fetch", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    const feedPath = req.query.path as string;
+    if (!feedPath) {
+      return res.status(400).json({ ok: false, error: "path query param required" });
+    }
+    try {
+      const feedKey = process.env.GOALSERVE_FEED_KEY;
+      if (!feedKey) {
+        return res.json({ ok: false, error: "GOALSERVE_FEED_KEY not configured" });
+      }
+      const jsonParam = feedPath.includes("?") ? "&json=1" : "?json=1";
+      const url = `https://www.goalserve.com/getfeed/${feedKey}/${feedPath}${jsonParam}`;
+
+      const response = await fetch(url, {
+        headers: { "Accept-Encoding": "identity", "User-Agent": "FootballMad/1.0" },
+      });
+      const rawText = await response.text();
+
+      let parsed: any = null;
+      try { parsed = JSON.parse(rawText); } catch {}
+
+      const topLevelKeys = parsed ? Object.keys(parsed) : [];
+
+      const hasScores = parsed?.scores != null;
+      const hasCategory = Array.isArray(parsed?.scores?.category) || parsed?.scores?.category != null;
+      const categories = Array.isArray(parsed?.scores?.category)
+        ? parsed.scores.category
+        : parsed?.scores?.category ? [parsed.scores.category] : [];
+      const categoriesCount = categories.length;
+
+      let leaguesCountGuess = 0;
+      let sampleLeagueName: string | null = null;
+      let sampleMatch: any = null;
+
+      const leagueSource = parsed?.leagues?.league
+        ?? parsed?.fixtures?.league
+        ?? (categories.length > 0 ? categories[0]?.league : null);
+
+      const leagueList = Array.isArray(leagueSource) ? leagueSource : leagueSource ? [leagueSource] : [];
+      leaguesCountGuess = leagueList.length;
+
+      if (leagueList.length > 0) {
+        const firstLeague = leagueList[0];
+        sampleLeagueName = String(firstLeague?.["@name"] ?? firstLeague?.name ?? "");
+
+        const weekData = firstLeague?.week ?? firstLeague?.match;
+        const weeks = Array.isArray(weekData) ? weekData : weekData ? [weekData] : [];
+
+        for (const w of weeks) {
+          const mData = w?.matches?.match ?? w?.match ?? w;
+          const mList = Array.isArray(mData) ? mData : mData ? [mData] : [];
+          if (mList.length > 0) {
+            const m = mList[0];
+            sampleMatch = {
+              id: m?.["@id"] ?? m?.id ?? null,
+              staticId: m?.["@static_id"] ?? m?.static_id ?? null,
+              formattedDate: m?.["@formatted_date"] ?? m?.formatted_date ?? null,
+              time: m?.["@time"] ?? m?.time ?? null,
+              status: m?.["@status"] ?? m?.status ?? null,
+              localteam: m?.localteam ?? m?.home ?? null,
+              visitorteam: m?.visitorteam ?? m?.away ?? null,
+            };
+            break;
+          }
+        }
+      }
+
+      res.json({
+        ok: true,
+        path: feedPath,
+        topLevelKeys,
+        probe: {
+          hasScores,
+          hasCategory,
+          categoriesCount,
+          leaguesCountGuess,
+          sampleLeagueName,
+          sampleMatch,
+        },
+        rawSnippet: rawText.slice(0, 1200),
+      });
+    } catch (err) {
+      res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ========== GOALSERVE CONNECTION TEST ==========
   app.post("/api/jobs/test-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
-    const result = await testGoalserveConnection();
-    res.json(result);
+    const feedPath = req.query.path as string | undefined;
+    if (feedPath) {
+      try {
+        const response = await goalserveFetch(feedPath);
+        res.json({
+          ok: true,
+          feed: feedPath,
+          receivedAt: new Date().toISOString(),
+          topLevelKeys: Object.keys(response),
+        });
+      } catch (err) {
+        res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    } else {
+      const result = await testGoalserveConnection();
+      res.json(result);
+    }
   });
 
   // ========== GOALSERVE COMPETITIONS SYNC ==========

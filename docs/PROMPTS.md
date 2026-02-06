@@ -13540,4 +13540,53 @@ After implementation, add a short comment at top of the job describing that Goal
 
 ---
 
+Update the Football Mad repo to add two safe debug job endpoints (secret protected) and improve Goalserve fixtures parsing.
+
+Context:
+- /api/jobs/test-goalserve is currently hardcoded to soccernew/home and does not accept a path.
+- /api/jobs/sync-goalserve-matches?leagueId=1204 returns error: "No league data in response.leagues.league"
+- We need to inspect the actual Goalserve payload for soccerfixtures/leagueid/{leagueId} to parse it correctly.
+- Also, staging returned competitionId=null earlier; we must verify staging DB contains competitions.goalserve_competition_id='1204'.
+
+Requirements:
+1) Add POST /api/jobs/db-fingerprint (protected with requireJobSecret("GOALSERVE_SYNC_SECRET")) that queries the DB and returns:
+   - databaseNow (select now())
+   - premierLeague: { count, id, season } from competitions where goalserve_competition_id='1204'
+   - matchesPLCount: count(*) from matches where goalserve_competition_id='1204'
+   Keep it read-only and small.
+
+2) Add POST /api/jobs/debug-goalserve-fetch?path=... (protected with requireJobSecret("GOALSERVE_SYNC_SECRET")):
+   - Uses the same Goalserve fetch logic already used elsewhere in server/routes.ts (GOALSERVE_FEED_KEY, base url).
+   - Fetches the provided path and returns JSON:
+     {
+       ok: true,
+       path,
+       topLevelKeys,
+       probe: {
+         hasScores, hasCategory, categoriesCount,
+         leaguesCountGuess,
+         sampleLeagueName,
+         sampleMatch: { id, static_id/staticId, formatted_date/formattedDate, time/status, localteam/visitorteam }
+       },
+       rawSnippet: first 1200 chars of the raw response string (safe for debugging)
+     }
+   - If fetch fails, return ok:false and error message.
+
+3) Update /api/jobs/test-goalserve to accept optional query param `path`.
+   - If path is present, call the same logic as debug-goalserve-fetch.
+   - Otherwise keep existing behavior (soccernew/home).
+
+4) Update server/jobs/sync-goalserve-matches.ts parsing logic to support the common Goalserve structure:
+   - Many feeds return { scores: { category: [ { league: [ { match: [...] } ] } ] } }
+   - Try multiple paths in order to find matches:
+     a) response.leagues.league (existing)
+     b) response.fixtures?.league
+     c) response.scores?.category (and walk category->league->match)
+   - Add a small helper function extractMatchesFromGoalserveResponse(resp, leagueId) returning an array of normalized match objects.
+   - Keep existing upsert-by-goalserve_static_id behavior and counters.
+
+Do NOT add E2E tests. Keep changes minimal and consistent with current code style in server/routes.ts and existing requireJobSecret usage.
+
+---
+
 
