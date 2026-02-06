@@ -13476,4 +13476,20 @@ echo "✅ Done (local code updated). Next: commit + push so Render staging deplo
 
 ---
 
+Open the Express server entry file (likely server/index.ts).
+
+Find where the app starts listening for connections (look for app.listen( ).
+
+Replace any hardcoded port (for example 1000) with this:
+
+const PORT = process.env.PORT || 1000;
+
+app.listen(PORT, () => {
+  console.log(`Express server running on port ${PORT}`);
+});
+
+Do not modify anything else in the file.
+
+---
+
 
