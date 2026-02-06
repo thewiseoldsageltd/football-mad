@@ -1514,6 +1514,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
+      let rawSnippet = rawText.slice(0, 1200);
+      if (feedKey) {
+        rawSnippet = rawSnippet.replaceAll(feedKey, "***REDACTED***");
+      }
+
       res.json({
         ok: true,
         path: feedPath,
@@ -1526,7 +1531,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           sampleLeagueName,
           sampleMatch,
         },
-        rawSnippet: rawText.slice(0, 1200),
+        rawSnippet,
       });
     } catch (err) {
       res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
