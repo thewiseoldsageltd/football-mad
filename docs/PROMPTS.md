@@ -13492,4 +13492,52 @@ Do not modify anything else in the file.
 
 ---
 
+You are working in the Football Mad repo.
+
+Goal: Implement a Goalserve fixtures/results ingestion job for matches using the canonical Goalserve static_id.
+
+Must-haves:
+- Fetch from Goalserve soccerfixtures endpoint for a given leagueId (e.g. 1204):
+  /soccerfixtures/leagueid/{leagueId}
+  Use existing Goalserve base URL + auth pattern already used in sync-goalserve-teams.ts (reuse env vars / helpers).
+  Prefer JSON if supported; if repo currently parses XML, use the same XML parsing approach as existing jobs.
+- Upsert matches using goalserve_static_id as the unique key (it is unique indexed in DB).
+- Always set:
+  - goalserve_static_id
+  - goalserve_match_id (the mutable one, if provided)
+  - goalserve_competition_id = leagueId
+  - home_goalserve_team_id / away_goalserve_team_id
+  - kickoff_time (UTC) (must be NOT NULL; skip records where date/time missing)
+  - status (scheduled/live/finished/postponed etc.)
+  - home_score / away_score if present
+  - competition_id: lookup competitions.id where competitions.goalserve_competition_id == leagueId
+  - season_key: set to competitions.season if present, else leave null
+- On upsert conflict (goalserve_static_id):
+  - update status, scores, kickoff_time, team ids/names, competition_id, season_key, and updated_at
+  - do NOT create duplicates
+
+Implementation steps:
+1) Update shared/schema.ts matches table definition to include:
+   - competitionId (varchar, nullable)
+   - seasonKey (text, nullable)
+   and export types/zod schemas consistently with existing patterns.
+   NOTE: the DB columns already exist; this is just to align the Drizzle schema.
+2) Create a new job file: server/jobs/sync-goalserve-matches.ts
+   - Export an async function that accepts leagueId and returns counts: fetched, inserted, updated, skipped (missing datetime).
+   - Lookup competition row (id + season) first.
+   - Fetch fixtures/results from Goalserve.
+   - Normalize each fixture into the matches table shape.
+   - Use drizzle insert(...).onConflictDoUpdate({ target: matches.goalserveStaticId, set: ... })
+   - Batch inserts in chunks (e.g. 200) to avoid huge single queries.
+3) Add an API endpoint mirroring existing jobs pattern:
+   - POST /api/jobs/sync-goalserve-matches?leagueId=1204
+   - Protect with header: x-sync-secret must equal process.env.GOALSERVE_SYNC_SECRET (use same secret as existing job endpoints if present; if the repo already uses x-sync-secret, reuse it exactly).
+   - Return JSON with the counters.
+
+Do NOT add E2E tests. Keep changes minimal and consistent with existing job structure in server/jobs and existing API route patterns.
+
+After implementation, add a short comment at top of the job describing that Goalserve id can change but static_id is canonical, so we upsert by static_id.
+
+---
+
 
