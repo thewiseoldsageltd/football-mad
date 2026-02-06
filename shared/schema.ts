@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -152,6 +152,38 @@ export const competitionsRelations = relations(competitions, ({ many }) => ({
 export const insertCompetitionSchema = createInsertSchema(competitions).omit({ id: true, createdAt: true });
 export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
 export type Competition = typeof competitions.$inferSelect;
+
+// ============ COMPETITION-TEAM MEMBERSHIPS ============
+export const competitionTeamMemberships = pgTable(
+  "competition_team_memberships",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    competitionId: varchar("competition_id")
+      .notNull()
+      .references(() => competitions.id, { onDelete: "cascade" }),
+    teamId: varchar("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    seasonKey: text("season_key").notNull(),
+    membershipType: text("membership_type"),
+    stage: text("stage"),
+    isCurrent: boolean("is_current").notNull().default(true),
+    source: text("source").notNull().default("goalserve"),
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ctm_unique").on(t.competitionId, t.teamId, t.seasonKey),
+    index("ctm_team_idx").on(t.teamId),
+    index("ctm_competition_idx").on(t.competitionId),
+    index("ctm_season_idx").on(t.seasonKey),
+    index("ctm_current_idx").on(t.isCurrent),
+  ]
+);
+
+export const insertCompetitionTeamMembershipSchema = createInsertSchema(competitionTeamMemberships).omit({ id: true, createdAt: true });
+export type InsertCompetitionTeamMembership = z.infer<typeof insertCompetitionTeamMembershipSchema>;
+export type CompetitionTeamMembership = typeof competitionTeamMemberships.$inferSelect;
 
 // ============ ARTICLE-COMPETITIONS JUNCTION ============
 export const articleCompetitions = pgTable("article_competitions", {

@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { teams } from "@shared/schema";
+import { teams, competitions, competitionTeamMemberships } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
 
@@ -44,6 +44,7 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
   goalserveTeams: number;
   matched: number;
   updated: number;
+  membershipsUpserted: number;
   unmatchedSample: { id: string; name: string }[];
   error?: string;
 }> {
@@ -58,6 +59,7 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
         goalserveTeams: 0,
         matched: 0,
         updated: 0,
+        membershipsUpserted: 0,
         unmatchedSample: [],
         error: "No team data found in response.league.team",
       };
@@ -96,8 +98,19 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       }
     }
 
+    // Resolve the competition DB record for this Goalserve league
+    const [competitionRow] = await db
+      .select({ id: competitions.id })
+      .from(competitions)
+      .where(eq(competitions.goalserveCompetitionId, leagueId))
+      .limit(1);
+
+    const competitionDbId = competitionRow?.id ?? null;
+    const seasonKey = new Date().getFullYear().toString();
+
     let matched = 0;
     let updated = 0;
+    let membershipsUpserted = 0;
     const unmatched: { id: string; name: string }[] = [];
 
     for (const gsTeam of goalserveTeamsList) {
@@ -135,6 +148,32 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
             .where(eq(teams.id, matchedDbTeam.id));
           updated++;
         }
+
+        if (competitionDbId) {
+          await db
+            .insert(competitionTeamMemberships)
+            .values({
+              competitionId: competitionDbId,
+              teamId: matchedDbTeam.id,
+              seasonKey,
+              membershipType: "league",
+              isCurrent: true,
+              source: "goalserve",
+              lastSeenAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: [
+                competitionTeamMemberships.competitionId,
+                competitionTeamMemberships.teamId,
+                competitionTeamMemberships.seasonKey,
+              ],
+              set: {
+                isCurrent: true,
+                lastSeenAt: new Date(),
+              },
+            });
+          membershipsUpserted++;
+        }
       } else {
         unmatched.push({ id: gsTeam.goalserveTeamId, name: gsTeam.name });
       }
@@ -146,6 +185,7 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       goalserveTeams: goalserveTeamsList.length,
       matched,
       updated,
+      membershipsUpserted,
       unmatchedSample: unmatched.slice(0, 15),
     };
   } catch (err) {
@@ -156,6 +196,7 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       goalserveTeams: 0,
       matched: 0,
       updated: 0,
+      membershipsUpserted: 0,
       unmatchedSample: [],
       error,
     };

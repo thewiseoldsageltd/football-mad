@@ -13038,4 +13038,203 @@ app.get("/robots.txt", (req, res) => {
 
 ---
 
+# ⚠️ REPLIT AI INSTRUCTIONS — READ FIRST
+# This task is CODE + DATABASE CHANGES ONLY.
+# DO NOT:
+# - Run end-to-end tests or regression sweeps
+# - Open Preview tabs / click around the UI
+# - Crawl pages / audit routes
+# - Generate videos/screenshots
+# Only edit the files and run the commands explicitly listed below.
+# ============================================
+
+set -euo pipefail
+cd ~/workspace
+
+echo "=== 1) Add competition_team_memberships table (DB) ==="
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS competition_team_memberships (
+  id              varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  competition_id  varchar NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  team_id         varchar NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  season_key      text    NOT NULL,
+  membership_type text    NULL,
+  stage           text    NULL,
+  is_current      boolean NOT NULL DEFAULT true,
+  source          text    NOT NULL DEFAULT 'goalserve',
+  last_seen_at    timestamp without time zone NOT NULL DEFAULT now(),
+  created_at      timestamp without time zone NOT NULL DEFAULT now(),
+  CONSTRAINT competition_team_memberships_unique UNIQUE (competition_id, team_id, season_key)
+);
+
+CREATE INDEX IF NOT EXISTS ctm_team_id_idx ON competition_team_memberships(team_id);
+CREATE INDEX IF NOT EXISTS ctm_competition_id_idx ON competition_team_memberships(competition_id);
+CREATE INDEX IF NOT EXISTS ctm_season_key_idx ON competition_team_memberships(season_key);
+CREATE INDEX IF NOT EXISTS ctm_current_idx ON competition_team_memberships(is_current);
+
+COMMIT;
+SQL
+
+echo "=== 2) Patch shared schema to include competitionTeamMemberships ==="
+python - <<'PY'
+import pathlib, re
+p = pathlib.Path("shared/schema.ts")
+txt = p.read_text()
+
+# Insert table definition near other entity tables if not present
+if "competitionTeamMemberships" not in txt:
+    # naive anchor: after "export const teams" or after competitions
+    anchor = "export const competitions"
+    idx = txt.find(anchor)
+    if idx == -1:
+        raise SystemExit("Couldn't find competitions table in shared/schema.ts")
+    # find end of competitions definition block by searching next "export const"
+    m = re.search(r"export const competitions.*?\n\);\n", txt, flags=re.S)
+    if not m:
+        raise SystemExit("Couldn't parse competitions block end in shared/schema.ts")
+
+    insert_pos = m.end()
+
+    table = """
+
+export const competitionTeamMemberships = pgTable(
+  "competition_team_memberships",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    competitionId: varchar("competition_id")
+      .notNull()
+      .references(() => competitions.id, { onDelete: "cascade" }),
+    teamId: varchar("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    seasonKey: text("season_key").notNull(),
+    membershipType: text("membership_type"),
+    stage: text("stage"),
+    isCurrent: boolean("is_current").notNull().default(true),
+    source: text("source").notNull().default("goalserve"),
+    lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    uniqueCompetitionTeamSeason: uniqueIndex("ctm_unique").on(t.competitionId, t.teamId, t.seasonKey),
+    teamIdx: index("ctm_team_idx").on(t.teamId),
+    competitionIdx: index("ctm_competition_idx").on(t.competitionId),
+    seasonIdx: index("ctm_season_idx").on(t.seasonKey),
+    currentIdx: index("ctm_current_idx").on(t.isCurrent),
+  })
+);
+"""
+    txt = txt[:insert_pos] + table + txt[insert_pos:]
+    p.write_text(txt)
+    print("✅ Added competitionTeamMemberships to shared/schema.ts")
+else:
+    print("ℹ️ competitionTeamMemberships already exists in shared/schema.ts")
+PY
+
+echo "=== 3) Update Goalserve teams sync job to write memberships ==="
+# We’ll patch sync-goalserve-teams.ts to upsert membership rows
+python - <<'PY'
+import pathlib, re
+p = pathlib.Path("server/jobs/sync-goalserve-teams.ts")
+txt = p.read_text()
+
+if "competitionTeamMemberships" not in txt:
+    # Ensure import includes competitionTeamMemberships + competitions
+    txt = re.sub(
+        r'from "@shared/schema";',
+        'from "@shared/schema";',
+        txt
+    )
+
+    # Add to schema import line if it exists
+    txt = re.sub(
+        r'import\s+\{([^}]+)\}\s+from\s+"@shared/schema";',
+        lambda m: (
+            'import {' +
+            (m.group(1).strip() + ', competitionTeamMemberships, competitions').replace('competitions, competitions', 'competitions') +
+            '} from "@shared/schema";'
+            if 'competitionTeamMemberships' not in m.group(1)
+            else m.group(0)
+        ),
+        txt,
+        count=1
+    )
+
+    # Add helper to resolve competition + season_key (safe default)
+    if "resolveSeasonKeyForCompetition" not in txt:
+        helper = """
+
+async function resolveSeasonKeyForCompetition(competitionId: string): Promise<string> {
+  // Prefer a season field if you later add one; for now we derive from name/type or default.
+  // IMPORTANT: season_key must be stable per sync run; 'unknown' is acceptable for MVP.
+  return "unknown";
+}
+"""
+        # Put helper near top after imports
+        insert_at = txt.find("\n", txt.find('process.env')) if 'process.env' in txt else 0
+        txt = txt[:insert_at] + helper + txt[insert_at:]
+
+    # Insert membership upsert where teams are upserted.
+    # We’ll look for a spot that has inserted/updated team and we have teamDbId available.
+    # If we can’t find an anchor, fail loudly.
+    anchor = "goalserveTeamId"
+    if anchor not in txt:
+        raise SystemExit("Couldn't find expected anchor in sync-goalserve-teams.ts. Open file and patch manually.")
+
+    # We add a clearly marked block the dev can reposition if needed.
+    block = """
+
+    // === Phase 2: Upsert competition↔team membership (season-aware, Goalserve-driven) ===
+    // competitionDbId should be resolved from the leagueId/competition being synced.
+    // teamDbId should be the DB id of the upserted team.
+    // seasonKey is 'unknown' for MVP unless you store mapping season in competitions.
+    if (competitionDbId && teamDbId) {
+      const seasonKey = await resolveSeasonKeyForCompetition(competitionDbId);
+      await db
+        .insert(competitionTeamMemberships)
+        .values({
+          competitionId: competitionDbId,
+          teamId: teamDbId,
+          seasonKey,
+          membershipType: "league",
+          isCurrent: true,
+          source: "goalserve",
+          lastSeenAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [
+            competitionTeamMemberships.competitionId,
+            competitionTeamMemberships.teamId,
+            competitionTeamMemberships.seasonKey,
+          ],
+          set: {
+            isCurrent: true,
+            lastSeenAt: new Date(),
+          },
+        });
+    }
+"""
+    if "Phase 2: Upsert competition↔team membership" not in txt:
+        # Try to inject after a likely "teamDbId" assignment line if exists
+        m = re.search(r'(const\s+teamDbId\s*=\s*[^;]+;\s*)', txt)
+        if m:
+            pos = m.end()
+            txt = txt[:pos] + block + txt[pos:]
+        else:
+            # If not found, append at end with TODO
+            txt += "\n\n// TODO: Insert membership upsert near the team upsert logic.\n" + block
+
+    p.write_text(txt)
+    print("✅ Patched server/jobs/sync-goalserve-teams.ts (check placement of competitionDbId/teamDbId anchors)")
+else:
+    print("ℹ️ sync-goalserve-teams.ts already references competitionTeamMemberships")
+PY
+
+echo "=== 4) Done. NEXT: open sync-goalserve-teams.ts and confirm competitionDbId/teamDbId variables exist where we injected ==="
+echo "Tip: if the patch landed in the wrong place, search for 'Phase 2: Upsert competition↔team membership' and move it right after team upsert."
+
+---
+
 
