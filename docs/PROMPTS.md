@@ -13439,4 +13439,41 @@ echo "✅ Done. No UI tests were run."
 
 ---
 
+# ⚠️ REPLIT AI INSTRUCTIONS — READ FIRST
+# CODE + DB MIGRATION PREP ONLY.
+# DO NOT run end-to-end tests, UI audits, open preview tabs, or generate videos.
+# We'll apply DB migration to Render DB separately (manual psql), same as before.
+# ============================================
+
+set -euo pipefail
+cd ~/workspace
+
+echo "=== A) Patch shared/schema.ts: add matches.competitionId FK column ==="
+python - <<'PY'
+import pathlib, re
+p = pathlib.Path("shared/schema.ts")
+txt = p.read_text()
+
+# Find matches table block and add competitionId if not present
+if "competitionId:" not in txt or 'varchar("competition_id")' not in txt:
+    # best-effort: insert near goalserveCompetitionId field if present
+    pattern = r'(export const matches = pgTable\("matches",\s*\{\s*[\s\S]*?)(goalserveCompetitionId:\s*text\("goalserve_competition_id"\)[^,\n]*,?)'
+    m = re.search(pattern, txt)
+    if not m:
+        raise SystemExit("Couldn't find matches table with goalserveCompetitionId in shared/schema.ts")
+    insert = m.group(2) + "\n  competitionId: varchar(\"competition_id\").references(() => competitions.id),"
+    txt = txt[:m.start(2)] + insert + txt[m.end(2):]
+    p.write_text(txt)
+    print("✅ Added matches.competitionId to shared/schema.ts")
+else:
+    print("ℹ️ matches.competitionId already appears present; skipping")
+PY
+
+echo "=== B) Add an index in DB migration script (Render DB manual later) ==="
+echo "NOTE: Next step after deploy is to run ALTER TABLE matches ADD COLUMN competition_id + backfill on Render DB."
+
+echo "✅ Done (local code updated). Next: commit + push so Render staging deploys new code."
+
+---
+
 

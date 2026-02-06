@@ -298,6 +298,7 @@ export const matches = pgTable("matches", {
   goalserveMatchId: text("goalserve_match_id").unique(),
   goalserveStaticId: text("goalserve_static_id"),
   goalserveCompetitionId: text("goalserve_competition_id"),
+  competitionId: varchar("competition_id").references(() => competitions.id),
   goalserveRound: text("goalserve_round"),
   homeGoalserveTeamId: text("home_goalserve_team_id"),
   awayGoalserveTeamId: text("away_goalserve_team_id"),
