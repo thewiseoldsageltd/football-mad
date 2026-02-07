@@ -1524,8 +1524,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const tournamentKeys = tournament ? Object.keys(tournament) : [];
       const stages = asArr(tournament?.stage);
       const stage0Keys = stages.length > 0 ? Object.keys(stages[0]) : [];
-      const stage0Matches = asArr(stages[0]?.match);
-      const stage0Match0Keys = stage0Matches.length > 0 ? Object.keys(stage0Matches[0]) : [];
+      const stage0DirectMatches = asArr(stages[0]?.match);
+      const stage0Groups = asArr(stages[0]?.group);
+      const stage0GroupMatches = stage0Groups.length > 0 ? asArr(stage0Groups[0]?.match) : [];
+      const stage0AllMatches = stage0DirectMatches.length > 0 ? stage0DirectMatches : stage0GroupMatches;
+      const stage0Match0Keys = stage0AllMatches.length > 0 ? Object.keys(stage0AllMatches[0]) : [];
       const weeksDbg = asArr(tournament?.week);
       const week0Keys = weeksDbg.length > 0 ? Object.keys(weeksDbg[0]) : [];
       const week0Matches = asArr(weeksDbg[0]?.match);

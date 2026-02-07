@@ -13706,4 +13706,62 @@ Deliverable:
 
 ---
 
+We need to fix Goalserve cup fixtures parsing + improve debug-goalserve-fetch output.
+
+Context:
+- /api/jobs/sync-goalserve-matches works for PL (leagueId=1204) but fails for Scottish Cup leagueId=1371 with:
+  "Could not find matches in response. Top-level keys: [?xml, results]"
+- debug-goalserve-fetch returns rawSnippet but does NOT include fields tournamentKeys, stage0Keys, stage0Match0Keys, week0Keys (so jq prints null)
+
+Goal:
+1) Update the fixtures/results parser used by sync-goalserve-matches to support BOTH shapes:
+   A) results.tournament.week[].match[]   (league-style)
+   B) results.tournament.stage[].match[]  (cup-style, rounds like 1/128-finals etc)
+   Also support stage.group.match[] if group exists (rare).
+
+2) Update debug-goalserve-fetch response JSON to include:
+   - topLevelKeys (already)
+   - tournamentKeys: keys of results.tournament (or null)
+   - week0Keys: keys of first week object (or null)
+   - stage0Keys: keys of first stage object (or null)
+   - stage0Match0Keys: keys of first match object found under either week[0].match or stage[0].match (or stage[0].group[0].match) (or null)
+
+Implementation details (TypeScript):
+- Add helpers:
+  const asArray = (x) => x ? (Array.isArray(x) ? x : [x]) : [];
+  const first = (arr) => (arr && arr.length ? arr[0] : null);
+
+- In sync-goalserve-matches job (server/jobs/sync-goalserve-matches.ts or wherever syncGoalserveMatches() lives):
+  - After fetching/parsing the payload into an object `data`, locate tournament:
+      const t = data?.results?.tournament;
+  - Extract matches:
+      // week path
+      const weeks = asArray(t?.week);
+      const weekMatches = weeks.flatMap(w => asArray(w?.match).map(m => ({ match: m, roundName: w?.["@number"] ?? null })));
+
+      // stage path (cup rounds)
+      const stages = asArray(t?.stage);
+      const stageMatches = stages.flatMap(s => {
+        const roundName = s?.["@name"] ?? null;
+        const direct = asArray(s?.match).map(m => ({ match: m, roundName }));
+        const groups = asArray(s?.group);
+        const grouped = groups.flatMap(g => asArray(g?.match).map(m => ({ match: m, roundName })));
+        return [...direct, ...grouped];
+      });
+
+      const all = [...weekMatches, ...stageMatches].map(x => x.match);
+  - Use `all` as the match list you upsert into DB.
+  - Bonus: if you already store `raw` jsonb for matches, add `raw.roundName = <stage @name>` when stage-based, so we keep the round/knockout stage info.
+
+- In debug-goalserve-fetch handler (server/routes.ts around /api/jobs/debug-goalserve-fetch):
+  - After fetching `data`, compute those keys safely and return them in JSON response.
+
+Acceptance:
+- POST /api/jobs/sync-goalserve-matches?leagueId=1371 returns ok:true and inserts/updates >0.
+- POST /api/jobs/debug-goalserve-fetch?path=soccerfixtures/leagueid/1371 returns JSON containing tournamentKeys/stage0Keys/stage0Match0Keys/week0Keys (not null if present).
+
+Make the changes, update any types, run TypeScript build if needed, and keep everything backwards compatible for leagueId=1204.
+
+---
+
 

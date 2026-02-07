@@ -154,11 +154,20 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
 
     const stages = asArray(t?.stage);
     if (stages.length > 0) {
-      const syntheticWeeks = stages.map((s: any) => ({
-        "@number": String(s?.["@name"] ?? s?.["@round"] ?? s?.["@id"] ?? ""),
-        match: asArray(s?.match),
-      }));
-      return { name, weeks: syntheticWeeks, responsePath: "results.tournament.stage" };
+      const syntheticWeeks = stages.map((s: any) => {
+        const roundName = String(s?.["@name"] ?? s?.["@round"] ?? s?.["@id"] ?? "");
+        const directMatches = asArray(s?.match);
+        const groups = asArray(s?.group);
+        const groupMatches = groups.flatMap((g: any) => asArray(g?.match));
+        return {
+          "@number": roundName,
+          match: [...directMatches, ...groupMatches],
+        };
+      });
+      const nonEmpty = syntheticWeeks.filter((w: any) => w.match.length > 0);
+      if (nonEmpty.length > 0) {
+        return { name, weeks: nonEmpty, responsePath: "results.tournament.stage" };
+      }
     }
 
     const topMatch = asArray(t?.match);
