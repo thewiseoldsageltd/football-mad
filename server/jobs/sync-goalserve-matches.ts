@@ -131,20 +131,39 @@ function extractScore(match: any, teamObj: any, side: "home" | "away"): number |
   return null;
 }
 
+function asArray(v: any): any[] {
+  if (v == null) return [];
+  return Array.isArray(v) ? v : [v];
+}
+
 interface ExtractedLeague {
   name: string;
   weeks: any[];
+  responsePath: string;
 }
 
 function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): ExtractedLeague | null {
   if (resp?.results?.tournament) {
     const t = resp.results.tournament;
-    const weekData = t?.week ?? t?.match;
-    if (weekData) {
-      return {
-        name: String(t?.["@name"] ?? t?.name ?? "Unknown"),
-        weeks: Array.isArray(weekData) ? weekData : [weekData],
-      };
+    const name = String(t?.["@name"] ?? t?.name ?? "Unknown");
+
+    const weeks = asArray(t?.week);
+    if (weeks.length > 0) {
+      return { name, weeks, responsePath: "results.tournament.week" };
+    }
+
+    const stages = asArray(t?.stage);
+    if (stages.length > 0) {
+      const syntheticWeeks = stages.map((s: any) => ({
+        "@number": String(s?.["@name"] ?? s?.["@round"] ?? s?.["@id"] ?? ""),
+        match: asArray(s?.match),
+      }));
+      return { name, weeks: syntheticWeeks, responsePath: "results.tournament.stage" };
+    }
+
+    const topMatch = asArray(t?.match);
+    if (topMatch.length > 0) {
+      return { name, weeks: [{ match: topMatch }], responsePath: "results.tournament.match" };
     }
   }
 
@@ -154,7 +173,8 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
     if (weekData) {
       return {
         name: String(ld?.["@name"] ?? ld?.name ?? "Unknown"),
-        weeks: Array.isArray(weekData) ? weekData : [weekData],
+        weeks: asArray(weekData),
+        responsePath: "leagues.league",
       };
     }
   }
@@ -165,23 +185,22 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
     if (weekData) {
       return {
         name: String(ld?.["@name"] ?? ld?.name ?? "Unknown"),
-        weeks: Array.isArray(weekData) ? weekData : [weekData],
+        weeks: asArray(weekData),
+        responsePath: "fixtures.league",
       };
     }
   }
 
   if (resp?.scores?.category) {
-    const categories = Array.isArray(resp.scores.category)
-      ? resp.scores.category
-      : [resp.scores.category];
+    const categories = asArray(resp.scores.category);
 
     for (const cat of categories) {
       if (!cat?.league) continue;
-      const leagues = Array.isArray(cat.league) ? cat.league : [cat.league];
+      const leagues = asArray(cat.league);
       for (const lg of leagues) {
         const matchData = lg?.match ?? lg?.week;
         if (matchData) {
-          const weeks = Array.isArray(matchData) ? matchData : [matchData];
+          const weeks = asArray(matchData);
           const syntheticWeeks = weeks.map((item: any) => {
             if (item?.matches?.match || item?.match) return item;
             return { match: item };
@@ -189,6 +208,7 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
           return {
             name: String(lg?.["@name"] ?? lg?.name ?? cat?.["@name"] ?? cat?.name ?? "Unknown"),
             weeks: syntheticWeeks,
+            responsePath: "scores.category",
           };
         }
       }
@@ -244,13 +264,19 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
     const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
     if (!extracted) {
       const topKeys = Object.keys(response ?? {}).join(", ");
+      const tournamentKeys = response?.results?.tournament
+        ? Object.keys(response.results.tournament).join(", ")
+        : "N/A";
+      const hasWeek = response?.results?.tournament?.week != null;
+      const hasStage = response?.results?.tournament?.stage != null;
       return emptyResult(
-        `Could not find matches in response. Top-level keys: [${topKeys}]`,
+        `Could not find matches in response. Top-level keys: [${topKeys}], tournament keys: [${tournamentKeys}], hasWeek=${hasWeek}, hasStage=${hasStage}`,
         { competitionId: competitionDbId, seasonKey }
       );
     }
 
-    const { name: competitionName, weeks } = extracted;
+    const { name: competitionName, weeks, responsePath } = extracted;
+    console.log(`[sync-goalserve-matches] leagueId=${leagueId} responsePath=${responsePath} weeks=${weeks.length}`);
 
     const dbTeams = await db
       .select({ id: teams.id, goalserveTeamId: teams.goalserveTeamId })
@@ -459,6 +485,7 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
       skippedNoKickoff,
       competitionId: competitionDbId,
       seasonKey,
+      responsePath,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);

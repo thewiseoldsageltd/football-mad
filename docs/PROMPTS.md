@@ -13655,4 +13655,55 @@ No changes to existing endpoints. No E2E tests.
 
 ---
 
+Update Goalserve ingestion to support cup payloads that use results.tournament.stage[].match[] (e.g. Scottish Cup), and improve debug-goalserve-fetch output so it returns parsed “shape” fields (keys/sample paths) instead of requiring parsing the truncated rawSnippet.
+
+Constraints:
+- Do NOT change any existing endpoints’ paths or auth requirements.
+- No E2E tests.
+- Keep existing league support (results.tournament.week[].match[]) working.
+
+Tasks:
+
+1) In the Goalserve matches extraction helper (the function currently used by /api/jobs/sync-goalserve-matches and preview-goalserve-matches, likely named extractMatchesFromGoalserveResponse or similar):
+   - Add support for cup format:
+     - If results?.tournament?.week exists, extract matches from week[].match (current behaviour).
+     - Else if results?.tournament?.stage exists, extract matches from stage[].match.
+   - Handle “match” sometimes being a single object not an array.
+   - Return a flat array of match objects.
+   - Also return (or log) which path was used: "tournament.week" or "tournament.stage".
+   - Make sure Scottish Cup leagueId=1371 no longer errors “Could not find matches in response. Top-level keys: [?xml, results]”.
+
+   Suggested implementation pattern:
+   - Define a helper asArray(v) that wraps non-array values into an array.
+   - tournament = json?.results?.tournament
+   - weeks = asArray(tournament?.week)
+   - if weeks.length: matches = weeks.flatMap(w => asArray(w?.match))
+   - else stages = asArray(tournament?.stage)
+     matches = stages.flatMap(s => asArray(s?.match))
+   - If still empty, throw an error that includes:
+     - top-level keys
+     - tournament keys
+     - whether week/stage existed
+     - and a short example of the tournament object (not huge)
+
+2) In server/routes.ts for POST /api/jobs/debug-goalserve-fetch:
+   - Keep existing response fields (ok, path, topLevelKeys, probe, rawSnippet).
+   - Add new derived fields computed from the parsed JSON object:
+     - tournamentKeys: keys of results.tournament (or [])
+     - stage0Keys: keys of first stage (or [])
+     - stage0Match0Keys: keys of first match in first stage (or [])
+     - week0Keys: keys of first week (or [])
+     - week0Match0Keys: keys of first match in first week (or [])
+   - Use safe array wrapping (asArray) to handle object-vs-array.
+   - These fields should allow us to confirm cup vs league shape without parsing rawSnippet.
+
+3) After changes, quickly sanity check in comments (no automated tests):
+   - leagueId=1204 still syncs.
+   - leagueId=1371 now finds matches via stage path (even if seasonKey isn’t set yet).
+
+Deliverable:
+- Provide the exact files changed and a brief summary in BUILD_LOG.md style.
+
+---
+
 

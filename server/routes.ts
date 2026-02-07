@@ -1519,10 +1519,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rawSnippet = rawSnippet.replaceAll(feedKey, "***REDACTED***");
       }
 
+      const asArr = (v: any): any[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+      const tournament = parsed?.results?.tournament;
+      const tournamentKeys = tournament ? Object.keys(tournament) : [];
+      const stages = asArr(tournament?.stage);
+      const stage0Keys = stages.length > 0 ? Object.keys(stages[0]) : [];
+      const stage0Matches = asArr(stages[0]?.match);
+      const stage0Match0Keys = stage0Matches.length > 0 ? Object.keys(stage0Matches[0]) : [];
+      const weeksDbg = asArr(tournament?.week);
+      const week0Keys = weeksDbg.length > 0 ? Object.keys(weeksDbg[0]) : [];
+      const week0Matches = asArr(weeksDbg[0]?.match);
+      const week0Match0Keys = week0Matches.length > 0 ? Object.keys(week0Matches[0]) : [];
+
       res.json({
         ok: true,
         path: feedPath,
         topLevelKeys,
+        tournamentKeys,
+        stage0Keys,
+        stage0Match0Keys,
+        week0Keys,
+        week0Match0Keys,
         probe: {
           hasScores,
           hasCategory,
