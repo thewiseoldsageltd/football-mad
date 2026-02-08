@@ -1871,7 +1871,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!leagueId) {
         return res.status(400).json({ ok: false, error: "leagueId query param required" });
       }
-      const seasonKeyParam = req.query.seasonKey as string | undefined;
+      const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
       const result = await syncGoalserveMatches(leagueId, seasonKeyParam);
       res.json(result);
     }

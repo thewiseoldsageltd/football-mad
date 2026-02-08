@@ -13851,3 +13851,52 @@ Do the implementation now, keep it minimal and safe.
 No E2E testing. No videos. 
 
 ---
+
+We need to fix seasonKey handling in sync-goalserve-matches.
+
+Currently the endpoint always ends up using the season parsed from Goalserve.
+We want priority to be:
+
+1) req.query.seasonKey
+2) competition.season
+3) parsed season from feed
+
+Please update the match ingest logic as follows:
+
+1. In the route handler for POST /api/jobs/sync-goalserve-matches
+
+Make sure we read:
+
+const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
+
+2. Where seasonKey is determined, REPLACE existing logic with:
+
+const seasonKey = resolveSeasonKey(
+  seasonKeyParam,
+  competition?.season,
+  parsedSeasonFromFeed
+);
+
+3. Ensure this seasonKey is what gets written into:
+- matches.season_key
+- competition_seasons table upsert
+
+4. Add seasonKeyUsed to the JSON response:
+
+res.json({
+  ok: true,
+  leagueId,
+  totalFromGoalserve,
+  inserted,
+  updated,
+  skippedNoStaticId,
+  skippedNoKickoff,
+  competitionId,
+  seasonKeyUsed: seasonKey,
+  responsePath
+});
+
+Do not change any parsing logic for stages vs weeks.
+Only change how seasonKey is selected.
+
+No E2E testing. No videos. 

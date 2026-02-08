@@ -149,16 +149,34 @@ interface ExtractedLeague {
   name: string;
   weeks: any[];
   responsePath: string;
+  parsedSeason: string | null;
+}
+
+function parseFeedSeason(obj: any): string | null {
+  const candidates = [
+    obj?.["@season"],
+    obj?.season,
+    obj?.["@season_year"],
+    obj?.season_year,
+  ];
+  for (const val of candidates) {
+    if (val != null && val !== "") {
+      const s = String(val).trim();
+      if (s.length > 0) return s;
+    }
+  }
+  return null;
 }
 
 function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): ExtractedLeague | null {
   if (resp?.results?.tournament) {
     const t = resp.results.tournament;
     const name = String(t?.["@name"] ?? t?.name ?? "Unknown");
+    const parsedSeason = parseFeedSeason(t);
 
     const weeks = asArray(t?.week);
     if (weeks.length > 0) {
-      return { name, weeks, responsePath: "results.tournament.week" };
+      return { name, weeks, responsePath: "results.tournament.week", parsedSeason };
     }
 
     const stages = asArray(t?.stage);
@@ -175,13 +193,13 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
       });
       const nonEmpty = syntheticWeeks.filter((w: any) => w.match.length > 0);
       if (nonEmpty.length > 0) {
-        return { name, weeks: nonEmpty, responsePath: "results.tournament.stage" };
+        return { name, weeks: nonEmpty, responsePath: "results.tournament.stage", parsedSeason };
       }
     }
 
     const topMatch = asArray(t?.match);
     if (topMatch.length > 0) {
-      return { name, weeks: [{ match: topMatch }], responsePath: "results.tournament.match" };
+      return { name, weeks: [{ match: topMatch }], responsePath: "results.tournament.match", parsedSeason };
     }
   }
 
@@ -193,6 +211,7 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
         name: String(ld?.["@name"] ?? ld?.name ?? "Unknown"),
         weeks: asArray(weekData),
         responsePath: "leagues.league",
+        parsedSeason: parseFeedSeason(ld),
       };
     }
   }
@@ -205,6 +224,7 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
         name: String(ld?.["@name"] ?? ld?.name ?? "Unknown"),
         weeks: asArray(weekData),
         responsePath: "fixtures.league",
+        parsedSeason: parseFeedSeason(ld),
       };
     }
   }
@@ -227,6 +247,7 @@ function extractMatchesFromGoalserveResponse(resp: any, _leagueId: string): Extr
             name: String(lg?.["@name"] ?? lg?.name ?? cat?.["@name"] ?? cat?.name ?? "Unknown"),
             weeks: syntheticWeeks,
             responsePath: "scores.category",
+            parsedSeason: parseFeedSeason(lg) ?? parseFeedSeason(cat),
           };
         }
       }
@@ -278,10 +299,15 @@ export async function syncGoalserveMatches(
       .limit(1);
 
     const competitionDbId = competitionRow?.id ?? null;
+
+    const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`);
+
+    const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
+
     const seasonKey = resolveSeasonKey(
       seasonKeyParam,
       competitionRow?.season ? String(competitionRow.season) : undefined,
-      undefined
+      extracted?.parsedSeason
     );
 
     let wroteCompetitionSeason = false;
@@ -305,9 +331,6 @@ export async function syncGoalserveMatches(
       wroteCompetitionSeason = true;
     }
 
-    const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`);
-
-    const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
     if (!extracted) {
       const topKeys = Object.keys(response ?? {}).join(", ");
       const tournamentKeys = response?.results?.tournament
@@ -317,7 +340,7 @@ export async function syncGoalserveMatches(
       const hasStage = response?.results?.tournament?.stage != null;
       return emptyResult(
         `Could not find matches in response. Top-level keys: [${topKeys}], tournament keys: [${tournamentKeys}], hasWeek=${hasWeek}, hasStage=${hasStage}`,
-        { competitionId: competitionDbId, seasonKey }
+        { competitionId: competitionDbId, seasonKey, seasonKeyUsed: seasonKey, wroteCompetitionSeason }
       );
     }
 
