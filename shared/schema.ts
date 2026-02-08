@@ -151,11 +151,45 @@ export const competitions = pgTable("competitions", {
 
 export const competitionsRelations = relations(competitions, ({ many }) => ({
   articles: many(articleCompetitions),
+  seasons: many(competitionSeasons),
 }));
 
 export const insertCompetitionSchema = createInsertSchema(competitions).omit({ id: true, createdAt: true });
 export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
 export type Competition = typeof competitions.$inferSelect;
+
+// ============ COMPETITION SEASONS ============
+export const competitionSeasons = pgTable(
+  "competition_seasons",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    competitionId: varchar("competition_id")
+      .notNull()
+      .references(() => competitions.id, { onDelete: "cascade" }),
+    seasonKey: text("season_key").notNull(),
+    isCurrent: boolean("is_current").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("competition_seasons_competition_season_uq").on(
+      table.competitionId,
+      table.seasonKey
+    ),
+    index("competition_seasons_competition_id_idx").on(table.competitionId),
+  ]
+);
+
+export const competitionSeasonsRelations = relations(competitionSeasons, ({ one }) => ({
+  competition: one(competitions, {
+    fields: [competitionSeasons.competitionId],
+    references: [competitions.id],
+  }),
+}));
+
+export const insertCompetitionSeasonSchema = createInsertSchema(competitionSeasons).omit({ id: true, createdAt: true });
+export type InsertCompetitionSeason = z.infer<typeof insertCompetitionSeasonSchema>;
+export type CompetitionSeason = typeof competitionSeasons.$inferSelect;
 
 // ============ COMPETITION-TEAM MEMBERSHIPS ============
 export const competitionTeamMemberships = pgTable(

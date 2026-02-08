@@ -13764,4 +13764,90 @@ Make the changes, update any types, run TypeScript build if needed, and keep eve
 
 ---
 
+You are working in the Football Mad repo. Please implement season-aware ingestion without breaking existing data.
 
+GOAL
+- Keep competitions as stable identities.
+- Add a new table competition_seasons to track seasons per competition.
+- Update Goalserve ingest jobs to accept seasonKey and always write matches.season_key reliably.
+- Do NOT remove existing columns; do safe additive changes.
+
+CHANGES
+
+1) DB: add competition_seasons table + indexes (safe, additive)
+- Create a migration SQL file (or add to your migrations) that runs:
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TABLE IF NOT EXISTS competition_seasons (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  competition_id varchar NOT NULL REFERENCES competitions(id) ON DELETE CASCADE,
+  season_key text NOT NULL,
+  is_current boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS competition_seasons_competition_season_uq
+  ON competition_seasons(competition_id, season_key);
+
+CREATE INDEX IF NOT EXISTS competition_seasons_competition_id_idx
+  ON competition_seasons(competition_id);
+
+2) Server: add a helper to resolve seasonKey consistently
+- Add a helper function somewhere appropriate (server/jobs/goalserve/*.ts or server/lib/*.ts):
+
+function resolveSeasonKey(inputSeasonKey: string | undefined, competitionSeason: string | null | undefined, parsedSeason: string | null | undefined) {
+  const s = (inputSeasonKey || competitionSeason || parsedSeason || "").trim();
+  return s.length ? s : null;
+}
+
+3) Server: update /api/jobs/sync-goalserve-matches to accept seasonKey
+- In server/routes.ts, in the handler for:
+  POST /api/jobs/sync-goalserve-matches?leagueId=XXXX
+  Update it to also read:
+  const seasonKeyParam = (req.query.seasonKey as string | undefined);
+
+- In the job logic, after you identify the competition row for leagueId, compute:
+  const seasonKey = resolveSeasonKey(seasonKeyParam, competition?.season, parsedSeasonFromFeed);
+
+- Ensure every upserted match sets:
+  season_key = seasonKey (if not null)
+  and also keeps existing season_key if already present and seasonKey is null.
+
+- Also ensure competition_seasons is upserted when seasonKey is present:
+  - Insert row into competition_seasons(competition_id, season_key, is_current)
+  - is_current should be true ONLY if seasonKey matches competition.season (if competition.season exists),
+    otherwise false. Keep it simple: is_current = (competition?.season === seasonKey)
+
+4) Server: update /api/jobs/sync-goalserve-teams similarly (optional but helpful)
+- In POST /api/jobs/sync-goalserve-teams?leagueId=XXXX
+  Accept seasonKey query param too.
+  Use resolveSeasonKey and upsert competition_seasons for that competition/season.
+  (Teams themselves may not be season-scoped, but memberships are; storing the season row helps.)
+
+5) Keep existing behaviour working
+- If seasonKey is not provided, and competitions.season is set, it should behave exactly as now.
+- Do not change existing endpoint names.
+- Do not break Scottish Cup stage parsing (results.tournament.stage) that we recently added.
+
+6) Data: make EFL Cup the canonical name in our competitions
+- Do NOT change Goalserve IDs here.
+- Add a small comment in code or ensure our UI prefers “EFL Cup” label if goalserve league name is “EFL Cup”.
+- If you have a manual seed/update, ensure cup competition is named “EFL Cup” and slug “efl-cup” (keep goalserve_competition_id as whatever works, currently 1199).
+
+After implementing:
+- Add brief log lines in sync-goalserve-matches response JSON:
+  include seasonKeyUsed and wroteCompetitionSeason=true/false.
+
+Files you will likely touch:
+- server/routes.ts
+- server/jobs/... goalserve match ingest
+- drizzle schema / migrations folder (if present)
+- any db helper layer used for SQL execution
+
+Do the implementation now, keep it minimal and safe.
+
+No E2E testing. No videos. 
+
+---
