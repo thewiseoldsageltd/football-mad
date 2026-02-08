@@ -1617,7 +1617,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
       const leagueId = String(req.query.leagueId || "1204");
-      const result = await syncGoalserveTeams(leagueId);
+      const seasonKeyParam = req.query.seasonKey as string | undefined;
+      const result = await syncGoalserveTeams(leagueId, seasonKeyParam);
       res.json(result);
     }
   );
@@ -1870,7 +1871,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!leagueId) {
         return res.status(400).json({ ok: false, error: "leagueId query param required" });
       }
-      const result = await syncGoalserveMatches(leagueId);
+      const seasonKeyParam = req.query.seasonKey as string | undefined;
+      const result = await syncGoalserveMatches(leagueId, seasonKeyParam);
       res.json(result);
     }
   );

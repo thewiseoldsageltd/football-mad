@@ -1,7 +1,8 @@
 import { db } from "../db";
-import { teams, competitions, competitionTeamMemberships } from "@shared/schema";
+import { teams, competitions, competitionTeamMemberships, competitionSeasons } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
+import { resolveSeasonKey } from "./sync-goalserve-matches";
 
 function slugify(text: string): string {
   return text
@@ -69,7 +70,10 @@ interface DbTeam {
   goalserveTeamId: string | null;
 }
 
-export async function syncGoalserveTeams(leagueId: string): Promise<{
+export async function syncGoalserveTeams(
+  leagueId: string,
+  seasonKeyParam?: string
+): Promise<{
   ok: boolean;
   leagueId: string;
   goalserveTeams: number;
@@ -77,6 +81,8 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
   updated: number;
   membershipsUpserted: number;
   unmatchedSample: { id: string; name: string }[];
+  seasonKeyUsed: string | null;
+  wroteCompetitionSeason: boolean;
   error?: string;
 }> {
   try {
@@ -92,6 +98,8 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
         updated: 0,
         membershipsUpserted: 0,
         unmatchedSample: [],
+        seasonKeyUsed: null,
+        wroteCompetitionSeason: false,
         error: "No team data found in response.league.team",
       };
     }
@@ -136,9 +144,32 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       .limit(1);
 
     const competitionDbId = competitionRow?.id ?? null;
-    const seasonKey = competitionRow?.season && String(competitionRow.season).trim()
-      ? String(competitionRow.season).trim()
-      : "unknown";
+    const seasonKey = resolveSeasonKey(
+      seasonKeyParam,
+      competitionRow?.season ? String(competitionRow.season) : undefined,
+      undefined
+    ) || "unknown";
+
+    let wroteCompetitionSeason = false;
+    if (competitionDbId && seasonKey !== "unknown") {
+      const isCurrent = competitionRow?.season === seasonKey;
+      await db
+        .insert(competitionSeasons)
+        .values({
+          competitionId: competitionDbId,
+          seasonKey,
+          isCurrent,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [competitionSeasons.competitionId, competitionSeasons.seasonKey],
+          set: {
+            isCurrent,
+            updatedAt: new Date(),
+          },
+        });
+      wroteCompetitionSeason = true;
+    }
 
     let matched = 0;
     let updated = 0;
@@ -234,6 +265,8 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       updated,
       membershipsUpserted,
       unmatchedSample: [],
+      seasonKeyUsed: seasonKey,
+      wroteCompetitionSeason,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -245,6 +278,8 @@ export async function syncGoalserveTeams(leagueId: string): Promise<{
       updated: 0,
       membershipsUpserted: 0,
       unmatchedSample: [],
+      seasonKeyUsed: null,
+      wroteCompetitionSeason: false,
       error,
     };
   }

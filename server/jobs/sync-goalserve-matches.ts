@@ -4,9 +4,18 @@
 // avoid duplicates and ensure stable references across feed refreshes.
 
 import { db } from "../db";
-import { matches, teams, competitions } from "@shared/schema";
+import { matches, teams, competitions, competitionSeasons } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
+
+export function resolveSeasonKey(
+  inputSeasonKey: string | undefined,
+  competitionSeason: string | null | undefined,
+  parsedSeason: string | null | undefined
+): string | null {
+  const s = (inputSeasonKey || competitionSeason || parsedSeason || "").trim();
+  return s.length ? s : null;
+}
 
 function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
   if (!formattedDate) return null;
@@ -238,10 +247,15 @@ interface SyncResult {
   competitionId: string | null;
   seasonKey: string | null;
   responsePath?: string;
+  seasonKeyUsed?: string | null;
+  wroteCompetitionSeason?: boolean;
   error?: string;
 }
 
-export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult> {
+export async function syncGoalserveMatches(
+  leagueId: string,
+  seasonKeyParam?: string
+): Promise<SyncResult> {
   const emptyResult = (error?: string, extra?: Partial<SyncResult>): SyncResult => ({
     ok: !error,
     leagueId,
@@ -264,9 +278,32 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
       .limit(1);
 
     const competitionDbId = competitionRow?.id ?? null;
-    const seasonKey = competitionRow?.season && String(competitionRow.season).trim()
-      ? String(competitionRow.season).trim()
-      : null;
+    const seasonKey = resolveSeasonKey(
+      seasonKeyParam,
+      competitionRow?.season ? String(competitionRow.season) : undefined,
+      undefined
+    );
+
+    let wroteCompetitionSeason = false;
+    if (competitionDbId && seasonKey) {
+      const isCurrent = competitionRow?.season === seasonKey;
+      await db
+        .insert(competitionSeasons)
+        .values({
+          competitionId: competitionDbId,
+          seasonKey,
+          isCurrent,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [competitionSeasons.competitionId, competitionSeasons.seasonKey],
+          set: {
+            isCurrent,
+            updatedAt: new Date(),
+          },
+        });
+      wroteCompetitionSeason = true;
+    }
 
     const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`);
 
@@ -495,6 +532,8 @@ export async function syncGoalserveMatches(leagueId: string): Promise<SyncResult
       competitionId: competitionDbId,
       seasonKey,
       responsePath,
+      seasonKeyUsed: seasonKey,
+      wroteCompetitionSeason,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
