@@ -13903,3 +13903,117 @@ No E2E testing. No videos.
 
 ---
 
+You are working on Football Mad (Render deploy). Goal: add a Goalserve “fixtures probe” debug endpoint so we can safely discover league feed shapes (week vs stage vs stage->week vs aggregate), match counts, season, and date ranges before running full ingests.
+
+CONSTRAINTS (MUST FOLLOW):
+- Do NOT run end-to-end tests (no Playwright/Cypress).
+- Do NOT generate videos.
+- Do NOT do automated browser testing.
+- Keep changes minimal and targeted.
+- No refactors unrelated to this task.
+- Provide short manual test steps for Barry to run (curl + browser hit).
+- Ensure responses are valid JSON objects (not strings), so Make.com doesn’t error “Expected Object, found String”.
+
+CONTEXT:
+- Goalserve is the data source of truth.
+- Fixtures endpoint: soccerfixtures/leagueid/{leagueId}
+- Feed can return different shapes:
+  - results.tournament.week[].match[]
+  - results.tournament.stage[].match[]
+  - results.tournament.stage[].week[].match[]
+  - sometimes results.tournament.aggregate exists for two-leg knockouts
+- We already support cups stages in ingest, but we need a lightweight “probe” to confirm each leagueId behavior and completeness.
+
+TASK:
+1) Add a new API route (server-side) e.g. GET /api/debug/goalserve/fixtures-probe?leagueId=1204
+   Optional params:
+   - dateStart=YYYY-MM-DD
+   - dateEnd=YYYY-MM-DD
+   - raw=1 (if provided, include a trimmed raw sample payload)
+2) The handler should:
+   - Validate leagueId exists and is numeric-ish.
+   - Call Goalserve fixtures endpoint for that leagueId (respect existing Goalserve base URL + key config used elsewhere).
+   - If dateStart/dateEnd are provided, pass them through to Goalserve if supported by our existing request helper (append as query params).
+   - Parse the JSON response.
+   - Detect which path(s) contain matches:
+       a) results.tournament.week[].match[]
+       b) results.tournament.stage[].match[]
+       c) results.tournament.stage[].week[].match[]
+   - Count:
+       - total matches
+       - number of weeks
+       - number of stages
+       - presence of aggregate node
+   - Extract:
+       - season string if present (any of: results.tournament.season, results.tournament.@season, etc.)
+       - earliest_match_date and latest_match_date (scan match.date or match.formatted_date fields; be defensive)
+   - Return a JSON object like:
+     {
+       "leagueId": "1204",
+       "schema": "week" | "stage" | "stage_week" | "unknown",
+       "counts": { "matches": 380, "weeks": 38, "stages": 0, "hasAggregate": false },
+       "season": "2025/2026" | null,
+       "dateRange": { "earliest": "2025-08-15", "latest": "2026-05-17" },
+       "warnings": [],
+       "sample": { ... } // only if raw=1, and trimmed (e.g. first 1-2 matches only)
+     }
+   - IMPORTANT: Always return an object, even on errors:
+     { "error": { "message": "...", "status": 500, "details": "...optional..." } }
+3) Add safe logging (one line) indicating leagueId + schema + matchCount.
+4) Add minimal tests ONLY if we already have a light unit-test setup; otherwise skip tests and just provide manual steps. Again: NO E2E.
+
+DELIVERABLES:
+- Code changes implementing the new endpoint.
+- Any new config/env vars (ideally none).
+- Manual verification steps (curl commands).
+
+---
+
+You are working on Football Mad (Render deploy). We added/attempted to add a debug endpoint, but it’s currently returning the SPA index.html.
+
+Evidence:
+- /api/news returns JSON ✅
+- /api/debug/goalserve/fixtures-probe?leagueId=1204 returns HTML index.html (HTTP 200, content-type text/html) ❌
+- /debug/goalserve/fixtures-probe also returns HTML ❌
+This indicates the SPA catch-all route is intercepting the request OR the route is not mounted.
+
+CONSTRAINTS (MUST FOLLOW):
+- Do NOT run end-to-end tests (no Playwright/Cypress).
+- Do NOT generate videos.
+- Do NOT do automated browser testing.
+- Keep changes minimal and targeted.
+- Ensure all debug endpoints return JSON objects (never strings), even on errors.
+
+TASK:
+1) Find the Express server entry file where routes are registered and where the SPA catch-all exists (e.g. app.get("*", ...) or similar).
+2) Ensure ALL API routes are mounted BEFORE the SPA catch-all.
+   - Specifically mount a debug router at: /api/debug
+3) Add a simple ping route:
+   GET /api/debug/ping -> { "ok": true, "ts": "<iso>", "env": "<NODE_ENV>" }
+4) Implement (or re-implement) the fixtures probe route under the debug router:
+   GET /api/debug/goalserve/fixtures-probe?leagueId=1204
+   Optional params: dateStart, dateEnd, raw=1
+   It must call the existing Goalserve request helper and return:
+   {
+     "leagueId": "1204",
+     "schema": "week" | "stage" | "stage_week" | "unknown",
+     "counts": { "matches": <n>, "weeks": <n>, "stages": <n>, "hasAggregate": <bool> },
+     "season": <string|null>,
+     "dateRange": { "earliest": <string|null>, "latest": <string|null> },
+     "warnings": [ ... ],
+     "sample": <object> (only if raw=1; include only the first 1-2 matches, never huge)
+   }
+   On any failure return:
+   { "error": { "message": "...", "status": <code>, "details": "...optional..." } }
+
+5) Add one-line server logging when probe runs: leagueId, schema, matchCount.
+
+DELIVERABLES:
+- Code changes only.
+- Manual checks for Barry:
+  curl -i https://football-mad-staging.onrender.com/api/debug/ping
+  curl -sS "https://football-mad-staging.onrender.com/api/debug/goalserve/fixtures-probe?leagueId=1204" | head
+  curl -sS "https://football-mad-staging.onrender.com/api/debug/goalserve/fixtures-probe?leagueId=1371" | head
+
+---
+

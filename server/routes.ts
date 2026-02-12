@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import { Router } from "express";
 import type { Server } from "http";
 import crypto from "crypto";
 import fs from "fs";
@@ -51,6 +52,221 @@ const shareClickSchema = z.object({
 });
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
+  // ========== DEBUG ROUTER (mounted first to avoid SPA catch-all) ==========
+  const debugRouter = Router();
+
+  debugRouter.get("/ping", (_req, res) => {
+    res.json({ ok: true, ts: new Date().toISOString(), env: process.env.NODE_ENV || "development" });
+  });
+
+  const fixturesProbeHandler = async (req: Request, res: Response) => {
+    const leagueId = (req.query.leagueId as string | undefined)?.trim();
+    if (!leagueId || !/^\d+$/.test(leagueId)) {
+      return res.status(400).json({
+        error: { message: "leagueId query param required and must be numeric", status: 400 },
+      });
+    }
+
+    const expectedSecret = process.env.GOALSERVE_SYNC_SECRET;
+    if (!expectedSecret) {
+      return res.status(500).json({ error: { message: "Sync not configured", status: 500 } });
+    }
+    const headerSecret = req.headers["x-sync-secret"] as string | undefined;
+    const authHeader = req.headers["authorization"] as string | undefined;
+    const providedSecret = headerSecret || (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined);
+    if (!providedSecret || providedSecret !== expectedSecret) {
+      return res.status(401).json({ error: { message: "Unauthorized", status: 401 } });
+    }
+
+    const dateStart = (req.query.dateStart as string | undefined)?.trim();
+    const dateEnd = (req.query.dateEnd as string | undefined)?.trim();
+    const includeRaw = req.query.raw === "1";
+
+    try {
+      let feedPath = `soccerfixtures/leagueid/${leagueId}`;
+      const qsParts: string[] = [];
+      if (dateStart) qsParts.push(`date_from=${encodeURIComponent(dateStart)}`);
+      if (dateEnd) qsParts.push(`date_to=${encodeURIComponent(dateEnd)}`);
+      if (qsParts.length) feedPath += `?${qsParts.join("&")}`;
+
+      const data = await goalserveFetch(feedPath);
+
+      const asArr = (v: any): any[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+
+      const tournament = data?.results?.tournament;
+      const weeks = asArr(tournament?.week);
+      const stages = asArr(tournament?.stage);
+      const hasAggregate = tournament?.aggregate != null;
+
+      let schema: "week" | "stage" | "stage_week" | "unknown" = "unknown";
+      let totalMatches = 0;
+      const warnings: string[] = [];
+      const dates: string[] = [];
+
+      const collectMatchDates = (m: any) => {
+        const d = String(m?.["@formatted_date"] ?? m?.formatted_date ?? m?.["@date"] ?? m?.date ?? "").trim();
+        if (d) dates.push(d);
+      };
+
+      if (weeks.length > 0) {
+        schema = "week";
+        for (const w of weeks) {
+          const mList = asArr(w?.match);
+          totalMatches += mList.length;
+          mList.forEach(collectMatchDates);
+        }
+      }
+
+      if (stages.length > 0) {
+        let stageHasWeeks = false;
+        let stageDirectMatches = 0;
+        let stageWeekMatches = 0;
+
+        for (const s of stages) {
+          const directMatches = asArr(s?.match);
+          const groups = asArr(s?.group);
+          const groupMatches = groups.flatMap((g: any) => asArr(g?.match));
+          const stageWeeks = asArr(s?.week);
+
+          directMatches.forEach(collectMatchDates);
+          groupMatches.forEach(collectMatchDates);
+          stageDirectMatches += directMatches.length + groupMatches.length;
+
+          if (stageWeeks.length > 0) {
+            stageHasWeeks = true;
+            for (const sw of stageWeeks) {
+              const swMatches = asArr(sw?.match);
+              stageWeekMatches += swMatches.length;
+              swMatches.forEach(collectMatchDates);
+            }
+          }
+        }
+
+        if (stageHasWeeks) {
+          schema = schema === "week" ? "week" : "stage_week";
+          totalMatches += stageWeekMatches + stageDirectMatches;
+        } else {
+          schema = schema === "week" ? "week" : "stage";
+          totalMatches += stageDirectMatches;
+        }
+
+        if (schema === "week" && stages.length > 0) {
+          warnings.push("Feed has both top-level weeks and stages; using 'week' as primary schema");
+        }
+      }
+
+      if (totalMatches === 0 && schema === "unknown") {
+        const topMatch = asArr(tournament?.match);
+        if (topMatch.length > 0) {
+          schema = "week";
+          totalMatches = topMatch.length;
+          topMatch.forEach(collectMatchDates);
+          warnings.push("Matches found directly under tournament (no week/stage wrapper)");
+        }
+      }
+
+      const seasonCandidates = [
+        tournament?.["@season"],
+        tournament?.season,
+        tournament?.["@season_year"],
+        tournament?.season_year,
+      ];
+      let season: string | null = null;
+      for (const c of seasonCandidates) {
+        if (c != null && String(c).trim()) {
+          season = String(c).trim();
+          break;
+        }
+      }
+
+      const parseDateStr = (s: string): string | null => {
+        const cleaned = s.replace(/\s+/g, " ").trim();
+        const isoMatch = cleaned.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (isoMatch) return isoMatch[1];
+        const slashMatch = cleaned.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+        if (slashMatch) return `${slashMatch[3]}-${slashMatch[2]}-${slashMatch[1]}`;
+        const mdyMatch = cleaned.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+        if (mdyMatch) return `${mdyMatch[3]}-${mdyMatch[1]}-${mdyMatch[2]}`;
+        try {
+          const d = new Date(cleaned);
+          if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+        } catch {}
+        return null;
+      };
+
+      const parsedDates = dates.map(parseDateStr).filter((d): d is string => d !== null).sort();
+      const earliest = parsedDates.length > 0 ? parsedDates[0] : null;
+      const latest = parsedDates.length > 0 ? parsedDates[parsedDates.length - 1] : null;
+
+      let sample: any = undefined;
+      if (includeRaw && tournament) {
+        const trimmedTournament: any = {
+          "@name": tournament["@name"] ?? tournament.name,
+          "@season": tournament["@season"] ?? tournament.season,
+        };
+        if (weeks.length > 0) {
+          const w0 = weeks[0];
+          const w0matches = asArr(w0?.match).slice(0, 2);
+          trimmedTournament.week_0 = { ...w0, match: w0matches };
+        }
+        if (stages.length > 0) {
+          const s0 = stages[0];
+          const s0matches = asArr(s0?.match).slice(0, 2);
+          const s0groups = asArr(s0?.group);
+          const s0weeksSample = asArr(s0?.week).slice(0, 1).map((sw: any) => ({
+            ...sw,
+            match: asArr(sw?.match).slice(0, 2),
+          }));
+          trimmedTournament.stage_0 = {
+            "@name": s0?.["@name"] ?? s0?.["@round"],
+            "@id": s0?.["@id"],
+            match: s0matches,
+            groupCount: s0groups.length,
+            group_0_matches: s0groups.length > 0 ? asArr(s0groups[0]?.match).slice(0, 2) : [],
+            weeks: s0weeksSample,
+          };
+        }
+        if (hasAggregate) {
+          const agg = tournament.aggregate;
+          trimmedTournament.aggregate_sample = Array.isArray(agg)
+            ? agg.slice(0, 2)
+            : typeof agg === "object"
+            ? agg
+            : agg;
+        }
+        sample = trimmedTournament;
+      }
+
+      console.log(`[fixtures-probe] leagueId=${leagueId} schema=${schema} matches=${totalMatches}`);
+
+      res.json({
+        leagueId,
+        schema,
+        counts: {
+          matches: totalMatches,
+          weeks: weeks.length,
+          stages: stages.length,
+          hasAggregate,
+        },
+        season,
+        dateRange: { earliest, latest },
+        warnings,
+        ...(sample !== undefined ? { sample } : {}),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[fixtures-probe] leagueId=${leagueId} error: ${message}`);
+      res.status(500).json({
+        error: { message, status: 500 },
+      });
+    }
+  };
+
+  debugRouter.get("/goalserve/fixtures-probe", fixturesProbeHandler as any);
+  debugRouter.post("/goalserve/fixtures-probe", fixturesProbeHandler as any);
+
+  app.use("/api/debug", debugRouter);
+
   // Auth routes - optional, server can start without auth configured
   try {
     await setupAuth(app);
@@ -1557,203 +1773,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: false, error: err instanceof Error ? err.message : String(err) });
     }
   });
-
-  // ========== GOALSERVE FIXTURES PROBE ==========
-  app.get(
-    "/api/debug/goalserve/fixtures-probe",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const leagueId = (req.query.leagueId as string | undefined)?.trim();
-      if (!leagueId || !/^\d+$/.test(leagueId)) {
-        return res.status(400).json({
-          error: { message: "leagueId query param required and must be numeric", status: 400 },
-        });
-      }
-
-      const dateStart = (req.query.dateStart as string | undefined)?.trim();
-      const dateEnd = (req.query.dateEnd as string | undefined)?.trim();
-      const includeRaw = req.query.raw === "1";
-
-      try {
-        let feedPath = `soccerfixtures/leagueid/${leagueId}`;
-        const qsParts: string[] = [];
-        if (dateStart) qsParts.push(`date_from=${encodeURIComponent(dateStart)}`);
-        if (dateEnd) qsParts.push(`date_to=${encodeURIComponent(dateEnd)}`);
-        if (qsParts.length) feedPath += `?${qsParts.join("&")}`;
-
-        const data = await goalserveFetch(feedPath);
-
-        const asArr = (v: any): any[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
-
-        const tournament = data?.results?.tournament;
-        const weeks = asArr(tournament?.week);
-        const stages = asArr(tournament?.stage);
-        const hasAggregate = tournament?.aggregate != null;
-
-        let schema: "week" | "stage" | "stage_week" | "unknown" = "unknown";
-        let totalMatches = 0;
-        const warnings: string[] = [];
-        const dates: string[] = [];
-
-        const collectMatchDates = (m: any) => {
-          const d = String(m?.["@formatted_date"] ?? m?.formatted_date ?? m?.["@date"] ?? m?.date ?? "").trim();
-          if (d) dates.push(d);
-        };
-
-        if (weeks.length > 0) {
-          schema = "week";
-          for (const w of weeks) {
-            const mList = asArr(w?.match);
-            totalMatches += mList.length;
-            mList.forEach(collectMatchDates);
-          }
-        }
-
-        if (stages.length > 0) {
-          let stageHasWeeks = false;
-          let stageDirectMatches = 0;
-          let stageWeekMatches = 0;
-
-          for (const s of stages) {
-            const directMatches = asArr(s?.match);
-            const groups = asArr(s?.group);
-            const groupMatches = groups.flatMap((g: any) => asArr(g?.match));
-            const stageWeeks = asArr(s?.week);
-
-            directMatches.forEach(collectMatchDates);
-            groupMatches.forEach(collectMatchDates);
-            stageDirectMatches += directMatches.length + groupMatches.length;
-
-            if (stageWeeks.length > 0) {
-              stageHasWeeks = true;
-              for (const sw of stageWeeks) {
-                const swMatches = asArr(sw?.match);
-                stageWeekMatches += swMatches.length;
-                swMatches.forEach(collectMatchDates);
-              }
-            }
-          }
-
-          if (stageHasWeeks) {
-            schema = schema === "week" ? "week" : "stage_week";
-            totalMatches += stageWeekMatches + stageDirectMatches;
-          } else {
-            schema = schema === "week" ? "week" : "stage";
-            totalMatches += stageDirectMatches;
-          }
-
-          if (schema === "week" && stages.length > 0) {
-            warnings.push("Feed has both top-level weeks and stages; using 'week' as primary schema");
-          }
-        }
-
-        if (totalMatches === 0 && schema === "unknown") {
-          const topMatch = asArr(tournament?.match);
-          if (topMatch.length > 0) {
-            schema = "week";
-            totalMatches = topMatch.length;
-            topMatch.forEach(collectMatchDates);
-            warnings.push("Matches found directly under tournament (no week/stage wrapper)");
-          }
-        }
-
-        const seasonCandidates = [
-          tournament?.["@season"],
-          tournament?.season,
-          tournament?.["@season_year"],
-          tournament?.season_year,
-        ];
-        let season: string | null = null;
-        for (const c of seasonCandidates) {
-          if (c != null && String(c).trim()) {
-            season = String(c).trim();
-            break;
-          }
-        }
-
-        const parseDateStr = (s: string): string | null => {
-          const cleaned = s.replace(/\s+/g, " ").trim();
-          const isoMatch = cleaned.match(/^(\d{4}-\d{2}-\d{2})/);
-          if (isoMatch) return isoMatch[1];
-          const slashMatch = cleaned.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
-          if (slashMatch) return `${slashMatch[3]}-${slashMatch[2]}-${slashMatch[1]}`;
-          const mdyMatch = cleaned.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-          if (mdyMatch) return `${mdyMatch[3]}-${mdyMatch[1]}-${mdyMatch[2]}`;
-          try {
-            const d = new Date(cleaned);
-            if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-          } catch {}
-          return null;
-        };
-
-        const parsedDates = dates.map(parseDateStr).filter((d): d is string => d !== null).sort();
-        const earliest = parsedDates.length > 0 ? parsedDates[0] : null;
-        const latest = parsedDates.length > 0 ? parsedDates[parsedDates.length - 1] : null;
-
-        let sample: any = undefined;
-        if (includeRaw && tournament) {
-          const trimmedTournament: any = {
-            "@name": tournament["@name"] ?? tournament.name,
-            "@season": tournament["@season"] ?? tournament.season,
-          };
-          if (weeks.length > 0) {
-            const w0 = weeks[0];
-            const w0matches = asArr(w0?.match).slice(0, 2);
-            trimmedTournament.week_0 = { ...w0, match: w0matches };
-          }
-          if (stages.length > 0) {
-            const s0 = stages[0];
-            const s0matches = asArr(s0?.match).slice(0, 2);
-            const s0groups = asArr(s0?.group);
-            const s0weeksSample = asArr(s0?.week).slice(0, 1).map((sw: any) => ({
-              ...sw,
-              match: asArr(sw?.match).slice(0, 2),
-            }));
-            trimmedTournament.stage_0 = {
-              "@name": s0?.["@name"] ?? s0?.["@round"],
-              "@id": s0?.["@id"],
-              match: s0matches,
-              groupCount: s0groups.length,
-              group_0_matches: s0groups.length > 0 ? asArr(s0groups[0]?.match).slice(0, 2) : [],
-              weeks: s0weeksSample,
-            };
-          }
-          if (hasAggregate) {
-            const agg = tournament.aggregate;
-            trimmedTournament.aggregate_sample = Array.isArray(agg)
-              ? agg.slice(0, 2)
-              : typeof agg === "object"
-              ? agg
-              : agg;
-          }
-          sample = trimmedTournament;
-        }
-
-        console.log(`[fixtures-probe] leagueId=${leagueId} schema=${schema} matches=${totalMatches}`);
-
-        res.json({
-          leagueId,
-          schema,
-          counts: {
-            matches: totalMatches,
-            weeks: weeks.length,
-            stages: stages.length,
-            hasAggregate,
-          },
-          season,
-          dateRange: { earliest, latest },
-          warnings,
-          ...(sample !== undefined ? { sample } : {}),
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[fixtures-probe] leagueId=${leagueId} error: ${message}`);
-        res.status(500).json({
-          error: { message, status: 500 },
-        });
-      }
-    }
-  );
 
   // ========== GOALSERVE CONNECTION TEST ==========
   app.post("/api/jobs/test-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
