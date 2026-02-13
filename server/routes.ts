@@ -2382,7 +2382,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               insertedRowsCount: r.insertedRowsCount,
               error: r.error || null,
             });
-            if (r.ok) successes++;
+            if (r.ok || r.skipped) successes++;
             else failures++;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);

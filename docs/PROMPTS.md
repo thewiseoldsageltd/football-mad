@@ -14346,3 +14346,23 @@ curl -sS "$STAGING_URL/api/standings?leagueId=1204&season=2023/2024&tablesOnly=1
 
 ---
 
+Update POST /api/jobs/backfill-priority-standings so that skipped runs are NOT counted as failures.
+
+Current behavior: it treats any result with ok=false as a failure, even when skipped=true (e.g. ok=false, skipped=true, error=null). This makes the summary misleading.
+
+Change the aggregation logic:
+- A run counts as SUCCESS if (r.ok === true) OR (r.skipped === true)
+- A run counts as FAILURE only if (r.ok === false AND r.skipped !== true)
+
+Also change the top-level ok flag:
+- ok should be true when failures === 0 (failures defined as above)
+
+Keep the response shape the same (season, total, successes, failures, results...).
+
+Do NOT run E2E tests or generate any videos.
+Build should compile cleanly.
+
+After implementing, please tell me exactly which file(s) changed and the snippet of the updated success/failure counting block.
+
+---
+
