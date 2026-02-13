@@ -199,6 +199,8 @@ export interface UpsertStandingsResult {
   ok: boolean;
   leagueId: string;
   season: string;
+  requestedSeason?: string;
+  effectiveSeasonUsed?: string;
   asOf?: Date;
   insertedRowsCount: number;
   snapshotId?: string;
@@ -334,14 +336,34 @@ export async function upsertGoalserveStandings(
   }
 
   // Extract metadata from resolved tournament
-  const season = t?.season || seasonParam || "";
+  const effectiveSeason = t?.season || seasonParam || "";
+  const season = effectiveSeason;
   const stageId = t?.stage_id || null;
+
+  // Season mismatch detection: Goalserve ignores historical season params
+  if (seasonParam && effectiveSeason && seasonParam !== effectiveSeason) {
+    console.warn(
+      `[StandingsIngest] SEASON MISMATCH — leagueId=${leagueId} requested=${seasonParam} got=${effectiveSeason}`
+    );
+    return {
+      ok: false,
+      leagueId,
+      season: effectiveSeason,
+      requestedSeason: seasonParam,
+      effectiveSeasonUsed: effectiveSeason,
+      insertedRowsCount: 0,
+      skipped: false,
+      error: `Historical standings not supported by Goalserve standings feed for this league (requested ${seasonParam}, got ${effectiveSeason})`,
+    };
+  }
 
   if (teamRows.length === 0) {
     return {
       ok: false,
       leagueId,
       season,
+      requestedSeason: seasonParam,
+      effectiveSeasonUsed: effectiveSeason || undefined,
       insertedRowsCount: 0,
       error: "No team rows in standings",
       debug: debugInfo,
@@ -397,6 +419,8 @@ export async function upsertGoalserveStandings(
       ok: true,
       leagueId,
       season,
+      requestedSeason: seasonParam,
+      effectiveSeasonUsed: effectiveSeason || undefined,
       asOf,
       insertedRowsCount: 0,
       snapshotId: latestSnapshot.id,
@@ -518,6 +542,8 @@ export async function upsertGoalserveStandings(
     ok: true,
     leagueId,
     season,
+    requestedSeason: seasonParam,
+    effectiveSeasonUsed: effectiveSeason || undefined,
     asOf,
     insertedRowsCount: result.insertedRowsCount,
     snapshotId: result.snapshotId,

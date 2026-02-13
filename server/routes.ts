@@ -2298,13 +2298,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     async (req, res) => {
       const leagueId = req.query.leagueId as string;
       const season = req.query.season as string | undefined;
+      const force = req.query.force === "1";
 
       if (!leagueId) {
         return res.status(400).json({ ok: false, error: "leagueId query param required" });
       }
 
       try {
-        const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
+        const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
         res.json(result);
       } catch (error) {
         console.error("Standings sync error:", error);
@@ -2324,9 +2325,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/jobs/backfill-priority-standings",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
-      const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
+      const CURRENT_SEASON = "2025/2026";
+      const season = (req.query.season as string | undefined)?.trim() || CURRENT_SEASON;
       const slugsParam = (req.query.slugs as string | undefined)?.trim();
       const force = req.query.force === "1";
+
+      if (season !== CURRENT_SEASON) {
+        return res.status(400).json({
+          ok: false,
+          error: "Historical season backfill is not supported by Goalserve standings feed. Only current season is supported.",
+          season,
+        });
+      }
 
       try {
         let comps: { slug: string; canonicalSlug: string | null; goalserveCompetitionId: string | null }[];

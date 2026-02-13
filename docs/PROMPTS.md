@@ -14228,3 +14228,60 @@ Expect: cup comps no longer appear in results, and failures drop.
 
 ---
 
+We confirmed Goalserve standings feed ignores historical season requests.
+
+Evidence:
+POST /api/jobs/sync-goalserve-standings?leagueId=1204&season=2024/2025&force=1 returns JSON with "season":"2025/2026" and skipped:true, and DB has no snapshots for 2024/2025.
+
+We must fix correctness + reporting (no misleading ok:true).
+
+Implement:
+
+A) Update upsertGoalserveStandings to accept both:
+- requestedSeason (string | undefined)
+- force (boolean)
+
+It should return a richer result:
+{
+  ok: boolean,
+  leagueId: string,
+  requestedSeason?: string,
+  effectiveSeasonUsed?: string,
+  asOf?: string,
+  insertedRowsCount: number,
+  snapshotId?: string,
+  skipped?: boolean,
+  error?: string,
+  reason?: string
+}
+
+B) Season validation:
+- If requestedSeason is provided AND requestedSeason !== effectiveSeasonUsed (the season that the function currently uses/writes), then:
+  - DO NOT write a snapshot under the wrong season
+  - Return ok:false with error:
+    "Historical standings not supported by Goalserve standings feed for this league (requested {requestedSeason}, got {effectiveSeasonUsed})"
+  - Set skipped:false (this is a hard failure for the request)
+- If requestedSeason is omitted, behave as before (current season ingestion).
+
+C) Force param:
+- Ensure POST /api/jobs/sync-goalserve-standings forwards force=1 to upsertGoalserveStandings.
+- Ensure POST /api/jobs/backfill-priority-standings forwards force=1 too.
+
+D) Backfill route behavior:
+- If season param is provided AND season !== CURRENT_SEASON_DEFAULT (currently "2025/2026"), then return 400 JSON:
+  { ok:false, error:"Historical season backfill is not supported by Goalserve standings feed. Only current season is supported.", season }
+This prevents false-success runs.
+
+E) Response content-type must always be JSON for these job routes.
+
+Constraints:
+- No E2E tests.
+- No videos.
+
+Provide manual curl tests:
+1) sync-goalserve-standings?leagueId=1204&season=2024/2025 => should return ok:false + clear error
+2) sync-goalserve-standings?leagueId=1204&season=2025/2026 => ok:true (or skipped:true) as before
+3) backfill-priority-standings?season=2024/2025 => HTTP 400 JSON
+
+---
+
