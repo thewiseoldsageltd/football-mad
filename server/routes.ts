@@ -2325,18 +2325,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "/api/jobs/backfill-priority-standings",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
-      const CURRENT_SEASON = "2025/2026";
-      const season = (req.query.season as string | undefined)?.trim() || CURRENT_SEASON;
+      const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
       const slugsParam = (req.query.slugs as string | undefined)?.trim();
       const force = req.query.force === "1";
-
-      if (season !== CURRENT_SEASON) {
-        return res.status(400).json({
-          ok: false,
-          error: "Historical season backfill is not supported by Goalserve standings feed. Only current season is supported.",
-          season,
-        });
-      }
 
       try {
         let comps: { slug: string; canonicalSlug: string | null; goalserveCompetitionId: string | null }[];

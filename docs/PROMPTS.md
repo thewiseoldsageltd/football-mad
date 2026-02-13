@@ -14285,3 +14285,64 @@ Provide manual curl tests:
 
 ---
 
+We’ve confirmed Goalserve historical standings work ONLY via the non-xml endpoint.
+
+Proof:
+- Current: /standings/1204.xml?json=true => tournament.season = 2025/2026
+- Historical: /standings/1204?json=true&season=2023-2024 => tournament.season = 2023/2024
+
+TASK: Update standings ingestion to support historical seasons safely.
+
+Constraints:
+- Make changes via Replit AI only (no manual edits).
+- NO E2E tests, NO videos.
+- Build must pass.
+
+Implement in server/jobs/upsert-goalserve-standings.ts (the function used by /api/jobs/upsert-goalserve-standings and our alias /api/jobs/sync-goalserve-standings):
+
+1) Season normalization
+- Accept seasonParam (already exists).
+- If provided:
+  - seasonSlash = "YYYY/YYYY" form (e.g. 2023/2024)
+  - seasonDash = convert slash to dash (e.g. 2023-2024)
+
+2) URL selection
+- If seasonParam is provided: use historical endpoint (NO .xml):
+  https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${seasonDash}
+- Else (no seasonParam): use current endpoint (.xml):
+  https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true
+
+3) Parsing robustness
+- tournamentNode = payload?.standings?.tournament
+- If tournamentNode is an array, use tournamentNode[0]; else use tournamentNode.
+- team rows = tournament.team (handle array/object normalization as you already do elsewhere)
+
+4) SAFETY: SeasonMismatch guard
+- If seasonParam was provided:
+  - Read returnedSeason = tournament.season (should be slash form)
+  - If returnedSeason !== seasonSlash:
+    return { ok:false, leagueId, season: seasonSlash, error:"SeasonMismatch", returnedSeason } and DO NOT write snapshots/rows.
+
+5) Return value consistency
+- Ensure the response JSON includes the season we actually attempted (seasonSlash when seasonParam provided).
+- Keep existing skipped/payloadHash behaviour intact.
+
+6) Update the backfill job so that when it loops seasons like 2024/2025 it genuinely backfills those seasons (and doesn’t silently save 2025/2026).
+- If backfill passes season=2024/2025, upsert must request season=2024-2025 and enforce the mismatch guard.
+
+After code change, provide these manual tests:
+
+A) Current season (should ok/skipped and season=2025/2026):
+curl -sS -X POST "$STAGING_URL/api/jobs/sync-goalserve-standings?leagueId=1204" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | jq .
+
+B) Historical season (should ok and season=2023/2024, insertedRowsCount>0 on first run):
+curl -sS -X POST "$STAGING_URL/api/jobs/sync-goalserve-standings?leagueId=1204&season=2023/2024&force=1" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | jq .
+
+C) DB verify:
+select league_id, season, count(*) from standings_snapshots where league_id='1204' group by league_id, season order by season;
+
+D) API verify:
+curl -sS "$STAGING_URL/api/standings?leagueId=1204&season=2023/2024&tablesOnly=1" | jq '{snapshot, rows:(.table|length)}'
+
+---
+

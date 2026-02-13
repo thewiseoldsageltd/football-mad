@@ -231,9 +231,21 @@ export async function upsertGoalserveStandings(
   options: UpsertStandingsOptions = {}
 ): Promise<UpsertStandingsResult> {
   const { seasonParam, force = false } = options;
-  let url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
+
+  let seasonSlash: string | undefined;
+  let seasonDash: string | undefined;
   if (seasonParam) {
-    url += `&season=${encodeURIComponent(seasonParam)}`;
+    seasonSlash = seasonParam.includes("-")
+      ? seasonParam.replace("-", "/")
+      : seasonParam;
+    seasonDash = seasonSlash.replace("/", "-");
+  }
+
+  let url: string;
+  if (seasonParam) {
+    url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${encodeURIComponent(seasonDash!)}`;
+  } else {
+    url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
   }
 
   const response = await fetch(url);
@@ -336,24 +348,26 @@ export async function upsertGoalserveStandings(
   }
 
   // Extract metadata from resolved tournament
-  const effectiveSeason = t?.season || seasonParam || "";
-  const season = effectiveSeason;
+  const returnedSeason = t?.season || "";
+  const requestedSeasonNorm = seasonSlash || "";
+  const effectiveSeason = returnedSeason || requestedSeasonNorm || "";
+  const season = seasonSlash || effectiveSeason;
   const stageId = t?.stage_id || null;
 
-  // Season mismatch detection: Goalserve ignores historical season params
-  if (seasonParam && effectiveSeason && seasonParam !== effectiveSeason) {
+  // Season mismatch detection
+  if (seasonSlash && returnedSeason && returnedSeason !== seasonSlash) {
     console.warn(
-      `[StandingsIngest] SEASON MISMATCH — leagueId=${leagueId} requested=${seasonParam} got=${effectiveSeason}`
+      `[StandingsIngest] SEASON MISMATCH — leagueId=${leagueId} requested=${seasonSlash} got=${returnedSeason}`
     );
     return {
       ok: false,
       leagueId,
-      season: effectiveSeason,
-      requestedSeason: seasonParam,
-      effectiveSeasonUsed: effectiveSeason,
+      season: seasonSlash,
+      requestedSeason: seasonSlash,
+      effectiveSeasonUsed: returnedSeason,
       insertedRowsCount: 0,
       skipped: false,
-      error: `Historical standings not supported by Goalserve standings feed for this league (requested ${seasonParam}, got ${effectiveSeason})`,
+      error: `Season mismatch: requested ${seasonSlash}, feed returned ${returnedSeason}`,
     };
   }
 
