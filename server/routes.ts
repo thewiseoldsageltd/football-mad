@@ -2291,6 +2291,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== SYNC GOALSERVE STANDINGS (alias for upsert-goalserve-standings) ==========
+  app.post(
+    "/api/jobs/sync-goalserve-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      const season = req.query.season as string | undefined;
+
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
+      }
+
+      try {
+        const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
+        res.json(result);
+      } catch (error) {
+        console.error("Standings sync error:", error);
+        res.status(500).json({
+          ok: false,
+          leagueId,
+          season: season || null,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+  );
+
   // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========
   app.get(
     "/api/jobs/backfill-standings",

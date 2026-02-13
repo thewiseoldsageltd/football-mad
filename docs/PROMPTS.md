@@ -14017,3 +14017,108 @@ DELIVERABLES:
 
 ---
 
+Please add a new job endpoint alias so this works:
+
+POST /api/jobs/sync-goalserve-standings
+
+Right now this route falls through to the SPA and returns HTML.
+
+---
+
+GOAL
+
+Make /api/jobs/sync-goalserve-standings behave exactly the same as:
+
+POST /api/jobs/upsert-goalserve-standings
+
+Do NOT duplicate ingestion logic — just call the existing standings upsert job.
+
+---
+
+IMPORTANT CONSTRAINTS
+
+❌ Do NOT generate E2E tests  
+❌ Do NOT generate integration tests  
+❌ Do NOT run test suites  
+❌ Do NOT create preview videos  
+❌ Do NOT simulate browser sessions  
+❌ Do NOT add Playwright / Cypress / Puppeteer  
+❌ Do NOT scaffold test files  
+
+We are IMPLEMENTING ONLY.
+
+No testing or verification steps beyond compile-time safety.
+
+---
+
+IMPLEMENTATION
+
+Inside server/routes.ts:
+
+1. Add a new POST route:
+
+/api/jobs/sync-goalserve-standings
+
+2. Use the same auth check we use for all other Goalserve jobs:
+   - header: x-sync-secret
+   - env var: GOALSERVE_SYNC_SECRET
+   Use the existing validation helper already used by:
+   - /api/jobs/sync-goalserve-matches
+   - /api/jobs/sync-goalserve-teams
+
+3. Accept query params:
+
+leagueId (required)
+season (optional)
+
+If season is not provided, fall back to the same default logic already used in:
+upsert-goalserve-standings
+
+4. Internally call the existing job:
+
+upsertGoalserveStandings({ leagueId, season })
+
+Do NOT reimplement Goalserve logic.
+
+5. Return JSON only (never HTML):
+
+Success:
+{
+  ok: true,
+  leagueId,
+  season,
+  asOf,
+  insertedRowsCount,
+  snapshotId
+}
+
+Failure:
+Status 500
+{
+  ok: false,
+  leagueId,
+  season,
+  error
+}
+
+---
+
+PLACE THIS ROUTE
+
+Register it alongside the other /api/jobs/* endpoints.
+
+---
+
+AFTER IMPLEMENTING
+
+Just ensure TypeScript compiles.
+
+Do NOT run any E2E or automated tests.
+
+Manual curl test only:
+
+curl -X POST "$STAGING_URL/api/jobs/sync-goalserve-standings?leagueId=1204&season=2025/2026" \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET"
+
+---
+
