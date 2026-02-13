@@ -146,6 +146,8 @@ export const competitions = pgTable("competitions", {
   dateStart: text("date_start"),
   dateEnd: text("date_end"),
   isCup: boolean("is_cup").default(false),
+  isPriority: boolean("is_priority").default(false),
+  canonicalSlug: text("canonical_slug"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

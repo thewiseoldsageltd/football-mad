@@ -2318,6 +2318,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== BACKFILL PRIORITY STANDINGS (initial DB seeding of standings snapshots) ==========
+  // Manual test: curl -sS -X POST "$STAGING_URL/api/jobs/backfill-priority-standings?season=2025/2026" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | head
+  app.post(
+    "/api/jobs/backfill-priority-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
+      const slugsParam = (req.query.slugs as string | undefined)?.trim();
+      const force = req.query.force === "1";
+
+      try {
+        let comps: { slug: string; canonicalSlug: string | null; goalserveCompetitionId: string | null }[];
+
+        if (slugsParam) {
+          const slugList = slugsParam.split(",").map(s => s.trim()).filter(Boolean);
+          comps = await db
+            .select({
+              slug: competitions.slug,
+              canonicalSlug: competitions.canonicalSlug,
+              goalserveCompetitionId: competitions.goalserveCompetitionId,
+            })
+            .from(competitions)
+            .where(
+              or(
+                inArray(competitions.canonicalSlug, slugList),
+                inArray(competitions.slug, slugList)
+              )
+            );
+        } else {
+          comps = await db
+            .select({
+              slug: competitions.slug,
+              canonicalSlug: competitions.canonicalSlug,
+              goalserveCompetitionId: competitions.goalserveCompetitionId,
+            })
+            .from(competitions)
+            .where(eq(competitions.isPriority, true));
+        }
+
+        const results: any[] = [];
+        let successes = 0;
+        let failures = 0;
+
+        for (const comp of comps) {
+          const leagueId = comp.goalserveCompetitionId;
+          const label = comp.canonicalSlug || comp.slug;
+
+          if (!leagueId) {
+            results.push({ canonicalSlug: label, leagueId: null, ok: false, skipped: false, insertedRowsCount: 0, error: "No goalserve_competition_id" });
+            failures++;
+            continue;
+          }
+
+          try {
+            const r = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
+            results.push({
+              canonicalSlug: label,
+              leagueId,
+              ok: r.ok,
+              skipped: r.skipped || false,
+              insertedRowsCount: r.insertedRowsCount,
+              error: r.error || null,
+            });
+            if (r.ok) successes++;
+            else failures++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            results.push({ canonicalSlug: label, leagueId, ok: false, skipped: false, insertedRowsCount: 0, error: msg });
+            failures++;
+          }
+        }
+
+        res.json({ ok: failures === 0, season, total: comps.length, successes, failures, results });
+      } catch (error) {
+        console.error("Backfill priority standings error:", error);
+        res.status(500).json({ ok: false, season, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
   // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========
   app.get(
     "/api/jobs/backfill-standings",

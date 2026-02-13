@@ -14122,3 +14122,32 @@ curl -X POST "$STAGING_URL/api/jobs/sync-goalserve-standings?leagueId=1204&seaso
 
 ---
 
+Replit AI — implement a new job endpoint to backfill standings for all priority competitions.
+
+Constraints:
+- Do NOT run any E2E tests.
+- Do NOT create videos.
+- Keep changes minimal and surgical.
+- All responses must be JSON (never HTML).
+- Use the existing DB tables: competitions (canonical_slug, is_priority, goalserve_competition_id), standings_snapshots, standings_rows.
+- Reuse the existing upsertGoalserveStandings function.
+
+Deliverable:
+1) Add POST /api/jobs/backfill-priority-standings
+   - Auth: requireJobSecret("GOALSERVE_SYNC_SECRET")
+   - Query params:
+     - season (optional, default "2025/2026")
+     - slugs (optional comma-separated canonical_slugs; if omitted, use all is_priority=true competitions)
+     - force (optional "1" to bypass “skipped” behaviour if supported; otherwise ignore)
+   - For each resolved competition:
+     - call upsertGoalserveStandings({ leagueId: goalserve_competition_id, season })
+   - Return JSON summary: { ok, season, total, successes, failures, results:[{canonical_slug, leagueId, ok, skipped, insertedRowsCount, error}] }
+
+2) Ensure route is registered in server/routes.ts near the other /api/jobs/* endpoints.
+3) Add a short comment near the route that it is used for initial DB seeding of standings snapshots.
+
+Also add a quick manual test command in a comment:
+curl -sS -X POST "$STAGING_URL/api/jobs/backfill-priority-standings?season=2025/2026" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | head
+
+---
+
