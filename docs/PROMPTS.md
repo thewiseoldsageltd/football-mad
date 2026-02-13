@@ -14212,3 +14212,19 @@ Do NOT run E2E tests.
 
 ---
 
+We should NOT attempt standings backfill for knockout cups. The Cups tab on /tables is round-by-round fixtures/results, not standings.
+
+Please update POST /api/jobs/backfill-priority-standings to SKIP cup competitions.
+
+Implementation:
+- In the query that selects comps when slugsParam is NOT provided (the isPriority=true branch), add a filter to exclude cups.
+- Use the existing competitions column that represents cup-ness (e.g. competitions.isCup or competitions.is_cup). If unsure, inspect shared/schema competitions definition and use the correct boolean column.
+- Keep behaviour identical otherwise.
+- Ensure JSON only (never HTML). No E2E tests. No videos.
+
+After change, manual test commands:
+1) curl -i -sS -X POST "$STAGING_URL/api/jobs/backfill-priority-standings?season=2025/2026" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | head -n 40
+Expect: cup comps no longer appear in results, and failures drop.
+
+---
+

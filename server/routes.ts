@@ -2354,7 +2354,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               goalserveCompetitionId: competitions.goalserveCompetitionId,
             })
             .from(competitions)
-            .where(eq(competitions.isPriority, true));
+            .where(and(eq(competitions.isPriority, true), eq(competitions.isCup, false)));
         }
 
         const results: any[] = [];
