@@ -14151,3 +14151,64 @@ curl -sS -X POST "$STAGING_URL/api/jobs/backfill-priority-standings?season=2025/
 
 ---
 
+You are working in the Football Mad repo.
+
+ABSOLUTE REQUIREMENTS:
+- Do NOT run any end-to-end tests.
+- Do NOT run Playwright/Cypress.
+- Do NOT generate videos.
+- Do NOT do “full app QA”.
+- Make only the minimal code changes required.
+
+PROBLEM:
+On staging, POST /api/jobs/backfill-priority-standings returns HTML (index.html), meaning the route is NOT registered.
+But POST /api/jobs/sync-goalserve-standings returns JSON, so /api/jobs routes are working.
+
+GOAL:
+Implement and register this route so it returns JSON (not HTML) and runs a bulk standings backfill for priority competitions:
+
+POST /api/jobs/backfill-priority-standings
+
+AUTH:
+Protect it with requireJobSecret("GOALSERVE_SYNC_SECRET") exactly like other job routes.
+
+QUERY PARAMS:
+- season (optional) default "2025/2026"
+- slugs (optional) comma-separated list; if provided, select competitions where canonical_slug IN (...) OR slug IN (...)
+- force=1 (optional) if set, bypass skip logic when calling upsertGoalserveStandings
+
+BEHAVIOUR:
+1) Read season, slugs, force from req.query
+2) Query DB:
+   - If slugs provided: competitions matching canonical_slug OR slug in slugs
+   - Else: competitions where is_priority = true
+   - Only include rows that have a goalserve_competition_id value
+3) For each competition:
+   - Call the existing upsertGoalserveStandings({ leagueId: competition.goalserveCompetitionId, season, force })
+     Use the same helper/function already used by the existing /api/jobs/upsert-goalserve-standings route.
+4) Return JSON summary:
+{
+  ok: true,
+  season,
+  total,
+  successes,
+  failures,
+  results: [
+    { leagueId, canonicalSlug, slug, ok, skipped, insertedRowsCount, asOf, error }
+  ]
+}
+
+IMPLEMENTATION DETAILS:
+- Make this change in server/routes.ts near the other /api/jobs standings routes (upsert-goalserve-standings / sync-goalserve-standings).
+- Ensure every response (including errors) is res.json(...), never HTML.
+- Keep logging minimal.
+
+AFTER CHANGES:
+1) Show me the exact code block you added in server/routes.ts (just that block).
+2) Show me the exact curl command to test staging:
+curl -i -sS -X POST "https://football-mad-staging.onrender.com/api/jobs/backfill-priority-standings?season=2025/2026" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | head -n 30
+Do NOT run E2E tests.
+
+
+---
+
