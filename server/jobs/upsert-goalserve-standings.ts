@@ -221,6 +221,74 @@ export interface UpsertStandingsResult {
   };
 }
 
+// ========== Supported Seasons Helper ==========
+const seasonsCache = new Map<string, { seasons: string[]; fetchedAt: number }>();
+const SEASONS_CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+let allSeasonsCache: { data: Map<string, string[]>; fetchedAt: number } | null = null;
+
+async function fetchAllSupportedSeasons(): Promise<Map<string, string[]>> {
+  if (allSeasonsCache && Date.now() - allSeasonsCache.fetchedAt < SEASONS_CACHE_TTL_MS) {
+    return allSeasonsCache.data;
+  }
+
+  const url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/soccerfixtures/data/seasons?json=true`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    console.warn(`[SupportedSeasons] Goalserve seasons endpoint returned ${resp.status}`);
+    return allSeasonsCache?.data || new Map();
+  }
+
+  const payload = await resp.json();
+  const result = new Map<string, string[]>();
+  const seasonDashRe = /^\d{4}-\d{4}$/;
+
+  const leaguesRaw = payload?.seasons?.league;
+  const leagues = Array.isArray(leaguesRaw) ? leaguesRaw : (leaguesRaw ? [leaguesRaw] : []);
+
+  for (const league of leagues) {
+    const leagueId = String(league?.["@id"] || league?.id || "").trim();
+    if (!leagueId) continue;
+
+    const standingsNode = league?.standings;
+    if (!standingsNode) continue;
+
+    const seasonNodes = Array.isArray(standingsNode.season)
+      ? standingsNode.season
+      : (standingsNode.season ? [standingsNode.season] : []);
+
+    const validSeasons: string[] = [];
+    for (const sn of seasonNodes) {
+      const name = String(sn?.name || sn?.["@name"] || "").trim();
+      if (seasonDashRe.test(name)) {
+        validSeasons.push(name);
+      }
+    }
+
+    if (validSeasons.length > 0) {
+      result.set(leagueId, validSeasons);
+    }
+  }
+
+  allSeasonsCache = { data: result, fetchedAt: Date.now() };
+
+  // Also populate per-league cache
+  result.forEach((seasons, lid) => {
+    seasonsCache.set(lid, { seasons, fetchedAt: Date.now() });
+  });
+
+  return result;
+}
+
+export async function getSupportedStandingsSeasons(leagueId: string): Promise<string[]> {
+  const cached = seasonsCache.get(leagueId);
+  if (cached && Date.now() - cached.fetchedAt < SEASONS_CACHE_TTL_MS) {
+    return cached.seasons;
+  }
+
+  const allSeasons = await fetchAllSupportedSeasons();
+  return allSeasons.get(leagueId) || [];
+}
+
 export interface UpsertStandingsOptions {
   seasonParam?: string;
   force?: boolean;

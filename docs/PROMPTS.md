@@ -14366,3 +14366,46 @@ After implementing, please tell me exactly which file(s) changed and the snippet
 
 ---
 
+Replit AI — please fix historical standings support + add a supported-season guard.
+
+Context:
+- Goalserve current standings endpoint: /standings/{leagueId}.xml?json=true (always current season)
+- Goalserve historical standings endpoint: /standings/{leagueId}?json=true&season=YYYY-YYYY (no .xml)
+- We proved historical works for Premier League using the non-xml endpoint (season comes back correctly).
+- We have POST /api/jobs/sync-goalserve-standings and POST /api/jobs/backfill-priority-standings.
+- No E2E tests, no videos.
+
+Requirements:
+1) In upsertGoalserveStandings:
+   - Accept requested season in "YYYY/YYYY".
+   - If requested season != current season (or if a seasonParam was explicitly provided):
+     - Call Goalserve using NON-XML endpoint:
+       https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=YYYY-YYYY
+     - Convert season "YYYY/YYYY" -> "YYYY-YYYY" for the request.
+   - If no seasonParam is provided, keep using the .xml current endpoint.
+   - Return fields: requestedSeason, effectiveSeasonUsed (keep what we have now).
+
+2) Add a helper to fetch supported standings seasons per leagueId from:
+   /soccerfixtures/data/seasons?json=true
+   - Extract seasons.league[].standings.season[].name
+   - Filter to only values matching /^\d{4}-\d{4}$/ (ignore "20242025" etc)
+   - Cache per leagueId for 6 hours.
+
+3) In backfill-priority-standings:
+   - Before calling upsertGoalserveStandings for a league, check if requested season (converted to YYYY-YYYY) exists in supported list.
+   - If not supported: do NOT call Goalserve standings; return result with skipped:true and skipReason:"Season not supported for this leagueId".
+   - Keep successes counting logic where skipped counts as success.
+
+4) In sync-goalserve-standings:
+   - If seasonParam is provided and not supported for that leagueId, return HTTP 400 JSON:
+     { ok:false, leagueId, requestedSeason, error:"Season not supported", supportedSeasons:[...] }
+
+5) Build must compile cleanly.
+
+After changes:
+- Provide curl commands to verify:
+  a) Scottish Prem 1370 season 2023/2024 ingests using non-xml endpoint
+  b) UECL 18853 season 2019/2020 is skipped as unsupported
+
+---
+

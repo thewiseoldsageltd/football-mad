@@ -42,7 +42,7 @@ import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { syncGoalserveMatches } from "./jobs/sync-goalserve-matches";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
-import { upsertGoalserveStandings } from "./jobs/upsert-goalserve-standings";
+import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
@@ -2304,6 +2304,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ ok: false, error: "leagueId query param required" });
       }
 
+      if (season) {
+        try {
+          const seasonDash = season.includes("/") ? season.replace("/", "-") : season;
+          const supported = await getSupportedStandingsSeasons(leagueId);
+          if (supported.length > 0 && !supported.includes(seasonDash)) {
+            return res.status(400).json({
+              ok: false,
+              leagueId,
+              requestedSeason: season,
+              error: "Season not supported",
+              supportedSeasons: supported,
+            });
+          }
+        } catch (lookupErr) {
+          console.warn(`[SyncStandings] Could not check supported seasons for ${leagueId}:`, lookupErr);
+        }
+      }
+
       try {
         const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
         res.json(result);
@@ -2362,6 +2380,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let successes = 0;
         let failures = 0;
 
+        const seasonDash = season.includes("/") ? season.replace("/", "-") : season;
+
         for (const comp of comps) {
           const leagueId = comp.goalserveCompetitionId;
           const label = comp.canonicalSlug || comp.slug;
@@ -2370,6 +2390,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             results.push({ canonicalSlug: label, leagueId: null, ok: false, skipped: false, insertedRowsCount: 0, error: "No goalserve_competition_id" });
             failures++;
             continue;
+          }
+
+          try {
+            const supported = await getSupportedStandingsSeasons(leagueId);
+            if (supported.length > 0 && !supported.includes(seasonDash)) {
+              results.push({
+                canonicalSlug: label,
+                leagueId,
+                ok: false,
+                skipped: true,
+                insertedRowsCount: 0,
+                error: null,
+                skipReason: `Season not supported for this leagueId`,
+              });
+              successes++;
+              continue;
+            }
+          } catch (lookupErr) {
+            console.warn(`[BackfillStandings] Could not check supported seasons for ${leagueId}:`, lookupErr);
           }
 
           try {
