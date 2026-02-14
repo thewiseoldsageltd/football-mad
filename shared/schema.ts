@@ -266,6 +266,8 @@ export const playerTeamMemberships = pgTable("player_team_memberships", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("player_id").references(() => players.id).notNull(),
   teamId: varchar("team_id").references(() => teams.id).notNull(),
+  shirtNumber: text("shirt_number"),
+  position: text("position"),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   isLoan: boolean("is_loan").default(false),
@@ -831,3 +833,34 @@ export const entityAliases = pgTable("entity_aliases", {
 export const insertEntityAliasSchema = createInsertSchema(entityAliases).omit({ id: true, createdAt: true });
 export type InsertEntityAlias = z.infer<typeof insertEntityAliasSchema>;
 export type EntityAlias = typeof entityAliases.$inferSelect;
+
+// ============ TEAM MANAGERS (current manager per team) ============
+export const teamManagers = pgTable("team_managers", {
+  teamId: varchar("team_id").primaryKey().references(() => teams.id, { onDelete: "cascade" }).notNull(),
+  managerId: varchar("manager_id").references(() => managers.id, { onDelete: "cascade" }).notNull(),
+  asOf: timestamp("as_of").notNull(),
+}, (table) => [
+  index("team_managers_manager_idx").on(table.managerId),
+]);
+
+export const teamManagersRelations = relations(teamManagers, ({ one }) => ({
+  team: one(teams, { fields: [teamManagers.teamId], references: [teams.id] }),
+  manager: one(managers, { fields: [teamManagers.managerId], references: [managers.id] }),
+}));
+
+export const insertTeamManagerSchema = createInsertSchema(teamManagers);
+export type InsertTeamManager = z.infer<typeof insertTeamManagerSchema>;
+export type TeamManager = typeof teamManagers.$inferSelect;
+
+// ============ SQUADS SNAPSHOTS (idempotency for squad ingestion) ============
+export const squadsSnapshots = pgTable("squads_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  leagueId: text("league_id").notNull(),
+  asOf: timestamp("as_of").notNull(),
+  payloadHash: text("payload_hash").notNull(),
+  endpointUsed: text("endpoint_used").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("squads_snapshots_league_idx").on(table.leagueId),
+  uniqueIndex("squads_snapshots_league_hash_idx").on(table.leagueId, table.payloadHash),
+]);

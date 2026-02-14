@@ -14536,3 +14536,176 @@ After implementing: remind me to commit/push to GitHub to trigger Render staging
 
 ---
 
+Replit AI — IMPLEMENT: Goalserve Squads (Players + Managers) ingestion (soccerleague endpoint)
+
+Context
+- Football Mad data engine already ingests competitions, teams, and standings (incl historical).
+- We now need Players + Managers ingestion using Goalserve soccerleague endpoint (NOT soccerfixtures).
+- Dev workflow: implement via Replit AI, then commit + push to GitHub to deploy to Render staging.
+
+Hard constraints
+- No E2E tests, no video generation.
+- Keep changes minimal and consistent with existing standings job patterns.
+- All endpoints must return JSON only (never HTML) and be protected by the same x-sync-secret middleware used for other /api/jobs routes.
+
+Goal
+Add a new ingestion job that:
+1) Fetches squads + coaches for a league from:
+   https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/soccerleague/${leagueId}?json=true
+2) Upserts:
+   - players (unique by goalserve_player_id)
+   - managers (unique by goalserve_manager_id) — skip empty coach.id or coach.name
+   - team_players mapping (team_id x player_id + shirt_number, position, as_of)
+   - team_managers mapping (team_id -> manager_id + as_of) (current manager)
+3) Adds idempotency via payload_hash “snapshot” for squads so repeated runs skip unless force=1.
+4) Adds job routes similar to standings:
+   - POST /api/jobs/sync-goalserve-squads?leagueId=1204&force=1
+   - POST /api/jobs/backfill-priority-squads (loops competitions is_priority=true AND is_cup=false)
+
+Deliverables
+A) Database schema (Drizzle + migrations)
+Create tables (or add if missing), minimal fields only:
+
+1) players
+- id uuid pk default gen_random_uuid()
+- goalserve_player_id text not null unique
+- name text not null
+- position text null
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+2) managers
+- id uuid pk default gen_random_uuid()
+- goalserve_manager_id text not null unique
+- name text not null
+- created_at timestamptz default now()
+- updated_at timestamptz default now()
+
+3) team_players
+- team_id uuid not null references teams(id) on delete cascade
+- player_id uuid not null references players(id) on delete cascade
+- shirt_number text null
+- position text null
+- as_of timestamptz not null
+- primary key (team_id, player_id)
+
+4) team_managers
+- team_id uuid not null references teams(id) on delete cascade
+- manager_id uuid not null references managers(id) on delete cascade
+- as_of timestamptz not null
+- primary key (team_id)
+
+5) squads_snapshots (for idempotency)
+- id uuid pk default gen_random_uuid()
+- league_id text not null
+- as_of timestamptz not null
+- payload_hash text not null
+- endpoint_used text not null
+- created_at timestamptz default now()
+- unique (league_id, as_of) OR (league_id, payload_hash) (choose a sensible uniqueness constraint)
+
+Add Drizzle schema definitions for these tables in the existing schema location (where standings_snapshots lives).
+Add a migration file to create these tables.
+
+B) Job implementation
+Create: server/jobs/upsert-goalserve-squads.ts
+
+Export:
+- type UpsertGoalserveSquadsResult = {
+    ok: boolean;
+    skipped?: boolean;
+    reason?: string;
+    leagueId: string;
+    asOf?: string;
+    insertedPlayersCount: number;
+    insertedManagersCount: number;
+    insertedTeamPlayersCount: number;
+    insertedTeamManagersCount: number;
+    endpointUsed: string;
+    tournamentCount?: number; // optional, but helpful if feed ever changes
+    error?: string | null;
+  }
+
+- async function upsertGoalserveSquads(leagueId: string, opts?: { force?: boolean }): Promise<UpsertGoalserveSquadsResult>
+
+Implementation details:
+1) Build endpointUsed exactly:
+   const endpointUsed = `${GOALSERVE_BASE}/getfeed/${GOALSERVE_FEED_KEY}/soccerleague/${leagueId}?json=true`
+2) Fetch JSON, fail with clear error including endpointUsed and HTTP status.
+3) Parse:
+   const teams = data?.league?.team ?? []
+   Each team has:
+   - team.id (goalserve team id) + team.name
+   - team.coach?.id / team.coach?.name (may be "" or missing)
+   - team.squad?.player ?? []
+4) Resolve internal team_id by matching teams.goalserveTeamId (or whatever column you use for Goalserve team id).
+   - If team not found in DB, skip that team with a result note (do not hard fail).
+5) Upsert players:
+   - Unique by goalserve_player_id (string)
+   - Store name + position (player.position)
+6) Upsert managers:
+   - Unique by goalserve_manager_id (string)
+   - Skip if coach.id is empty OR coach.name empty
+7) Upsert mappings:
+   - team_players: insert or update shirt_number/position/as_of for (team_id, player_id)
+   - team_managers: insert or update manager_id/as_of for (team_id)
+8) Idempotency:
+   - Compute payload hash from the raw fetched JSON (stable stringify).
+   - Check latest squads_snapshots row for that league_id; if payload_hash matches and !force, return:
+     { ok: true, skipped: true, reason: "hash_match", ... insertedCounts all 0 }
+   - If new/force, insert snapshot row with as_of from feed timestamp if available; else now().
+     Feed has data.league?.timestamp sometimes — use it if present, parse to ISO safely; else use new Date().
+9) Return ok true with inserted counts and asOf, endpointUsed.
+
+C) Routes
+Edit server/routes.ts and register alongside other /api/jobs endpoints:
+
+1) POST /api/jobs/sync-goalserve-squads
+- Query params:
+  - leagueId required
+  - force optional (force=1)
+- Secured by requireJobSecret("GOALSERVE_SYNC_SECRET") (same header x-sync-secret)
+- Returns JSON result from upsertGoalserveSquads
+- Status codes:
+  - 400 if missing leagueId
+  - 500 if job throws (with JSON)
+
+2) POST /api/jobs/backfill-priority-squads
+- Secured by same secret middleware
+- Select competitions where is_priority=true AND is_cup=false
+- For each comp with goalserveCompetitionId:
+  call upsertGoalserveSquads(goalserveCompetitionId, { force })
+- Counting logic:
+  if (r.ok || r.skipped) successes++; else failures++;
+- Return:
+  { ok: failures===0, total, successes, failures, results:[{canonicalSlug, leagueId, ok, skipped, reason, insertedPlayersCount, insertedManagersCount, insertedTeamPlayersCount, insertedTeamManagersCount, error}] }
+
+D) Docs
+Update PROMPTS.md (or your running build log doc) with:
+- The two curl commands below
+- The DB spot checks below
+- A note: soccerleague endpoint is source of squads+coaches; soccerfixtures is unreliable (500).
+
+Manual test commands (include these verbatim in docs)
+1) Sync Premier League squads:
+curl -sS -X POST "$STAGING_URL/api/jobs/sync-goalserve-squads?leagueId=1204&force=1" \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | jq .
+
+2) Backfill priority squads (non-cups):
+curl -sS -X POST "$STAGING_URL/api/jobs/backfill-priority-squads?force=1" \
+  -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | jq '{ok,total,successes,failures}'
+
+3) DB spot checks:
+psql "$RENDER_DB_URL" -c "select count(*) from players;"
+psql "$RENDER_DB_URL" -c "select count(*) from managers;"
+psql "$RENDER_DB_URL" -c "select count(*) from team_players;"
+psql "$RENDER_DB_URL" -c "select count(*) from team_managers;"
+psql "$RENDER_DB_URL" -c "select league_id, max(as_of) from squads_snapshots group by league_id order by league_id;"
+
+Finally
+- Ensure build compiles.
+- Do NOT run end-to-end tests.
+- After implementation, I will commit + push via existing GitHub auth flow so Render staging picks it up.
+
+---
+

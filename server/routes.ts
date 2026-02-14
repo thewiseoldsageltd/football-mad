@@ -43,6 +43,7 @@ import { syncGoalserveMatches } from "./jobs/sync-goalserve-matches";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
+import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
@@ -2414,6 +2415,94 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } catch (error) {
         console.error("Backfill priority standings error:", error);
         res.status(500).json({ ok: false, season, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
+  // ========== SYNC GOALSERVE SQUADS (players + managers from soccerleague endpoint) ==========
+  app.post(
+    "/api/jobs/sync-goalserve-squads",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = req.query.leagueId as string;
+      const force = req.query.force === "1";
+
+      if (!leagueId) {
+        return res.status(400).json({ ok: false, error: "leagueId query param required" });
+      }
+
+      try {
+        const result = await upsertGoalserveSquads(leagueId, { force });
+        res.json(result);
+      } catch (error) {
+        console.error("Squads sync error:", error);
+        res.status(500).json({
+          ok: false,
+          leagueId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+  );
+
+  // ========== BACKFILL PRIORITY SQUADS (loops priority non-cup competitions) ==========
+  app.post(
+    "/api/jobs/backfill-priority-squads",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const force = req.query.force === "1";
+
+      try {
+        const comps = await db
+          .select({
+            slug: competitions.slug,
+            canonicalSlug: competitions.canonicalSlug,
+            goalserveCompetitionId: competitions.goalserveCompetitionId,
+          })
+          .from(competitions)
+          .where(and(eq(competitions.isPriority, true), eq(competitions.isCup, false)));
+
+        const results: any[] = [];
+        let successes = 0;
+        let failures = 0;
+
+        for (const comp of comps) {
+          const compLeagueId = comp.goalserveCompetitionId;
+          const label = comp.canonicalSlug || comp.slug;
+
+          if (!compLeagueId) {
+            results.push({ canonicalSlug: label, leagueId: null, ok: false, skipped: false, error: "No goalserve_competition_id" });
+            failures++;
+            continue;
+          }
+
+          try {
+            const r = await upsertGoalserveSquads(compLeagueId, { force });
+            results.push({
+              canonicalSlug: label,
+              leagueId: compLeagueId,
+              ok: r.ok,
+              skipped: r.skipped || false,
+              reason: r.reason || null,
+              insertedPlayersCount: r.insertedPlayersCount,
+              insertedManagersCount: r.insertedManagersCount,
+              insertedTeamPlayersCount: r.insertedTeamPlayersCount,
+              insertedTeamManagersCount: r.insertedTeamManagersCount,
+              error: r.error || null,
+            });
+            if (r.ok || r.skipped) successes++;
+            else failures++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            results.push({ canonicalSlug: label, leagueId: compLeagueId, ok: false, skipped: false, error: msg });
+            failures++;
+          }
+        }
+
+        res.json({ ok: failures === 0, total: comps.length, successes, failures, results });
+      } catch (error) {
+        console.error("Backfill priority squads error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
       }
     }
   );
