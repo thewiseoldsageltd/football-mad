@@ -2380,8 +2380,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let successes = 0;
         let failures = 0;
 
-        const seasonDash = season.includes("/") ? season.replace("/", "-") : season;
-
         for (const comp of comps) {
           const leagueId = comp.goalserveCompetitionId;
           const label = comp.canonicalSlug || comp.slug;
@@ -2393,25 +2391,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
 
           try {
-            const supported = await getSupportedStandingsSeasons(leagueId);
-            if (supported.length > 0 && !supported.includes(seasonDash)) {
-              results.push({
-                canonicalSlug: label,
-                leagueId,
-                ok: false,
-                skipped: true,
-                insertedRowsCount: 0,
-                error: null,
-                skipReason: `Season not supported for this leagueId`,
-              });
-              successes++;
-              continue;
-            }
-          } catch (lookupErr) {
-            console.warn(`[BackfillStandings] Could not check supported seasons for ${leagueId}:`, lookupErr);
-          }
-
-          try {
             const r = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
             results.push({
               canonicalSlug: label,
@@ -2420,6 +2399,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               skipped: r.skipped || false,
               insertedRowsCount: r.insertedRowsCount,
               error: r.error || null,
+              reason: r.reason || null,
             });
             if (r.ok || r.skipped) successes++;
             else failures++;

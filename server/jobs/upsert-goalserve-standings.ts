@@ -201,6 +201,7 @@ export interface UpsertStandingsResult {
   season: string;
   requestedSeason?: string;
   effectiveSeasonUsed?: string;
+  endpointUsed?: string;
   asOf?: Date;
   insertedRowsCount: number;
   snapshotId?: string;
@@ -208,6 +209,7 @@ export interface UpsertStandingsResult {
   error?: string;
   reason?: string;
   teamCount?: number;
+  tournamentCount?: number;
   missingTeams?: { goalserveTeamId: string; name: string }[];
   debug?: {
     timestampRaw: unknown;
@@ -294,6 +296,15 @@ export interface UpsertStandingsOptions {
   force?: boolean;
 }
 
+export function toGoalserveSeason(season?: string | null): string | null {
+  return season ? season.replace("/", "-") : null;
+}
+
+function normalizeTournaments(tournament: unknown): any[] {
+  if (!tournament) return [];
+  return Array.isArray(tournament) ? tournament : [tournament];
+}
+
 export async function upsertGoalserveStandings(
   leagueId: string,
   options: UpsertStandingsOptions = {}
@@ -309,8 +320,32 @@ export async function upsertGoalserveStandings(
     seasonDash = seasonSlash.replace("/", "-");
   }
 
+  const isHistorical = !!seasonParam;
+
+  // Check season availability before making a historical request
+  if (isHistorical && seasonDash) {
+    try {
+      const supported = await getSupportedStandingsSeasons(leagueId);
+      if (supported.length > 0 && !supported.includes(seasonDash)) {
+        return {
+          ok: false,
+          leagueId,
+          season: seasonSlash || seasonParam,
+          requestedSeason: seasonSlash,
+          effectiveSeasonUsed: undefined,
+          endpointUsed: undefined,
+          insertedRowsCount: 0,
+          skipped: true,
+          reason: "season_not_available",
+        };
+      }
+    } catch (lookupErr) {
+      console.warn(`[StandingsIngest] Could not check supported seasons for ${leagueId}:`, lookupErr);
+    }
+  }
+
   let url: string;
-  if (seasonParam) {
+  if (isHistorical) {
     url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}?json=true&season=${encodeURIComponent(seasonDash!)}`;
   } else {
     url = `https://www.goalserve.com/getfeed/${GOALSERVE_FEED_KEY}/standings/${leagueId}.xml?json=true`;
@@ -321,9 +356,11 @@ export async function upsertGoalserveStandings(
     return {
       ok: false,
       leagueId,
-      season: seasonParam || "",
+      season: seasonSlash || seasonParam || "",
+      requestedSeason: seasonSlash,
+      endpointUsed: url,
       insertedRowsCount: 0,
-      error: `Goalserve API returned ${response.status}`,
+      error: `Goalserve API returned ${response.status} for leagueId=${leagueId} season=${seasonSlash || "current"} endpoint=${url}`,
     };
   }
 
@@ -331,61 +368,16 @@ export async function upsertGoalserveStandings(
   
   // Resolve standings root safely
   const s = payload?.standings ?? payload;
-  
-  // Resolve tournament safely (may be object or array)
-  const tRaw = s?.tournament;
-  const t = Array.isArray(tRaw) ? tRaw[0] : tRaw;
-  
-  // Resolve teams safely (may be array or single object)
-  const teamRaw = t?.team;
-  const teamRows: GoalserveTeamRow[] = Array.isArray(teamRaw) ? teamRaw : (teamRaw ? [teamRaw] : []);
-
-  // 🚨 SAFETY CHECK: Prevent saving incomplete standings tables
-  const MIN_EXPECTED_TEAMS: Record<string, number> = {
-    "1204": 20, // Premier League
-    "1205": 24, // Championship
-    "1206": 24, // League One
-    "1207": 24, // League Two
-  };
-
-  const minTeams = MIN_EXPECTED_TEAMS[leagueId] || 10;
-
-  if (teamRows.length < minTeams) {
-    console.warn(
-      `[StandingsIngest] ABORTED — leagueId=${leagueId} season=${seasonParam || ""} teams=${teamRows.length} (expected at least ${minTeams})`
-    );
-
-    return {
-      ok: false,
-      skipped: true,
-      reason: "Too few teams returned from Goalserve feed — possible partial data",
-      teamCount: teamRows.length,
-      leagueId,
-      season: seasonParam || "",
-      insertedRowsCount: 0,
-    };
-  }
-  
-  // Build comprehensive debug info
-  const debugInfo = {
-    timestampRaw: s?.timestamp,
-    timestampType: typeof s?.timestamp + (Array.isArray(s?.timestamp) ? " array" : ""),
-    payloadTopKeys: Object.keys(payload || {}),
-    standingsKeys: Object.keys(s || {}),
-    tournamentType: typeof tRaw + (Array.isArray(tRaw) ? " array" : ""),
-    tournamentKeys: Object.keys(t || {}),
-    teamType: typeof teamRaw + (Array.isArray(teamRaw) ? " array" : ""),
-    teamCount: teamRows.length,
-  };
 
   if (!s) {
     return {
       ok: false,
       leagueId,
-      season: seasonParam || "",
+      season: seasonSlash || seasonParam || "",
+      requestedSeason: seasonSlash,
+      endpointUsed: url,
       insertedRowsCount: 0,
       error: "No standings object in response",
-      debug: debugInfo,
     };
   }
 
@@ -397,28 +389,69 @@ export async function upsertGoalserveStandings(
     return {
       ok: false,
       leagueId,
-      season: seasonParam || "",
+      season: seasonSlash || seasonParam || "",
+      requestedSeason: seasonSlash,
+      endpointUsed: url,
       insertedRowsCount: 0,
       error: parseErr instanceof Error ? parseErr.message : "Timestamp parse error",
-      debug: debugInfo,
     };
   }
+  
+  // Normalize tournament: may be object or array (e.g. Scottish Prem has multiple tables)
+  const tournaments = normalizeTournaments(s?.tournament);
 
-  if (!t) {
+  if (tournaments.length === 0) {
     return {
       ok: false,
       leagueId,
-      season: seasonParam || "",
+      season: seasonSlash || seasonParam || "",
+      requestedSeason: seasonSlash,
+      endpointUsed: url,
       insertedRowsCount: 0,
-      error: "No tournament object in response",
-      debug: debugInfo,
+      error: "No tournament data in response",
+    };
+  }
+
+  // Use first tournament for standings (multi-table storage deferred — schema lacks group/table field on standings_rows)
+  // TODO: When schema supports a group/table label on standings_rows, iterate all tournaments
+  const t = tournaments[0];
+  
+  // Resolve teams safely (may be array or single object)
+  const teamRaw = t?.team;
+  const teamRows: GoalserveTeamRow[] = Array.isArray(teamRaw) ? teamRaw : (teamRaw ? [teamRaw] : []);
+
+  // SAFETY CHECK: Prevent saving incomplete standings tables
+  const MIN_EXPECTED_TEAMS: Record<string, number> = {
+    "1204": 20, // Premier League
+    "1205": 24, // Championship
+    "1206": 24, // League One
+    "1207": 24, // League Two
+  };
+
+  const minTeams = MIN_EXPECTED_TEAMS[leagueId] || 10;
+
+  if (teamRows.length < minTeams) {
+    console.warn(
+      `[StandingsIngest] ABORTED — leagueId=${leagueId} season=${seasonSlash || seasonParam || ""} teams=${teamRows.length} (expected at least ${minTeams})`
+    );
+
+    return {
+      ok: false,
+      skipped: true,
+      reason: "Too few teams returned from Goalserve feed — possible partial data",
+      teamCount: teamRows.length,
+      tournamentCount: tournaments.length,
+      leagueId,
+      season: seasonSlash || seasonParam || "",
+      requestedSeason: seasonSlash,
+      endpointUsed: url,
+      insertedRowsCount: 0,
     };
   }
 
   // Extract metadata from resolved tournament
   const returnedSeason = t?.season || "";
-  const requestedSeasonNorm = seasonSlash || "";
-  const effectiveSeason = returnedSeason || requestedSeasonNorm || "";
+  const effectiveSeason = returnedSeason || seasonSlash || "";
   const season = seasonSlash || effectiveSeason;
   const stageId = t?.stage_id || null;
 
@@ -433,6 +466,7 @@ export async function upsertGoalserveStandings(
       season: seasonSlash,
       requestedSeason: seasonSlash,
       effectiveSeasonUsed: returnedSeason,
+      endpointUsed: url,
       insertedRowsCount: 0,
       skipped: false,
       error: `Season mismatch: requested ${seasonSlash}, feed returned ${returnedSeason}`,
@@ -444,11 +478,11 @@ export async function upsertGoalserveStandings(
       ok: false,
       leagueId,
       season,
-      requestedSeason: seasonParam,
+      requestedSeason: seasonSlash,
       effectiveSeasonUsed: effectiveSeason || undefined,
+      endpointUsed: url,
       insertedRowsCount: 0,
       error: "No team rows in standings",
-      debug: debugInfo,
     };
   }
 
@@ -501,12 +535,14 @@ export async function upsertGoalserveStandings(
       ok: true,
       leagueId,
       season,
-      requestedSeason: seasonParam,
+      requestedSeason: seasonSlash,
       effectiveSeasonUsed: effectiveSeason || undefined,
+      endpointUsed: url,
       asOf,
       insertedRowsCount: 0,
       snapshotId: latestSnapshot.id,
       skipped: true,
+      tournamentCount: tournaments.length,
     };
   }
 
@@ -624,10 +660,12 @@ export async function upsertGoalserveStandings(
     ok: true,
     leagueId,
     season,
-    requestedSeason: seasonParam,
+    requestedSeason: seasonSlash,
     effectiveSeasonUsed: effectiveSeason || undefined,
+    endpointUsed: url,
     asOf,
     insertedRowsCount: result.insertedRowsCount,
     snapshotId: result.snapshotId,
+    tournamentCount: tournaments.length,
   };
 }

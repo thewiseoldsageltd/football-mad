@@ -14409,3 +14409,130 @@ After changes:
 
 ---
 
+Paste this WHOLE prompt into Replit AI chat (single copy/paste). No E2E tests, no videos.
+
+We need to harden Goalserve standings ingestion for historical seasons + multi-table leagues, and stop counting “skipped” as failures.
+
+Constraints:
+- Do NOT run any E2E testing or generate videos.
+- Keep changes minimal and focused.
+- Ensure all /api/jobs routes return JSON (never HTML).
+
+GOAL:
+1) Historical standings must use the NON-.xml endpoint:
+   /standings/{leagueId}?json=true&season=YYYY-YYYY
+2) Current season standings keep using:
+   /standings/{leagueId}.xml?json=true
+3) Convert season formats:
+   our input:  "2023/2024"  -> Goalserve: "2023-2024"
+4) Check availability via seasons endpoint BEFORE calling historical standings:
+   /soccerfixtures/data/seasons?json=true
+   If season not available: return { ok:false, skipped:true, reason:"season_not_available" } (HTTP 200 JSON).
+5) Normalize tournament shape:
+   standings.tournament can be an object OR an array (e.g., Scottish Prem). Always process as an array.
+6) Backfill endpoint success/failure counting:
+   successes++ when (r.ok || r.skipped)
+   failures++ only when (r.ok===false && !r.skipped)
+7) Improve per-league error reporting:
+   - If Goalserve returns HTTP 500 for historical request, set error string to include leagueId + season + endpoint used.
+
+IMPLEMENTATION DETAILS (DO THIS EXACTLY):
+
+A) Add helpers (best placed near other Goalserve helpers in server/routes.ts or wherever upsertGoalserveStandings lives):
+
+- toGoalserveSeason(season?: string | null): string | null
+  return season ? season.replace("/", "-") : null
+
+- normalizeTournaments(tournament: any): any[]
+  if (!tournament) return []
+  return Array.isArray(tournament) ? tournament : [tournament]
+
+- goalserveSeasonAvailable(leagueId: string, seasonSlash: string): Promise<boolean>
+  1. Convert to hyphen season.
+  2. GET https://www.goalserve.com/getfeed/${process.env.GOALSERVE_FEED_KEY}/soccerfixtures/data/seasons?json=true
+  3. Find matching league by id
+  4. Look at league.standings.season[].name
+  5. Return true if any name === hyphen season.
+
+B) Update upsertGoalserveStandings (or the function that builds the Goalserve URL) to choose endpoint:
+
+Inputs already include leagueId and seasonParam (slash format). Add:
+- requestedSeason = seasonParam ?? DEFAULT_SEASON
+- hyphenSeason = toGoalserveSeason(requestedSeason)
+
+Determine “historical” by: if seasonParam is provided AND seasonParam !== CURRENT_SEASON_USED_FOR_DEFAULT (whatever your code currently uses as “current”).
+(If you already treat “seasonParam” as authoritative, just treat any provided seasonParam as historical unless it equals the returned tournament season from current endpoint.)
+
+Endpoint selection:
+- If historical:
+  - Check availability first (goalserveSeasonAvailable)
+  - If not available: return { ok:false, skipped:true, insertedRowsCount:0, requestedSeason, effectiveSeasonUsed:null, error:null, reason:"season_not_available" }
+  - Use URL: https://www.goalserve.com/getfeed/${GS_KEY}/standings/${leagueId}?json=true&season=${hyphenSeason}
+- Else:
+  - Use URL: https://www.goalserve.com/getfeed/${GS_KEY}/standings/${leagueId}.xml?json=true
+
+C) Parse response safely:
+
+After fetching JSON:
+- const tournaments = normalizeTournaments(data?.standings?.tournament)
+- If tournaments.length === 0: return { ok:false, skipped:false, error:"No tournament data" }
+
+For each tournament entry:
+- seasonFromFeed = tournament.season (this is slash format like 2023/2024 in JSON)
+- stageId = tournament.stage_id
+- team list: tournament.team (array)
+- Build standings rows from each tournament table.
+IMPORTANT: For multi-table leagues (Scottish Prem), store ALL tables for that snapshot:
+- Create one snapshot per (league_id, seasonFromFeed, stageId) OR (league_id, seasonFromFeed) but include stageId + maybe a “tableKey”/“leagueName” if already supported.
+If your existing schema supports a single snapshot per league+season, then:
+- Insert snapshot once, but insert standings_rows with a “group”/“table” label field if schema supports it.
+- If schema does NOT support multiple tables today, then choose the first tournament ONLY and add a comment explaining we’re deferring multi-table storage. (But prefer storing all if there is any place to put it.)
+
+D) Fix backfill counting in /api/jobs/backfill-priority-standings:
+Update counting to:
+- if (r.ok || r.skipped) successes++
+- else failures++
+
+And top-level ok should be: (failures === 0)
+
+E) Return JSON always:
+- Ensure backfill route returns res.json(...)
+- Ensure sync route returns res.json(...)
+- Never fall through to SPA catch-all.
+
+F) Add a small “debug” field in the sync response:
+Return:
+{
+  ok,
+  leagueId,
+  season: effectiveSeasonUsed,
+  requestedSeason,
+  effectiveSeasonUsed,
+  endpointUsed,
+  insertedRowsCount,
+  skipped,
+  error
+}
+
+G) Build should compile cleanly.
+
+H) After changes, DO NOT run E2E tests. Provide me manual curl commands only.
+
+Manual verification commands to include in your response:
+
+1) Verify historical endpoint works direct:
+curl -s "https://www.goalserve.com/getfeed/$GOALSERVE_FEED_KEY/standings/1204?json=true&season=2023-2024" | jq -r '.standings.tournament | (if type=="array" then .[0] else . end) | .season'
+
+2) Ingest historical into staging:
+curl -sS -X POST "$STAGING_URL/api/jobs/sync-goalserve-standings?leagueId=1204&season=2023/2024&force=1" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET" | jq .
+
+3) API check:
+curl -sS "$STAGING_URL/api/standings?leagueId=1204&season=2023/2024&tablesOnly=1" | jq '{snapshot, rows:(.table|length)}'
+
+Commit message:
+"Support historical Goalserve standings seasons + skip unavailable seasons + fix backfill counting"
+
+After implementing: remind me to commit/push to GitHub to trigger Render staging deployment.
+
+---
+
