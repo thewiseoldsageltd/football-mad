@@ -300,10 +300,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/db/migrations", async (_req, res) => {
     try {
       const result = await pool.query(
-        'SELECT id, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at DESC NULLS LAST LIMIT 5',
+        'SELECT id, hash, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at DESC LIMIT 5',
       );
-      const migrations = result.rows.map((row: { id: number; created_at: string | number }) => ({
-        id: String(row.id),
+      const migrations = result.rows.map((row: { id: number; hash: string; created_at: string | number }) => ({
+        id: Number(row.id),
+        hash: String(row.hash ?? ""),
         created_at: String(row.created_at ?? ""),
       }));
       res.json({ migrations });
