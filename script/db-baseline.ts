@@ -8,7 +8,7 @@
  * - Columns: id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint
  * Hash from migrator.js: sha256(raw SQL file content).digest("hex"); created_at = journal entry "when".
  */
-import "dotenv/config";
+import "../server/load-env";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -34,6 +34,11 @@ let host = "";
 try {
   const u = new URL(DATABASE_URL);
   host = u.hostname || "";
+  if (DB_ENV === "staging") {
+    const user = u.username || "?";
+    const db = (u.pathname || "").replace(/^\//, "") || "?";
+    console.log(`[db:baseline] Using DATABASE_URL host=${host} user=${user} db=${db}`);
+  }
 } catch {
   console.error("[db:baseline] Aborted: DATABASE_URL is not a valid URL.");
   process.exit(1);

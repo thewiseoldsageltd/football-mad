@@ -297,6 +297,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/db/migrations", async (_req, res) => {
+    try {
+      const result = await pool.query(
+        'SELECT id, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at DESC NULLS LAST LIMIT 5',
+      );
+      const migrations = result.rows.map((row: { id: number; created_at: string | number }) => ({
+        id: String(row.id),
+        created_at: String(row.created_at ?? ""),
+      }));
+      res.json({ migrations });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ migrations: [], error: message });
+    }
+  });
+
   // Auth routes - optional, server can start without auth configured
   try {
     await setupAuth(app);

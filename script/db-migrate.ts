@@ -3,7 +3,7 @@
  * Use: npm run db:migrate
  * Requires: DB_ENV=staging, DATABASE_URL with host containing "render.com"
  */
-import "dotenv/config";
+import "../server/load-env";
 import { execSync } from "child_process";
 
 const DB_ENV = process.env.DB_ENV;
@@ -26,6 +26,11 @@ let host = "";
 try {
   const u = new URL(DATABASE_URL);
   host = u.hostname || "";
+  if (DB_ENV === "staging") {
+    const user = u.username || "?";
+    const db = (u.pathname || "").replace(/^\//, "") || "?";
+    console.log(`[db:migrate] Using DATABASE_URL host=${host} user=${user} db=${db}`);
+  }
 } catch {
   console.error("[db:migrate] Aborted: DATABASE_URL is not a valid URL.");
   process.exit(1);
