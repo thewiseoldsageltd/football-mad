@@ -32,6 +32,10 @@ export async function setupVite(server: Server, app: Express) {
   app.use(vite.middlewares);
 
   app.use("*", async (req, res, next) => {
+    // Never serve SPA for /api/* — let Express API routes handle them (or 404)
+    if (req.path.startsWith("/api")) {
+      return next();
+    }
     const url = req.originalUrl;
 
     try {

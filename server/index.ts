@@ -1,3 +1,4 @@
+import "./load-env";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -79,6 +80,15 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Register /api/health first so it is never overridden by Vite/static/catch-all
+  app.get("/api/health", (_req, res) => {
+    res.json({
+      ok: true,
+      service: "football-mad",
+      env: process.env.NODE_ENV || "development",
+    });
+  });
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -99,28 +109,19 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const PORT = process.env.PORT || 5000;
-  httpServer.listen(
-    {
-      port: Number(PORT),
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`Express server running on port ${PORT}`);
+  const port = Number(process.env.PORT) || 5055;
+  const host = process.env.HOST || "localhost";
 
-      // Live polling for match updates
-      if (process.env.ENABLE_LIVE_POLLING === "1") {
-        log("[LivePolling] enabled");
-        // Poll today's matches every 60 seconds
-        setInterval(() => upsertGoalserveMatches("soccernew/home").catch(() => {}), 60_000);
-        // Poll yesterday's matches every 10 minutes for late corrections
-        setInterval(() => upsertGoalserveMatches("soccernew/d-1").catch(() => {}), 600_000);
-      }
-    },
-  );
+  httpServer.listen(port, host, () => {
+    console.log(`Express server running on http://${host}:${port}`);
+
+    // Live polling for match updates
+    if (process.env.ENABLE_LIVE_POLLING === "1") {
+      log("[LivePolling] enabled");
+      // Poll today's matches every 60 seconds
+      setInterval(() => upsertGoalserveMatches("soccernew/home").catch(() => {}), 60_000);
+      // Poll yesterday's matches every 10 minutes for late corrections
+      setInterval(() => upsertGoalserveMatches("soccernew/d-1").catch(() => {}), 600_000);
+    }
+  });
 })();

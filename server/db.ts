@@ -10,5 +10,18 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const connectionString = process.env.DATABASE_URL;
+(function logDbConnectionSafe() {
+  try {
+    const u = new URL(connectionString);
+    const user = u.username || "?";
+    const host = u.hostname || "?";
+    const db = (u.pathname || "").replace(/^\//, "") || "?";
+    console.log(`[db] user=${user} host=${host} db=${db}`);
+  } catch {
+    console.log("[db] user=? host=? db=? (could not parse URL)");
+  }
+})();
+
+export const pool = new Pool({ connectionString });
 export const db = drizzle(pool, { schema });

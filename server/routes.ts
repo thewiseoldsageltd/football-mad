@@ -24,7 +24,7 @@ function logWebhookAudit(line: string): void {
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases } from "@shared/schema";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
@@ -267,6 +267,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   debugRouter.post("/goalserve/fixtures-probe", fixturesProbeHandler as any);
 
   app.use("/api/debug", debugRouter);
+
+  // ========== DB PING (connectivity check; no credentials in response) ==========
+  app.get("/api/db/ping", async (_req, res) => {
+    try {
+      const url = process.env.DATABASE_URL;
+      if (!url || typeof url !== "string") {
+        return res.status(500).json({ ok: false, error: "DATABASE_URL not set" });
+      }
+      let dbHost = "";
+      let dbName = "";
+      try {
+        const parsed = new URL(url);
+        dbHost = parsed.hostname || "";
+        dbName = (parsed.pathname || "").replace(/^\//, "") || "";
+      } catch {
+        // leave empty if parse fails; do not expose URL
+      }
+      await pool.query("SELECT 1");
+      res.json({
+        ok: true,
+        dbHost,
+        dbName,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: message });
+    }
+  });
 
   // Auth routes - optional, server can start without auth configured
   try {
