@@ -110,10 +110,9 @@ app.use((req, res, next) => {
   }
 
   const port = Number(process.env.PORT) || 5055;
-  const host = process.env.HOST || "localhost";
 
-  httpServer.listen(port, host, () => {
-    console.log(`Express server running on http://${host}:${port}`);
+  httpServer.listen(port, "0.0.0.0", () => {
+    console.log(`Express server running on port ${port}`);
 
     // Live polling for match updates
     if (process.env.ENABLE_LIVE_POLLING === "1") {
