@@ -1,7 +1,7 @@
 /**
  * Migration runner with safety guards: only allows running against Render STAGING.
  * Use: npm run db:migrate
- * Requires: DB_ENV=staging, DATABASE_URL with host containing "render.com"
+ * Requires: DB_ENV=staging; DATABASE_URL host allowed if render.com, dpg-*, or RENDER env set.
  */
 import "../server/load-env";
 import { execSync } from "child_process";
@@ -36,9 +36,19 @@ try {
   process.exit(1);
 }
 
-if (!host.includes("render.com")) {
+const allowedByRenderCom = host.includes("render.com");
+const allowedByDpg = host.startsWith("dpg-");
+const allowedByRenderEnv = !!process.env.RENDER;
+
+if (allowedByRenderCom) {
+  console.log("[db:migrate] Host accepted via render.com");
+} else if (allowedByDpg) {
+  console.log("[db:migrate] Host accepted via dpg internal");
+} else if (allowedByRenderEnv) {
+  console.log("[db:migrate] Host accepted via RENDER env");
+} else {
   console.error(
-    "[db:migrate] Aborted: DATABASE_URL host must be Render (contain 'render.com'). Got host:",
+    "[db:migrate] Aborted: DATABASE_URL host must be Render (render.com, dpg-*, or RENDER env set). Got host:",
     host || "(unknown)",
   );
   process.exit(1);
