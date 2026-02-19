@@ -95,6 +95,10 @@ export const articles = pgTable("articles", {
   sourcePublishedAt: timestamp("source_published_at"),
   sourceUpdatedAt: timestamp("source_updated_at"),
   sortAt: timestamp("sort_at").defaultNow(), // Indexed column for fast pagination: COALESCE(sourceUpdatedAt, publishedAt, createdAt)
+  // Entity enrichment pipeline (pills): pending → processing → done | error
+  entityEnrichStatus: text("entity_enrich_status").default("pending").notNull(),
+  entityEnrichAttemptedAt: timestamp("entity_enrich_attempted_at", { withTimezone: true }),
+  entityEnrichError: text("entity_enrich_error"),
 }, (table) => [
   index("articles_published_at_idx").on(table.publishedAt),
   index("articles_category_idx").on(table.category),
@@ -102,6 +106,7 @@ export const articles = pgTable("articles", {
   index("articles_content_type_idx").on(table.contentType),
   index("articles_source_source_id_idx").on(table.source, table.sourceId),
   index("articles_sort_at_id_idx").on(table.sortAt, table.id), // Composite index for cursor pagination
+  index("articles_entity_enrich_status_published_idx").on(table.entityEnrichStatus, table.publishedAt),
 ]);
 
 export const articlesRelations = relations(articles, ({ many }) => ({
@@ -111,6 +116,15 @@ export const articlesRelations = relations(articles, ({ many }) => ({
   players: many(articlePlayers),
   managers: many(articleManagers),
 }));
+
+// ============ PA MEDIA INGEST CURSOR ============
+export const pamediaIngestState = pgTable("pamedia_ingest_state", {
+  key: text("key").primaryKey().default("default"),
+  lastIssued: timestamp("last_issued", { withTimezone: true }),
+  lastUri: text("last_uri"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+export type PamediaIngestState = typeof pamediaIngestState.$inferSelect;
 
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
 export type InsertArticle = z.infer<typeof insertArticleSchema>;

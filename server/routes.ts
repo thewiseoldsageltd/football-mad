@@ -45,6 +45,8 @@ import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { backfillStandings } from "./jobs/backfill-standings";
+import { runPaMediaIngest } from "./jobs/ingest-pamedia";
+import { enrichPendingArticles } from "./jobs/enrich-articles";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
 const shareClickSchema = z.object({
@@ -1673,7 +1675,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ========== PA MEDIA INGEST (Server Jobs) ==========
   app.post("/api/jobs/ingest-pamedia", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
-    res.json({ ok: true, message: "PA Media ingest stub" });
+    try {
+      const result = await runPaMediaIngest();
+      if (result.ok) {
+        res.status(200).json({ ok: true, processed: result.processed });
+      } else {
+        res.status(500).json({ ok: false, processed: result.processed, error: result.error });
+      }
+      // Run enrichment async so response is fast; do not await.
+      setImmediate(() =>
+        enrichPendingArticles({ limit: 25, timeBudgetMs: 10000 }).catch((e) =>
+          console.error("[enrich-articles]", e)
+        )
+      );
+    } catch (err) {
+      console.error("[ingest-pamedia] Job error:", err);
+      res.status(500).json({ ok: false, processed: 0, error: (err as Error).message });
+    }
   });
 
   // ========== DB FINGERPRINT (debug) ==========
