@@ -33,7 +33,7 @@ function uniqueSlug(headline: string, sourceId: string): string {
 }
 
 function getItems(response: Record<string, unknown>): unknown[] {
-  const arr = response.items ?? response.data ?? response.results;
+  const arr = (response as any).item ?? (response as any).items ?? (response as any).data ?? (response as any).results;
   return Array.isArray(arr) ? arr : [];
 }
 
