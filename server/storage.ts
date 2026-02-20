@@ -420,6 +420,19 @@ export class DatabaseStorage implements IStorage {
       .where(eq(articles.id, id));
   }
 
+  /** Harden list row for /api/news and /api/news/updates so null fields (e.g. PA Media tags) don't break the UI. */
+  normalizeArticleListRow<T extends Record<string, unknown>>(row: T): T & { excerpt: string; tags: unknown[]; competition: string | null; contentType: string; coverImage: string | null; authorName: string } {
+    return {
+      ...row,
+      excerpt: row.excerpt ?? "",
+      tags: row.tags ?? [],
+      competition: row.competition ?? null,
+      contentType: row.contentType ?? "story",
+      coverImage: row.coverImage ?? null,
+      authorName: row.authorName ?? "PA Media",
+    };
+  }
+
   async getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse> {
     const { comp, type, teamSlugs, sort, range, breaking, limit: limitParam, cursor } = params;
     const limit = limitParam ?? 15; // Default to 15 (5 rows of 3)
@@ -549,7 +562,8 @@ export class DatabaseStorage implements IStorage {
     }
     
     const hasMore = result.length > limit;
-    const articlesToReturn = hasMore ? result.slice(0, limit) : result;
+    const rawSlice = hasMore ? result.slice(0, limit) : result;
+    const articlesToReturn = rawSlice.map((row) => this.normalizeArticleListRow(row));
     
     // Build nextCursor from last article's sortAt and id (stable cursor)
     let nextCursor: string | null = null;
@@ -658,8 +672,9 @@ export class DatabaseStorage implements IStorage {
         }
       : (since ? { since, sinceId: sinceId || "" } : null);
     
+    const normalizedRows = rows.map((row) => this.normalizeArticleListRow(row));
     return {
-      articles: rows,
+      articles: normalizedRows,
       nextCursor,
       serverTime,
     };
