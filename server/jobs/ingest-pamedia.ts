@@ -6,7 +6,7 @@
  * Provider breakdown: SELECT provider, count(*) FROM job_http_calls GROUP BY provider;
  */
 
-import { db } from "../db";
+import { db, pool } from "../db";
 import { articles } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import * as cheerio from "cheerio";
@@ -20,6 +20,7 @@ import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 import { runWithJobContext } from "../lib/job-context";
 
 const PA_SOURCE = "pa_media";
+const PAMEDIA_JOB_STATE_KEY = "ingest_pamedia";
 const BASE_URL = process.env.PAMEDIA_API_BASE_URL ?? "https://content.api.pressassociation.io/v1";
 const FETCH_TIMEOUT_MS = 10_000;
 const IMAGE_WIDTHS = [320, 640, 960, 1280] as const;
@@ -226,6 +227,21 @@ function uniqueSlug(headline: string, sourceId: string): string {
   return `${base || "article"}-${shortStableHash(sourceId)}`;
 }
 
+/** Compare (ts, id) strictly after (wTs, wId). Null watermark = all items after. */
+function isAfterWatermark(
+  itemTs: Date | null,
+  itemId: string,
+  watermarkTs: Date | null,
+  watermarkId: string | null
+): boolean {
+  if (watermarkTs == null && watermarkId == null) return true;
+  const ts = itemTs ? itemTs.getTime() : 0;
+  const wTs = watermarkTs ? watermarkTs.getTime() : 0;
+  if (ts > wTs) return true;
+  if (ts < wTs) return false;
+  return (watermarkId ?? "") < itemId;
+}
+
 export async function runPaMediaIngest(): Promise<{
   ok: boolean;
   processed: number;
@@ -234,10 +250,10 @@ export async function runPaMediaIngest(): Promise<{
   imagesUploaded?: number;
   inlineRewritten?: number;
   skipped?: number;
+  skippedReason?: string;
   timeMs?: number;
   stoppedReason?: string | null;
 }> {
-  // Always create a job run first so we have observability on every exit path.
   const run = await startJobRun("ingest_pamedia", {
     limit: PAMEDIA_INGEST_LIMIT,
     timeBudgetMs: PAMEDIA_JOB_TIME_BUDGET_MS,
@@ -250,11 +266,41 @@ export async function runPaMediaIngest(): Promise<{
     return { ok: false, processed: 0, error: "PAMEDIA_API_KEY is not set" };
   }
 
-  return runWithJobContext(run.id, async () => {
+  const client = await pool.connect();
+  try {
+    const lockResult = await client.query<{ acquired: boolean }>(
+      "SELECT pg_try_advisory_lock(hashtext($1)) AS acquired",
+      [PAMEDIA_JOB_STATE_KEY]
+    );
+    if (!lockResult.rows[0]?.acquired) {
+      await finishJobRun(runId, { status: "success", counters: { skippedReason: "locked" } });
+      return { ok: true, processed: 0, skippedReason: "locked" };
+    }
+
+    return await runWithJobContext(run.id, async () => {
   const start = Date.now();
   let stoppedReason: string | null = null;
   let articlesInserted = 0;
   let articlesUpdated = 0;
+  let maxProcessedTs: Date | null = null;
+  let maxProcessedId: string | null = null;
+  let itemsFetched = 0;
+
+  let watermarkTs: Date | null = null;
+  let watermarkId: string | null = null;
+  try {
+    const w = await client.query<{ watermark_ts: Date | null; watermark_id: string | null }>(
+      "SELECT watermark_ts, watermark_id FROM job_state WHERE job_name = $1 LIMIT 1",
+      [PAMEDIA_JOB_STATE_KEY]
+    );
+    const first = w.rows[0];
+    if (first) {
+      watermarkTs = first.watermark_ts ? new Date(first.watermark_ts) : null;
+      watermarkId = first.watermark_id ?? null;
+    }
+  } catch (_) {
+    // job_state may not exist or have different schema; proceed with null watermark
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -271,13 +317,23 @@ export async function runPaMediaIngest(): Promise<{
     await finishJobRun(runId, { status: "error", error: (err as Error).message });
     return { ok: false, processed: 0, error: (err as Error).message };
   }
-  let rawItems: unknown[] = [];
-  try {
-    rawItems = getItems(body);
-  } catch (_) {
-    await finishJobRun(runId, { status: "error", error: "Failed to parse PA API response" });
-    return { ok: false, processed: 0, error: "Failed to parse PA API response" };
-  }
+  const rawItems = getItems(body) as unknown[];
+  itemsFetched = rawItems.length;
+  const normalized = rawItems
+    .filter((raw): raw is Record<string, unknown> => typeof raw === "object" && raw !== null)
+    .map((raw) => normalizeItem(raw))
+    .filter((item): item is NormalizedPaItem => item !== null);
+  const itemTs = (item: NormalizedPaItem) =>
+    item.versionCreated ? new Date(item.versionCreated) : item.issued ? new Date(item.issued) : null;
+  normalized.sort((a, b) => {
+    const ta = itemTs(a)?.getTime() ?? 0;
+    const tb = itemTs(b)?.getTime() ?? 0;
+    if (ta !== tb) return ta - tb;
+    return (a.id ?? "").localeCompare(b.id ?? "");
+  });
+  const toProcess = normalized.filter((item) =>
+    isAfterWatermark(itemTs(item), item.id, watermarkTs, watermarkId)
+  ).slice(0, PAMEDIA_INGEST_LIMIT);
 
   let processed = 0;
   let skipped = 0;
@@ -287,19 +343,11 @@ export async function runPaMediaIngest(): Promise<{
   const semaphore = createSemaphore(PAMEDIA_IMAGE_CONCURRENCY);
 
   try {
-  for (const raw of rawItems) {
-    if (processed >= PAMEDIA_INGEST_LIMIT) {
-      stoppedReason = "item_limit";
-      break;
-    }
+  for (const item of toProcess) {
     if (Date.now() - start > PAMEDIA_JOB_TIME_BUDGET_MS) {
       stoppedReason = "time_budget";
       break;
     }
-
-    if (typeof raw !== "object" || raw === null) continue;
-    const item = normalizeItem(raw as Record<string, unknown>);
-    if (!item) continue;
 
     try {
       const existing = await db
@@ -492,6 +540,11 @@ export async function runPaMediaIngest(): Promise<{
         });
       }
       processed++;
+      const ts = itemTs(item);
+      if (ts && (!maxProcessedTs || ts.getTime() > maxProcessedTs.getTime() || (ts.getTime() === maxProcessedTs.getTime() && item.id > (maxProcessedId ?? "")))) {
+        maxProcessedTs = ts;
+        maxProcessedId = item.id;
+      }
     } catch (err) {
       console.warn(`[ingest-pamedia] Item ${item.id} failed:`, (err as Error).message);
     }
@@ -499,13 +552,40 @@ export async function runPaMediaIngest(): Promise<{
 
   const timeMs = Date.now() - start;
   console.log(
-    `[ingest-pamedia] fetched=${rawItems.length} processed=${processed} skipped=${skipped} imagesUploaded=${imagesUploaded} inlineRewritten=${inlineRewritten} inlineSkippedDueToCap=${inlineSkippedDueToCap} timeMs=${timeMs} stoppedReason=${stoppedReason ?? "none"}`
+    `[ingest-pamedia] fetched=${itemsFetched} processed=${processed} skipped=${skipped} imagesUploaded=${imagesUploaded} inlineRewritten=${inlineRewritten} inlineSkippedDueToCap=${inlineSkippedDueToCap} timeMs=${timeMs} stoppedReason=${stoppedReason ?? "none"}`
   );
+
+  if (processed > 0 && maxProcessedTs != null && maxProcessedId != null) {
+    const summary = {
+      fetched: itemsFetched,
+      processed,
+      inserted: articlesInserted,
+      updated: articlesUpdated,
+      imagesUploaded,
+      inlineRewritten,
+      timeMs,
+    };
+    try {
+      await client.query(
+        `INSERT INTO job_state (job_name, watermark_ts, watermark_id, meta, updated_at)
+         VALUES ($1, $2, $3, jsonb_build_object('lastRunAt', now(), 'lastSummary', $4::jsonb), now())
+         ON CONFLICT (job_name) DO UPDATE SET
+           watermark_ts = EXCLUDED.watermark_ts,
+           watermark_id = EXCLUDED.watermark_id,
+           meta = jsonb_set(jsonb_set(COALESCE(job_state.meta, '{}'::jsonb), '{lastRunAt}', to_jsonb(now()), true), '{lastSummary}', to_jsonb($4::jsonb), true),
+           updated_at = now()`,
+        [PAMEDIA_JOB_STATE_KEY, maxProcessedTs, maxProcessedId, JSON.stringify(summary)]
+      );
+    } catch (e) {
+      console.warn("[ingest-pamedia] job_state update failed:", (e as Error).message);
+    }
+  }
+  console.log("[ingest-pamedia] watermark after run:", { watermark_ts: maxProcessedTs?.toISOString() ?? null, watermark_id: maxProcessedId ?? null });
 
   await finishJobRun(runId, {
     status: "success",
     counters: {
-      itemsFetched: rawItems.length,
+      itemsFetched,
       processed,
       skipped,
       imagesUploaded,
@@ -522,7 +602,7 @@ export async function runPaMediaIngest(): Promise<{
   return {
     ok: true,
     processed,
-    itemsFetched: rawItems.length,
+    itemsFetched,
     imagesUploaded,
     inlineRewritten,
     skipped,
@@ -535,7 +615,7 @@ export async function runPaMediaIngest(): Promise<{
       status: "error",
       error: (err as Error).message,
       counters: {
-        itemsFetched: rawItems.length,
+        itemsFetched,
         processed,
         skipped,
         imagesUploaded,
@@ -549,4 +629,8 @@ export async function runPaMediaIngest(): Promise<{
     return { ok: false, processed, error: (err as Error).message };
   }
   });
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(hashtext($1))", [PAMEDIA_JOB_STATE_KEY]).catch(() => {});
+    client.release();
+  }
 }
