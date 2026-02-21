@@ -205,15 +205,17 @@ export async function jobFetch(
       const arr = await res.arrayBuffer();
       bytesIn = arr.byteLength;
       const durationMs = Date.now() - start;
-      await recordJobHttpCall(runId || undefined, {
-        provider,
-        url,
-        method,
-        statusCode,
-        durationMs,
-        bytesIn,
-        error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
-      });
+      if (runId) {
+        await recordJobHttpCall(runId, {
+          provider,
+          url,
+          method,
+          statusCode,
+          durationMs,
+          bytesIn,
+          error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
+        });
+      }
       if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
         throw new Error(`HTTP ${res.status}`);
       }
@@ -221,7 +223,9 @@ export async function jobFetch(
     } catch (e) {
       const durationMs = Date.now() - start;
       errMsg = (e as Error).message;
-      await recordJobHttpCall(runId || undefined, { provider, url, method, statusCode, durationMs, bytesIn, error: errMsg });
+      if (runId) {
+        await recordJobHttpCall(runId, { provider, url, method, statusCode, durationMs, bytesIn, error: errMsg });
+      }
       throw e;
     }
   }
@@ -241,26 +245,30 @@ export async function jobFetch(
     bytesIn = arr.byteLength;
     if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
       errMsg = `HTTP ${res.status}`;
-      await recordJobHttpCall(runId || undefined, {
+      if (runId) {
+        await recordJobHttpCall(runId, {
+          provider,
+          url,
+          method,
+          statusCode,
+          durationMs: Date.now() - start,
+          bytesIn,
+          error: errMsg,
+        });
+      }
+      throw new Error(errMsg);
+    }
+    if (runId) {
+      await recordJobHttpCall(runId, {
         provider,
         url,
         method,
         statusCode,
         durationMs: Date.now() - start,
         bytesIn,
-        error: errMsg,
+        error: null,
       });
-      throw new Error(errMsg);
     }
-    await recordJobHttpCall(runId || undefined, {
-      provider,
-      url,
-      method,
-      statusCode,
-      durationMs: Date.now() - start,
-      bytesIn,
-      error: null,
-    });
     return new Response(arr, {
       status: res.status,
       statusText: res.statusText,
@@ -269,15 +277,17 @@ export async function jobFetch(
   } catch (e) {
     const durationMs = Date.now() - start;
     errMsg = (e as Error).message;
-    await recordJobHttpCall(runId || undefined, {
-      provider,
-      url,
-      method,
-      statusCode,
-      durationMs,
-      bytesIn,
-      error: errMsg,
-    });
+    if (runId) {
+      await recordJobHttpCall(runId, {
+        provider,
+        url,
+        method,
+        statusCode,
+        durationMs,
+        bytesIn,
+        error: errMsg,
+      });
+    }
     throw e;
   }
 }

@@ -116,10 +116,10 @@ function getTagsFromSubject(raw: Record<string, unknown>): string[] {
   return tags.slice(0, 20);
 }
 
-/** Fetch with timeout; records to job_http_calls with provider pamedia. */
+/** Fetch with timeout; records to job_http_calls with provider pa_media. */
 async function fetchWithTimeout(runId: string, url: string): Promise<Buffer> {
   const res = await jobFetch(runId, {
-    provider: "pamedia",
+    provider: "pa_media",
     url: normalizeImageUrl(url),
     method: "GET",
     timeoutMs: FETCH_TIMEOUT_MS,
@@ -225,7 +225,7 @@ export async function runPaMediaIngest(): Promise<{
   try {
     const url = `${BASE_URL.replace(/\/$/, "")}/item`;
     const res = await jobFetch(runId, {
-      provider: "pamedia",
+      provider: "pa_media",
       url,
       method: "GET",
       headers: { apikey: apiKey, "Content-Type": "application/json" },

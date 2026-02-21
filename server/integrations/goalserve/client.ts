@@ -23,12 +23,13 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
 
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
 
-  const effectiveRunId = runId ?? getJobRunId() ?? "";
-  const response = await jobFetch(effectiveRunId || undefined, {
+  const effectiveRunId = runId ?? getJobRunId() ?? undefined;
+  const response = await jobFetch(effectiveRunId, {
     provider: "goalserve",
     url: finalUrl,
     method: "GET",
-    fetcher: () => fetch(finalUrl, { headers: DEFAULT_HEADERS }),
+    headers: DEFAULT_HEADERS,
+    throwOnNon2xx: true,
   });
 
   const buffer = await response.arrayBuffer();
@@ -69,12 +70,13 @@ export async function goalserveFetchXml(path: string, runId?: string): Promise<a
 
   console.log(`[Goalserve XML] Fetching: ${redactedUrl}`);
 
-  const effectiveRunId = runId ?? getJobRunId() ?? "";
-  const response = await jobFetch(effectiveRunId || undefined, {
+  const effectiveRunId = runId ?? getJobRunId() ?? undefined;
+  const response = await jobFetch(effectiveRunId, {
     provider: "goalserve",
     url: finalUrl,
     method: "GET",
-    fetcher: () => fetch(finalUrl, { headers: DEFAULT_HEADERS }),
+    headers: DEFAULT_HEADERS,
+    throwOnNon2xx: true,
   });
 
   const buffer = await response.arrayBuffer();
