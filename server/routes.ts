@@ -49,6 +49,7 @@ import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/u
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
+import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
@@ -1778,6 +1779,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err) {
       console.error("[ingest-pamedia] Job error:", err);
       res.status(500).json({ ok: false, processed: 0, error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/jobs/backfill-pamedia-inline-images", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
+    try {
+      const result = await runBackfillPaMediaInlineImages();
+      const payload = {
+        ok: result.ok,
+        processed: result.processed,
+        updated: result.updated,
+        imagesUploaded: result.imagesUploaded,
+        inlineRewritten: result.inlineRewritten,
+        skipped: result.skipped,
+        ...(result.error && { error: result.error }),
+      };
+      if (result.ok) res.status(200).json(payload);
+      else res.status(500).json(payload);
+    } catch (err) {
+      console.error("[backfill-pamedia-inline] Job error:", err);
+      res.status(500).json({
+        ok: false,
+        processed: 0,
+        updated: 0,
+        imagesUploaded: 0,
+        inlineRewritten: 0,
+        skipped: 0,
+        error: (err as Error).message,
+      });
     }
   });
 
