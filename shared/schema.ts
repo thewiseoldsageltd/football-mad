@@ -126,6 +126,44 @@ export const pamediaIngestState = pgTable("pamedia_ingest_state", {
 });
 export type PamediaIngestState = typeof pamediaIngestState.$inferSelect;
 
+// ============ JOB OBSERVABILITY ============
+export const jobRuns = pgTable(
+  "job_runs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    jobName: text("job_name").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    status: text("status").notNull(), // success | error | partial
+    stoppedReason: text("stopped_reason"),
+    meta: jsonb("meta"),
+    counters: jsonb("counters"),
+    error: text("error"),
+  },
+  (table) => [index("job_runs_job_name_started_idx").on(table.jobName, table.startedAt)]
+);
+export type JobRun = typeof jobRuns.$inferSelect;
+
+export const jobHttpCalls = pgTable(
+  "job_http_calls",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    runId: varchar("run_id")
+      .references(() => jobRuns.id, { onDelete: "cascade" })
+      .notNull(),
+    provider: text("provider").notNull(), // pa_media | goalserve | other
+    url: text("url").notNull(),
+    method: text("method").default("GET"),
+    statusCode: integer("status_code"),
+    durationMs: integer("duration_ms"),
+    bytesIn: integer("bytes_in"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [index("job_http_calls_run_created_idx").on(table.runId, table.createdAt)]
+);
+export type JobHttpCall = typeof jobHttpCalls.$inferSelect;
+
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type Article = typeof articles.$inferSelect;

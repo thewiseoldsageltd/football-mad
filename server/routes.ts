@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -1665,6 +1665,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("[Team Metadata Sync] Error:", error);
       res.status(500).json({ error: "Sync failed" });
+    }
+  });
+
+  // ========== JOBS OBSERVABILITY (read-only, GOALSERVE_SYNC_SECRET) ==========
+  app.get("/api/jobs/runs", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    try {
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10) || 50));
+      const rows = await db
+        .select({
+          id: jobRuns.id,
+          job_name: jobRuns.jobName,
+          started_at: jobRuns.startedAt,
+          finished_at: jobRuns.finishedAt,
+          status: jobRuns.status,
+          counters: jobRuns.counters,
+        })
+        .from(jobRuns)
+        .orderBy(desc(jobRuns.startedAt))
+        .limit(limit);
+      res.json({ runs: rows });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  app.get("/api/jobs/runs/:id", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    try {
+      const runId = req.params.id;
+      const runRows = await db.select().from(jobRuns).where(eq(jobRuns.id, runId)).limit(1);
+      if (runRows.length === 0) {
+        return res.status(404).json({ error: "Run not found" });
+      }
+      const httpCalls = await db
+        .select()
+        .from(jobHttpCalls)
+        .where(eq(jobHttpCalls.runId, runId))
+        .orderBy(desc(jobHttpCalls.createdAt))
+        .limit(500);
+      res.json({ run: runRows[0], httpCalls });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 

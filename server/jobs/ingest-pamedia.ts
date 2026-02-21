@@ -1,5 +1,9 @@
 /**
  * PA Media ingestion: fetch items, hero + inline images to R2 (WEBP variants), rewrite HTML. Idempotent.
+ *
+ * Observability: every run creates a job_runs row and records HTTP calls in job_http_calls.
+ * Query latest runs:  SELECT * FROM job_runs ORDER BY started_at DESC LIMIT 20;
+ * Provider breakdown: SELECT provider, count(*) FROM job_http_calls GROUP BY provider;
  */
 
 import { db } from "../db";
@@ -12,12 +16,47 @@ import {
   seoSlugFromText,
   shortStableHash,
 } from "../lib/r2";
+import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 
 const PA_SOURCE = "pa_media";
 const BASE_URL = process.env.PAMEDIA_API_BASE_URL ?? "https://content.api.pressassociation.io/v1";
 const FETCH_TIMEOUT_MS = 10_000;
 const IMAGE_WIDTHS = [320, 640, 960, 1280] as const;
 const DEBUG_PAMEDIA_IMAGES = process.env.DEBUG_PAMEDIA_IMAGES === "1";
+
+const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL ?? "https://img.footballmad.co.uk").replace(/\/$/, "");
+
+const PAMEDIA_INGEST_LIMIT = Math.max(1, parseInt(process.env.PAMEDIA_INGEST_LIMIT ?? "15", 10));
+const PAMEDIA_JOB_TIME_BUDGET_MS = Math.max(5000, parseInt(process.env.PAMEDIA_JOB_TIME_BUDGET_MS ?? "45000", 10));
+const PAMEDIA_IMAGE_CONCURRENCY = Math.max(1, parseInt(process.env.PAMEDIA_IMAGE_CONCURRENCY ?? "2", 10));
+const PAMEDIA_MAX_INLINE_IMAGES = Math.max(1, parseInt(process.env.PAMEDIA_MAX_INLINE_IMAGES ?? "5", 10));
+
+/** Simple concurrency limiter: at most `limit` concurrent executions. */
+function createSemaphore(limit: number): { acquire: () => Promise<void>; release: () => void } {
+  let inFlight = 0;
+  const waiters: (() => void)[] = [];
+  return {
+    acquire: () => {
+      if (inFlight < limit) {
+        inFlight++;
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        waiters.push(() => {
+          inFlight++;
+          resolve();
+        });
+      });
+    },
+    release: () => {
+      inFlight--;
+      if (waiters.length > 0 && inFlight < limit) {
+        const next = waiters.shift()!;
+        next();
+      }
+    },
+  };
+}
 
 function getItems(response: Record<string, unknown>): unknown[] {
   const arr = (response as any).item ?? (response as any).items ?? (response as any).data ?? (response as any).results;
@@ -76,21 +115,16 @@ function getTagsFromSubject(raw: Record<string, unknown>): string[] {
   return tags.slice(0, 20);
 }
 
-/** Fetch with timeout. */
-async function fetchWithTimeout(url: string): Promise<Buffer> {
-  const controller = new AbortController();
-  const to = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(normalizeImageUrl(url), {
-      redirect: "follow",
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    return buf;
-  } finally {
-    clearTimeout(to);
-  }
+/** Fetch with timeout; records to job_http_calls when runId is set. */
+async function fetchWithTimeout(runId: string, url: string): Promise<Buffer> {
+  const res = await jobFetch(runId, {
+    provider: "pa_media",
+    url: normalizeImageUrl(url),
+    method: "GET",
+    timeoutMs: FETCH_TIMEOUT_MS,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return Buffer.from(await res.arrayBuffer());
 }
 
 export interface NormalizedPaItem {
@@ -163,48 +197,111 @@ export async function runPaMediaIngest(): Promise<{
   itemsFetched?: number;
   imagesUploaded?: number;
   inlineRewritten?: number;
+  skipped?: number;
+  timeMs?: number;
+  stoppedReason?: string | null;
 }> {
+  // Always create a job run first so we have observability on every exit path.
+  const run = await startJobRun("ingest_pamedia", {
+    limit: PAMEDIA_INGEST_LIMIT,
+    timeBudgetMs: PAMEDIA_JOB_TIME_BUDGET_MS,
+  });
+  const runId = run.id;
+
   const apiKey = process.env.PAMEDIA_API_KEY;
   if (!apiKey) {
+    await finishJobRun(runId, { status: "error", error: "PAMEDIA_API_KEY is not set" });
     return { ok: false, processed: 0, error: "PAMEDIA_API_KEY is not set" };
   }
 
-  const url = `${BASE_URL.replace(/\/$/, "")}/item`;
-  let res: Response;
+  const start = Date.now();
+  let stoppedReason: string | null = null;
+  let articlesInserted = 0;
+  let articlesUpdated = 0;
+
+  let body: Record<string, unknown>;
   try {
-    res = await fetch(url, {
+    const url = `${BASE_URL.replace(/\/$/, "")}/item`;
+    const res = await jobFetch(runId, {
+      provider: "pa_media",
+      url,
+      method: "GET",
       headers: { apikey: apiKey, "Content-Type": "application/json" },
+      throwOnNon2xx: true,
     });
+    body = (await res.json()) as Record<string, unknown>;
   } catch (err) {
+    await finishJobRun(runId, { status: "error", error: (err as Error).message });
     return { ok: false, processed: 0, error: (err as Error).message };
   }
-
-  if (!res.ok) {
-    const text = await res.text();
-    return { ok: false, processed: 0, error: `PA API ${res.status}: ${text.slice(0, 200)}` };
+  let rawItems: unknown[] = [];
+  try {
+    rawItems = getItems(body);
+  } catch (_) {
+    await finishJobRun(runId, { status: "error", error: "Failed to parse PA API response" });
+    return { ok: false, processed: 0, error: "Failed to parse PA API response" };
   }
 
-  const body = (await res.json()) as Record<string, unknown>;
-  const rawItems = getItems(body);
   let processed = 0;
+  let skipped = 0;
   let imagesUploaded = 0;
   let inlineRewritten = 0;
+  let inlineSkippedDueToCap = 0;
+  const semaphore = createSemaphore(PAMEDIA_IMAGE_CONCURRENCY);
 
+  try {
   for (const raw of rawItems) {
+    if (processed >= PAMEDIA_INGEST_LIMIT) {
+      stoppedReason = "item_limit";
+      break;
+    }
+    if (Date.now() - start > PAMEDIA_JOB_TIME_BUDGET_MS) {
+      stoppedReason = "time_budget";
+      break;
+    }
+
     if (typeof raw !== "object" || raw === null) continue;
     const item = normalizeItem(raw as Record<string, unknown>);
     if (!item) continue;
 
     try {
+      const existing = await db
+        .select({
+          id: articles.id,
+          slug: articles.slug,
+          coverImage: articles.coverImage,
+          content: articles.content,
+          sourceUpdatedAt: articles.sourceUpdatedAt,
+        })
+        .from(articles)
+        .where(and(eq(articles.source, PA_SOURCE), eq(articles.sourceId, item.id)))
+        .limit(1);
+
+      const existingRow = existing[0];
+      const incomingVersion = item.versionCreated ? new Date(item.versionCreated).getTime() : 0;
+      const existingVersion = existingRow?.sourceUpdatedAt ? new Date(existingRow.sourceUpdatedAt).getTime() : 0;
+      const isEnrichedCover =
+        !!existingRow?.coverImage &&
+        (existingRow.coverImage.startsWith(R2_PUBLIC_BASE_URL) || existingRow.coverImage.includes("img.footballmad.co.uk"));
+      const isEnrichedContent =
+        !!existingRow?.content &&
+        (existingRow.content.includes(R2_PUBLIC_BASE_URL) || existingRow.content.includes("img.footballmad.co.uk"));
+
+      if (existingRow && isEnrichedCover && isEnrichedContent && incomingVersion <= existingVersion) {
+        skipped++;
+        continue;
+      }
+
       let coverImage: string | null = null;
       let heroImageCredit: string | null = null;
       let content = item.content;
 
-      // --- Hero: associations.featureimage ---
+      // --- Hero: associations.featureimage (with concurrency limit) ---
       const heroHref = getHeroHref(item.associations);
       if (heroHref) {
+        await semaphore.acquire();
         try {
-          const buf = await fetchWithTimeout(heroHref);
+          const buf = await fetchWithTimeout(runId, heroHref);
           const featureAssoc = (item.associations.featureimage ?? item.associations.feature_image) as Record<string, unknown> | undefined;
           const baseName = getImageBaseName(featureAssoc ?? null, item.headline);
           const result = await uploadImageVariantsToR2({
@@ -220,6 +317,8 @@ export async function runPaMediaIngest(): Promise<{
           if (credit && typeof credit === "string") heroImageCredit = credit;
         } catch (e) {
           console.warn(`[ingest-pamedia] Hero image failed for ${item.id}:`, (e as Error).message);
+        } finally {
+          semaphore.release();
         }
       }
 
@@ -248,9 +347,14 @@ export async function runPaMediaIngest(): Promise<{
 
       const defaultSizes = "(max-width: 767px) 89vw, (max-width: 1000px) 54vw, 580px";
 
-      // 1) Figures with id="embeddedXXXX" — process sequentially so DOM is updated before $.html()
+      // 1) Figures with id="embeddedXXXX" — cap to PAMEDIA_MAX_INLINE_IMAGES
       const figureEls = $('figure[id^="embedded"]').toArray();
-      for (const el of figureEls) {
+      const figureElsToProcess = figureEls.slice(0, PAMEDIA_MAX_INLINE_IMAGES);
+      if (figureEls.length > PAMEDIA_MAX_INLINE_IMAGES) {
+        inlineSkippedDueToCap += figureEls.length - PAMEDIA_MAX_INLINE_IMAGES;
+      }
+
+      for (const el of figureElsToProcess) {
         const $el = $(el);
         const figureId = $el.attr("id")?.trim();
         const $img = $el.find("img").first();
@@ -260,8 +364,9 @@ export async function runPaMediaIngest(): Promise<{
         const href = assoc ? getRenditionHref(assoc) : null;
         if (!href) continue;
 
+        await semaphore.acquire();
         try {
-          const buf = await fetchWithTimeout(href);
+          const buf = await fetchWithTimeout(runId, href);
           const baseName = getImageBaseName(assoc, item.headline);
           const result = await uploadImageVariantsToR2({
             buffer: buf,
@@ -280,12 +385,17 @@ export async function runPaMediaIngest(): Promise<{
           inlineRewritten++;
         } catch (e) {
           console.warn(`[ingest-pamedia] Inline image failed ${figureId}:`, (e as Error).message);
+        } finally {
+          semaphore.release();
         }
       }
 
-      // 2) Plain <img src="//image.assets..."> — skip if already rewritten (src already our domain)
+      // 2) Plain <img src="//image.assets..."> — cap total inlines already; allow up to (PAMEDIA_MAX_INLINE_IMAGES - figureElsToProcess) more plain to stay under cap
+      const inlineBudgetLeft = Math.max(0, PAMEDIA_MAX_INLINE_IMAGES - figureElsToProcess.length);
       const imgEls = $("img[src]").toArray();
+      let plainProcessed = 0;
       for (const el of imgEls) {
+        if (plainProcessed >= inlineBudgetLeft) break;
         const $img = $(el);
         let src = $img.attr("src") ?? "";
         if (!src.includes("image.assets.pressassociation.io") && !src.includes("pressassociation")) continue;
@@ -299,8 +409,9 @@ export async function runPaMediaIngest(): Promise<{
           if (href && normalizeImageUrl(href) === src) {
             matched = true;
             const assoc = val as Record<string, unknown>;
+            await semaphore.acquire();
             try {
-              const buf = await fetchWithTimeout(src);
+              const buf = await fetchWithTimeout(runId, src);
               const baseName = getImageBaseName(assoc, item.headline);
               const result = await uploadImageVariantsToR2({
                 buffer: buf,
@@ -316,15 +427,19 @@ export async function runPaMediaIngest(): Promise<{
               $img.attr("loading", "lazy");
               $img.attr("alt", ($img.attr("alt") ?? "").trim() || baseName);
               inlineRewritten++;
+              plainProcessed++;
             } catch (e) {
               console.warn(`[ingest-pamedia] Plain img failed:`, (e as Error).message);
+            } finally {
+              semaphore.release();
             }
             break;
           }
         }
         if (!matched) {
+          await semaphore.acquire();
           try {
-            const buf = await fetchWithTimeout(src);
+            const buf = await fetchWithTimeout(runId, src);
             const baseName = seoSlugFromText(item.headline) || "image";
             const result = await uploadImageVariantsToR2({
               buffer: buf,
@@ -340,8 +455,11 @@ export async function runPaMediaIngest(): Promise<{
             $img.attr("loading", "lazy");
             if (!$img.attr("alt")) $img.attr("alt", baseName);
             inlineRewritten++;
+            plainProcessed++;
           } catch (e) {
             console.warn(`[ingest-pamedia] Plain img (no assoc) failed:`, (e as Error).message);
+          } finally {
+            semaphore.release();
           }
         }
       }
@@ -352,13 +470,8 @@ export async function runPaMediaIngest(): Promise<{
       const publishedAt = item.issued ? new Date(item.issued) : new Date();
       const updatedAt = item.versionCreated ? new Date(item.versionCreated) : publishedAt;
 
-      const existing = await db
-        .select({ id: articles.id, slug: articles.slug })
-        .from(articles)
-        .where(and(eq(articles.source, PA_SOURCE), eq(articles.sourceId, item.id)))
-        .limit(1);
-
-      if (existing.length > 0) {
+      if (existingRow) {
+        articlesUpdated++;
         await db
           .update(articles)
           .set({
@@ -375,8 +488,9 @@ export async function runPaMediaIngest(): Promise<{
             tags: item.tags.length > 0 ? item.tags : undefined,
             authorName: item.byline ?? "PA Media",
           })
-          .where(eq(articles.id, existing[0].id));
+          .where(eq(articles.id, existingRow.id));
       } else {
+        articlesInserted++;
         const slugTaken = await db
           .select({ id: articles.id })
           .from(articles)
@@ -408,9 +522,27 @@ export async function runPaMediaIngest(): Promise<{
     }
   }
 
+  const timeMs = Date.now() - start;
   console.log(
-    `[ingest-pamedia] itemsFetched=${rawItems.length} processed=${processed} imagesUploaded=${imagesUploaded} inlineRewritten=${inlineRewritten}`
+    `[ingest-pamedia] fetched=${rawItems.length} processed=${processed} skipped=${skipped} imagesUploaded=${imagesUploaded} inlineRewritten=${inlineRewritten} inlineSkippedDueToCap=${inlineSkippedDueToCap} timeMs=${timeMs} stoppedReason=${stoppedReason ?? "none"}`
   );
+
+  await finishJobRun(runId, {
+    status: "success",
+    counters: {
+      itemsFetched: rawItems.length,
+      processed,
+      skipped,
+      imagesUploaded,
+      inlineRewritten,
+      inlineSkippedDueToCap,
+      articles_inserted: articlesInserted,
+      articles_updated: articlesUpdated,
+      timeMs,
+    },
+    stoppedReason,
+    error: null,
+  });
 
   return {
     ok: true,
@@ -418,5 +550,27 @@ export async function runPaMediaIngest(): Promise<{
     itemsFetched: rawItems.length,
     imagesUploaded,
     inlineRewritten,
+    skipped,
+    timeMs,
+    stoppedReason,
   };
+  } catch (err) {
+    const timeMs = Date.now() - start;
+    await finishJobRun(runId, {
+      status: "error",
+      error: (err as Error).message,
+      counters: {
+        itemsFetched: rawItems.length,
+        processed,
+        skipped,
+        imagesUploaded,
+        inlineRewritten,
+        inlineSkippedDueToCap,
+        articles_inserted: articlesInserted,
+        articles_updated: articlesUpdated,
+        timeMs,
+      },
+    });
+    return { ok: false, processed, error: (err as Error).message };
+  }
 }

@@ -5,6 +5,12 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
 
+// Throttle sharp globally to reduce memory pressure (Render exit 134).
+const PAMEDIA_SHARP_CONCURRENCY = Math.max(1, parseInt(process.env.PAMEDIA_SHARP_CONCURRENCY ?? "1", 10));
+const PAMEDIA_SHARP_CACHE_MB = Math.max(0, parseInt(process.env.PAMEDIA_SHARP_CACHE_MB ?? "32", 10));
+sharp.concurrency(PAMEDIA_SHARP_CONCURRENCY);
+sharp.cache({ memory: PAMEDIA_SHARP_CACHE_MB, files: 10, items: 50 });
+
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
 const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
