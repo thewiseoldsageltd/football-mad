@@ -1810,6 +1810,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // PA Media ingest runner status (lightweight; no auth for visibility)
+  app.get("/api/jobs/pamedia/status", (_req, res) => {
+    res.json({
+      enabled: PAMEDIA_INGEST_RUNNER_ENABLED,
+      intervalMs: PAMEDIA_INGEST_RUNNER_INTERVAL_MS,
+      isRunning: paRunnerRunning,
+      lastRunAt: lastPaRunnerRunAt,
+      lastSummary: lastPaRunnerSummary,
+      lastError: lastPaRunnerError,
+    });
+  });
+
+  app.post("/api/jobs/pamedia/run", (req, res) => {
+    if (!PAMEDIA_INGEST_RUNNER_ENABLED) {
+      return res.status(400).json({ ok: false, reason: "disabled" });
+    }
+    if (!process.env.PAMEDIA_INGEST_SECRET) {
+      return res.status(400).json({ ok: false, reason: "misconfigured" });
+    }
+    if (paRunnerRunning) {
+      return res.status(409).json({ ok: false, reason: "running" });
+    }
+    setImmediate(() => scheduledPaMediaIngest());
+    res.status(200).json({ ok: true });
+  });
+
   // ========== DB FINGERPRINT (debug) ==========
   app.post("/api/jobs/db-fingerprint", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
     try {
@@ -6873,6 +6899,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   let lastCatchupError: string | null = null;
   
   const CATCHUP_INTERVAL_MS = 120000; // 2 minutes
+
+  // State for PA Media ingest runner
+  let paRunnerRunning = false;
+  let lastPaRunnerRunAt: string | null = null;
+  let lastPaRunnerSummary: Record<string, unknown> | null = null;
+  let lastPaRunnerError: string | null = null;
   
   // Helper to upsert a single Ghost post (reuses same mapping as webhook sync)
   const upsertGhostPostForCatchup = async (ghostPost: any): Promise<"inserted" | "updated" | "skipped"> => {
@@ -7012,7 +7044,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     setInterval(scheduledCatchupSync, CATCHUP_INTERVAL_MS);
     console.log(`[Catchup sync] Enabled with interval ${CATCHUP_INTERVAL_MS / 1000}s`);
   }
-  
+
+  // ========== PA MEDIA INGEST RUNNER (scheduled) ==========
+  const PAMEDIA_INGEST_RUNNER_ENABLED = process.env.PAMEDIA_INGEST_RUNNER_ENABLED === "true";
+  const PAMEDIA_INGEST_RUNNER_INTERVAL_MS = Math.max(60000, parseInt(process.env.PAMEDIA_INGEST_RUNNER_INTERVAL_MS ?? "900000", 10) || 900000);
+
+  const scheduledPaMediaIngest = async () => {
+    if (!PAMEDIA_INGEST_RUNNER_ENABLED) return;
+    if (!process.env.PAMEDIA_INGEST_SECRET) {
+      console.warn("[pamedia-runner] Skipping: PAMEDIA_INGEST_SECRET not set");
+      return;
+    }
+    if (paRunnerRunning) return;
+
+    paRunnerRunning = true;
+    console.log("[pamedia-runner] Started");
+    try {
+      const result = await runPaMediaIngest();
+      lastPaRunnerRunAt = new Date().toISOString();
+      lastPaRunnerSummary = result as Record<string, unknown>;
+      lastPaRunnerError = null;
+      console.log("[pamedia-runner] Completed", result.processed, "processed", result.inlineRewritten ?? 0, "inline rewritten");
+      setImmediate(() =>
+        enrichPendingArticles({ limit: 25, timeBudgetMs: 10000 }).catch((e) =>
+          console.error("[enrich-articles]", e)
+        )
+      );
+    } catch (err: unknown) {
+      lastPaRunnerRunAt = new Date().toISOString();
+      lastPaRunnerError = err instanceof Error ? err.message : String(err);
+      console.warn("[pamedia-runner] Failed:", lastPaRunnerError);
+    } finally {
+      paRunnerRunning = false;
+    }
+  };
+
+  if (PAMEDIA_INGEST_RUNNER_ENABLED) {
+    setInterval(scheduledPaMediaIngest, PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
+    console.log(`[pamedia-runner] Enabled interval=${PAMEDIA_INGEST_RUNNER_INTERVAL_MS}ms`);
+  }
+
   // Manual trigger endpoint: POST /api/news/sync/run
   app.post("/api/news/sync/run", async (req, res) => {
     const ingestSecret = process.env.INGEST_SECRET;
