@@ -275,7 +275,8 @@ interface SyncResult {
 
 export async function syncGoalserveMatches(
   leagueId: string,
-  seasonKeyParam?: string
+  seasonKeyParam?: string,
+  runId?: string
 ): Promise<SyncResult> {
   const emptyResult = (error?: string, extra?: Partial<SyncResult>): SyncResult => ({
     ok: !error,
@@ -300,7 +301,7 @@ export async function syncGoalserveMatches(
 
     const competitionDbId = competitionRow?.id ?? null;
 
-    const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`);
+    const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`, runId);
 
     const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
 

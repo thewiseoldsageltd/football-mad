@@ -17,6 +17,7 @@ import {
   shortStableHash,
 } from "../lib/r2";
 import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
+import { runWithJobContext } from "../lib/job-context";
 
 const PA_SOURCE = "pa_media";
 const BASE_URL = process.env.PAMEDIA_API_BASE_URL ?? "https://content.api.pressassociation.io/v1";
@@ -115,10 +116,10 @@ function getTagsFromSubject(raw: Record<string, unknown>): string[] {
   return tags.slice(0, 20);
 }
 
-/** Fetch with timeout; records to job_http_calls when runId is set. */
+/** Fetch with timeout; records to job_http_calls with provider pamedia. */
 async function fetchWithTimeout(runId: string, url: string): Promise<Buffer> {
   const res = await jobFetch(runId, {
-    provider: "pa_media",
+    provider: "pamedia",
     url: normalizeImageUrl(url),
     method: "GET",
     timeoutMs: FETCH_TIMEOUT_MS,
@@ -214,6 +215,7 @@ export async function runPaMediaIngest(): Promise<{
     return { ok: false, processed: 0, error: "PAMEDIA_API_KEY is not set" };
   }
 
+  return runWithJobContext(run.id, async () => {
   const start = Date.now();
   let stoppedReason: string | null = null;
   let articlesInserted = 0;
@@ -223,7 +225,7 @@ export async function runPaMediaIngest(): Promise<{
   try {
     const url = `${BASE_URL.replace(/\/$/, "")}/item`;
     const res = await jobFetch(runId, {
-      provider: "pa_media",
+      provider: "pamedia",
       url,
       method: "GET",
       headers: { apikey: apiKey, "Content-Type": "application/json" },
@@ -573,4 +575,5 @@ export async function runPaMediaIngest(): Promise<{
     });
     return { ok: false, processed, error: (err as Error).message };
   }
+  });
 }

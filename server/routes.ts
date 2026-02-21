@@ -1733,7 +1733,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await runWithJobContext(run.id, async () => {
         const leagueId = (req.query.leagueId as string) || "1204";
         const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
-        const result = await syncGoalserveMatches(leagueId, seasonKeyParam);
+        const result = await syncGoalserveMatches(leagueId, seasonKeyParam, run.id);
 
         await finishJobRun(run.id, {
           status: result.ok ? "success" : "error",
