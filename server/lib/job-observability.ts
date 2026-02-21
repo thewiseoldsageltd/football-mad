@@ -160,6 +160,8 @@ export async function recordJobHttpCall(
       method,
       statusCode,
       durationMs,
+      bytesIn: payload.bytesIn ?? null,
+      error: payload.error ?? null,
     });
   } catch (e) {
     const msg = (e as Error).message;

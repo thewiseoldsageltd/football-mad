@@ -301,6 +301,7 @@ export async function syncGoalserveMatches(
 
     const competitionDbId = competitionRow?.id ?? null;
 
+    // Pass runId so goalserveFetch logs to job_http_calls.
     const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`, runId);
 
     const extracted = extractMatchesFromGoalserveResponse(response, leagueId);

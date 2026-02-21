@@ -42,6 +42,7 @@ import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { syncGoalserveMatches } from "./jobs/sync-goalserve-matches";
+import { runSyncGoalserve } from "./jobs/sync-goalserve";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
@@ -1733,7 +1734,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await runWithJobContext(run.id, async () => {
         const leagueId = (req.query.leagueId as string) || "1204";
         const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
-        const result = await syncGoalserveMatches(leagueId, seasonKeyParam, run.id);
+        const result = await runSyncGoalserve(leagueId, seasonKeyParam, run.id);
 
         await finishJobRun(run.id, {
           status: result.ok ? "success" : "error",
