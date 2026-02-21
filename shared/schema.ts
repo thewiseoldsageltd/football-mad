@@ -126,6 +126,14 @@ export const pamediaIngestState = pgTable("pamedia_ingest_state", {
 });
 export type PamediaIngestState = typeof pamediaIngestState.$inferSelect;
 
+// ============ JOB STATE (durable watermark store) ============
+export const jobState = pgTable("job_state", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull().default(sql`'{}'::jsonb`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export type JobState = typeof jobState.$inferSelect;
+
 // ============ JOB OBSERVABILITY ============
 export const jobRuns = pgTable(
   "job_runs",
