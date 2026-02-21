@@ -103,19 +103,28 @@ export async function recordJobHttpCall(
     }
     state.recorded++;
   }
+  const method = payload.method ?? "GET";
+  const statusCode = payload.statusCode ?? null;
+  const durationMs = payload.durationMs ?? null;
   try {
     await db.insert(jobHttpCalls).values({
       runId,
       provider: payload.provider,
       url: payload.url,
-      method: payload.method ?? "GET",
-      statusCode: payload.statusCode ?? null,
-      durationMs: payload.durationMs ?? null,
-      bytesIn: payload.bytesIn ?? null,
-      error: payload.error ?? null,
+      method,
+      statusCode,
+      durationMs,
     });
   } catch (e) {
-    console.warn("[job-observability] recordJobHttpCall failed:", (e as Error).message);
+    const msg = (e as Error).message;
+    console.error(
+      "[job-observability] recordJobHttpCall insert failed:",
+      msg,
+      "provider=" + payload.provider,
+      "method=" + method,
+      "url=" + payload.url,
+      "status_code=" + String(statusCode)
+    );
   }
 }
 

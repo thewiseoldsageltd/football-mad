@@ -1710,6 +1710,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ========== DEBUG HTTP LOG (verifies job_http_calls wiring) ==========
+  app.post("/api/jobs/debug-http-log", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
+    const run = await startJobRun("debug_http_log", {});
+    try {
+      await goalserveFetch("soccernew/home", run.id);
+      await finishJobRun(run.id, { status: "success", counters: { requests: 1 } });
+      res.json({ ok: true, run_id: run.id });
+    } catch (err) {
+      await finishJobRun(run.id, { status: "error", error: String(err) });
+      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err), run_id: run.id });
+    }
+  });
+
   // ========== GOALSERVE SYNC (Server Jobs) ==========
   app.post("/api/jobs/sync-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
     const run = await startJobRun("sync_goalserve", { meta: { triggeredBy: "api" } });

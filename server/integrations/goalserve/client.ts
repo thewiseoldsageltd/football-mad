@@ -22,6 +22,7 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
 
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
 
+  // When runId is set (e.g. from sync-goalserve), jobFetch writes one row to job_http_calls per request.
   const response = await jobFetch(runId ?? "", {
     provider: "goalserve",
     url: finalUrl,
