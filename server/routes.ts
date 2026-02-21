@@ -1714,9 +1714,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/jobs/sync-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
     const run = await startJobRun("sync_goalserve", { meta: { triggeredBy: "api" } });
     try {
-      // Stub: no sync logic yet; job run recorded for observability.
-      await finishJobRun(run.id, { status: "success", counters: { ok: 1 } });
-      res.json({ ok: true, message: "Goalserve sync stub" });
+      const leagueId = (req.query.leagueId as string) || "1204";
+      const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
+      const result = await syncGoalserveMatches(leagueId, seasonKeyParam);
+
+      await finishJobRun(run.id, {
+        status: result.ok ? "success" : "error",
+        counters: {
+          inserted: result.inserted,
+          updated: result.updated,
+          totalFromGoalserve: result.totalFromGoalserve,
+          skippedNoStaticId: result.skippedNoStaticId,
+          skippedNoKickoff: result.skippedNoKickoff,
+        },
+        error: result.error ?? null,
+      });
+
+      if (result.ok) {
+        res.json(result);
+      } else {
+        res.status(500).json(result);
+      }
     } catch (err) {
       await finishJobRun(run.id, { status: "error", error: String(err) });
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
