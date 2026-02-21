@@ -147,17 +147,51 @@ export interface JobFetchOpts {
   timeoutMs?: number;
   /** If true, throw on non-2xx. Default false: record and return. */
   throwOnNon2xx?: boolean;
+  /** When set, use this instead of internal fetch (for observability-only wrapping). */
+  fetcher?: () => Promise<Response>;
 }
 
 export async function jobFetch(
   runId: string,
   opts: JobFetchOpts
 ): Promise<Response> {
-  const { provider, url, method = "GET", headers, body, timeoutMs = 10000, throwOnNon2xx = false } = opts;
+  const { provider, url, method = "GET", headers, body, timeoutMs = 10000, throwOnNon2xx = false, fetcher } = opts;
   const start = Date.now();
   let statusCode: number | null = null;
   let bytesIn: number | null = null;
   let errMsg: string | null = null;
+
+  if (fetcher) {
+    try {
+      const res = await fetcher();
+      statusCode = res.status;
+      const arr = await res.arrayBuffer();
+      bytesIn = arr.byteLength;
+      const durationMs = Date.now() - start;
+      if (runId) {
+        await recordJobHttpCall(runId, {
+          provider,
+          url,
+          method,
+          statusCode,
+          durationMs,
+          bytesIn,
+          error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
+        });
+      }
+      if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      return new Response(arr, { status: res.status, statusText: res.statusText, headers: res.headers });
+    } catch (e) {
+      const durationMs = Date.now() - start;
+      errMsg = (e as Error).message;
+      if (runId) {
+        await recordJobHttpCall(runId, { provider, url, method, statusCode, durationMs, bytesIn, error: errMsg });
+      }
+      throw e;
+    }
+  }
 
   try {
     const controller = new AbortController();

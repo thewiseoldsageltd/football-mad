@@ -30,6 +30,7 @@ import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
 import { requireJobSecret } from "./jobs/requireJobSecret";
+import { startJobRun, finishJobRun } from "./lib/job-observability";
 import { testGoalserveConnection } from "./jobs/test-goalserve";
 import { goalserveFetch } from "./integrations/goalserve/client";
 import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
@@ -1711,7 +1712,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   // ========== GOALSERVE SYNC (Server Jobs) ==========
   app.post("/api/jobs/sync-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
-    res.json({ ok: true, message: "Goalserve sync stub" });
+    const run = await startJobRun("sync_goalserve", { meta: { triggeredBy: "api" } });
+    try {
+      // Stub: no sync logic yet; job run recorded for observability.
+      await finishJobRun(run.id, { status: "success", counters: { ok: 1 } });
+      res.json({ ok: true, message: "Goalserve sync stub" });
+    } catch (err) {
+      await finishJobRun(run.id, { status: "error", error: String(err) });
+      res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   // ========== PA MEDIA INGEST (Server Jobs) ==========
