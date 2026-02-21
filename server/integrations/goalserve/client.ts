@@ -23,6 +23,7 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
 
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
 
+  // All external HTTP via jobFetch so requests are logged to job_http_calls when runId is set.
   const effectiveRunId = runId ?? getJobRunId() ?? undefined;
   const response = await jobFetch(effectiveRunId, {
     provider: "goalserve",
