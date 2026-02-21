@@ -206,15 +206,14 @@ export async function jobFetch(
       bytesIn = arr.byteLength;
       const durationMs = Date.now() - start;
       await recordJobHttpCall(runId || undefined, {
-          provider,
-          url,
-          method,
-          statusCode,
-          durationMs,
-          bytesIn,
-          error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
-        });
-      }
+        provider,
+        url,
+        method,
+        statusCode,
+        durationMs,
+        bytesIn,
+        error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
+      });
       if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
         throw new Error(`HTTP ${res.status}`);
       }
