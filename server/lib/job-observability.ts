@@ -97,6 +97,30 @@ export async function finishJobRun(
 
 let _noRunIdWarned = false;
 
+/** Call recordJobHttpCall without ever throwing. If runId is falsy, skip and warn. */
+async function safeRecordJobHttpCall(
+  runId: string | undefined,
+  payload: {
+    provider: string;
+    url: string;
+    method?: string;
+    statusCode?: number | null;
+    durationMs?: number | null;
+    bytesIn?: number | null;
+    error?: string | null;
+  }
+): Promise<void> {
+  if (!runId) {
+    console.warn("[job-observability] skip job_http_calls insert: no runId");
+    return;
+  }
+  try {
+    await recordJobHttpCall(runId, payload);
+  } catch (err) {
+    console.warn("job_http_calls insert failed", { err });
+  }
+}
+
 export async function recordJobHttpCall(
   runIdParam: string | undefined,
   payload: {
@@ -205,27 +229,31 @@ export async function jobFetch(
       const arr = await res.arrayBuffer();
       bytesIn = arr.byteLength;
       const durationMs = Date.now() - start;
-      if (runId) {
-        await recordJobHttpCall(runId, {
-          provider,
-          url,
-          method,
-          statusCode,
-          durationMs,
-          bytesIn,
-          error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
-        });
-      }
+      await safeRecordJobHttpCall(runId, {
+        provider,
+        url,
+        method,
+        statusCode,
+        durationMs,
+        bytesIn,
+        error: res.status >= 200 && res.status < 300 ? null : `HTTP ${res.status}`,
+      });
       if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
         throw new Error(`HTTP ${res.status}`);
       }
       return new Response(arr, { status: res.status, statusText: res.statusText, headers: res.headers });
     } catch (e) {
       const durationMs = Date.now() - start;
-      errMsg = (e as Error).message;
-      if (runId) {
-        await recordJobHttpCall(runId, { provider, url, method, statusCode, durationMs, bytesIn, error: errMsg });
-      }
+      errMsg = e instanceof Error ? e.message : String(e);
+      await safeRecordJobHttpCall(runId, {
+        provider,
+        url,
+        method,
+        statusCode: null,
+        durationMs,
+        bytesIn: null,
+        error: errMsg,
+      });
       throw e;
     }
   }
@@ -245,30 +273,26 @@ export async function jobFetch(
     bytesIn = arr.byteLength;
     if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
       errMsg = `HTTP ${res.status}`;
-      if (runId) {
-        await recordJobHttpCall(runId, {
-          provider,
-          url,
-          method,
-          statusCode,
-          durationMs: Date.now() - start,
-          bytesIn,
-          error: errMsg,
-        });
-      }
-      throw new Error(errMsg);
-    }
-    if (runId) {
-      await recordJobHttpCall(runId, {
+      await safeRecordJobHttpCall(runId, {
         provider,
         url,
         method,
         statusCode,
         durationMs: Date.now() - start,
         bytesIn,
-        error: null,
+        error: errMsg,
       });
+      throw new Error(errMsg);
     }
+    await safeRecordJobHttpCall(runId, {
+      provider,
+      url,
+      method,
+      statusCode,
+      durationMs: Date.now() - start,
+      bytesIn,
+      error: null,
+    });
     return new Response(arr, {
       status: res.status,
       statusText: res.statusText,
@@ -276,18 +300,16 @@ export async function jobFetch(
     });
   } catch (e) {
     const durationMs = Date.now() - start;
-    errMsg = (e as Error).message;
-    if (runId) {
-      await recordJobHttpCall(runId, {
-        provider,
-        url,
-        method,
-        statusCode,
-        durationMs,
-        bytesIn,
-        error: errMsg,
-      });
-    }
+    errMsg = e instanceof Error ? e.message : String(e);
+    await safeRecordJobHttpCall(runId, {
+      provider,
+      url,
+      method,
+      statusCode: null,
+      durationMs,
+      bytesIn: null,
+      error: errMsg,
+    });
     throw e;
   }
 }

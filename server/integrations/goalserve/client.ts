@@ -31,6 +31,7 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
     method: "GET",
     headers: DEFAULT_HEADERS,
     throwOnNon2xx: true,
+    timeoutMs: 60000,
   });
 
   const buffer = await response.arrayBuffer();
@@ -78,6 +79,7 @@ export async function goalserveFetchXml(path: string, runId?: string): Promise<a
     method: "GET",
     headers: DEFAULT_HEADERS,
     throwOnNon2xx: true,
+    timeoutMs: 60000,
   });
 
   const buffer = await response.arrayBuffer();
