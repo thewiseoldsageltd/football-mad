@@ -31,6 +31,7 @@ import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
 import { requireJobSecret } from "./jobs/requireJobSecret";
 import { startJobRun, finishJobRun } from "./lib/job-observability";
+import { runWithJobContext } from "./lib/job-context";
 import { testGoalserveConnection } from "./jobs/test-goalserve";
 import { goalserveFetch } from "./integrations/goalserve/client";
 import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
@@ -1714,9 +1715,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/jobs/debug-http-log", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
     const run = await startJobRun("debug_http_log", {});
     try {
-      await goalserveFetch("soccernew/home", run.id);
-      await finishJobRun(run.id, { status: "success", counters: { requests: 1 } });
-      res.json({ ok: true, run_id: run.id });
+      await runWithJobContext(run.id, async () => {
+        await goalserveFetch("soccernew/home");
+        await finishJobRun(run.id, { status: "success", counters: { requests: 1 } });
+        res.json({ ok: true, run_id: run.id });
+      });
     } catch (err) {
       await finishJobRun(run.id, { status: "error", error: String(err) });
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err), run_id: run.id });
@@ -1727,27 +1730,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/jobs/sync-goalserve", requireJobSecret("GOALSERVE_SYNC_SECRET"), async (req, res) => {
     const run = await startJobRun("sync_goalserve", { meta: { triggeredBy: "api" } });
     try {
-      const leagueId = (req.query.leagueId as string) || "1204";
-      const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
-      const result = await syncGoalserveMatches(leagueId, seasonKeyParam, run.id);
+      await runWithJobContext(run.id, async () => {
+        const leagueId = (req.query.leagueId as string) || "1204";
+        const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
+        const result = await syncGoalserveMatches(leagueId, seasonKeyParam);
 
-      await finishJobRun(run.id, {
-        status: result.ok ? "success" : "error",
-        counters: {
-          inserted: result.inserted,
-          updated: result.updated,
-          totalFromGoalserve: result.totalFromGoalserve,
-          skippedNoStaticId: result.skippedNoStaticId,
-          skippedNoKickoff: result.skippedNoKickoff,
-        },
-        error: result.error ?? null,
+        await finishJobRun(run.id, {
+          status: result.ok ? "success" : "error",
+          counters: {
+            inserted: result.inserted,
+            updated: result.updated,
+            totalFromGoalserve: result.totalFromGoalserve,
+            skippedNoStaticId: result.skippedNoStaticId,
+            skippedNoKickoff: result.skippedNoKickoff,
+          },
+          error: result.error ?? null,
+        });
+
+        if (result.ok) {
+          res.json(result);
+        } else {
+          res.status(500).json(result);
+        }
       });
-
-      if (result.ok) {
-        res.json(result);
-      } else {
-        res.status(500).json(result);
-      }
     } catch (err) {
       await finishJobRun(run.id, { status: "error", error: String(err) });
       res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });

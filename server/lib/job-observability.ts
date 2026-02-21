@@ -6,6 +6,7 @@
 import { db } from "../db";
 import { jobRuns, jobHttpCalls } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { getJobRunId } from "./job-context";
 
 const JOB_HTTP_CALLS_CAP = Math.max(100, parseInt(process.env.JOB_HTTP_CALLS_CAP ?? "2000", 10));
 
@@ -13,6 +14,9 @@ const runCallCounts = new Map<
   string,
   { recorded: number; dropped: number }
 >();
+
+/** Per-run HTTP log insert failures (for counters + optional error surfacing in job_runs). */
+const runHttpLogFailures = new Map<string, { count: number; lastError: string }>();
 
 export type JobRunRow = { id: string; jobName: string; startedAt: Date };
 
@@ -54,6 +58,7 @@ export interface FinishJobRunOpts {
   error?: string | null;
 }
 
+/** Sets finished_at/status (and counters/error). Never throws so job completion is never broken by observability. */
 export async function finishJobRun(
   runId: string,
   opts: FinishJobRunOpts
@@ -65,6 +70,14 @@ export async function finishJobRun(
       runCallCounts.delete(runId);
       if (counts.dropped > 0) {
         opts.counters = { ...opts.counters, http_calls_dropped: counts.dropped };
+      }
+    }
+    const failures = runHttpLogFailures.get(runId);
+    if (failures) {
+      runHttpLogFailures.delete(runId);
+      opts.counters = { ...opts.counters, httpLogFailed: failures.count };
+      if (opts.status === "success" && failures.lastError) {
+        opts.error = failures.lastError;
       }
     }
     await db
@@ -82,8 +95,10 @@ export async function finishJobRun(
   }
 }
 
+let _noRunIdWarned = false;
+
 export async function recordJobHttpCall(
-  runId: string,
+  runIdParam: string | undefined,
   payload: {
     provider: string;
     url: string;
@@ -94,7 +109,14 @@ export async function recordJobHttpCall(
     error?: string | null;
   }
 ): Promise<void> {
-  if (!runId) return;
+  const runId = runIdParam ?? getJobRunId() ?? "";
+  if (!runId) {
+    if (!_noRunIdWarned) {
+      _noRunIdWarned = true;
+      console.warn("[job-observability] HTTP logging has no runId context (call outside runWithJobContext or pass runId)");
+    }
+    return;
+  }
   const state = runCallCounts.get(runId);
   if (state) {
     if (state.recorded >= JOB_HTTP_CALLS_CAP) {
@@ -118,13 +140,18 @@ export async function recordJobHttpCall(
   } catch (e) {
     const msg = (e as Error).message;
     console.error(
-      "[job-observability] recordJobHttpCall insert failed:",
-      msg,
+      "[job-observability] recordJobHttpCall failed:",
       "provider=" + payload.provider,
-      "method=" + method,
       "url=" + payload.url,
-      "status_code=" + String(statusCode)
+      "error=" + msg
     );
+    let entry = runHttpLogFailures.get(runId);
+    if (!entry) {
+      entry = { count: 0, lastError: "" };
+      runHttpLogFailures.set(runId, entry);
+    }
+    entry.count++;
+    entry.lastError = msg;
   }
 }
 
@@ -161,9 +188,10 @@ export interface JobFetchOpts {
 }
 
 export async function jobFetch(
-  runId: string,
+  runIdParam: string | undefined,
   opts: JobFetchOpts
 ): Promise<Response> {
+  const runId = runIdParam ?? getJobRunId() ?? "";
   const { provider, url, method = "GET", headers, body, timeoutMs = 10000, throwOnNon2xx = false, fetcher } = opts;
   const start = Date.now();
   let statusCode: number | null = null;
@@ -177,8 +205,7 @@ export async function jobFetch(
       const arr = await res.arrayBuffer();
       bytesIn = arr.byteLength;
       const durationMs = Date.now() - start;
-      if (runId) {
-        await recordJobHttpCall(runId, {
+      await recordJobHttpCall(runId || undefined, {
           provider,
           url,
           method,
@@ -195,9 +222,7 @@ export async function jobFetch(
     } catch (e) {
       const durationMs = Date.now() - start;
       errMsg = (e as Error).message;
-      if (runId) {
-        await recordJobHttpCall(runId, { provider, url, method, statusCode, durationMs, bytesIn, error: errMsg });
-      }
+      await recordJobHttpCall(runId || undefined, { provider, url, method, statusCode, durationMs, bytesIn, error: errMsg });
       throw e;
     }
   }
@@ -217,7 +242,7 @@ export async function jobFetch(
     bytesIn = arr.byteLength;
     if (throwOnNon2xx && (res.status < 200 || res.status >= 300)) {
       errMsg = `HTTP ${res.status}`;
-      await recordJobHttpCall(runId, {
+      await recordJobHttpCall(runId || undefined, {
         provider,
         url,
         method,
@@ -228,7 +253,7 @@ export async function jobFetch(
       });
       throw new Error(errMsg);
     }
-    await recordJobHttpCall(runId, {
+    await recordJobHttpCall(runId || undefined, {
       provider,
       url,
       method,
@@ -245,7 +270,7 @@ export async function jobFetch(
   } catch (e) {
     const durationMs = Date.now() - start;
     errMsg = (e as Error).message;
-    await recordJobHttpCall(runId, {
+    await recordJobHttpCall(runId || undefined, {
       provider,
       url,
       method,
@@ -286,3 +311,12 @@ export async function jobFetch(
   GROUP BY provider
   ORDER BY total_calls DESC;
 */
+
+/** For debugging: returns current runId from context; logs when DEBUG_JOB_OBS=true */
+export function __debugGetCurrentRunId(): string | null {
+  const id = getJobRunId();
+  if (process.env.DEBUG_JOB_OBS === "true" || process.env.DEBUG_JOB_OBS === "1") {
+    console.log("[job-observability] __debugGetCurrentRunId:", id ?? "(none)");
+  }
+  return id;
+}

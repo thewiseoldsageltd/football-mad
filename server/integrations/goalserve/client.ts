@@ -1,6 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import { XMLParser } from "fast-xml-parser";
 import { jobFetch } from "../../lib/job-observability";
+import { getJobRunId } from "../../lib/job-context";
 
 const GOALSERVE_BASE_URL = "https://www.goalserve.com/getfeed/";
 
@@ -22,8 +23,8 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
 
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
 
-  // When runId is set (e.g. from sync-goalserve), jobFetch writes one row to job_http_calls per request.
-  const response = await jobFetch(runId ?? "", {
+  const effectiveRunId = runId ?? getJobRunId() ?? "";
+  const response = await jobFetch(effectiveRunId || undefined, {
     provider: "goalserve",
     url: finalUrl,
     method: "GET",
@@ -68,7 +69,8 @@ export async function goalserveFetchXml(path: string, runId?: string): Promise<a
 
   console.log(`[Goalserve XML] Fetching: ${redactedUrl}`);
 
-  const response = await jobFetch(runId ?? "", {
+  const effectiveRunId = runId ?? getJobRunId() ?? "";
+  const response = await jobFetch(effectiveRunId || undefined, {
     provider: "goalserve",
     url: finalUrl,
     method: "GET",
