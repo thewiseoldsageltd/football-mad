@@ -9,23 +9,20 @@ const DEFAULT_HEADERS = {
   "User-Agent": "FootballMad/1.0",
 } as const;
 
-export async function goalserveFetch(
-  feedPath: string,
-  options?: { runId?: string }
-): Promise<any> {
+export async function goalserveFetch(path: string, runId?: string): Promise<any> {
   const feedKey = process.env.GOALSERVE_FEED_KEY;
 
   if (!feedKey) {
     throw new Error("GOALSERVE_FEED_KEY is not configured");
   }
 
-  const jsonParam = feedPath.includes("?") ? "&json=1" : "?json=1";
-  const finalUrl = `${GOALSERVE_BASE_URL}${feedKey}/${feedPath}${jsonParam}`;
+  const jsonParam = path.includes("?") ? "&json=1" : "?json=1";
+  const finalUrl = `${GOALSERVE_BASE_URL}${feedKey}/${path}${jsonParam}`;
   const redactedUrl = finalUrl.replace(feedKey, "***");
 
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
 
-  const response = await jobFetch(options?.runId ?? "", {
+  const response = await jobFetch(runId ?? "", {
     provider: "goalserve",
     url: finalUrl,
     method: "GET",
@@ -58,22 +55,19 @@ export async function goalserveFetch(
  * Fetch XML from Goalserve (no ?json=1 param).
  * Used to get proper <week number="X"> containers for league fixtures.
  */
-export async function goalserveFetchXml(
-  feedPath: string,
-  options?: { runId?: string }
-): Promise<any> {
+export async function goalserveFetchXml(path: string, runId?: string): Promise<any> {
   const feedKey = process.env.GOALSERVE_FEED_KEY;
 
   if (!feedKey) {
     throw new Error("GOALSERVE_FEED_KEY is not configured");
   }
 
-  const finalUrl = `${GOALSERVE_BASE_URL}${feedKey}/${feedPath}`;
+  const finalUrl = `${GOALSERVE_BASE_URL}${feedKey}/${path}`;
   const redactedUrl = finalUrl.replace(feedKey, "***");
 
   console.log(`[Goalserve XML] Fetching: ${redactedUrl}`);
 
-  const response = await jobFetch(options?.runId ?? "", {
+  const response = await jobFetch(runId ?? "", {
     provider: "goalserve",
     url: finalUrl,
     method: "GET",
