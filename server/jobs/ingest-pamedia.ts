@@ -89,6 +89,41 @@ function normalizeImageUrl(url: string): string {
   return s;
 }
 
+function isHttpUrl(url: string): boolean {
+  const u = url.trim();
+  if (!u) return false;
+  return u.startsWith("http://") || u.startsWith("https://") || u.startsWith("//");
+}
+
+function alreadyOurCdn(url: string): boolean {
+  const u = normalizeImageUrl(url);
+  return u.includes(R2_PUBLIC_BASE_URL) || u.includes("img.footballmad.co.uk");
+}
+
+/** First URL from srcset (comma-separated, optional descriptor). */
+function getFirstUrlFromSrcset(srcset: string): string | null {
+  const part = srcset.split(",")[0]?.trim();
+  if (!part) return null;
+  const space = part.lastIndexOf(" ");
+  const url = space >= 0 ? part.slice(0, space).trim() : part;
+  return url?.trim() || null;
+}
+
+/** Get candidate fetch URL from img: src, data-src, data-original, data-lazy-src, or first from srcset. */
+function getInlineImgCandidateUrl($img: cheerio.Cheerio<cheerio.Element>, $: cheerio.CheerioAPI): string | null {
+  const src = $img.attr("src")?.trim();
+  if (src) return src;
+  const dataSrc = $img.attr("data-src")?.trim();
+  if (dataSrc) return dataSrc;
+  const dataOriginal = $img.attr("data-original")?.trim();
+  if (dataOriginal) return dataOriginal;
+  const dataLazy = $img.attr("data-lazy-src")?.trim();
+  if (dataLazy) return dataLazy;
+  const srcset = $img.attr("srcset")?.trim();
+  if (srcset) return getFirstUrlFromSrcset(srcset);
+  return null;
+}
+
 /** SEO base name from association or article headline. */
 function getImageBaseName(
   assoc: Record<string, unknown> | null,
@@ -336,12 +371,12 @@ export async function runPaMediaIngest(): Promise<{
         };
         const bodyHasPaAssets = item.content.includes("image.assets.pressassociation.io");
         const imgCount = $("img").length;
-        const imgPaCount = $("img").filter((_, el) => {
+        const imgPaCount = $("img").filter((_: number, el: cheerio.Element) => {
           const src = $(el).attr("src") ?? "";
           const srcset = $(el).attr("srcset") ?? "";
           return src.includes("image.assets.pressassociation.io") || srcset.includes("image.assets.pressassociation.io");
         }).length;
-        const embeddedFigureCount = $('figure[id^="embedded"]').filter((_, el) => /^embedded\d+$/.test($(el).attr("id") ?? "")).length;
+        const embeddedFigureCount = $('figure[id^="embedded"]').filter((_: number, el: cheerio.Element) => /^embedded\d+$/.test($(el).attr("id") ?? "")).length;
         console.log(
           `[ingest-pamedia DEBUG] uri=${item.id} headline=${item.headline.slice(0, 60)} | assocKeys=${assocKeys.length} feature=${JSON.stringify(hasFeature)} | bodyHasPaAssets=${bodyHasPaAssets} | imgCount=${imgCount} imgPaCount=${imgPaCount} embeddedFigureCount=${embeddedFigureCount}`
         );
@@ -349,27 +384,29 @@ export async function runPaMediaIngest(): Promise<{
 
       const defaultSizes = "(max-width: 767px) 89vw, (max-width: 1000px) 54vw, 580px";
 
-      // 1) Figures with id="embeddedXXXX" — cap to PAMEDIA_MAX_INLINE_IMAGES
-      const figureEls = $('figure[id^="embedded"]').toArray();
-      const figureElsToProcess = figureEls.slice(0, PAMEDIA_MAX_INLINE_IMAGES);
-      if (figureEls.length > PAMEDIA_MAX_INLINE_IMAGES) {
-        inlineSkippedDueToCap += figureEls.length - PAMEDIA_MAX_INLINE_IMAGES;
-      }
+      // Inline: any <img> (in figure or standalone) with http(s) URL not already on our CDN
+      type InlineCandidate = { el: cheerio.Element; url: string };
+      const candidates: InlineCandidate[] = [];
+      $("img").each((_: number, el: cheerio.Element) => {
+        const $img = $(el);
+        const raw = getInlineImgCandidateUrl($img, $);
+        if (!raw) return;
+        const url = normalizeImageUrl(raw);
+        if (!isHttpUrl(url) || alreadyOurCdn(url)) return;
+        candidates.push({ el, url });
+      });
 
-      for (const el of figureElsToProcess) {
-        const $el = $(el);
-        const figureId = $el.attr("id")?.trim();
-        const $img = $el.find("img").first();
-        if (!figureId || !$img.length) continue;
+      const toProcess = candidates.slice(0, PAMEDIA_MAX_INLINE_IMAGES);
+      inlineSkippedDueToCap += Math.max(0, candidates.length - PAMEDIA_MAX_INLINE_IMAGES);
+      const beforeInlineCount = inlineRewritten;
 
-        const assoc = getAssociation(item.associations, figureId);
-        const href = assoc ? getRenditionHref(assoc) : null;
-        if (!href) continue;
-
+      for (const { el, url } of toProcess) {
+        const $img = $(el);
+        const baseName = (seoSlugFromText(item.headline) || "image") + "-" + shortStableHash(url).slice(0, 8);
         await semaphore.acquire();
         try {
-          const buf = await fetchWithTimeout(runId, href);
-          const baseName = getImageBaseName(assoc, item.headline);
+          const buf = await fetchWithTimeout(runId, url);
+          if (!buf?.length) continue;
           const result = await uploadImageVariantsToR2({
             buffer: buf,
             source: "pa_media",
@@ -377,93 +414,29 @@ export async function runPaMediaIngest(): Promise<{
             kind: "inline",
             baseName,
           });
+          if (!result.original) continue;
           imagesUploaded += IMAGE_WIDTHS.length;
           $img.attr("src", result.original);
           $img.attr("srcset", result.srcset);
           $img.attr("sizes", defaultSizes);
           $img.attr("loading", "lazy");
-          const alt = ($img.attr("alt") ?? "").trim() || getImageBaseName(assoc, item.headline);
-          $img.attr("alt", alt);
+          if ($img.attr("data-src")) $img.attr("data-src", result.original);
+          if ($img.attr("data-original")) $img.attr("data-original", result.original);
+          if ($img.attr("data-lazy-src")) $img.attr("data-lazy-src", result.original);
+          if (!$img.attr("alt")) $img.attr("alt", baseName);
           inlineRewritten++;
         } catch (e) {
-          console.warn(`[ingest-pamedia] Inline image failed ${figureId}:`, (e as Error).message);
+          console.warn(`[ingest-pamedia] Inline image failed:`, (e as Error).message);
         } finally {
           semaphore.release();
         }
       }
 
-      // 2) Plain <img src="//image.assets..."> — cap total inlines already; allow up to (PAMEDIA_MAX_INLINE_IMAGES - figureElsToProcess) more plain to stay under cap
-      const inlineBudgetLeft = Math.max(0, PAMEDIA_MAX_INLINE_IMAGES - figureElsToProcess.length);
-      const imgEls = $("img[src]").toArray();
-      let plainProcessed = 0;
-      for (const el of imgEls) {
-        if (plainProcessed >= inlineBudgetLeft) break;
-        const $img = $(el);
-        let src = $img.attr("src") ?? "";
-        if (!src.includes("image.assets.pressassociation.io") && !src.includes("pressassociation")) continue;
-        if (src.includes("img.footballmad.co.uk")) continue;
-        src = normalizeImageUrl(src);
-
-        let matched = false;
-        for (const [, val] of Object.entries(item.associations)) {
-          if (!val || typeof val !== "object") continue;
-          const href = getRenditionHref(val as Record<string, unknown>);
-          if (href && normalizeImageUrl(href) === src) {
-            matched = true;
-            const assoc = val as Record<string, unknown>;
-            await semaphore.acquire();
-            try {
-              const buf = await fetchWithTimeout(runId, src);
-              const baseName = getImageBaseName(assoc, item.headline);
-              const result = await uploadImageVariantsToR2({
-                buffer: buf,
-                source: "pa_media",
-                articleId: item.id,
-                kind: "inline",
-                baseName,
-              });
-              imagesUploaded += IMAGE_WIDTHS.length;
-              $img.attr("src", result.original);
-              $img.attr("srcset", result.srcset);
-              $img.attr("sizes", defaultSizes);
-              $img.attr("loading", "lazy");
-              $img.attr("alt", ($img.attr("alt") ?? "").trim() || baseName);
-              inlineRewritten++;
-              plainProcessed++;
-            } catch (e) {
-              console.warn(`[ingest-pamedia] Plain img failed:`, (e as Error).message);
-            } finally {
-              semaphore.release();
-            }
-            break;
-          }
-        }
-        if (!matched) {
-          await semaphore.acquire();
-          try {
-            const buf = await fetchWithTimeout(runId, src);
-            const baseName = seoSlugFromText(item.headline) || "image";
-            const result = await uploadImageVariantsToR2({
-              buffer: buf,
-              source: "pa_media",
-              articleId: item.id,
-              kind: "inline",
-              baseName,
-            });
-            imagesUploaded += IMAGE_WIDTHS.length;
-            $img.attr("src", result.original);
-            $img.attr("srcset", result.srcset);
-            $img.attr("sizes", defaultSizes);
-            $img.attr("loading", "lazy");
-            if (!$img.attr("alt")) $img.attr("alt", baseName);
-            inlineRewritten++;
-            plainProcessed++;
-          } catch (e) {
-            console.warn(`[ingest-pamedia] Plain img (no assoc) failed:`, (e as Error).message);
-          } finally {
-            semaphore.release();
-          }
-        }
+      const itemRewritten = inlineRewritten - beforeInlineCount;
+      if (candidates.length > 0 && itemRewritten === 0) {
+        console.warn(
+          "[ingest-pamedia] inline: found_imgs=" + candidates.length + " rewritten=0 slug=" + uniqueSlug(item.headline, item.id) + " sourceId=" + item.id + " note=check-img-attrs"
+        );
       }
 
       content = $.html();
