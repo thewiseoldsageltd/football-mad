@@ -64,6 +64,13 @@
       "when": 1771707353349,
       "tag": "0008_job_state",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771790906522,
+      "tag": "0009_mvp_competitions",
+      "breakpoints": true
     }
   ]
 }

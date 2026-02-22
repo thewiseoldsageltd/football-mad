@@ -220,6 +220,24 @@ export const insertCompetitionSchema = createInsertSchema(competitions).omit({ i
 export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
 export type Competition = typeof competitions.$inferSelect;
 
+// ============ MVP COMPETITIONS ============
+export const mvpCompetitions = pgTable(
+  "mvp_competitions",
+  {
+    competitionId: varchar("competition_id")
+      .primaryKey()
+      .references(() => competitions.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("mvp_competitions_enabled_sort_idx").on(t.enabled, t.sortOrder),
+  ]
+);
+
+export type MvpCompetition = typeof mvpCompetitions.$inferSelect;
+
 // ============ COMPETITION SEASONS ============
 export const competitionSeasons = pgTable(
   "competition_seasons",

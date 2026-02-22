@@ -19,6 +19,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { useNewsFilters, type CompetitionSlug } from "@/hooks/use-news-filters";
 import { NEWS_COMPETITIONS, type Team, type NewsFiltersResponse } from "@shared/schema";
 
+interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
+interface NavCompetition { id: string; name: string; slug: string; sortOrder: number; teams: NavTeam[] }
+interface NewsNavResponse { competitions: NavCompetition[] }
+
 const competitionsList = Object.values(NEWS_COMPETITIONS).map(comp => ({
   ...comp,
   subheading: comp.value === "all" 
@@ -261,9 +265,24 @@ export default function NewsPage() {
 
   // Note: Polling removed - React Query's refetchOnMount handles refresh on navigation
 
-  const { data: teams } = useQuery<Team[]>({
-    queryKey: ["/api/teams"],
+  const { data: newsNav } = useQuery<NewsNavResponse>({
+    queryKey: ["/api/news/nav"],
   });
+
+  const teams: Team[] | undefined = useMemo(() => {
+    if (!newsNav) return undefined;
+    const seen = new Set<string>();
+    const flat: Team[] = [];
+    for (const comp of newsNav.competitions) {
+      for (const t of comp.teams) {
+        if (!seen.has(t.id)) {
+          seen.add(t.id);
+          flat.push({ id: t.id, name: t.name, slug: t.slug, shortName: t.shortName } as Team);
+        }
+      }
+    }
+    return flat;
+  }, [newsNav]);
 
   const { data: followedTeamIds = [] } = useQuery<string[]>({
     queryKey: ["/api/follows"],
@@ -303,27 +322,27 @@ export default function NewsPage() {
     };
   }, [canonicalUrl, shouldNoIndex]);
 
-  const filteredTeams = useMemo(() => {
-    if (!teams) return [];
-    let filtered = teams;
-    
-    if (drawerComp !== "all") {
-      const compData = NEWS_COMPETITIONS[drawerComp as keyof typeof NEWS_COMPETITIONS];
-      const compLabel = compData && "dbValue" in compData ? compData.dbValue : compData?.label;
-      if (compLabel) {
-        filtered = filtered.filter(t => t.league === compLabel);
-      }
-    }
-    
-    if (teamSearch) {
-      filtered = filtered.filter(t => 
-        t.name.toLowerCase().includes(teamSearch.toLowerCase()) ||
-        t.shortName?.toLowerCase().includes(teamSearch.toLowerCase())
-      );
-    }
-    
-    return filtered;
-  }, [teams, teamSearch, drawerComp]);
+  const groupedTeams = useMemo(() => {
+    if (!newsNav) return [];
+    const lc = teamSearch.toLowerCase();
+    return newsNav.competitions
+      .map((comp) => {
+        let compTeams = comp.teams;
+        if (drawerComp !== "all") {
+          const compData = NEWS_COMPETITIONS[drawerComp as keyof typeof NEWS_COMPETITIONS];
+          const compLabel = compData && "dbValue" in compData ? compData.dbValue : compData?.label;
+          if (compLabel && comp.name !== compLabel) return null;
+        }
+        if (teamSearch) {
+          compTeams = compTeams.filter(
+            (t) => t.name.toLowerCase().includes(lc) || t.shortName?.toLowerCase().includes(lc),
+          );
+        }
+        if (compTeams.length === 0) return null;
+        return { ...comp, teams: compTeams };
+      })
+      .filter(Boolean) as NavCompetition[];
+  }, [newsNav, teamSearch, drawerComp]);
 
   const filteredPlayers = useMemo(() => {
     if (!playerSearch) return [];
@@ -524,28 +543,35 @@ export default function NewsPage() {
                         data-testid="input-team-search"
                       />
                     </div>
-                    <div className="space-y-2">
-                      {filteredTeams.length > 0 ? (
-                        filteredTeams.map((team) => (
-                          <div key={team.id} className="flex items-center space-x-2">
-                            <Checkbox 
-                              id={`team-${team.id}`}
-                              checked={filters.myTeams 
-                                ? followedTeamIds.includes(team.id)
-                                : filters.teams.includes(team.slug)
-                              }
-                              onCheckedChange={() => handleTeamCheckboxChange(team.slug)}
-                              data-testid={`checkbox-team-${team.slug}`}
-                            />
-                            <label 
-                              htmlFor={`team-${team.id}`}
-                              className="text-sm cursor-pointer flex items-center gap-2"
-                            >
-                              {team.name}
-                              {followedTeamIds.includes(team.id) && (
-                                <Badge variant="outline" className="text-xs py-0">Following</Badge>
-                              )}
-                            </label>
+                    <div className="space-y-4">
+                      {groupedTeams.length > 0 ? (
+                        groupedTeams.map((comp) => (
+                          <div key={comp.id}>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{comp.name}</p>
+                            <div className="space-y-2">
+                              {comp.teams.map((team) => (
+                                <div key={team.id} className="flex items-center space-x-2">
+                                  <Checkbox
+                                    id={`team-${team.id}`}
+                                    checked={filters.myTeams
+                                      ? followedTeamIds.includes(team.id)
+                                      : filters.teams.includes(team.slug)
+                                    }
+                                    onCheckedChange={() => handleTeamCheckboxChange(team.slug)}
+                                    data-testid={`checkbox-team-${team.slug}`}
+                                  />
+                                  <label
+                                    htmlFor={`team-${team.id}`}
+                                    className="text-sm cursor-pointer flex items-center gap-2"
+                                  >
+                                    {team.name}
+                                    {followedTeamIds.includes(team.id) && (
+                                      <Badge variant="outline" className="text-xs py-0">Following</Badge>
+                                    )}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))
                       ) : (

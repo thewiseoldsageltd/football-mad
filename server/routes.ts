@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -429,6 +429,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching team managers:", error);
       res.status(500).json({ error: "Failed to fetch team managers" });
+    }
+  });
+
+  // ========== NEWS NAV (MVP competitions + their teams) ==========
+  app.get("/api/news/nav", async (_req, res) => {
+    try {
+      const rows = await db
+        .select({
+          compId: competitions.id,
+          compName: competitions.name,
+          compSlug: competitions.slug,
+          sortOrder: mvpCompetitions.sortOrder,
+          teamId: teams.id,
+          teamName: teams.name,
+          teamSlug: teams.slug,
+          teamShortName: teams.shortName,
+        })
+        .from(mvpCompetitions)
+        .innerJoin(competitions, eq(mvpCompetitions.competitionId, competitions.id))
+        .innerJoin(
+          competitionTeamMemberships,
+          and(
+            eq(competitionTeamMemberships.competitionId, competitions.id),
+            eq(competitionTeamMemberships.isCurrent, true),
+          ),
+        )
+        .innerJoin(teams, eq(competitionTeamMemberships.teamId, teams.id))
+        .where(eq(mvpCompetitions.enabled, true))
+        .orderBy(asc(mvpCompetitions.sortOrder), asc(competitions.name), asc(teams.name));
+
+      const compMap = new Map<string, {
+        id: string; name: string; slug: string; sortOrder: number;
+        teams: { id: string; name: string; slug: string; shortName: string | null }[];
+      }>();
+
+      for (const r of rows) {
+        let comp = compMap.get(r.compId);
+        if (!comp) {
+          comp = { id: r.compId, name: r.compName, slug: r.compSlug, sortOrder: r.sortOrder, teams: [] };
+          compMap.set(r.compId, comp);
+        }
+        if (r.teamId && !comp.teams.some((t) => t.id === r.teamId)) {
+          comp.teams.push({ id: r.teamId, name: r.teamName, slug: r.teamSlug, shortName: r.teamShortName });
+        }
+      }
+
+      const result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+      res.json({ competitions: result });
+    } catch (err) {
+      console.error("[news/nav] Error:", err);
+      res.status(500).json({ error: "Failed to fetch news nav" });
     }
   });
 
