@@ -115,17 +115,26 @@ async function resizeToWebp(buffer: Buffer, width: number): Promise<Buffer> {
     .toBuffer();
 }
 
-/** 16:9 top-anchored crop (for hero). Width in px, height = width * 9/16. */
-async function resizeToWebpHero(buffer: Buffer, width: number): Promise<Buffer> {
+/** 16:9 smart crop (for hero). Tries Sharp "attention" strategy, falls back to "centre". */
+async function resizeToWebpHero(buffer: Buffer, width: number): Promise<{ buf: Buffer; crop: "attention" | "centre" }> {
   const height = Math.round((width * 9) / 16);
-  return sharp(buffer)
-    .resize(width, height, { fit: "cover", position: "north" })
-    .webp({ quality: WEBP_QUALITY })
-    .toBuffer();
+  try {
+    const buf = await sharp(buffer)
+      .resize(width, height, { fit: "cover", position: "attention" })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer();
+    return { buf, crop: "attention" };
+  } catch {
+    const buf = await sharp(buffer)
+      .resize(width, height, { fit: "cover", position: "centre" })
+      .webp({ quality: WEBP_QUALITY })
+      .toBuffer();
+    return { buf, crop: "centre" };
+  }
 }
 
-/** Single 1280x720 hero WEBP (for backfill overwrite). Exported for backfill job. */
-export async function resizeToHero1280x720Webp(buffer: Buffer): Promise<Buffer> {
+/** Single 1280x720 hero WEBP (for backfill overwrite). Returns buffer + crop mode used. */
+export async function resizeToHero1280x720Webp(buffer: Buffer): Promise<{ buf: Buffer; crop: "attention" | "centre" }> {
   return resizeToWebpHero(buffer, 1280);
 }
 
@@ -145,7 +154,7 @@ export interface UploadImageVariantsResult {
 
 /**
  * Generate 320/640/960/1280 WEBP variants, upload to R2, return URLs and srcset.
- * Hero kind: 16:9 top-anchored crop (1280x720, 960x540, etc.). Inline: keep aspect ratio.
+ * Hero kind: 16:9 smart crop (attention with centre fallback). Inline: keep aspect ratio.
  */
 export async function uploadImageVariantsToR2(opts: UploadImageVariantsToR2Opts): Promise<UploadImageVariantsResult> {
   const { buffer, source, articleId, kind, baseName } = opts;
@@ -153,10 +162,10 @@ export async function uploadImageVariantsToR2(opts: UploadImageVariantsToR2Opts)
   const base = R2_PUBLIC_BASE_URL.replace(/\/$/, "");
   const variants: Record<number, string> = {};
   const srcsetParts: string[] = [];
-  const resizeFn = kind === "hero" ? resizeToWebpHero : resizeToWebp;
+  const isHero = kind === "hero";
 
   for (const w of IMAGE_WIDTHS) {
-    const webpBuf = await resizeFn(buffer, w);
+    const webpBuf = isHero ? (await resizeToWebpHero(buffer, w)).buf : await resizeToWebp(buffer, w);
     const key = buildImageKey({ source, articleId, kind, baseName, width: w });
     await client.send(
       new PutObjectCommand({

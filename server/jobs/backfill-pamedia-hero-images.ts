@@ -81,6 +81,8 @@ export async function runBackfillPaMediaHeroImages(): Promise<{
       let processed = 0;
       let imagesUploaded = 0;
       let skipped = 0;
+      let attentionCount = 0;
+      let centreCount = 0;
 
       for (const row of toProcess) {
         const url = row.coverImage!;
@@ -95,15 +97,19 @@ export async function runBackfillPaMediaHeroImages(): Promise<{
             skipped++;
             continue;
           }
-          const webpBuf = await resizeToHero1280x720Webp(buf);
+          const { buf: webpBuf, crop } = await resizeToHero1280x720Webp(buf);
           await uploadBufferToR2Key(key, webpBuf, "image/webp");
           processed++;
           imagesUploaded++;
+          if (crop === "attention") attentionCount++;
+          else centreCount++;
         } catch (e) {
           console.warn(`[backfill-pamedia-hero] Article ${row.id} failed:`, (e as Error).message);
           skipped++;
         }
       }
+
+      console.log(`[backfill-pamedia-hero] Done processed=${processed} attention=${attentionCount} centreFallback=${centreCount} skipped=${skipped}`);
 
       await finishJobRun(runId, {
         status: "success",
@@ -112,6 +118,8 @@ export async function runBackfillPaMediaHeroImages(): Promise<{
           updated: processed,
           imagesUploaded,
           skipped,
+          attentionCrop: attentionCount,
+          centreFallback: centreCount,
         },
       });
 
