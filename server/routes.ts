@@ -54,6 +54,8 @@ import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-image
 import { enrichPendingArticles } from "./jobs/enrich-articles";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
+const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE !== "false"; // default true
+
 const shareClickSchema = z.object({
   articleId: z.string(),
   platform: z.enum(["whatsapp", "twitter", "facebook", "copy", "native"]),
@@ -1771,12 +1773,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } else {
         res.status(500).json({ ok: false, processed: result.processed, error: result.error });
       }
-      // Run enrichment async so response is fast; do not await.
-      setImmediate(() =>
-        enrichPendingArticles({ limit: 25, timeBudgetMs: 10000 }).catch((e) =>
-          console.error("[enrich-articles]", e)
-        )
-      );
+      if (!PAMEDIA_BASIC_MODE) {
+        setImmediate(() =>
+          enrichPendingArticles({ limit: 25, timeBudgetMs: 10000 }).catch((e) =>
+            console.error("[enrich-articles]", e)
+          )
+        );
+      } else {
+        console.log("[ingest-pamedia] Basic mode: skipping entity enrichment");
+      }
     } catch (err) {
       console.error("[ingest-pamedia] Job error:", err);
       res.status(500).json({ ok: false, processed: 0, error: (err as Error).message });
@@ -7092,11 +7097,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       lastPaRunnerSummary = result as Record<string, unknown>;
       lastPaRunnerError = null;
       console.log("[pamedia-runner] Completed", result.processed, "processed", result.inlineRewritten ?? 0, "inline rewritten");
-      setImmediate(() =>
-        enrichPendingArticles({ limit: 25, timeBudgetMs: 10000 }).catch((e) =>
-          console.error("[enrich-articles]", e)
-        )
-      );
+      if (!PAMEDIA_BASIC_MODE) {
+        setImmediate(() =>
+          enrichPendingArticles({ limit: 25, timeBudgetMs: 10000 }).catch((e) =>
+            console.error("[enrich-articles]", e)
+          )
+        );
+      } else {
+        console.log("[pamedia-runner] Basic mode: skipping entity enrichment");
+      }
     } catch (err: unknown) {
       lastPaRunnerRunAt = new Date().toISOString();
       lastPaRunnerError = err instanceof Error ? err.message : String(err);

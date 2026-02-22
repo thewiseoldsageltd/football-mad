@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
-import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode } from "@/lib/entity-utils";
+import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode, buildTagFallbackPills } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
 interface EntityWithProvenance {
@@ -730,6 +730,20 @@ export default function ArticlePage() {
       )
     );
     
+    const totalPills = resolvedHeaderPills.length + resolvedCompetitionPills.length +
+      resolvedTeamPills.length + resolvedPlayerPills.length + resolvedManagerPills.length;
+    if (totalPills === 0 && article.tags?.length) {
+      const tagPills = buildTagFallbackPills(article.tags, 12);
+      return {
+        teamPills: [] as typeof resolvedTeamPills,
+        competitionPills: tagPills,
+        playerPills: [] as typeof resolvedPlayerPills,
+        managerPills: [] as typeof resolvedManagerPills,
+        headerPills: tagPills.slice(0, 3),
+        articleTeams: resolvedArticleTeams,
+      };
+    }
+
     return {
       teamPills: resolvedTeamPills,
       competitionPills: resolvedCompetitionPills,

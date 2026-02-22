@@ -1,4 +1,5 @@
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
+import type { EntityData } from "@/components/entity-pill";
 
 export interface ScoredEntity {
   id?: string;
@@ -400,4 +401,19 @@ export function selectTopPills(entitySets: EntitySets): TopPills {
   }
   
   return { competitionPill, teamPills, optionalThirdPill };
+}
+
+/**
+ * When entity enrichment hasn't run (basic mode), convert raw tags into generic
+ * pills so articles still get visible labels. Competition-matching tags are
+ * already handled by buildEntitySets; this covers the remaining "unresolved" tags.
+ */
+export function buildTagFallbackPills(tags: string[], limit: number): EntityData[] {
+  return tags.slice(0, limit).map((tag) => ({
+    type: "competition" as const,
+    name: tag,
+    slug: slugify(tag),
+    fallbackText: tag.slice(0, 2).toUpperCase(),
+    href: `/news?tag=${encodeURIComponent(tag)}`,
+  }));
 }

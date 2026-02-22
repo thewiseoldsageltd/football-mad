@@ -5,7 +5,7 @@ import { EntityPill, type EntityData } from "@/components/entity-pill";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode } from "@/lib/entity-utils";
+import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode, buildTagFallbackPills } from "@/lib/entity-utils";
 
 interface ArticleCardProps {
   article: Article;
@@ -55,6 +55,9 @@ function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
     });
   }
   
+  if (pills.length === 0 && article.tags?.length) {
+    return buildTagFallbackPills(article.tags, 3);
+  }
   return pills.slice(0, 3);
 }
 
