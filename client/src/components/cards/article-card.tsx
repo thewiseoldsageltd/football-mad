@@ -70,12 +70,12 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
     return (
       <Link href={newsArticle(article.slug)}>
         <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-article-featured-${article.id}`}>
-          <div className="relative aspect-[16/9] overflow-hidden">
+          <div className="relative aspect-video overflow-hidden rounded-t-xl">
             {article.coverImage ? (
               <img
                 src={article.coverImage}
                 alt={article.title}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
@@ -132,12 +132,12 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
         style={teamCardStyle}
         data-testid={`card-article-${article.id}`}
       >
-        <div className="relative aspect-[16/9] overflow-hidden">
+        <div className="relative aspect-video overflow-hidden rounded-t-xl">
           {article.coverImage ? (
             <img
               src={article.coverImage}
               alt={article.title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
