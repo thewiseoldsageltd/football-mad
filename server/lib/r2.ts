@@ -115,6 +115,20 @@ async function resizeToWebp(buffer: Buffer, width: number): Promise<Buffer> {
     .toBuffer();
 }
 
+/** 16:9 top-anchored crop (for hero). Width in px, height = width * 9/16. */
+async function resizeToWebpHero(buffer: Buffer, width: number): Promise<Buffer> {
+  const height = Math.round((width * 9) / 16);
+  return sharp(buffer)
+    .resize(width, height, { fit: "cover", position: "north" })
+    .webp({ quality: WEBP_QUALITY })
+    .toBuffer();
+}
+
+/** Single 1280x720 hero WEBP (for backfill overwrite). Exported for backfill job. */
+export async function resizeToHero1280x720Webp(buffer: Buffer): Promise<Buffer> {
+  return resizeToWebpHero(buffer, 1280);
+}
+
 export interface UploadImageVariantsToR2Opts {
   buffer: Buffer;
   source: "pa_media";
@@ -131,6 +145,7 @@ export interface UploadImageVariantsResult {
 
 /**
  * Generate 320/640/960/1280 WEBP variants, upload to R2, return URLs and srcset.
+ * Hero kind: 16:9 top-anchored crop (1280x720, 960x540, etc.). Inline: keep aspect ratio.
  */
 export async function uploadImageVariantsToR2(opts: UploadImageVariantsToR2Opts): Promise<UploadImageVariantsResult> {
   const { buffer, source, articleId, kind, baseName } = opts;
@@ -138,9 +153,10 @@ export async function uploadImageVariantsToR2(opts: UploadImageVariantsToR2Opts)
   const base = R2_PUBLIC_BASE_URL.replace(/\/$/, "");
   const variants: Record<number, string> = {};
   const srcsetParts: string[] = [];
+  const resizeFn = kind === "hero" ? resizeToWebpHero : resizeToWebp;
 
   for (const w of IMAGE_WIDTHS) {
-    const webpBuf = await resizeToWebp(buffer, w);
+    const webpBuf = await resizeFn(buffer, w);
     const key = buildImageKey({ source, articleId, kind, baseName, width: w });
     await client.send(
       new PutObjectCommand({
@@ -192,4 +208,19 @@ export async function uploadHeroToR2(paItemId: string, buffer: Buffer, contentTy
 
   const base = R2_PUBLIC_BASE_URL.replace(/\/$/, "");
   return `${base}/${key}`;
+}
+
+/**
+ * Upload a buffer to an existing R2 key (overwrite). Used by hero backfill.
+ */
+export async function uploadBufferToR2Key(key: string, body: Buffer, contentType: string = "image/webp"): Promise<void> {
+  const client = getR2Client();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    })
+  );
 }
