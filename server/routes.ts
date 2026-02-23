@@ -621,12 +621,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/articles/:slug", async (req, res) => {
+    const before = process.memoryUsage().heapUsed;
     try {
       const article = await storage.getArticleWithEntities(req.params.slug);
       if (!article) {
         return res.status(404).json({ error: "Article not found" });
       }
       await storage.incrementArticleViews(article.id);
+      const after = process.memoryUsage().heapUsed;
+      console.log("[MEM] /api/articles/:slug heap delta KB:", Math.round((after - before) / 1024));
       res.json(article);
     } catch (error) {
       console.error("Error fetching article:", error);
