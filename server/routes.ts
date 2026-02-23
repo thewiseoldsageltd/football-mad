@@ -331,10 +331,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   // ========== TEAMS ==========
+  function sendJsonNoEtag(res: Response, data: unknown) {
+    const body = JSON.stringify(data);
+    res.writeHead(res.statusCode || 200, {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+      "Cache-Control": "no-store",
+    });
+    res.end(body);
+  }
+
   app.get("/api/teams", async (req, res) => {
     try {
       const teams = await storage.getTeams();
-      res.json(teams);
+      sendJsonNoEtag(res, teams);
     } catch (error) {
       console.error("Error fetching teams:", error);
       res.status(500).json({ error: "Failed to fetch teams" });
@@ -358,7 +368,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/players", async (req, res) => {
     try {
       const players = await storage.getAllPlayers();
-      res.json(players);
+      sendJsonNoEtag(res, players);
     } catch (error) {
       console.error("Error fetching players:", error);
       res.status(500).json({ error: "Failed to fetch players" });
@@ -402,7 +412,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       } else {
         managers = await storage.getAllManagers();
       }
-      res.json(managers);
+      sendJsonNoEtag(res, managers);
     } catch (error) {
       console.error("Error fetching managers:", error);
       res.status(500).json({ error: "Failed to fetch managers" });
