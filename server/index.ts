@@ -42,6 +42,8 @@ app.get("/robots.txt", (req, res) => {
   }
 });
 
+const MAX_LOG_MSG_BYTES = 2048;
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -50,29 +52,35 @@ export function log(message: string, source = "express") {
     hour12: true,
   });
 
-  console.log(`${formattedTime} [${source}] ${message}`);
+  const safe = message.length > MAX_LOG_MSG_BYTES
+    ? message.slice(0, 120) + " [omitted: payload too large]"
+    : message;
+
+  console.log(`${formattedTime} [${source}] ${safe}`);
 }
 
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  let responseBytes = 0;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+  const originalWrite = res.write;
+  const originalEnd = res.end;
+
+  res.write = function (this: Response, chunk: any, ...args: any[]) {
+    if (chunk) responseBytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+    return (originalWrite as Function).apply(this, [chunk, ...args]);
+  } as typeof res.write;
+
+  res.end = function (this: Response, chunk: any, ...args: any[]) {
+    if (chunk) responseBytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+    return (originalEnd as Function).apply(this, [chunk, ...args]);
+  } as typeof res.end;
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms ${responseBytes}b`);
     }
   });
 
