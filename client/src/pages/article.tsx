@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
-import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode, buildTagFallbackPills } from "@/lib/entity-utils";
+import { buildTagFallbackPills } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
 interface EntityWithProvenance {
@@ -35,7 +35,7 @@ interface ArticleWithEntities extends Article {
   entityCompetitions?: (Pick<Competition, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
 }
 
-const SHOW_PILLS = false;
+const SHOW_PILLS = true;
 
 function EntityGroup({
   title,
@@ -548,18 +548,6 @@ export default function ArticlePage() {
     queryKey: ["/api/articles"],
   });
 
-  const { data: teams = [] } = useQuery<Team[]>({
-    queryKey: ["/api/teams"],
-  });
-
-  const { data: players = [] } = useQuery<Player[]>({
-    queryKey: ["/api/players"],
-  });
-
-  const { data: managers = [] } = useQuery<Manager[]>({
-    queryKey: ["/api/managers"],
-  });
-
   const { data: followedTeamIdsRaw } = useQuery<string[] | null>({
     queryKey: ["/api/follows"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -589,18 +577,13 @@ export default function ArticlePage() {
     if (!article || allArticles.length === 0) return [];
     
     const otherArticles = allArticles.filter(a => a.id !== article.id);
-    const teamSlugs = teams.map(t => t.slug);
-    
-    const articleTeamSlugs = (article.tags || []).filter(t => teamSlugs.includes(t));
+    const articleTags = article.tags || [];
     
     const scored = otherArticles.map(a => {
       let score = 0;
-      const aTeamSlugs = (a.tags || []).filter(t => teamSlugs.includes(t));
-      const teamOverlap = articleTeamSlugs.filter(t => aTeamSlugs.includes(t)).length;
-      score += teamOverlap * 10;
       if (a.category === article.category) score += 5;
-      const tagOverlap = (article.tags || []).filter(t => (a.tags || []).includes(t)).length;
-      score += tagOverlap * 2;
+      const tagOverlap = articleTags.filter(t => (a.tags || []).includes(t)).length;
+      score += tagOverlap * 3;
       if (a.isTrending) score += 3;
       if (a.isEditorPick) score += 2;
       return { article: a, score };
@@ -622,7 +605,7 @@ export default function ArticlePage() {
     }
     
     return result.slice(0, 3);
-  }, [article, allArticles, teams]);
+  }, [article, allArticles]);
 
   const popularArticles = useMemo(() => {
     return [...allArticles]
@@ -630,131 +613,13 @@ export default function ArticlePage() {
       .slice(0, 6);
   }, [allArticles]);
 
-  // Check if backend has any entity data (safe when article is undefined)
-  const backendHasEntities = 
-    (article?.entityTeams?.length || 0) +
-    (article?.entityPlayers?.length || 0) +
-    (article?.entityManagers?.length || 0) +
-    (article?.entityCompetitions?.length || 0) > 0;
-  
-  // Build entity pill arrays using shared utility with proper scoring
-  // Must be called unconditionally (before early returns) per React hook rules
+  // Basic mode: pills from article.tags only (no DB dictionary lookups)
   const { teamPills, competitionPills, playerPills, managerPills, headerPills, articleTeams } = useMemo(() => {
-    if (!article) {
-      return { teamPills: [], competitionPills: [], playerPills: [], managerPills: [], headerPills: [], articleTeams: [] as Team[] };
-    }
-    
-    // Build entity sets with scoring (tag=100, mention=60, fallback=10)
-    const entitySets = buildEntitySets(
-      article,
-      teams,
-      players,
-      managers,
-      article.entityPlayers,
-      article.entityManagers
-    );
-    
-    // Header pills: use selectTopPills for consistent card/header behavior
-    const topPills = selectTopPills(entitySets);
-    const resolvedHeaderPills: EntityData[] = [];
-    
-    if (topPills.competitionPill) {
-      const comp = topPills.competitionPill;
-      resolvedHeaderPills.push({
-        type: "competition" as const,
-        name: comp.name,
-        slug: comp.slug,
-        href: `/news?competition=${comp.slug}`,
-        iconUrl: `/crests/comps/${comp.slug}.svg`,
-        fallbackText: comp.name.slice(0, 2),
-        shortLabel: getCompShortCode(comp.name),
-      });
-    }
-    
-    for (const team of topPills.teamPills) {
-      resolvedHeaderPills.push({
-        type: "team" as const,
-        name: team.name,
-        slug: team.slug,
-        href: `/teams/${team.slug}`,
-        iconUrl: `/crests/teams/${team.slug}.svg`,
-        fallbackText: team.name.slice(0, 2).toUpperCase(),
-        color: team.primaryColor,
-        shortLabel: getTeamShortCode({ name: team.name, shortName: team.shortName }),
-      });
-    }
-    
-    // Footer pills: all entities from each group (excluding fallback for competitions)
-    const resolvedCompetitionPills: EntityData[] = entitySets.competitions
-      .filter(c => c.source !== "fallback") // Exclude fallback competitions from footer
-      .map(c => ({
-        type: "competition" as const,
-        name: c.name,
-        slug: c.slug,
-        href: `/news?competition=${c.slug}`,
-        iconUrl: `/crests/comps/${c.slug}.svg`,
-        fallbackText: c.name.slice(0, 2),
-        shortLabel: getCompShortCode(c.name),
-      }));
-    
-    const resolvedTeamPills: EntityData[] = entitySets.teams.map(t => ({
-      type: "team" as const,
-      name: t.name,
-      slug: t.slug,
-      href: `/teams/${t.slug}`,
-      iconUrl: `/crests/teams/${t.slug}.svg`,
-      fallbackText: t.name.slice(0, 2).toUpperCase(),
-      color: t.primaryColor,
-      shortLabel: getTeamShortCode({ name: t.name, shortName: t.shortName }),
-    }));
-    
-    const resolvedPlayerPills: EntityData[] = entitySets.players.map(p => ({
-      type: "player" as const,
-      name: p.name,
-      slug: p.slug,
-      href: `/news?player=${p.slug}`,
-      fallbackText: p.name.slice(0, 2).toUpperCase(),
-    }));
-    
-    const resolvedManagerPills: EntityData[] = entitySets.managers.map(m => ({
-      type: "manager" as const,
-      name: m.name,
-      slug: m.slug,
-      href: `/news?manager=${m.slug}`,
-      fallbackText: m.name.slice(0, 2).toUpperCase(),
-    }));
-    
-    // Get teams from tags for the "Follow Team" CTA
-    const resolvedArticleTeams = teams.filter(t => 
-      (article.tags || []).some(tag => 
-        t.name.toLowerCase() === tag.toLowerCase() || 
-        t.slug === tag.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
-      )
-    );
-    
-    const totalPills = resolvedHeaderPills.length + resolvedCompetitionPills.length +
-      resolvedTeamPills.length + resolvedPlayerPills.length + resolvedManagerPills.length;
-    if (totalPills === 0 && article.tags?.length) {
-      const tagPills = buildTagFallbackPills(article.tags, 12);
-      return {
-        teamPills: [] as typeof resolvedTeamPills,
-        competitionPills: tagPills,
-        playerPills: [] as typeof resolvedPlayerPills,
-        managerPills: [] as typeof resolvedManagerPills,
-        headerPills: tagPills.slice(0, 3),
-        articleTeams: resolvedArticleTeams,
-      };
-    }
-
-    return {
-      teamPills: resolvedTeamPills,
-      competitionPills: resolvedCompetitionPills,
-      playerPills: resolvedPlayerPills,
-      managerPills: resolvedManagerPills,
-      headerPills: resolvedHeaderPills,
-      articleTeams: resolvedArticleTeams,
-    };
-  }, [article, teams, players, managers]);
+    const empty = { teamPills: [] as EntityData[], competitionPills: [] as EntityData[], playerPills: [] as EntityData[], managerPills: [] as EntityData[], headerPills: [] as EntityData[], articleTeams: [] as Team[] };
+    if (!article) return empty;
+    const tagPills = buildTagFallbackPills(article.tags || [], 12);
+    return { ...empty, competitionPills: tagPills, headerPills: tagPills.slice(0, 3) };
+  }, [article]);
 
   // Early returns AFTER all hooks
   if (isLoading) {
