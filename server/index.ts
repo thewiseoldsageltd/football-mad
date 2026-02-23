@@ -62,20 +62,28 @@ export function log(message: string, source = "express") {
 
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
   let responseBytes = 0;
 
-  const originalWrite = res.write;
-  const originalEnd = res.end;
+  const _write = res.write;
+  const _end = res.end;
+
+  function addBytes(chunk: unknown, encoding?: string) {
+    if (chunk == null) return;
+    if (Buffer.isBuffer(chunk)) {
+      responseBytes += chunk.length;
+    } else if (typeof chunk === "string") {
+      responseBytes += Buffer.byteLength(chunk, encoding as BufferEncoding | undefined);
+    }
+  }
 
   res.write = function (this: Response, chunk: any, ...args: any[]) {
-    if (chunk) responseBytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
-    return (originalWrite as Function).apply(this, [chunk, ...args]);
+    addBytes(chunk, typeof args[0] === "string" ? args[0] : undefined);
+    return (_write as Function).apply(this, [chunk, ...args]);
   } as typeof res.write;
 
   res.end = function (this: Response, chunk: any, ...args: any[]) {
-    if (chunk) responseBytes += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
-    return (originalEnd as Function).apply(this, [chunk, ...args]);
+    addBytes(chunk, typeof args[0] === "string" ? args[0] : undefined);
+    return (_end as Function).apply(this, [chunk, ...args]);
   } as typeof res.end;
 
   res.on("finish", () => {
