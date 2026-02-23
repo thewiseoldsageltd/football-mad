@@ -255,100 +255,6 @@ function LatestNewsSection({ articles, isLoading }: { articles: Article[]; isLoa
   );
 }
 
-function TeamsSection({ 
-  isAuthenticated, 
-  followedTeams, 
-  allTeams 
-}: { 
-  isAuthenticated: boolean; 
-  followedTeams: Team[];
-  allTeams: Team[];
-}) {
-  const hasFollows = followedTeams.length > 0;
-
-  if (isAuthenticated && hasFollows) {
-    return (
-      <section className="mb-8" data-testid="section-followed-teams">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Heart className="h-5 w-5 text-primary" />
-            <h2 className="text-xl font-bold">Your Teams</h2>
-          </div>
-          <Link href="/teams">
-            <Button variant="ghost" size="sm" className="gap-1" data-testid="link-all-teams">
-              All Teams <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-          {followedTeams.map((team) => (
-            <Link key={team.id} href={`/teams/${team.slug}`}>
-              <Card 
-                className="flex-shrink-0 w-[140px] hover-elevate cursor-pointer"
-                data-testid={`card-followed-team-${team.slug}`}
-              >
-                <CardContent className="p-4 text-center">
-                  <div 
-                    className="w-12 h-12 mx-auto rounded-lg flex items-center justify-center mb-2"
-                    style={{ backgroundColor: team.primaryColor || "#333" }}
-                  >
-                    {team.logoUrl ? (
-                      <img src={team.logoUrl} alt={team.name} className="w-8 h-8 object-contain" />
-                    ) : (
-                      <span className="text-lg font-bold text-white">
-                        {team.shortName?.[0] || team.name[0]}
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-medium text-sm truncate">{team.name}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="mb-8" data-testid="section-pick-teams">
-      <Card className="bg-gradient-to-r from-primary/10 to-transparent border-primary/20">
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-bold mb-1">Pick Your Teams</h2>
-              <p className="text-muted-foreground">
-                Follow your favourite clubs to get personalised news, match updates, and transfer rumours.
-              </p>
-            </div>
-            <Link href="/teams">
-              <Button className="gap-2" data-testid="button-pick-teams">
-                <Heart className="h-4 w-4" />
-                Choose Teams
-              </Button>
-            </Link>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-4">
-            {allTeams.slice(0, 10).map((team) => (
-              <Link key={team.id} href={`/teams/${team.slug}`}>
-                <Badge 
-                  variant="outline" 
-                  className="cursor-pointer hover-elevate"
-                  data-testid={`badge-team-cta-${team.slug}`}
-                >
-                  {team.shortName || team.name}
-                </Badge>
-              </Link>
-            ))}
-            {allTeams.length > 10 && (
-              <Badge variant="secondary">+{allTeams.length - 10} more</Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </section>
-  );
-}
 
 function NewsletterCTA() {
   return (
@@ -450,10 +356,6 @@ export default function HomePage() {
     queryKey: ["/api/matches"],
   });
 
-  const { data: teams = [] } = useQuery<Team[]>({
-    queryKey: ["/api/teams"],
-  });
-
   const { data: followedTeamIds = [] } = useQuery<string[]>({
     queryKey: ["/api/follows"],
     queryFn: getQueryFn({ on401: "returnNull" }),
@@ -466,7 +368,6 @@ export default function HomePage() {
 
   const heroArticle = articles.find((a) => a.isEditorPick) || articles[0];
   const todaysMatches = allMatches.filter((m) => isToday(new Date(m.kickoffTime)));
-  const followedTeams = teams.filter((t) => followedTeamIds.includes(t.id));
   const latestArticles = articles.filter((a) => a.id !== heroArticle?.id);
   const showForYou = isAuthenticated && followedTeamIds.length > 0;
 
@@ -480,7 +381,7 @@ export default function HomePage() {
         {showForYou && (
           <ForYouSection 
             articles={latestArticles} 
-            teams={teams} 
+            teams={[]} 
             followedTeamIds={followedTeamIds} 
           />
         )}
@@ -488,12 +389,6 @@ export default function HomePage() {
         <TrendingSection articles={articles} />
 
         <LatestNewsSection articles={latestArticles} isLoading={articlesLoading} />
-
-        <TeamsSection 
-          isAuthenticated={isAuthenticated} 
-          followedTeams={followedTeams} 
-          allTeams={teams} 
-        />
 
         <NewsletterCTA />
 
