@@ -7,6 +7,7 @@ import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { isStagingHost } from "./middleware/environment";
 
 const app = express();
+app.set("etag", false);
 const httpServer = createServer(app);
 
 declare module "http" {
