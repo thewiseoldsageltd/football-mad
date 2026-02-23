@@ -35,6 +35,8 @@ interface ArticleWithEntities extends Article {
   entityCompetitions?: (Pick<Competition, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
 }
 
+const SHOW_PILLS = false;
+
 function EntityGroup({
   title,
   pills,
@@ -782,7 +784,7 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              {(teamPills.length > 0 || competitionPills.length > 0) && (
+              {SHOW_PILLS && (teamPills.length > 0 || competitionPills.length > 0) && (
                 <div className="flex items-center gap-2 flex-wrap mb-4">
                   {competitionPills[0] && (
                     <EntityPill
@@ -851,7 +853,7 @@ export default function ArticlePage() {
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
-            {(competitionPills.length > 0 || teamPills.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
+            {SHOW_PILLS && (competitionPills.length > 0 || teamPills.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
               <section className="mb-8 py-6 border-t" data-testid="in-this-article-section">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
                 <div className="space-y-4">
