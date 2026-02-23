@@ -13,6 +13,7 @@ interface ArticleCardProps {
   teamBadge?: string;
   teamColor?: string;
   teams?: Team[];
+  showPills?: boolean;
 }
 
 function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
@@ -61,13 +62,13 @@ function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
   return pills.slice(0, 3);
 }
 
-export function ArticleCard({ article, featured = false, teamBadge, teamColor, teams }: ArticleCardProps) {
+export function ArticleCard({ article, featured = false, teamBadge, teamColor, teams, showPills = true }: ArticleCardProps) {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
   
   const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;
   
-  const displayPills = extractEntityPills(article, teams);
+  const displayPills = showPills ? extractEntityPills(article, teams) : [];
   
   if (featured) {
     return (
