@@ -621,16 +621,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/articles/:slug", async (req, res) => {
-    const beforeHeap = process.memoryUsage().heapUsed;
+    const mem = (label: string) => {
+      const m = process.memoryUsage();
+      console.log(`[MEM] /api/articles/:slug ${label} heapMB=${(m.heapUsed / 1024 / 1024).toFixed(1)} rssMB=${(m.rss / 1024 / 1024).toFixed(1)}`);
+    };
+    let t0 = Date.now();
+    const time = (step: string) => { const now = Date.now(); console.log(`[TIME] ${step} ms=${now - t0}`); t0 = now; };
+
+    mem("start");
     try {
       const article = await storage.getArticleWithEntities(req.params.slug);
+      time("getArticleWithEntities");
+      mem("after article db");
       if (!article) {
         return res.status(404).json({ error: "Article not found" });
       }
       await storage.incrementArticleViews(article.id);
-      const afterHeap = process.memoryUsage().heapUsed;
-      console.log("[MEM] /api/articles/:slug heapMB=", (afterHeap / 1024 / 1024).toFixed(1), "deltaKB=", Math.round((afterHeap - beforeHeap) / 1024));
+      time("incrementArticleViews");
+      mem("after incrementViews");
+      mem("before response");
       res.json(article);
+      time("res.json");
+      mem("after response (sync)");
     } catch (error) {
       console.error("Error fetching article:", error);
       res.status(500).json({ error: "Failed to fetch article" });
