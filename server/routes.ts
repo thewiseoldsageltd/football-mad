@@ -578,31 +578,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ========== ARTICLES ==========
+  const articleLightweight = {
+    id: articles.id,
+    slug: articles.slug,
+    title: articles.title,
+    excerpt: articles.excerpt,
+    coverImage: articles.coverImage,
+    publishedAt: articles.publishedAt,
+    authorName: articles.authorName,
+    competition: articles.competition,
+    contentType: articles.contentType,
+    tags: articles.tags,
+    isBreaking: articles.isBreaking,
+    isTrending: articles.isTrending,
+    isFeatured: articles.isFeatured,
+    isEditorPick: articles.isEditorPick,
+    viewCount: articles.viewCount,
+    commentsCount: articles.commentsCount,
+    category: articles.category,
+  };
+
   app.get("/api/articles", async (req, res) => {
+    try {
+      const category = req.query.category as string | undefined;
+      const conditions = [];
+      if (category && category !== "all") {
+        conditions.push(eq(articles.category, category));
+      }
+      const rows = await db
+        .select(articleLightweight)
+        .from(articles)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(articles.publishedAt))
+        .limit(50);
+      res.json(rows);
+    } catch (error) {
+      console.error("Error fetching articles:", error);
+      res.status(500).json({ error: "Failed to fetch articles" });
+    }
+  });
+
+  app.get("/api/articles/page", async (req, res) => {
     try {
       const category = req.query.category as string | undefined;
       const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
       const cursor = req.query.cursor as string | undefined;
-
-      const lightweight = {
-        id: articles.id,
-        slug: articles.slug,
-        title: articles.title,
-        excerpt: articles.excerpt,
-        coverImage: articles.coverImage,
-        publishedAt: articles.publishedAt,
-        authorName: articles.authorName,
-        competition: articles.competition,
-        contentType: articles.contentType,
-        tags: articles.tags,
-        isBreaking: articles.isBreaking,
-        isTrending: articles.isTrending,
-        isFeatured: articles.isFeatured,
-        isEditorPick: articles.isEditorPick,
-        viewCount: articles.viewCount,
-        commentsCount: articles.commentsCount,
-        category: articles.category,
-      };
 
       const conditions = [];
       if (category && category !== "all") {
@@ -613,7 +633,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const rows = await db
-        .select(lightweight)
+        .select(articleLightweight)
         .from(articles)
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(articles.publishedAt))
