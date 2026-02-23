@@ -581,8 +581,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/articles", async (req, res) => {
     try {
       const category = req.query.category as string | undefined;
-      const articles = await storage.getArticles(category);
-      res.json(articles);
+      const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+      const cursor = req.query.cursor as string | undefined;
+
+      const lightweight = {
+        id: articles.id,
+        slug: articles.slug,
+        title: articles.title,
+        excerpt: articles.excerpt,
+        coverImage: articles.coverImage,
+        publishedAt: articles.publishedAt,
+        authorName: articles.authorName,
+        competition: articles.competition,
+        contentType: articles.contentType,
+        tags: articles.tags,
+        isBreaking: articles.isBreaking,
+        isTrending: articles.isTrending,
+        isFeatured: articles.isFeatured,
+        isEditorPick: articles.isEditorPick,
+        viewCount: articles.viewCount,
+        commentsCount: articles.commentsCount,
+        category: articles.category,
+      };
+
+      const conditions = [];
+      if (category && category !== "all") {
+        conditions.push(eq(articles.category, category));
+      }
+      if (cursor) {
+        conditions.push(lt(articles.publishedAt, new Date(cursor)));
+      }
+
+      const rows = await db
+        .select(lightweight)
+        .from(articles)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(articles.publishedAt))
+        .limit(limit + 1);
+
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore && page[page.length - 1]?.publishedAt
+        ? page[page.length - 1].publishedAt!.toISOString()
+        : null;
+
+      res.json({ articles: page, nextCursor, hasMore });
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -591,8 +634,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/articles/category/:category", async (req, res) => {
     try {
-      const articles = await storage.getArticles(req.params.category);
-      res.json(articles);
+      const rows = await db
+        .select({
+          id: articles.id, slug: articles.slug, title: articles.title,
+          excerpt: articles.excerpt, coverImage: articles.coverImage,
+          publishedAt: articles.publishedAt, authorName: articles.authorName,
+          competition: articles.competition, contentType: articles.contentType,
+          tags: articles.tags, isBreaking: articles.isBreaking,
+          isTrending: articles.isTrending, isFeatured: articles.isFeatured,
+          viewCount: articles.viewCount, category: articles.category,
+        })
+        .from(articles)
+        .where(eq(articles.category, req.params.category))
+        .orderBy(desc(articles.publishedAt))
+        .limit(50);
+      res.json(rows);
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -611,9 +667,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/articles/related/:slug", async (req, res) => {
     try {
-      const articles = await storage.getArticles();
-      const filtered = articles.filter(a => a.slug !== req.params.slug).slice(0, 6);
-      res.json(filtered);
+      const rows = await db
+        .select({
+          id: articles.id,
+          slug: articles.slug,
+          title: articles.title,
+          excerpt: articles.excerpt,
+          coverImage: articles.coverImage,
+          publishedAt: articles.publishedAt,
+          authorName: articles.authorName,
+          competition: articles.competition,
+          contentType: articles.contentType,
+          tags: articles.tags,
+          isBreaking: articles.isBreaking,
+          isTrending: articles.isTrending,
+          isFeatured: articles.isFeatured,
+          viewCount: articles.viewCount,
+        })
+        .from(articles)
+        .where(drizzleSql`${articles.slug} != ${req.params.slug}`)
+        .orderBy(desc(articles.publishedAt))
+        .limit(6);
+      res.json(rows);
     } catch (error) {
       console.error("Error fetching related articles:", error);
       res.status(500).json({ error: "Failed to fetch related articles" });

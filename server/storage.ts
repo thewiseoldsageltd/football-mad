@@ -310,12 +310,25 @@ export class DatabaseStorage implements IStorage {
 
   // Articles
   async getArticles(category?: string): Promise<Article[]> {
+    const lightweight = {
+      id: articles.id, slug: articles.slug, title: articles.title,
+      excerpt: articles.excerpt, coverImage: articles.coverImage,
+      publishedAt: articles.publishedAt, authorName: articles.authorName,
+      competition: articles.competition, contentType: articles.contentType,
+      tags: articles.tags, isBreaking: articles.isBreaking,
+      isTrending: articles.isTrending, isFeatured: articles.isFeatured,
+      isEditorPick: articles.isEditorPick, viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount, category: articles.category,
+    };
     if (category && category !== "all") {
-      return db.select().from(articles)
+      return db.select(lightweight).from(articles)
         .where(eq(articles.category, category))
-        .orderBy(desc(articles.publishedAt));
+        .orderBy(desc(articles.publishedAt))
+        .limit(50) as any;
     }
-    return db.select().from(articles).orderBy(desc(articles.publishedAt));
+    return db.select(lightweight).from(articles)
+      .orderBy(desc(articles.publishedAt))
+      .limit(50) as any;
   }
 
   async getArticleBySlug(slug: string): Promise<Article | undefined> {
@@ -398,15 +411,24 @@ export class DatabaseStorage implements IStorage {
   async getArticlesByTeam(teamSlug: string): Promise<Article[]> {
     const team = await this.getTeamBySlug(teamSlug);
     if (!team) return [];
-    
+
     const result = await db
-      .select({ article: articles })
+      .select({
+        id: articles.id, slug: articles.slug, title: articles.title,
+        excerpt: articles.excerpt, coverImage: articles.coverImage,
+        publishedAt: articles.publishedAt, authorName: articles.authorName,
+        competition: articles.competition, contentType: articles.contentType,
+        tags: articles.tags, isBreaking: articles.isBreaking,
+        isTrending: articles.isTrending, isFeatured: articles.isFeatured,
+        viewCount: articles.viewCount, category: articles.category,
+      })
       .from(articles)
       .innerJoin(articleTeams, eq(articleTeams.articleId, articles.id))
       .where(eq(articleTeams.teamId, team.id))
-      .orderBy(desc(articles.publishedAt));
-    
-    return result.map(r => r.article);
+      .orderBy(desc(articles.publishedAt))
+      .limit(50);
+
+    return result as any;
   }
 
   async createArticle(data: InsertArticle): Promise<Article> {
