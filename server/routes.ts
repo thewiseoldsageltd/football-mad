@@ -745,10 +745,58 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ========== MATCHES ==========
+  const matchListFields = {
+    id: matches.id,
+    slug: matches.slug,
+    kickoffTime: matches.kickoffTime,
+    status: matches.status,
+    homeScore: matches.homeScore,
+    awayScore: matches.awayScore,
+    venue: matches.venue,
+    competition: matches.competition,
+    competitionId: matches.competitionId,
+    goalserveCompetitionId: matches.goalserveCompetitionId,
+    goalserveRound: matches.goalserveRound,
+    homeTeamId: matches.homeTeamId,
+    awayTeamId: matches.awayTeamId,
+    homeGoalserveTeamId: matches.homeGoalserveTeamId,
+    awayGoalserveTeamId: matches.awayGoalserveTeamId,
+    seasonKey: matches.seasonKey,
+    goalserveMatchId: matches.goalserveMatchId,
+  };
+
+  const clamp = (value: unknown, defaultValue: number, min: number, max: number) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return defaultValue;
+    return Math.min(max, Math.max(min, Math.trunc(n)));
+  };
+
+  const toYmdUtc = (d: Date) => d.toISOString().slice(0, 10);
+
   app.get("/api/matches", async (req, res) => {
     try {
-      const matches = await storage.getMatches();
-      res.json(matches);
+      const date = req.query.date as string | undefined; // YYYY-MM-DD
+      const days = clamp(req.query.days, 1, 1, 500);
+      const hasDate = Boolean(date && /^\d{4}-\d{2}-\d{2}$/.test(date));
+      const hasDays = req.query.days !== undefined;
+      const limit = clamp(req.query.limit, 250, 1, 500);
+
+      const todayYmd = toYmdUtc(new Date());
+      const startYmd = hasDate ? (date as string) : todayYmd;
+      const start = new Date(`${startYmd}T00:00:00.000Z`);
+      const end = new Date(start);
+      end.setUTCDate(end.getUTCDate() + ((hasDate || hasDays) ? days : 1));
+
+      const rows = await db
+        .select(matchListFields)
+        .from(matches)
+        .where(and(gte(matches.kickoffTime, start), drizzleSql`${matches.kickoffTime} < ${end}`))
+        .orderBy(asc(matches.kickoffTime))
+        .limit(limit);
+
+      const responseBytes = Buffer.byteLength(JSON.stringify(rows));
+      console.log(`[matches-bytes] path=/api/matches count=${rows.length} bytes=${responseBytes}`);
+      res.json(rows);
     } catch (error) {
       console.error("Error fetching matches:", error);
       res.status(500).json({ error: "Failed to fetch matches" });
@@ -780,7 +828,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // These must be defined BEFORE /api/matches/:slug to avoid slug matching "fixtures", "results", "live"
   
   function formatMatchResponse(match: any, homeTeamData: any, awayTeamData: any) {
-    const timeline = match.timeline as any;
     return {
       id: match.id,
       slug: match.slug,
@@ -795,10 +842,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goalserveRound: match.goalserveRound || null,
       homeTeam: match.homeTeamId && homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
-        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: timeline?.home?.name || "Unknown" },
+        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: "Unknown" },
       awayTeam: match.awayTeamId && awayTeamData
         ? { id: awayTeamData.id, name: awayTeamData.name, slug: awayTeamData.slug }
-        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: timeline?.away?.name || "Unknown" },
+        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: "Unknown" },
     };
   }
 
@@ -831,8 +878,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const days = parseInt(req.query.days as string) || 7;
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
-      const limit = Math.min(parseInt(req.query.limit as string) || 200, 200);
-      const debug = req.query.debug === "1";
+      const limit = clamp(req.query.limit, 200, 1, 500);
 
       const now = new Date();
       const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -852,7 +898,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)));
       }
 
-      const results = await db.select()
+      const results = await db.select(matchListFields)
         .from(matches)
         .where(and(...conditions))
         .orderBy(asc(matches.kickoffTime))
@@ -866,34 +912,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const teamMap = await fetchTeamMap(teamIds);
       const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
-
-      if (debug) {
-        // Debug info
-        const countFuture = await db.select({ count: drizzleSql<number>`COUNT(*)` })
-          .from(matches)
-          .where(gte(matches.kickoffTime, now));
-        const sampleNext5 = await db.select({ 
-          kickoffTime: matches.kickoffTime, 
-          status: matches.status, 
-          competition: matches.competition 
-        })
-          .from(matches)
-          .orderBy(asc(matches.kickoffTime))
-          .limit(5);
-        
-        return res.json({
-          debug: {
-            nowServer: now.toISOString(),
-            nowUtc: new Date().toISOString(),
-            days,
-            endDate: endDate.toISOString(),
-            countFutureAll: countFuture[0]?.count || 0,
-            sampleNext5,
-          },
-          count: formatted.length,
-          matches: formatted,
-        });
-      }
 
       res.json(formatted);
     } catch (error) {
@@ -909,7 +927,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
       const round = req.query.round as string;
-      const limit = Math.min(parseInt(req.query.limit as string) || 200, 200);
+      const limit = clamp(req.query.limit, 200, 1, 500);
 
       const now = new Date();
       const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
@@ -933,7 +951,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(eq(matches.goalserveRound, round));
       }
 
-      const results = await db.select()
+      const results = await db.select(matchListFields)
         .from(matches)
         .where(and(...conditions))
         .orderBy(desc(matches.kickoffTime))
@@ -960,6 +978,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
+      const limit = clamp(req.query.limit, 200, 1, 500);
 
       // Live: status matches live patterns (case-insensitive)
       const conditions: any[] = [
@@ -974,10 +993,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(or(eq(matches.homeTeamId, teamId), eq(matches.awayTeamId, teamId)));
       }
 
-      const results = await db.select()
+      const results = await db.select(matchListFields)
         .from(matches)
         .where(and(...conditions))
-        .orderBy(asc(matches.kickoffTime));
+        .orderBy(asc(matches.kickoffTime))
+        .limit(limit);
 
       const teamIds = new Set<string>();
       results.forEach(m => {
@@ -1270,7 +1290,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const status = (req.query.status as string) || "all";
       const competitionId = req.query.competitionId as string;
       const sortMode = (req.query.sort as string) || "competition"; // competition (default) or kickoff
-      const debug = req.query.debug === "1";
+      const limit = clamp(req.query.limit, 200, 1, 500);
 
       // Default to today in UTC if no date provided
       const effectiveDate = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) 
@@ -1314,10 +1334,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const refresh = req.query.refresh === "1";
 
-      let results = await db.select()
+      let results = await db.select(matchListFields)
         .from(matches)
         .where(and(...conditions))
-        .orderBy(asc(matches.kickoffTime));
+        .orderBy(asc(matches.kickoffTime))
+        .limit(limit);
 
       // If no results (or refresh requested), try Goalserve sync
       if (refresh || results.length === 0) {
@@ -1326,10 +1347,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           try {
             await upsertGoalserveMatches(feed);
             // Re-run query after sync
-            results = await db.select()
+            results = await db.select(matchListFields)
               .from(matches)
               .where(and(...conditions))
-              .orderBy(asc(matches.kickoffTime));
+              .orderBy(asc(matches.kickoffTime))
+              .limit(limit);
           } catch (syncErr) {
             console.error(`Goalserve sync failed for feed ${feed}:`, syncErr);
             // Continue with existing results (may be empty)
@@ -1380,61 +1402,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
 
-      if (debug) {
-        // Build topSamples: first 50 matches with full priority details
-        const topSamples = formatted.slice(0, 50).map((m, idx) => {
-          const { priority, parsed } = getPriorityWithDetails(m.competition, hasUefa);
-          const kickoffTime = new Date(m.kickoffTime).getTime();
-          return {
-            index: idx,
-            id: m.id,
-            kickoffTime: m.kickoffTime,
-            status: m.status,
-            competition: m.competition,
-            goalserveCompetitionId: m.goalserveCompetitionId,
-            parsedCountry: parsed.countryNorm,
-            parsedLeague: parsed.leagueNorm,
-            leagueKey: parsed.leagueKey,
-            priority,
-            sortKey: sortMode === "kickoff" 
-              ? [kickoffTime, priority, parsed.competitionDisplayName]
-              : [priority, parsed.competitionDisplayName, kickoffTime],
-          };
-        });
-
-        // Build leagueSummary: counts per leagueKey (top 30)
-        const leagueCounter: Record<string, { count: number; priority: number }> = {};
-        formatted.forEach(m => {
-          const { priority, parsed } = getPriorityWithDetails(m.competition, hasUefa);
-          const key = parsed.leagueKey;
-          if (!leagueCounter[key]) {
-            leagueCounter[key] = { count: 0, priority };
-          }
-          leagueCounter[key].count++;
-        });
-        const leagueSummary = Object.entries(leagueCounter)
-          .map(([key, val]) => ({ leagueKey: key, count: val.count, priority: val.priority }))
-          .sort((a, b) => a.priority - b.priority || b.count - a.count)
-          .slice(0, 30);
-
-        return res.json({
-          matches: formatted,
-          debug: {
-            date: effectiveDate,
-            start: start.toISOString(),
-            end: nextDate.toISOString(),
-            status,
-            competitionId: competitionId || null,
-            sort: sortMode,
-            hasUefa,
-            uefaCounts,
-            returnedCount: formatted.length,
-            topSamples,
-            leagueSummary,
-          },
-        });
-      }
-
+      const responseBytes = Buffer.byteLength(JSON.stringify(formatted));
+      console.log(`[matches-bytes] path=/api/matches/day count=${formatted.length} bytes=${responseBytes}`);
       res.json(formatted);
     } catch (error) {
       console.error("Error fetching matches by day:", error);
