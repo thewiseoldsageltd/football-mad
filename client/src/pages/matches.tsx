@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { cn } from "@/lib/utils";
 
 interface ApiMatch {
   id: string;
@@ -23,6 +22,7 @@ interface ApiMatch {
   awayScore: number | null;
   venue: string | null;
   competition: string | null;
+  competitionId?: string | null;
   goalserveCompetitionId: string | null;
   goalserveMatchId: string | null;
   goalserveRound: string | null;
@@ -80,15 +80,23 @@ function getDisplayCompetitionName(competition: string | null | undefined): stri
   return parsed.name;
 }
 
-const LIVE_STATUSES = ["playing", "1st half", "2nd half", "half time", "ht", "extra time", "pen."];
-const FINISHED_STATUSES = ["finished", "ft", "full-time", "aet", "pen", "awarded", "postponed", "cancelled", "abandoned"];
-
-function isLiveStatus(status: string): boolean {
-  return LIVE_STATUSES.some(s => status.toLowerCase().includes(s.toLowerCase())) || /^\d+$/.test(status);
+function normStatus(s?: string | null) {
+  return (s || "").toLowerCase();
 }
 
-function isFinishedStatus(status: string): boolean {
-  return FINISHED_STATUSES.some(s => status.toLowerCase().includes(s.toLowerCase()));
+function isFinishedStatus(s?: string | null) {
+  const x = normStatus(s);
+  return ["finished", "ft", "full_time", "ended", "final", "aet", "pen"].includes(x);
+}
+
+function isLiveStatus(s?: string | null) {
+  const x = normStatus(s);
+  return ["live", "inplay", "in_play", "ht", "halftime", "et", "extra_time", "pen", "penalties", "1h", "2h"].includes(x) || /^\d+$/.test(x);
+}
+
+function isScheduledStatus(s?: string | null) {
+  const x = normStatus(s);
+  return !isLiveStatus(x) && !isFinishedStatus(x);
 }
 
 
@@ -154,37 +162,40 @@ export default function MatchesPage() {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
   const statusParam = activeTab === "all" ? "all" : activeTab === "live" ? "live" : activeTab === "scheduled" ? "scheduled" : "fulltime";
-  
-  const matchesUrl = `/api/matches/day?date=${dateStr}&status=${statusParam}&sort=${sortMode}${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
+  const liveEnabled = statusParam === "live";
+  const baseDayUrl = `/api/matches/day?date=${dateStr}&status=all&sort=competition`;
 
-  const { data: matchesData, isLoading } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-day", dateStr, statusParam, selectedCompetitionId, sortMode],
+  const { data: baseMatches = [], isLoading: baseLoading, isError: baseError } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-day-base", dateStr],
     queryFn: async () => {
-      const res = await fetch(matchesUrl);
-      if (!res.ok) throw new Error("Failed to load matches");
+      const res = await fetch(baseDayUrl);
+      if (!res.ok) throw new Error("Failed to fetch matches day");
       return res.json();
     },
-    refetchInterval: isToday ? 30000 : false,
+    staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
 
-  const allMatchesUrl = `/api/matches/day?date=${dateStr}&status=all${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
-  const { data: allMatchesData } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-day", dateStr, "all", selectedCompetitionId],
+  const { data: liveMatches = [], isLoading: liveLoading, isError: liveError } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-live"],
     queryFn: async () => {
-      const res = await fetch(allMatchesUrl);
-      if (!res.ok) throw new Error("Failed to load all matches");
+      const res = await fetch("/api/matches/live");
+      if (!res.ok) throw new Error("Failed to fetch live matches");
       return res.json();
     },
-    staleTime: 30000,
-    refetchInterval: isToday ? 30000 : false,
+    enabled: liveEnabled,
+    refetchInterval: 30_000,
+    staleTime: 0,
     refetchOnWindowFocus: true,
   });
+
+  const sourceMatches = liveEnabled ? liveMatches : baseMatches;
+  const isLoading = liveEnabled ? liveLoading : baseLoading;
+  const isError = liveEnabled ? liveError : baseError;
 
   const allMatches = useMemo(() => {
-    if (!allMatchesData) return [];
-    return allMatchesData.map(apiMatchToMockMatch);
-  }, [allMatchesData]);
+    return baseMatches.map(apiMatchToMockMatch);
+  }, [baseMatches]);
 
   const counts = useMemo(() => {
     const live = allMatches.filter(m => m.status === "live").length;
@@ -198,109 +209,45 @@ export default function MatchesPage() {
     };
   }, [allMatches]);
 
-  const currentMatches = useMemo(() => {
-    if (!matchesData) return [];
-    // Server returns sorted by priority, kickoff time, then competition name
-    // Just convert to MockMatch format without re-sorting
-    return matchesData.map(apiMatchToMockMatch);
-  }, [matchesData]);
-
-  // Fetch all matches for the selected date (no competition filter) to populate the filter dropdown
-  const allMatchesForDateUrl = `/api/matches/day?date=${dateStr}&status=${statusParam}`;
-  const { data: allMatchesForDate } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-day-filter-options", dateStr, statusParam],
-    queryFn: async () => {
-      const res = await fetch(allMatchesForDateUrl);
-      if (!res.ok) throw new Error("Failed to load matches for filter");
-      return res.json();
-    },
-    staleTime: 30000,
-  });
-
-  const filterableMatches = useMemo(() => {
-    if (!allMatchesForDate) return [];
-    return allMatchesForDate.map(apiMatchToMockMatch);
-  }, [allMatchesForDate]);
-
   const competitionOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    // Use filterableMatches (all matches for this date/status) to populate the filter dropdown
-    filterableMatches.forEach((m) => {
-      // Use goalserveCompetitionId as unique key, fallback to competition display name as key
-      const compId = m.goalserveCompetitionId || m.rawCompetition || m.competition;
-      // Use rawCompetition if present, else use competition (display name)
-      const rawName = m.rawCompetition || m.competition;
-      if (compId && rawName) {
-        seen.set(compId, rawName);
+    const map = new Map<string, { id: string; label: string; rawName: string }>();
+    for (const m of baseMatches) {
+      const id = String(m.competitionId || m.goalserveCompetitionId || m.competition || "");
+      if (!id) continue;
+      const label = String(m.competition || "Unknown");
+      if (!map.has(id)) {
+        map.set(id, { id, label, rawName: label });
       }
-    });
-
-    // Priority tier map matching backend logic
-    const LEAGUE_PRIORITY: Record<string, number> = {
-      // Tier 0: UEFA competitions (1-3)
-      "uefa|champions league": 1, "uefa|europa league": 2, "uefa|conference league": 3,
-      // Tier 0: England (4-10)
-      "england|premier league": 4, "england|championship": 5, "england|league one": 6,
-      "england|league two": 7, "england|fa cup": 8, "england|efl cup": 9, "england|league cup": 9,
-      "england|community shield": 10,
-      // Tier 1: Big 5 Europe (200-299)
-      "spain|la liga": 200, "spain|primera": 200, "germany|bundesliga": 210,
-      "italy|serie a": 220, "france|ligue 1": 230,
-      // Tier 1: Second divisions
-      "spain|segunda": 240, "germany|2. bundesliga": 250, "italy|serie b": 260, "france|ligue 2": 270,
-      // Tier 2: Scotland (300-399)
-      "scotland|premiership": 300, "scotland|championship": 310, "scotland|league one": 320, "scotland|league two": 330,
-    };
-
-    const YOUTH_PATTERNS = /\b(u21|u23|u19|u18|u17|u16|youth|reserve|academy|friendly|premier league 2|premier league cup)\b/i;
-
-    function getCompetitionPriority(rawName: string): number {
-      const raw = rawName.toLowerCase();
-      
-      // Youth/reserve demoted
-      if (YOUTH_PATTERNS.test(raw)) return 9000;
-      
-      // Parse country and league
-      const match = raw.match(/^(.+?)\s*\(([^)]+)\)\s*\[/);
-      if (match) {
-        const leagueName = match[1].trim().toLowerCase();
-        const country = match[2].trim().toLowerCase();
-        
-        // Handle UEFA first
-        if (leagueName.startsWith("uefa ")) {
-          const leagueKey = `uefa|${leagueName.replace("uefa ", "")}`;
-          if (LEAGUE_PRIORITY[leagueKey]) return LEAGUE_PRIORITY[leagueKey];
-          return 50; // Other UEFA
-        }
-        
-        const leagueKey = `${country}|${leagueName}`;
-        if (LEAGUE_PRIORITY[leagueKey]) return LEAGUE_PRIORITY[leagueKey];
-        
-        // Ambiguous leagues with unknown country
-        if (country === "unknown") {
-          const ambiguous = ["championship", "premiership", "serie a", "ligue 1"];
-          if (ambiguous.includes(leagueName)) return 9000;
-        }
-      }
-      
-      return 1000; // Default priority
     }
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [baseMatches]);
 
-    // Build options with priority
-    const options = Array.from(seen.entries()).map(([id, rawName]) => ({
-      id,
-      displayName: getDisplayCompetitionName(rawName),
-      rawName,
-      priority: getCompetitionPriority(rawName),
-    }));
+  const filteredByComp = useMemo(() => {
+    if (!selectedCompetitionId) return sourceMatches;
+    return sourceMatches.filter(
+      (m) => String(m.competitionId || m.goalserveCompetitionId || "") === String(selectedCompetitionId),
+    );
+  }, [sourceMatches, selectedCompetitionId]);
 
-    // Sort by priority, then alphabetically (no country disambiguation text)
-    return options
-      .sort((a, b) => {
-        if (a.priority !== b.priority) return a.priority - b.priority;
-        return a.displayName.localeCompare(b.displayName);
-      });
-  }, [filterableMatches]);
+  const statusFiltered = useMemo(() => {
+    if (liveEnabled) return filteredByComp;
+    if (statusParam === "scheduled") return filteredByComp.filter((m) => isScheduledStatus(m.status));
+    if (statusParam === "fulltime") return filteredByComp.filter((m) => isFinishedStatus(m.status));
+    return filteredByComp;
+  }, [filteredByComp, statusParam, liveEnabled]);
+
+  const matchesToRender = useMemo(() => {
+    if (sortMode !== "kickoff") return statusFiltered;
+    return [...statusFiltered].sort((a, b) => {
+      const ta = new Date(a.kickoffTime).getTime();
+      const tb = new Date(b.kickoffTime).getTime();
+      return ta - tb;
+    });
+  }, [statusFiltered, sortMode]);
+
+  const currentMatches = useMemo(() => {
+    return matchesToRender.map(apiMatchToMockMatch);
+  }, [matchesToRender]);
 
   const handlePrevDay = () => setSelectedDate(subDays(selectedDate, 1));
   const handleNextDay = () => setSelectedDate(addDays(selectedDate, 1));
@@ -390,7 +337,7 @@ export default function MatchesPage() {
               <SelectItem value="all">All competitions</SelectItem>
               {competitionOptions.map((opt) => (
                 <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
+                  <CompetitionOption competition={opt.rawName} displayName={opt.label} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -470,7 +417,7 @@ export default function MatchesPage() {
               <SelectItem value="all">All competitions</SelectItem>
               {competitionOptions.map((opt) => (
                 <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} displayName={opt.displayName} />
+                  <CompetitionOption competition={opt.rawName} displayName={opt.label} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -496,6 +443,11 @@ export default function MatchesPage() {
             <span className="ml-3 text-muted-foreground">
               Loading matches...
             </span>
+          </div>
+        ) : isError ? (
+          <div className="text-center py-16" data-testid="error-matches">
+            <h3 className="text-lg font-medium mb-2">Unable to load matches</h3>
+            <p className="text-sm text-muted-foreground">Please try again in a moment.</p>
           </div>
         ) : currentMatches.length === 0 ? (
           <div className="text-center py-16" data-testid="empty-matches">
