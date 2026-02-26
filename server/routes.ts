@@ -7114,6 +7114,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     try {
       const result = await runPaMediaIngest();
       lastPaRunnerRunAt = new Date().toISOString();
+      if (!result.ok) {
+        lastPaRunnerError = result.error ?? "PA Media ingest failed";
+        lastPaRunnerSummary = result as Record<string, unknown>;
+        markPamediaRunFailed(lastPaRunnerError);
+        console.warn("[pamedia-runner] Failed:", lastPaRunnerError);
+        return;
+      }
+
       lastPaRunnerSummary = result as Record<string, unknown>;
       lastPaRunnerError = null;
       markPamediaRunCompleted({
@@ -7125,8 +7133,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         inlineSkippedDueToCap: result.inlineSkippedDueToCap ?? null,
         timeMs: result.timeMs ?? null,
         stoppedReason: result.stoppedReason ?? null,
-        watermark_ts: result.watermarkTs ?? null,
-        watermark_id: result.watermarkId ?? null,
+        watermarkTs: result.watermarkTs ?? null,
+        watermarkId: result.watermarkId ?? null,
       });
       console.log("[pamedia-runner] Completed", result.processed, "processed", result.inlineRewritten ?? 0, "inline rewritten");
       if (!PAMEDIA_BASIC_MODE) {

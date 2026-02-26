@@ -1,4 +1,5 @@
-export interface PamediaLastRunStatus {
+export interface PamediaRunStatus {
+  ok: boolean;
   startedAt: string | null;
   finishedAt: string | null;
   durationMs: number | null;
@@ -17,34 +18,51 @@ export interface PamediaLastRunStatus {
 export interface PamediaStatus {
   enabled: boolean;
   intervalMs: number;
-  lastRun: PamediaLastRunStatus;
+  now: string;
+  isStale: boolean;
+  staleThresholdMs: number;
+  lastSuccessAgeMs: number | null;
+  lastRun: PamediaRunStatus | null;
+  lastSuccess: PamediaRunStatus | null;
 }
 
-const status: PamediaStatus = {
+interface PamediaStatusStore {
+  enabled: boolean;
+  intervalMs: number;
+  lastRun: PamediaRunStatus | null;
+  lastSuccess: PamediaRunStatus | null;
+}
+
+const status: PamediaStatusStore = {
   enabled: false,
   intervalMs: 900000,
-  lastRun: {
-    startedAt: null,
-    finishedAt: null,
-    durationMs: null,
-    fetched: null,
-    processed: null,
-    skipped: null,
-    imagesUploaded: null,
-    inlineRewritten: null,
-    inlineSkippedDueToCap: null,
-    stoppedReason: null,
-    watermarkTs: null,
-    watermarkId: null,
-    error: null,
-  },
+  lastRun: null,
+  lastSuccess: null,
 };
 
+function cloneRun(run: PamediaRunStatus | null): PamediaRunStatus | null {
+  return run ? { ...run } : null;
+}
+
 export function getPamediaStatus(): PamediaStatus {
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  const staleThresholdMs = Math.max(5 * 60_000, status.intervalMs * 3);
+  const successFinishedAt = status.lastSuccess?.finishedAt
+    ? new Date(status.lastSuccess.finishedAt).getTime()
+    : null;
+  const lastSuccessAgeMs = successFinishedAt == null ? null : Math.max(0, nowMs - successFinishedAt);
+  const isStale = status.enabled && (lastSuccessAgeMs == null || lastSuccessAgeMs > staleThresholdMs);
+
   return {
     enabled: status.enabled,
     intervalMs: status.intervalMs,
-    lastRun: { ...status.lastRun },
+    now,
+    isStale,
+    staleThresholdMs,
+    lastSuccessAgeMs,
+    lastRun: cloneRun(status.lastRun),
+    lastSuccess: cloneRun(status.lastSuccess),
   };
 }
 
@@ -59,8 +77,22 @@ export function markPamediaEnabled(intervalMs: number): void {
 }
 
 export function markPamediaRunStarted(): void {
-  status.lastRun.startedAt = new Date().toISOString();
-  status.lastRun.error = null;
+  status.lastRun = {
+    ok: false,
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    durationMs: null,
+    fetched: null,
+    processed: null,
+    skipped: null,
+    imagesUploaded: null,
+    inlineRewritten: null,
+    inlineSkippedDueToCap: null,
+    stoppedReason: null,
+    watermarkTs: null,
+    watermarkId: null,
+    error: null,
+  };
 }
 
 export function markPamediaRunCompleted(payload: {
@@ -72,25 +104,53 @@ export function markPamediaRunCompleted(payload: {
   inlineSkippedDueToCap?: number | null;
   timeMs?: number | null;
   stoppedReason?: string | null;
-  watermark_ts?: string | null;
-  watermark_id?: string | null;
+  watermarkTs?: string | null;
+  watermarkId?: string | null;
 }): void {
-  status.lastRun.finishedAt = new Date().toISOString();
-  status.lastRun.durationMs = payload.timeMs ?? null;
-  status.lastRun.fetched = payload.fetched ?? null;
-  status.lastRun.processed = payload.processed ?? null;
-  status.lastRun.skipped = payload.skipped ?? null;
-  status.lastRun.imagesUploaded = payload.imagesUploaded ?? null;
-  status.lastRun.inlineRewritten = payload.inlineRewritten ?? null;
-  status.lastRun.inlineSkippedDueToCap = payload.inlineSkippedDueToCap ?? null;
-  status.lastRun.stoppedReason = payload.stoppedReason ?? null;
-  status.lastRun.watermarkTs = payload.watermark_ts ?? null;
-  status.lastRun.watermarkId = payload.watermark_id ?? null;
-  status.lastRun.error = null;
+  const finishedAt = new Date().toISOString();
+  const startedAt = status.lastRun?.startedAt ?? finishedAt;
+  const durationMs =
+    payload.timeMs ??
+    Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime());
+  const run: PamediaRunStatus = {
+    ok: true,
+    startedAt,
+    finishedAt,
+    durationMs,
+    fetched: payload.fetched ?? null,
+    processed: payload.processed ?? null,
+    skipped: payload.skipped ?? null,
+    imagesUploaded: payload.imagesUploaded ?? null,
+    inlineRewritten: payload.inlineRewritten ?? null,
+    inlineSkippedDueToCap: payload.inlineSkippedDueToCap ?? null,
+    stoppedReason: payload.stoppedReason ?? null,
+    watermarkTs: payload.watermarkTs ?? null,
+    watermarkId: payload.watermarkId ?? null,
+    error: null,
+  };
+  status.lastRun = run;
+  status.lastSuccess = { ...run };
 }
 
 export function markPamediaRunFailed(err: unknown): void {
-  status.lastRun.finishedAt = new Date().toISOString();
-  status.lastRun.stoppedReason = "error";
-  status.lastRun.error = err instanceof Error ? err.message : String(err);
+  const finishedAt = new Date().toISOString();
+  const startedAt = status.lastRun?.startedAt ?? finishedAt;
+  const error = err instanceof Error ? err.message : String(err);
+  const durationMs = Math.max(0, new Date(finishedAt).getTime() - new Date(startedAt).getTime());
+  status.lastRun = {
+    ok: false,
+    startedAt,
+    finishedAt,
+    durationMs,
+    fetched: status.lastRun?.fetched ?? null,
+    processed: status.lastRun?.processed ?? null,
+    skipped: status.lastRun?.skipped ?? null,
+    imagesUploaded: status.lastRun?.imagesUploaded ?? null,
+    inlineRewritten: status.lastRun?.inlineRewritten ?? null,
+    inlineSkippedDueToCap: status.lastRun?.inlineSkippedDueToCap ?? null,
+    stoppedReason: "error",
+    watermarkTs: status.lastRun?.watermarkTs ?? null,
+    watermarkId: status.lastRun?.watermarkId ?? null,
+    error,
+  };
 }
