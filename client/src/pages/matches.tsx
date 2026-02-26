@@ -162,40 +162,22 @@ export default function MatchesPage() {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
   const statusParam = activeTab === "all" ? "all" : activeTab === "live" ? "live" : activeTab === "scheduled" ? "scheduled" : "fulltime";
-  const liveEnabled = statusParam === "live";
-  const baseDayUrl = `/api/matches/day?date=${dateStr}&status=all&sort=competition`;
+  const dayUrl = `/api/matches/day?date=${dateStr}&status=all&sort=${sortMode}${selectedCompetitionId ? `&competitionId=${selectedCompetitionId}` : ""}`;
 
-  const { data: baseMatches = [], isLoading: baseLoading, isError: baseError } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-day-base", dateStr],
+  const { data: dayMatches = [], isLoading, isError } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-day", dateStr, sortMode, selectedCompetitionId],
     queryFn: async () => {
-      const res = await fetch(baseDayUrl);
+      const res = await fetch(dayUrl);
       if (!res.ok) throw new Error("Failed to fetch matches day");
       return res.json();
     },
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
-
-  const { data: liveMatches = [], isLoading: liveLoading, isError: liveError } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-live"],
-    queryFn: async () => {
-      const res = await fetch("/api/matches/live");
-      if (!res.ok) throw new Error("Failed to fetch live matches");
-      return res.json();
-    },
-    enabled: liveEnabled,
-    refetchInterval: 30_000,
     staleTime: 0,
     refetchOnWindowFocus: true,
   });
 
-  const sourceMatches = liveEnabled ? liveMatches : baseMatches;
-  const isLoading = liveEnabled ? liveLoading : baseLoading;
-  const isError = liveEnabled ? liveError : baseError;
-
   const allMatches = useMemo(() => {
-    return baseMatches.map(apiMatchToMockMatch);
-  }, [baseMatches]);
+    return dayMatches.map(apiMatchToMockMatch);
+  }, [dayMatches]);
 
   const counts = useMemo(() => {
     const live = allMatches.filter(m => m.status === "live").length;
@@ -211,7 +193,7 @@ export default function MatchesPage() {
 
   const competitionOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string; rawName: string }>();
-    for (const m of baseMatches) {
+    for (const m of dayMatches) {
       const id = String(m.competitionId || m.goalserveCompetitionId || m.competition || "");
       if (!id) continue;
       const label = String(m.competition || "Unknown");
@@ -220,30 +202,18 @@ export default function MatchesPage() {
       }
     }
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [baseMatches]);
-
-  const filteredByComp = useMemo(() => {
-    if (!selectedCompetitionId) return sourceMatches;
-    return sourceMatches.filter(
-      (m) => String(m.competitionId || m.goalserveCompetitionId || "") === String(selectedCompetitionId),
-    );
-  }, [sourceMatches, selectedCompetitionId]);
+  }, [dayMatches]);
 
   const statusFiltered = useMemo(() => {
-    if (liveEnabled) return filteredByComp;
-    if (statusParam === "scheduled") return filteredByComp.filter((m) => isScheduledStatus(m.status));
-    if (statusParam === "fulltime") return filteredByComp.filter((m) => isFinishedStatus(m.status));
-    return filteredByComp;
-  }, [filteredByComp, statusParam, liveEnabled]);
+    if (statusParam === "live") return dayMatches.filter((m) => isLiveStatus(m.status));
+    if (statusParam === "scheduled") return dayMatches.filter((m) => isScheduledStatus(m.status));
+    if (statusParam === "fulltime") return dayMatches.filter((m) => isFinishedStatus(m.status));
+    return dayMatches;
+  }, [dayMatches, statusParam]);
 
   const matchesToRender = useMemo(() => {
-    if (sortMode !== "kickoff") return statusFiltered;
-    return [...statusFiltered].sort((a, b) => {
-      const ta = new Date(a.kickoffTime).getTime();
-      const tb = new Date(b.kickoffTime).getTime();
-      return ta - tb;
-    });
-  }, [statusFiltered, sortMode]);
+    return statusFiltered;
+  }, [statusFiltered]);
 
   const currentMatches = useMemo(() => {
     return matchesToRender.map(apiMatchToMockMatch);
