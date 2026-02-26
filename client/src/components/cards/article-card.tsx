@@ -1,7 +1,8 @@
 import { Link } from "wouter";
 import { Clock, Eye } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { EntityPill, type EntityData } from "@/components/entity-pill";
+import { type EntityData } from "@/components/entity-pill";
+import { PillsRow } from "@/components/pills-row";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
@@ -57,9 +58,12 @@ function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
   }
   
   if (pills.length === 0 && article.tags?.length) {
-    return buildTagFallbackPills(article.tags, 3);
+    return buildTagFallbackPills(article.tags, 3).map((pill) => ({
+      ...pill,
+      href: undefined, // display-only MVP: no pill navigation yet
+    }));
   }
-  return pills.slice(0, 3);
+  return pills.slice(0, 3).map((pill) => ({ ...pill, href: undefined }));
 }
 
 export function ArticleCard({ article, featured = false, teamBadge, teamColor, teams, showPills = true }: ArticleCardProps) {
@@ -88,17 +92,12 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 p-6">
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
-                {displayPills.map((pill) => (
-                  <EntityPill
-                    key={`${pill.type}-${pill.slug}`}
-                    entity={pill}
-                    size="small"
-                    className="bg-white/20 border-white/30 text-white [&_span]:text-white"
-                    data-testid={`pill-${pill.type}-${pill.slug}`}
-                  />
-                ))}
-              </div>
+              <PillsRow
+                pills={displayPills}
+                max={3}
+                className="mb-3"
+                pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
+              />
               <h3 className="text-2xl md:text-3xl font-bold text-white mb-2 line-clamp-2">
                 {article.title}
               </h3>
@@ -155,16 +154,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
           )}
         </div>
         <CardContent className="p-4">
-          <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-            {displayPills.map((pill) => (
-              <EntityPill
-                key={`${pill.type}-${pill.slug}`}
-                entity={pill}
-                size="small"
-                data-testid={`pill-${pill.type}-${pill.slug}`}
-              />
-            ))}
-          </div>
+          <PillsRow pills={displayPills} max={3} className="mb-2" />
           <h3 className="font-semibold text-lg line-clamp-2 mb-2 group-hover:text-primary transition-colors">
             {article.title}
           </h3>

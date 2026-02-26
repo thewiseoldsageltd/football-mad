@@ -671,7 +671,7 @@ export default function NewsPage() {
             <TabsContent key={comp.value} value={comp.value}>
               {featuredArticle && !isLoading && comp.value === filters.comp && (
                 <section className="mb-8">
-                  <ArticleCard article={featuredArticle} featured teams={teams} showPills={false} />
+                  <ArticleCard article={featuredArticle} featured teams={teams} />
                 </section>
               )}
 
@@ -706,7 +706,7 @@ export default function NewsPage() {
                 <>
                   <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {regularArticles.map((article) => (
-                      <ArticleCard key={article.id} article={article} teams={teams} showPills={false} />
+                      <ArticleCard key={article.id} article={article} teams={teams} />
                     ))}
                   </div>
                   {hasMore && (
