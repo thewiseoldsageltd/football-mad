@@ -55,6 +55,9 @@ import { enrichPendingArticles } from "./jobs/enrich-articles";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE !== "false"; // default true
+let liveMatchesCache: any = null;
+let liveMatchesLastFetch = 0;
+const LIVE_CACHE_TTL_MS = 30000; // 30 seconds
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -976,6 +979,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // GET /api/matches/live - currently live matches (case-insensitive status matching)
   app.get("/api/matches/live", async (req, res) => {
     try {
+      const now = Date.now();
+
+      // Return cached response if within 30s
+      if (liveMatchesCache && (now - liveMatchesLastFetch < LIVE_CACHE_TTL_MS)) {
+        console.log("[live-cache] hit");
+        return res.json(liveMatchesCache);
+      }
+
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
       const limit = clamp(req.query.limit, 200, 1, 500);
@@ -1008,6 +1019,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const teamMap = await fetchTeamMap(teamIds);
       const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
 
+      // Store in cache
+      liveMatchesCache = formatted;
+      liveMatchesLastFetch = now;
+      console.log("[live-cache] refreshed");
       res.json(formatted);
     } catch (error) {
       console.error("Error fetching live matches:", error);
