@@ -249,10 +249,13 @@ export async function runPaMediaIngest(): Promise<{
   itemsFetched?: number;
   imagesUploaded?: number;
   inlineRewritten?: number;
+  inlineSkippedDueToCap?: number;
   skipped?: number;
   skippedReason?: string;
   timeMs?: number;
   stoppedReason?: string | null;
+  watermarkTs?: string | null;
+  watermarkId?: string | null;
 }> {
   const run = await startJobRun("ingest_pamedia", {
     limit: PAMEDIA_INGEST_LIMIT,
@@ -605,9 +608,12 @@ export async function runPaMediaIngest(): Promise<{
     itemsFetched,
     imagesUploaded,
     inlineRewritten,
+    inlineSkippedDueToCap,
     skipped,
     timeMs,
     stoppedReason,
+    watermarkTs: maxProcessedTs?.toISOString() ?? null,
+    watermarkId: maxProcessedId ?? null,
   };
   } catch (err) {
     const timeMs = Date.now() - start;

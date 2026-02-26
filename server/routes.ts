@@ -52,6 +52,14 @@ import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
+import {
+  getPamediaStatus,
+  markPamediaEnabled,
+  markPamediaRunCompleted,
+  markPamediaRunFailed,
+  markPamediaRunStarted,
+  setPamediaRunnerConfig,
+} from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE !== "false"; // default true
@@ -2007,6 +2015,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       lastSummary: lastPaRunnerSummary,
       lastError: lastPaRunnerError,
     });
+  });
+
+  app.get("/api/ingest/pamedia/status", (_req, res) => {
+    res.json(getPamediaStatus());
   });
 
   app.post("/api/jobs/pamedia/run", (req, res) => {
@@ -7086,6 +7098,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== PA MEDIA INGEST RUNNER (scheduled) ==========
   const PAMEDIA_INGEST_RUNNER_ENABLED = process.env.PAMEDIA_INGEST_RUNNER_ENABLED === "true";
   const PAMEDIA_INGEST_RUNNER_INTERVAL_MS = Math.max(60000, parseInt(process.env.PAMEDIA_INGEST_RUNNER_INTERVAL_MS ?? "900000", 10) || 900000);
+  setPamediaRunnerConfig(PAMEDIA_INGEST_RUNNER_ENABLED, PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
 
   const scheduledPaMediaIngest = async () => {
     if (!PAMEDIA_INGEST_RUNNER_ENABLED) return;
@@ -7097,11 +7110,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     paRunnerRunning = true;
     console.log("[pamedia-runner] Started");
+    markPamediaRunStarted();
     try {
       const result = await runPaMediaIngest();
       lastPaRunnerRunAt = new Date().toISOString();
       lastPaRunnerSummary = result as Record<string, unknown>;
       lastPaRunnerError = null;
+      markPamediaRunCompleted({
+        fetched: result.itemsFetched ?? null,
+        processed: result.processed ?? null,
+        skipped: result.skipped ?? null,
+        imagesUploaded: result.imagesUploaded ?? null,
+        inlineRewritten: result.inlineRewritten ?? null,
+        inlineSkippedDueToCap: result.inlineSkippedDueToCap ?? null,
+        timeMs: result.timeMs ?? null,
+        stoppedReason: result.stoppedReason ?? null,
+        watermark_ts: result.watermarkTs ?? null,
+        watermark_id: result.watermarkId ?? null,
+      });
       console.log("[pamedia-runner] Completed", result.processed, "processed", result.inlineRewritten ?? 0, "inline rewritten");
       if (!PAMEDIA_BASIC_MODE) {
         setImmediate(() =>
@@ -7115,6 +7141,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err: unknown) {
       lastPaRunnerRunAt = new Date().toISOString();
       lastPaRunnerError = err instanceof Error ? err.message : String(err);
+      markPamediaRunFailed(err);
       console.warn("[pamedia-runner] Failed:", lastPaRunnerError);
     } finally {
       paRunnerRunning = false;
@@ -7122,6 +7149,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
 
   if (PAMEDIA_INGEST_RUNNER_ENABLED) {
+    markPamediaEnabled(PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
     setInterval(scheduledPaMediaIngest, PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
     console.log(`[pamedia-runner] Enabled interval=${PAMEDIA_INGEST_RUNNER_INTERVAL_MS}ms`);
   }
