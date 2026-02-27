@@ -10,14 +10,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
+import { PillsRow } from "@/components/pills-row";
 import { NewsletterForm } from "@/components/newsletter-form";
-import { EntityPill, type EntityData } from "@/components/entity-pill";
 import { ArticleMetaBar } from "@/components/article-meta-bar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle } from "@/lib/urls";
-import { buildTagFallbackPills } from "@/lib/entity-utils";
+import { buildPillsForFooter, buildPillsForHeader, type PillSourceArticle } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
 interface EntityWithProvenance {
@@ -36,38 +36,6 @@ interface ArticleWithEntities extends Article {
 }
 
 const SHOW_PILLS = true;
-
-function EntityGroup({
-  title,
-  pills,
-  testIdPrefix,
-}: {
-  title: string;
-  pills: EntityData[];
-  testIdPrefix: string;
-}) {
-  if (pills.length === 0) return null;
-  
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-2">{title}</p>
-      <div 
-        className="flex flex-wrap gap-2"
-        data-testid={`entity-group-${testIdPrefix}`}
-      >
-        {pills.map((pill) => (
-          <EntityPill
-            key={pill.slug}
-            entity={pill}
-            size="small"
-            labelMode="full"
-            data-testid={`pill-bottom-${testIdPrefix}-${pill.slug}`}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // Normalize text for comparison (lowercase, strip HTML, collapse whitespace)
 function normalizeText(text: string): string {
@@ -613,12 +581,25 @@ export default function ArticlePage() {
       .slice(0, 6);
   }, [allArticles]);
 
-  // Basic mode: pills from article.tags only (no DB dictionary lookups)
-  const { teamPills, competitionPills, playerPills, managerPills, headerPills, articleTeams } = useMemo(() => {
-    const empty = { teamPills: [] as EntityData[], competitionPills: [] as EntityData[], playerPills: [] as EntityData[], managerPills: [] as EntityData[], headerPills: [] as EntityData[], articleTeams: [] as Team[] };
+  // Display-only pills in hierarchy order: competition -> teams -> players -> managers
+  const { headerPills, footerPills, articleTeams } = useMemo(() => {
+    const empty = { headerPills: [], footerPills: [], articleTeams: [] as Team[] };
     if (!article) return empty;
-    const tagPills = buildTagFallbackPills(article.tags || [], 12);
-    return { ...empty, competitionPills: tagPills, headerPills: tagPills.slice(0, 3) };
+    const derivedTeams =
+      article.entityTeams?.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        shortName: t.shortName ?? null,
+        primaryColor: t.primaryColor ?? null,
+        logoUrl: t.logoUrl ?? null,
+      } as Team)) ?? [];
+
+    return {
+      headerPills: buildPillsForHeader(article as PillSourceArticle, derivedTeams),
+      footerPills: buildPillsForFooter(article as PillSourceArticle, derivedTeams),
+      articleTeams: derivedTeams,
+    };
   }, [article]);
 
   // Early returns AFTER all hooks
@@ -649,26 +630,8 @@ export default function ArticlePage() {
             </Link>
 
             <header className="mb-8">
-              {SHOW_PILLS && (teamPills.length > 0 || competitionPills.length > 0) && (
-                <div className="flex items-center gap-2 flex-wrap mb-4">
-                  {competitionPills[0] && (
-                    <EntityPill
-                      entity={competitionPills[0]}
-                      size="default"
-                      labelMode="responsive"
-                      data-testid="pill-competition"
-                    />
-                  )}
-                  {teamPills.slice(0, 2).map((pill) => (
-                    <EntityPill
-                      key={pill.slug}
-                      entity={pill}
-                      size="default"
-                      labelMode="responsive"
-                      data-testid={`pill-team-${pill.slug}`}
-                    />
-                  ))}
-                </div>
+              {SHOW_PILLS && headerPills.length > 0 && (
+                <PillsRow pills={headerPills} max={4} className="mb-4" />
               )}
 
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4">
@@ -718,31 +681,10 @@ export default function ArticlePage() {
               dangerouslySetInnerHTML={{ __html: article.content }}
             />
 
-            {SHOW_PILLS && (competitionPills.length > 0 || teamPills.length > 0 || playerPills.length > 0 || managerPills.length > 0) && (
+            {SHOW_PILLS && footerPills.length > 0 && (
               <section className="mb-8 py-6 border-t" data-testid="in-this-article-section">
                 <h3 className="text-sm font-semibold text-muted-foreground mb-4">In this article</h3>
-                <div className="space-y-4">
-                  <EntityGroup
-                    title="Competitions"
-                    pills={competitionPills}
-                    testIdPrefix="competition"
-                  />
-                  <EntityGroup
-                    title="Teams"
-                    pills={teamPills}
-                    testIdPrefix="team"
-                  />
-                  <EntityGroup
-                    title="Players"
-                    pills={playerPills}
-                    testIdPrefix="player"
-                  />
-                  <EntityGroup
-                    title="Managers"
-                    pills={managerPills}
-                    testIdPrefix="manager"
-                  />
-                </div>
+                <PillsRow pills={footerPills} max={footerPills.length} constrainHeight={false} />
               </section>
             )}
 

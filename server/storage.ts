@@ -75,6 +75,14 @@ export interface NewsUpdatesResponse {
   serverTime: string;
 }
 
+type EntityLite = { id: string; name: string; slug: string };
+type ArticleWithEntityArrays = {
+  entityCompetitions: EntityLite[];
+  entityTeams: EntityLite[];
+  entityPlayers: EntityLite[];
+  entityManagers: EntityLite[];
+};
+
 export interface IStorage {
   // Teams
   getTeams(): Promise<Team[]>;
@@ -455,6 +463,87 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  private async attachEntityArraysToArticles<T extends { id: string }>(
+    rows: T[],
+  ): Promise<Array<T & ArticleWithEntityArrays>> {
+    if (rows.length === 0) return [];
+
+    const articleIds = rows.map((r) => r.id);
+
+    const [competitionRows, teamRows, playerRows, managerRows] = await Promise.all([
+      db
+        .select({
+          articleId: articleCompetitions.articleId,
+          id: competitions.id,
+          name: competitions.name,
+          slug: competitions.slug,
+        })
+        .from(articleCompetitions)
+        .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
+        .where(inArray(articleCompetitions.articleId, articleIds)),
+      db
+        .select({
+          articleId: articleTeams.articleId,
+          id: teams.id,
+          name: teams.name,
+          slug: teams.slug,
+        })
+        .from(articleTeams)
+        .innerJoin(teams, eq(articleTeams.teamId, teams.id))
+        .where(inArray(articleTeams.articleId, articleIds)),
+      db
+        .select({
+          articleId: articlePlayers.articleId,
+          id: players.id,
+          name: players.name,
+          slug: players.slug,
+        })
+        .from(articlePlayers)
+        .innerJoin(players, eq(articlePlayers.playerId, players.id))
+        .where(inArray(articlePlayers.articleId, articleIds)),
+      db
+        .select({
+          articleId: articleManagers.articleId,
+          id: managers.id,
+          name: managers.name,
+          slug: managers.slug,
+        })
+        .from(articleManagers)
+        .innerJoin(managers, eq(articleManagers.managerId, managers.id))
+        .where(inArray(articleManagers.articleId, articleIds)),
+    ]);
+
+    const compMap = new Map<string, EntityLite[]>();
+    const teamMap = new Map<string, EntityLite[]>();
+    const playerMap = new Map<string, EntityLite[]>();
+    const managerMap = new Map<string, EntityLite[]>();
+
+    for (const row of competitionRows) {
+      if (!compMap.has(row.articleId)) compMap.set(row.articleId, []);
+      compMap.get(row.articleId)!.push({ id: row.id, name: row.name, slug: row.slug });
+    }
+    for (const row of teamRows) {
+      if (!teamMap.has(row.articleId)) teamMap.set(row.articleId, []);
+      teamMap.get(row.articleId)!.push({ id: row.id, name: row.name, slug: row.slug });
+    }
+    for (const row of playerRows) {
+      if (!playerMap.has(row.articleId)) playerMap.set(row.articleId, []);
+      playerMap.get(row.articleId)!.push({ id: row.id, name: row.name, slug: row.slug });
+    }
+    for (const row of managerRows) {
+      if (!managerMap.has(row.articleId)) managerMap.set(row.articleId, []);
+      managerMap.get(row.articleId)!.push({ id: row.id, name: row.name, slug: row.slug });
+    }
+
+    return rows.map((row) => ({
+      ...row,
+      entityCompetitions: compMap.get(row.id) ?? [],
+      entityTeams: teamMap.get(row.id) ?? [],
+      entityPlayers: playerMap.get(row.id) ?? [],
+      entityManagers: managerMap.get(row.id) ?? [],
+    }));
+  }
+
   async getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse> {
     const { comp, type, teamSlugs, sort, range, breaking, limit: limitParam, cursor } = params;
     const limit = limitParam ?? 15; // Default to 15 (5 rows of 3)
@@ -585,7 +674,8 @@ export class DatabaseStorage implements IStorage {
     
     const hasMore = result.length > limit;
     const rawSlice = hasMore ? result.slice(0, limit) : result;
-    const articlesToReturn = rawSlice.map((row) => this.normalizeArticleListRow(row));
+    const normalizedRows = rawSlice.map((row) => this.normalizeArticleListRow(row));
+    const articlesToReturn = await this.attachEntityArraysToArticles(normalizedRows);
     
     // Build nextCursor from last article's sortAt and id (stable cursor)
     let nextCursor: string | null = null;
@@ -598,7 +688,7 @@ export class DatabaseStorage implements IStorage {
     }
     
     return {
-      articles: articlesToReturn,
+      articles: articlesToReturn as any,
       appliedFilters: {
         comp,
         type,
@@ -695,8 +785,9 @@ export class DatabaseStorage implements IStorage {
       : (since ? { since, sinceId: sinceId || "" } : null);
     
     const normalizedRows = rows.map((row) => this.normalizeArticleListRow(row));
+    const withEntities = await this.attachEntityArraysToArticles(normalizedRows);
     return {
-      articles: normalizedRows,
+      articles: withEntities,
       nextCursor,
       serverTime,
     };

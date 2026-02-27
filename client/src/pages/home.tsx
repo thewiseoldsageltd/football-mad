@@ -352,8 +352,9 @@ export default function HomePage() {
     queryKey: ["/api/articles"],
   });
 
+  const todayYmd = new Date().toISOString().slice(0, 10);
   const { data: allMatches = [] } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
-    queryKey: ["/api/matches"],
+    queryKey: [`/api/matches/day?date=${todayYmd}&status=all&sort=competition&limit=200`],
   });
 
   const { data: followedTeamIds = [] } = useQuery<string[]>({

@@ -18,6 +18,7 @@ import {
 } from "../lib/r2";
 import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 import { runWithJobContext } from "../lib/job-context";
+import { syncArticleEntitiesFromTags } from "../lib/article-entity-sync";
 
 const PA_SOURCE = "pa_media";
 const PAMEDIA_JOB_STATE_KEY = "ingest_pamedia";
@@ -137,7 +138,10 @@ function getImageBaseName(
   return seoSlugFromText(articleHeadline) || "image";
 }
 
-/** Extract tags from subject array where profile === 'tag', use name. */
+/**
+ * Extract the full raw PA subject/tag name set.
+ * No filtering and no dedupe at ingest stage; client handles filtering.
+ */
 function getTagsFromSubject(raw: Record<string, unknown>): string[] {
   const subject = raw.subject ?? raw.subjects;
   if (!Array.isArray(subject)) return [];
@@ -145,11 +149,10 @@ function getTagsFromSubject(raw: Record<string, unknown>): string[] {
   for (const s of subject) {
     const obj = s && typeof s === "object" ? (s as Record<string, unknown>) : null;
     if (!obj) continue;
-    const profile = (obj.profile ?? obj.type) as string | undefined;
     const name = (obj.name ?? obj["@name"]) as string | undefined;
-    if (profile === "tag" && name && typeof name === "string") tags.push(name);
+    if (name && typeof name === "string") tags.push(name);
   }
-  return tags.slice(0, 20);
+  return tags;
 }
 
 /** Fetch with timeout; records to job_http_calls with provider pa_media. */
@@ -495,6 +498,7 @@ export async function runPaMediaIngest(): Promise<{
       const slug = uniqueSlug(item.headline, item.id);
       const publishedAt = item.issued ? new Date(item.issued) : new Date();
       const updatedAt = item.versionCreated ? new Date(item.versionCreated) : publishedAt;
+      let articleIdForMappings: string | null = existingRow?.id ?? null;
 
       if (existingRow) {
         articlesUpdated++;
@@ -524,7 +528,7 @@ export async function runPaMediaIngest(): Promise<{
           .limit(1);
         const finalSlug = slugTaken.length > 0 ? `${slug}-${shortStableHash(item.id + Date.now())}` : slug;
 
-        await db.insert(articles).values({
+        const inserted = await db.insert(articles).values({
           title: item.headline,
           slug: finalSlug,
           content,
@@ -540,8 +544,17 @@ export async function runPaMediaIngest(): Promise<{
           sortAt: updatedAt,
           entityEnrichStatus: "pending",
           tags: item.tags.length > 0 ? item.tags : undefined,
-        });
+        }).returning({ id: articles.id });
+        articleIdForMappings = inserted[0]?.id ?? null;
       }
+
+      if (articleIdForMappings) {
+        const syncStats = await syncArticleEntitiesFromTags(articleIdForMappings, item.tags || []);
+        console.log(
+          `[ingest-pamedia] entity-sync articleId=${articleIdForMappings} tags=${syncStats.tagsPassed} resolved=${syncStats.resolved} inserted competition=${syncStats.insertedCompetitions} team=${syncStats.insertedTeams} player=${syncStats.insertedPlayers} manager=${syncStats.insertedManagers}`
+        );
+      }
+
       processed++;
       const ts = itemTs(item);
       if (ts && (!maxProcessedTs || ts.getTime() > maxProcessedTs.getTime() || (ts.getTime() === maxProcessedTs.getTime() && item.id > (maxProcessedId ?? "")))) {

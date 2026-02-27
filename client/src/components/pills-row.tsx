@@ -7,6 +7,7 @@ interface PillsRowProps {
   className?: string;
   pillClassName?: string;
   testIdPrefix?: string;
+  constrainHeight?: boolean;
 }
 
 /**
@@ -19,12 +20,13 @@ export function PillsRow({
   className,
   pillClassName,
   testIdPrefix = "pill",
+  constrainHeight = true,
 }: PillsRowProps) {
   const display = pills.slice(0, max);
   if (display.length === 0) return null;
 
   return (
-    <div className={cn("flex flex-wrap gap-1.5 max-h-12 overflow-hidden", className)}>
+    <div className={cn("flex flex-wrap items-start content-start gap-1.5", constrainHeight && "max-h-12 overflow-hidden", className)}>
       {display.map((pill) => (
         <EntityPill
           key={`${pill.type}-${pill.slug}`}

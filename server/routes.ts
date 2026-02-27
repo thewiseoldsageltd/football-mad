@@ -51,6 +51,7 @@ import { backfillStandings } from "./jobs/backfill-standings";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
+import { runBackfillPaMediaEntities } from "./jobs/backfill-pamedia-entities";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
 import {
   getPamediaStatus,
@@ -62,7 +63,7 @@ import {
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 
-const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE !== "false"; // default true
+const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 let liveMatchesCache: any = null;
 let liveMatchesLastFetch = 0;
 const LIVE_CACHE_TTL_MS = 30000; // 30 seconds
@@ -2000,6 +2001,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         updated: 0,
         imagesUploaded: 0,
         skipped: 0,
+        error: (err as Error).message,
+      });
+    }
+  });
+
+  app.post("/api/jobs/pamedia/backfill-entities", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
+    try {
+      const daysParam = parseInt(req.query.days as string, 10);
+      const days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 90) : 7;
+      const result = await runBackfillPaMediaEntities(days);
+      if (result.ok) {
+        res.status(200).json(result);
+      } else {
+        res.status(500).json(result);
+      }
+    } catch (err) {
+      console.error("[backfill-pamedia-entities] Job error:", err);
+      res.status(500).json({
+        ok: false,
+        processed: 0,
+        updated: 0,
+        insertedCompetitions: 0,
+        insertedTeams: 0,
+        insertedPlayers: 0,
+        insertedManagers: 0,
         error: (err as Error).message,
       });
     }

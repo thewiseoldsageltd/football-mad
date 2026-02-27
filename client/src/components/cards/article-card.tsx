@@ -6,7 +6,7 @@ import { PillsRow } from "@/components/pills-row";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import { buildEntitySets, selectTopPills, getCompShortCode, getTeamShortCode, buildTagFallbackPills } from "@/lib/entity-utils";
+import { buildPillsForCard, type PillSourceArticle } from "@/lib/entity-utils";
 
 interface ArticleCardProps {
   article: Article;
@@ -18,57 +18,29 @@ interface ArticleCardProps {
 }
 
 function extractEntityPills(article: Article, teams?: Team[]): EntityData[] {
-  const pills: EntityData[] = [];
-  
-  const entitySets = buildEntitySets(article, teams || []);
-  const topPills = selectTopPills(entitySets);
-  
-  if (topPills.competitionPill) {
-    const comp = topPills.competitionPill;
-    pills.push({
-      type: "competition",
-      name: comp.name,
-      slug: comp.slug,
-      iconUrl: `/crests/comps/${comp.slug}.svg`,
-      fallbackText: comp.name.slice(0, 2),
-      shortLabel: getCompShortCode(comp.name),
-    });
-  }
-  
-  for (const team of topPills.teamPills) {
-    pills.push({
-      type: "team",
-      name: team.shortName || team.name,
-      slug: team.slug,
-      iconUrl: `/crests/teams/${team.slug}.svg`,
-      fallbackText: (team.shortName || team.name).slice(0, 2),
-      color: team.primaryColor,
-      shortLabel: getTeamShortCode({ name: team.name, shortName: team.shortName }),
-    });
-  }
-  
-  if (topPills.optionalThirdPill) {
-    const entity = topPills.optionalThirdPill;
-    pills.push({
-      type: entity.entityType === "manager" ? "manager" : "player",
-      name: entity.name,
-      slug: entity.slug,
-      fallbackText: entity.name.slice(0, 2).toUpperCase(),
-    });
-  }
-  
-  if (pills.length === 0 && article.tags?.length) {
-    return buildTagFallbackPills(article.tags, 3).map((pill) => ({
-      ...pill,
-      href: undefined, // display-only MVP: no pill navigation yet
-    }));
-  }
-  return pills.slice(0, 3).map((pill) => ({ ...pill, href: undefined }));
+  return buildPillsForCard(article as PillSourceArticle, teams || []);
+}
+
+function getCardExcerpt(article: Article): string | null {
+  const anyArticle = article as unknown as {
+    excerpt?: string | null;
+    summary?: string | null;
+    description?: string | null;
+    snippet?: string | null;
+  };
+  return (
+    anyArticle.excerpt?.trim() ||
+    anyArticle.summary?.trim() ||
+    anyArticle.description?.trim() ||
+    anyArticle.snippet?.trim() ||
+    null
+  );
 }
 
 export function ArticleCard({ article, featured = false, teamBadge, teamColor, teams, showPills = true }: ArticleCardProps) {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
+  const cardExcerpt = getCardExcerpt(article);
   
   const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;
   
@@ -95,15 +67,15 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
               <PillsRow
                 pills={displayPills}
                 max={3}
-                className="mb-3"
+                className="mb-2"
                 pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
               />
-              <h3 className="text-2xl md:text-3xl font-bold text-white mb-2 line-clamp-2">
+              <h3 className="text-2xl md:text-3xl font-bold text-white mt-2 mb-2 line-clamp-2">
                 {article.title}
               </h3>
-              {article.excerpt && (
+              {cardExcerpt && (
                 <p className="text-white/80 text-sm md:text-base line-clamp-2 mb-3">
-                  {article.excerpt}
+                  {cardExcerpt}
                 </p>
               )}
               <div className="flex items-center gap-4 text-white/60 text-sm">
@@ -155,12 +127,12 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
         </div>
         <CardContent className="p-4">
           <PillsRow pills={displayPills} max={3} className="mb-2" />
-          <h3 className="font-semibold text-lg line-clamp-2 mb-2 group-hover:text-primary transition-colors">
+          <h3 className="font-semibold text-lg line-clamp-2 mt-2 mb-2 group-hover:text-primary transition-colors">
             {article.title}
           </h3>
-          {article.excerpt && (
+          {cardExcerpt && (
             <p className="text-muted-foreground text-sm line-clamp-2 mb-3">
-              {article.excerpt}
+              {cardExcerpt}
             </p>
           )}
           <div className="flex items-center gap-3 text-muted-foreground text-xs">

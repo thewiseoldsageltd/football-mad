@@ -1,0 +1,41 @@
+{
+  "competitions": [
+    { "slug": "premier-league", "aliases": ["premier league", "epl", "english premier league"] },
+    { "slug": "championship", "aliases": ["championship", "efl championship"] },
+    { "slug": "league-one", "aliases": ["league one", "efl league one"] },
+    { "slug": "league-two", "aliases": ["league two", "efl league two"] },
+    { "slug": "fa-cup", "aliases": ["fa cup", "the fa cup"] },
+    { "slug": "efl-cup", "aliases": ["efl cup", "carabao cup", "league cup"] }
+  ],
+  "teams": [
+    { "slug": "arsenal", "aliases": ["arsenal", "gunners"] },
+    { "slug": "aston-villa", "aliases": ["aston villa", "villa"] },
+    { "slug": "bournemouth", "aliases": ["bournemouth", "afc bournemouth"] },
+    { "slug": "brentford", "aliases": ["brentford"] },
+    { "slug": "brighton-and-hove-albion", "aliases": ["brighton", "brighton and hove albion"] },
+    { "slug": "chelsea", "aliases": ["chelsea"] },
+    { "slug": "crystal-palace", "aliases": ["crystal palace", "palace"] },
+    { "slug": "everton", "aliases": ["everton"] },
+    { "slug": "fulham", "aliases": ["fulham"] },
+    { "slug": "ipswich-town", "aliases": ["ipswich", "ipswich town"] },
+    { "slug": "leicester-city", "aliases": ["leicester", "leicester city"] },
+    { "slug": "liverpool", "aliases": ["liverpool", "lfc"] },
+    { "slug": "manchester-city", "aliases": ["man city", "manchester city"] },
+    { "slug": "manchester-utd", "aliases": ["man utd", "man united", "manchester united", "manchester utd"] },
+    { "slug": "newcastle-utd", "aliases": ["newcastle", "newcastle united", "newcastle utd"] },
+    { "slug": "nottingham-forest", "aliases": ["nottingham forest", "forest"] },
+    { "slug": "southampton", "aliases": ["southampton", "saints"] },
+    { "slug": "tottenham-hotspur", "aliases": ["tottenham", "tottenham hotspur", "spurs"] },
+    { "slug": "west-ham-united", "aliases": ["west ham", "west ham united", "hammers"] },
+    { "slug": "wolverhampton-wanderers", "aliases": ["wolves", "wolverhampton", "wolverhampton wanderers"] },
+    { "slug": "leeds-united", "aliases": ["leeds", "leeds united"] },
+    { "slug": "sunderland", "aliases": ["sunderland"] },
+    { "slug": "middlesbrough", "aliases": ["middlesbrough", "boro"] },
+    { "slug": "sheffield-united", "aliases": ["sheffield united", "blades"] },
+    { "slug": "norwich-city", "aliases": ["norwich", "norwich city"] },
+    { "slug": "coventry-city", "aliases": ["coventry", "coventry city"] },
+    { "slug": "watford", "aliases": ["watford"] },
+    { "slug": "birmingham-city", "aliases": ["birmingham", "birmingham city"] },
+    { "slug": "wrexham", "aliases": ["wrexham"] }
+  ]
+}

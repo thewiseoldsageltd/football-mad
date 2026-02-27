@@ -417,3 +417,247 @@ export function buildTagFallbackPills(tags: string[], limit: number): EntityData
     href: `/news?tag=${encodeURIComponent(tag)}`,
   }));
 }
+
+type EntityLike = { name: string; slug: string };
+type TeamLike = Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor">;
+
+export type PillSourceArticle = Article & {
+  entityTeams?: TeamLike[];
+  entityPlayers?: EntityLike[];
+  entityManagers?: EntityLike[];
+  entityCompetitions?: EntityLike[];
+};
+
+const GENERIC_TAGS = new Set(["football", "soccer", "sport", "sports"]);
+const FIXTURE_TAG_RE =
+  /^\s*[\w'.&-]+(?:\s+[\w'.&-]+)*\s+v(?:s)?\.?\s+[\w'.&-]+(?:\s+[\w'.&-]+)*\s*$/i;
+
+function normalizeTagValue(value: string): string {
+  return normalizeText(value);
+}
+
+export function isGenericTag(name: string): boolean {
+  return GENERIC_TAGS.has(normalizeTagValue(name));
+}
+
+export function isFixtureTag(name: string): boolean {
+  return FIXTURE_TAG_RE.test(name.trim());
+}
+
+function toEntityData(
+  type: EntityData["type"],
+  name: string,
+  opts?: { slug?: string; color?: string | null; iconUrl?: string }
+): EntityData {
+  const slug = opts?.slug ?? slugify(name);
+  const href =
+    type === "competition"
+      ? `/matches/${slug}`
+      : type === "team"
+        ? `/teams/${slug}`
+        : type === "player"
+          ? `/players/${slug}`
+          : `/managers/${slug}`;
+  return {
+    type,
+    name,
+    slug,
+    color: opts?.color,
+    iconUrl: opts?.iconUrl,
+    fallbackText: name.slice(0, 2).toUpperCase(),
+    href,
+  };
+}
+
+export interface PillGroups {
+  competitionPills: EntityData[];
+  teamPills: EntityData[];
+  playerPills: EntityData[];
+  managerPills: EntityData[];
+}
+
+interface ResolvedEntity {
+  type: "competition" | "team" | "player" | "manager";
+  name: string;
+}
+
+interface EntityLookupValue {
+  type: "competition" | "team" | "player" | "manager";
+  name: string;
+  slug: string;
+  color?: string | null;
+  iconUrl?: string;
+}
+
+interface EntityLookups {
+  competitions: Map<string, EntityLookupValue>;
+  teams: Map<string, EntityLookupValue>;
+  players: Map<string, EntityLookupValue>;
+  managers: Map<string, EntityLookupValue>;
+}
+
+function addLookup(map: Map<string, EntityLookupValue>, key: string, value: EntityLookupValue): void {
+  const normalized = normalizeTagValue(key);
+  if (!normalized || map.has(normalized)) return;
+  map.set(normalized, value);
+}
+
+function buildEntityLookups(article: PillSourceArticle, teams: Team[] = []): EntityLookups {
+  const competitions = new Map<string, EntityLookupValue>();
+  const teamLookups = new Map<string, EntityLookupValue>();
+  const players = new Map<string, EntityLookupValue>();
+  const managers = new Map<string, EntityLookupValue>();
+
+  for (const c of article.entityCompetitions ?? []) {
+    const value: EntityLookupValue = {
+      type: "competition",
+      name: c.name,
+      slug: c.slug || slugify(c.name),
+      iconUrl: `/crests/comps/${c.slug || slugify(c.name)}.svg`,
+    };
+    addLookup(competitions, c.name, value);
+    addLookup(competitions, c.slug, value);
+  }
+
+  for (const t of article.entityTeams ?? []) {
+    const value: EntityLookupValue = {
+      type: "team",
+      name: t.shortName || t.name,
+      slug: t.slug || slugify(t.name),
+      color: t.primaryColor,
+      iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,
+    };
+    addLookup(teamLookups, t.name, value);
+    if (t.shortName) addLookup(teamLookups, t.shortName, value);
+    addLookup(teamLookups, t.slug, value);
+    addLookup(teamLookups, t.slug.replace(/-/g, " "), value);
+  }
+
+  for (const p of article.entityPlayers ?? []) {
+    const value: EntityLookupValue = {
+      type: "player",
+      name: p.name,
+      slug: p.slug || slugify(p.name),
+    };
+    addLookup(players, p.name, value);
+    addLookup(players, p.slug, value);
+    addLookup(players, p.slug.replace(/-/g, " "), value);
+  }
+
+  for (const m of article.entityManagers ?? []) {
+    const value: EntityLookupValue = {
+      type: "manager",
+      name: m.name,
+      slug: m.slug || slugify(m.name),
+    };
+    addLookup(managers, m.name, value);
+    addLookup(managers, m.slug, value);
+    addLookup(managers, m.slug.replace(/-/g, " "), value);
+  }
+
+  return { competitions, teams: teamLookups, players, managers };
+}
+
+function lookupResolvedEntity(resolved: ResolvedEntity, lookups: EntityLookups): EntityLookupValue | null {
+  const key = normalizeTagValue(resolved.name);
+  if (resolved.type === "competition") return lookups.competitions.get(key) ?? null;
+  if (resolved.type === "team") return lookups.teams.get(key) ?? null;
+  if (resolved.type === "player") return lookups.players.get(key) ?? null;
+  return lookups.managers.get(key) ?? null;
+}
+
+export function resolveEntityFromTag(name: string, lookups: EntityLookups): ResolvedEntity | null {
+  if (!name || isGenericTag(name) || isFixtureTag(name)) return null;
+  const key = normalizeTagValue(name);
+  if (!key) return null;
+
+  const comp = lookups.competitions.get(key);
+  if (comp) return { type: "competition", name: comp.name };
+
+  const team = lookups.teams.get(key);
+  if (team) return { type: "team", name: team.name };
+
+  const player = lookups.players.get(key);
+  if (player) return { type: "player", name: player.name };
+
+  const manager = lookups.managers.get(key);
+  if (manager) return { type: "manager", name: manager.name };
+
+  return null;
+}
+
+function dedupeByNameCaseInsensitive(pills: EntityData[]): EntityData[] {
+  const seen = new Set<string>();
+  const out: EntityData[] = [];
+  for (const pill of pills) {
+    const key = normalizeTagValue(pill.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(pill);
+  }
+  return out;
+}
+
+export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []): PillGroups {
+  const competitions: EntityData[] = [];
+  const teamsOut: EntityData[] = [];
+  const players: EntityData[] = [];
+  const managersOut: EntityData[] = [];
+  const lookups = buildEntityLookups(article, teams);
+
+  const pushFromMap = (map: Map<string, EntityLookupValue>, type: EntityData["type"], target: EntityData[]) => {
+    const seen = new Set<string>();
+    for (const entity of Array.from(map.values())) {
+      if (entity.type !== type) continue;
+      const key = `${entity.type}:${normalizeTagValue(entity.name)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      target.push(
+        toEntityData(entity.type, entity.name, {
+          slug: entity.slug,
+          color: entity.color,
+          iconUrl: entity.iconUrl,
+        }),
+      );
+    }
+  };
+
+  pushFromMap(lookups.competitions, "competition", competitions);
+  pushFromMap(lookups.teams, "team", teamsOut);
+  pushFromMap(lookups.players, "player", players);
+  pushFromMap(lookups.managers, "manager", managersOut);
+
+  return {
+    competitionPills: dedupeByNameCaseInsensitive(competitions),
+    teamPills: dedupeByNameCaseInsensitive(teamsOut).slice(0, 2),
+    playerPills: dedupeByNameCaseInsensitive(players),
+    managerPills: dedupeByNameCaseInsensitive(managersOut),
+  };
+}
+
+function flattenHierarchy(groups: PillGroups): EntityData[] {
+  return [...groups.competitionPills, ...groups.teamPills, ...groups.playerPills, ...groups.managerPills];
+}
+
+export function buildPillsForCard(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
+  const groups = buildPillGroups(article, teams);
+  const result: EntityData[] = [];
+
+  if (groups.competitionPills[0]) result.push(groups.competitionPills[0]);
+  result.push(...groups.teamPills.slice(0, 2));
+
+  if (result.length < 3) {
+    const people = [...groups.playerPills, ...groups.managerPills];
+    result.push(...people.slice(0, 3 - result.length));
+  }
+
+  return dedupeByNameCaseInsensitive(result).slice(0, 3);
+}
+
+export function buildPillsForHeader(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
+  return dedupeByNameCaseInsensitive(flattenHierarchy(buildPillGroups(article, teams))).slice(0, 4);
+}
+
+export function buildPillsForFooter(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
+  return dedupeByNameCaseInsensitive(flattenHierarchy(buildPillGroups(article, teams)));
+}
