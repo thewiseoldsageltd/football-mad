@@ -1,5 +1,11 @@
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 import type { EntityData } from "@/components/entity-pill";
+import {
+  COMP_PILL_DISPLAY_BY_NAME_NORM,
+  normalizeKey,
+  TEAM_PILL_DISPLAY_BY_NAME_NORM,
+  TEAM_PILL_DISPLAY_BY_SLUG,
+} from "@/lib/pill-display-names";
 
 export interface ScoredEntity {
   id?: string;
@@ -45,7 +51,14 @@ export function formatCompetitionName(name: string): string {
   const withoutId = name.replace(/\s*\[[^\]]*\]\s*$/, "");
   const withoutTrailingParen = withoutId.replace(/\s*\([^)]*\)\s*$/, "");
   const cleaned = withoutTrailingParen.trim();
-  return cleaned.replace(/^French\s+(Ligue\s+[12])$/i, "$1");
+  const deFrench = cleaned.replace(/^French\s+(Ligue\s+[12])$/i, "$1");
+  return COMP_PILL_DISPLAY_BY_NAME_NORM[normalizeKey(deFrench)] ?? deFrench;
+}
+
+function formatTeamPillLabel(team: { slug?: string; name: string }): string {
+  const bySlug = team.slug ? TEAM_PILL_DISPLAY_BY_SLUG[team.slug] : undefined;
+  if (bySlug) return bySlug;
+  return TEAM_PILL_DISPLAY_BY_NAME_NORM[normalizeKey(team.name)] ?? team.name;
 }
 
 function inTitleBoost(articleTitle: string, entityName: string): boolean {
@@ -651,7 +664,7 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
       iconUrl: `/crests/comps/${c.slug || slugify(c.name)}.svg`,
     });
   const mapTeam = (t: TeamLike): EntityData =>
-    toEntityData("team", t.shortName || t.name, {
+    toEntityData("team", formatTeamPillLabel({ slug: t.slug, name: t.name }), {
       slug: t.slug || slugify(t.name),
       color: t.primaryColor,
       iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,
