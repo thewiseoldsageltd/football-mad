@@ -3,6 +3,32 @@ import { db } from "../db";
 import { articleCompetitions, articleManagers, articlePlayers, articleTeams, managers, players } from "@shared/schema";
 import { normalizeEntityAlias, resolveEntityFromTag } from "./entity-alias-resolver";
 
+const PA_GENERIC_TAG_STOPWORDS = new Set([
+  "football",
+  "soccer",
+  "sport",
+  "sports",
+  "competition discipline",
+  "discipline",
+]);
+
+function normalizePaTag(s: string): string {
+  return s
+    .toLowerCase()
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function isGenericPaTag(s: string): boolean {
+  const n = normalizePaTag(s);
+  if (!n) return true;
+  if (PA_GENERIC_TAG_STOPWORDS.has(n)) return true;
+  if (n.length <= 2) return true;
+  return false;
+}
+
 export interface EntitySyncStats {
   tagsPassed: number;
   resolved: number;
@@ -23,20 +49,12 @@ function slugifyFromTag(tag: string): string {
 }
 
 function isLikelyPersonTag(tag: string): boolean {
-  const normalized = normalizeEntityAlias(tag);
+  const normalized = normalizePaTag(tag);
   if (!normalized) return false;
   if (normalized.includes(" vs ") || normalized.includes(" v ")) return false;
-  if (["football", "soccer", "sport", "sports"].includes(normalized)) return false;
+  if (isGenericPaTag(normalized)) return false;
   const words = normalized.split(" ").filter(Boolean);
   return words.length >= 2;
-}
-
-function isLikelyManagerTag(tag: string): boolean {
-  const normalized = normalizeEntityAlias(tag);
-  if (!normalized) return false;
-  if (normalized.includes(" ") || normalized.includes(" vs ") || normalized.includes(" v ")) return false;
-  if (["football", "soccer", "sport", "sports"].includes(normalized)) return false;
-  return /^[a-z][a-z'-]{3,}$/.test(normalized);
 }
 
 export async function syncArticleEntitiesFromTags(
@@ -53,17 +71,26 @@ export async function syncArticleEntitiesFromTags(
   const teamIds = new Set<string>();
   const playerIds = new Set<string>();
   const managerIds = new Set<string>();
-  const normalizedSeen = new Set<string>();
+  const rawTagNames: string[] = (tags ?? [])
+    .map((t: unknown) => (typeof t === "string" ? t : ((t as any)?.name ?? (t as any)?.label ?? (t as any)?.value ?? "")))
+    .filter(Boolean);
+
+  const candidateTagNames: string[] = Array.from(
+    new Map(
+      rawTagNames
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0)
+        .filter((t) => !isGenericPaTag(t))
+        .map((t) => [normalizePaTag(t), t] as const),
+    ).values(),
+  );
 
   let resolved = 0;
   let createdPlayersFromPa = 0;
   let createdManagersFromPa = 0;
-  for (const rawTag of tags) {
-    const tag = (rawTag || "").trim();
-    if (!tag) continue;
-    const normalized = normalizeEntityAlias(tag);
-    if (!normalized || normalizedSeen.has(normalized)) continue;
-    normalizedSeen.add(normalized);
+  for (const tag of candidateTagNames) {
+    const normalized = normalizePaTag(tag);
+    if (!normalized) continue;
 
     const mapped = await resolveEntityFromTag(tag);
     if (mapped) {
@@ -90,44 +117,7 @@ export async function syncArticleEntitiesFromTags(
     }
 
     if (!options?.allowPaPeopleFallback) continue;
-
-    if (isLikelyManagerTag(tag)) {
-      const managerSlugBase = slugifyFromTag(tag) || "pa-manager";
-      const [existingManagerBySlug] = await db
-        .select({ id: managers.id })
-        .from(managers)
-        .where(eq(managers.slug, managerSlugBase))
-        .limit(1);
-
-      if (existingManagerBySlug) {
-        managerIds.add(existingManagerBySlug.id);
-        continue;
-      }
-
-      const insertedManager = await db
-        .insert(managers)
-        .values({
-          name: tag,
-          slug: managerSlugBase,
-        })
-        .onConflictDoNothing()
-        .returning({ id: managers.id });
-
-      if (insertedManager.length > 0) {
-        createdManagersFromPa += 1;
-        managerIds.add(insertedManager[0].id);
-        continue;
-      }
-
-      const [conflictedManager] = await db
-        .select({ id: managers.id })
-        .from(managers)
-        .where(eq(managers.slug, managerSlugBase))
-        .limit(1);
-      if (conflictedManager) managerIds.add(conflictedManager.id);
-      continue;
-    }
-
+    // Fallback creation is restricted to person-like tags only.
     if (!isLikelyPersonTag(tag)) continue;
 
     const personSlugBase = slugifyFromTag(tag) || "pa-person";
@@ -139,6 +129,17 @@ export async function syncArticleEntitiesFromTags(
 
     if (existingBySlug) {
       playerIds.add(existingBySlug.id);
+      continue;
+    }
+
+    const [existingManagerBySlug] = await db
+      .select({ id: managers.id })
+      .from(managers)
+      .where(eq(managers.slug, personSlugBase))
+      .limit(1);
+
+    if (existingManagerBySlug) {
+      managerIds.add(existingManagerBySlug.id);
       continue;
     }
 
@@ -162,7 +163,32 @@ export async function syncArticleEntitiesFromTags(
       .from(players)
       .where(eq(players.slug, personSlugBase))
       .limit(1);
-    if (conflictedPlayer) playerIds.add(conflictedPlayer.id);
+    if (conflictedPlayer) {
+      playerIds.add(conflictedPlayer.id);
+      continue;
+    }
+
+    const insertedManager = await db
+      .insert(managers)
+      .values({
+        name: tag,
+        slug: personSlugBase,
+      })
+      .onConflictDoNothing()
+      .returning({ id: managers.id });
+
+    if (insertedManager.length > 0) {
+      createdManagersFromPa += 1;
+      managerIds.add(insertedManager[0].id);
+      continue;
+    }
+
+    const [conflictedManager] = await db
+      .select({ id: managers.id })
+      .from(managers)
+      .where(eq(managers.slug, personSlugBase))
+      .limit(1);
+    if (conflictedManager) managerIds.add(conflictedManager.id);
   }
 
   for (const competitionId of Array.from(competitionIds)) {
@@ -191,7 +217,7 @@ export async function syncArticleEntitiesFromTags(
   }
 
   return {
-    tagsPassed: tags.length,
+    tagsPassed: candidateTagNames.length,
     resolved,
     insertedCompetitions: competitionIds.size,
     insertedTeams: teamIds.size,

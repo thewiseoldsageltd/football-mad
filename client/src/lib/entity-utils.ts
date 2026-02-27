@@ -677,7 +677,12 @@ export function selectEntityPills(
   result.push(...groups.teamPills.slice(0, 2));
 
   if (placement === "card") {
-    // Cards never show players/managers.
+    if (result.length < 3) {
+      result.push(...groups.playerPills.slice(0, 3 - result.length));
+    }
+    if (result.length < 3) {
+      result.push(...groups.managerPills.slice(0, 3 - result.length));
+    }
     return dedupeByNameCaseInsensitive(result).slice(0, 3);
   }
 
