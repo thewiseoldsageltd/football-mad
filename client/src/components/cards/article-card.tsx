@@ -69,6 +69,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                 max={3}
                 className="mb-2"
                 pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
+                constrainHeight={false}
               />
               <h3 className="text-2xl md:text-3xl font-bold text-white mt-2 mb-2 line-clamp-2">
                 {article.title}
@@ -126,7 +127,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
           )}
         </div>
         <CardContent className="p-4">
-          <PillsRow pills={displayPills} max={3} className="mb-2" />
+          <PillsRow pills={displayPills} max={3} className="mb-2" constrainHeight={false} />
           <h3 className="font-semibold text-lg line-clamp-2 mt-2 mb-2 group-hover:text-primary transition-colors">
             {article.title}
           </h3>
