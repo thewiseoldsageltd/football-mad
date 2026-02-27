@@ -39,5 +39,19 @@
     { "slug": "watford", "aliases": ["watford"] },
     { "slug": "birmingham", "aliases": ["birmingham", "birmingham city"] },
     { "slug": "wrexham", "aliases": ["wrexham"] }
+  ],
+  "players": [
+    { "slug": "viktor-gyokeres", "aliases": ["viktor gyokeres", "gyokeres", "viktor gyökeres"] },
+    { "slug": "mohamed-salah", "aliases": ["mohamed salah", "salah"] },
+    { "slug": "erling-haaland", "aliases": ["erling haaland", "haaland"] },
+    { "slug": "bukayo-saka", "aliases": ["bukayo saka", "saka"] },
+    { "slug": "cole-palmer", "aliases": ["cole palmer", "palmer"] },
+    { "slug": "bruno-fernandes", "aliases": ["bruno fernandes", "fernandes"] }
+  ],
+  "managers": [
+    { "slug": "mikel-arteta", "aliases": ["mikel arteta", "arteta"] },
+    { "slug": "pep-guardiola", "aliases": ["pep guardiola", "guardiola"] },
+    { "slug": "arne-slot", "aliases": ["arne slot", "slot"] },
+    { "slug": "eddie-howe", "aliases": ["eddie howe", "howe"] }
   ]
 }

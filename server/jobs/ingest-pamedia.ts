@@ -550,9 +550,11 @@ export async function runPaMediaIngest(): Promise<{
       }
 
       if (articleIdForMappings) {
-        const syncStats = await syncArticleEntitiesFromTags(articleIdForMappings, item.tags || []);
+        const syncStats = await syncArticleEntitiesFromTags(articleIdForMappings, item.tags || [], {
+          allowPaPeopleFallback: true,
+        });
         console.log(
-          `[ingest-pamedia] entity-sync articleId=${articleIdForMappings} tags=${syncStats.tagsPassed} resolved=${syncStats.resolved} inserted competition=${syncStats.insertedCompetitions} team=${syncStats.insertedTeams} player=${syncStats.insertedPlayers} manager=${syncStats.insertedManagers}`
+          `[ingest-pamedia] entity-sync articleId=${articleIdForMappings} tags=${syncStats.tagsPassed} resolved=${syncStats.resolved} inserted competition=${syncStats.insertedCompetitions} team=${syncStats.insertedTeams} player=${syncStats.insertedPlayers} manager=${syncStats.insertedManagers} createdPlayer=${syncStats.createdPlayersFromPa} createdManager=${syncStats.createdManagersFromPa}`
         );
       }
 

@@ -13,6 +13,8 @@ export interface BackfillPaMediaEntitiesResult {
   insertedTeams: number;
   insertedPlayers: number;
   insertedManagers: number;
+  createdPlayersFromPa: number;
+  createdManagersFromPa: number;
   error?: string;
 }
 
@@ -50,6 +52,8 @@ export async function runBackfillPaMediaEntities(days: number): Promise<Backfill
     let insertedTeams = 0;
     let insertedPlayers = 0;
     let insertedManagers = 0;
+    let createdPlayersFromPa = 0;
+    let createdManagersFromPa = 0;
 
     for (const row of rows) {
       const publishedAt = toValidDate(row.publishedAt);
@@ -58,7 +62,9 @@ export async function runBackfillPaMediaEntities(days: number): Promise<Backfill
         console.warn(`[backfill-pamedia-entities] skip invalid publishedAt articleId=${row.id} slug=${row.slug}`);
         continue;
       }
-      const stats = await syncArticleEntitiesFromTags(row.id, (row.tags as string[] | null) ?? []);
+      const stats = await syncArticleEntitiesFromTags(row.id, (row.tags as string[] | null) ?? [], {
+        allowPaPeopleFallback: true,
+      });
       const insertedTotal =
         stats.insertedCompetitions +
         stats.insertedTeams +
@@ -69,6 +75,8 @@ export async function runBackfillPaMediaEntities(days: number): Promise<Backfill
       insertedTeams += stats.insertedTeams;
       insertedPlayers += stats.insertedPlayers;
       insertedManagers += stats.insertedManagers;
+      createdPlayersFromPa += stats.createdPlayersFromPa;
+      createdManagersFromPa += stats.createdManagersFromPa;
     }
 
     return {
@@ -80,6 +88,8 @@ export async function runBackfillPaMediaEntities(days: number): Promise<Backfill
       insertedTeams,
       insertedPlayers,
       insertedManagers,
+      createdPlayersFromPa,
+      createdManagersFromPa,
     };
   } catch (error) {
     return {
@@ -91,6 +101,8 @@ export async function runBackfillPaMediaEntities(days: number): Promise<Backfill
       insertedTeams: 0,
       insertedPlayers: 0,
       insertedManagers: 0,
+      createdPlayersFromPa: 0,
+      createdManagersFromPa: 0,
       error: error instanceof Error ? error.message : String(error),
     };
   }

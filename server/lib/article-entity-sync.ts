@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { articleCompetitions, articleManagers, articlePlayers, articleTeams } from "@shared/schema";
-import { resolveEntityFromTag } from "./entity-alias-resolver";
+import { articleCompetitions, articleManagers, articlePlayers, articleTeams, managers, players } from "@shared/schema";
+import { normalizeEntityAlias, resolveEntityFromTag } from "./entity-alias-resolver";
 
 export interface EntitySyncStats {
   tagsPassed: number;
@@ -10,9 +10,40 @@ export interface EntitySyncStats {
   insertedTeams: number;
   insertedPlayers: number;
   insertedManagers: number;
+  createdPlayersFromPa: number;
+  createdManagersFromPa: number;
 }
 
-export async function syncArticleEntitiesFromTags(articleId: string, tags: string[]): Promise<EntitySyncStats> {
+function slugifyFromTag(tag: string): string {
+  return normalizeEntityAlias(tag)
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function isLikelyPersonTag(tag: string): boolean {
+  const normalized = normalizeEntityAlias(tag);
+  if (!normalized) return false;
+  if (normalized.includes(" vs ") || normalized.includes(" v ")) return false;
+  if (["football", "soccer", "sport", "sports"].includes(normalized)) return false;
+  const words = normalized.split(" ").filter(Boolean);
+  return words.length >= 2;
+}
+
+function isLikelyManagerTag(tag: string): boolean {
+  const normalized = normalizeEntityAlias(tag);
+  if (!normalized) return false;
+  if (normalized.includes(" ") || normalized.includes(" vs ") || normalized.includes(" v ")) return false;
+  if (["football", "soccer", "sport", "sports"].includes(normalized)) return false;
+  return /^[a-z][a-z'-]{3,}$/.test(normalized);
+}
+
+export async function syncArticleEntitiesFromTags(
+  articleId: string,
+  tags: string[],
+  options?: { allowPaPeopleFallback?: boolean },
+): Promise<EntitySyncStats> {
   await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
   await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
   await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -22,20 +53,116 @@ export async function syncArticleEntitiesFromTags(articleId: string, tags: strin
   const teamIds = new Set<string>();
   const playerIds = new Set<string>();
   const managerIds = new Set<string>();
+  const normalizedSeen = new Set<string>();
 
   let resolved = 0;
+  let createdPlayersFromPa = 0;
+  let createdManagersFromPa = 0;
   for (const rawTag of tags) {
     const tag = (rawTag || "").trim();
     if (!tag) continue;
+    const normalized = normalizeEntityAlias(tag);
+    if (!normalized || normalizedSeen.has(normalized)) continue;
+    normalizedSeen.add(normalized);
 
     const mapped = await resolveEntityFromTag(tag);
-    if (!mapped) continue;
-    resolved += 1;
+    if (mapped) {
+      resolved += 1;
 
-    if (mapped.entityType === "competition") competitionIds.add(mapped.entityId);
-    else if (mapped.entityType === "team") teamIds.add(mapped.entityId);
-    else if (mapped.entityType === "player") playerIds.add(mapped.entityId);
-    else if (mapped.entityType === "manager") managerIds.add(mapped.entityId);
+      if (mapped.entityType === "competition") competitionIds.add(mapped.entityId);
+      else if (mapped.entityType === "team") teamIds.add(mapped.entityId);
+      else if (mapped.entityType === "player") {
+        const existingPlayer = await db
+          .select({ id: players.id })
+          .from(players)
+          .where(eq(players.id, mapped.entityId))
+          .limit(1);
+        if (existingPlayer.length > 0) playerIds.add(mapped.entityId);
+      } else if (mapped.entityType === "manager") {
+        const existingManager = await db
+          .select({ id: managers.id })
+          .from(managers)
+          .where(eq(managers.id, mapped.entityId))
+          .limit(1);
+        if (existingManager.length > 0) managerIds.add(mapped.entityId);
+      }
+      continue;
+    }
+
+    if (!options?.allowPaPeopleFallback) continue;
+
+    if (isLikelyManagerTag(tag)) {
+      const managerSlugBase = slugifyFromTag(tag) || "pa-manager";
+      const [existingManagerBySlug] = await db
+        .select({ id: managers.id })
+        .from(managers)
+        .where(eq(managers.slug, managerSlugBase))
+        .limit(1);
+
+      if (existingManagerBySlug) {
+        managerIds.add(existingManagerBySlug.id);
+        continue;
+      }
+
+      const insertedManager = await db
+        .insert(managers)
+        .values({
+          name: tag,
+          slug: managerSlugBase,
+        })
+        .onConflictDoNothing()
+        .returning({ id: managers.id });
+
+      if (insertedManager.length > 0) {
+        createdManagersFromPa += 1;
+        managerIds.add(insertedManager[0].id);
+        continue;
+      }
+
+      const [conflictedManager] = await db
+        .select({ id: managers.id })
+        .from(managers)
+        .where(eq(managers.slug, managerSlugBase))
+        .limit(1);
+      if (conflictedManager) managerIds.add(conflictedManager.id);
+      continue;
+    }
+
+    if (!isLikelyPersonTag(tag)) continue;
+
+    const personSlugBase = slugifyFromTag(tag) || "pa-person";
+    const [existingBySlug] = await db
+      .select({ id: players.id })
+      .from(players)
+      .where(eq(players.slug, personSlugBase))
+      .limit(1);
+
+    if (existingBySlug) {
+      playerIds.add(existingBySlug.id);
+      continue;
+    }
+
+    const insertedPlayer = await db
+      .insert(players)
+      .values({
+        name: tag,
+        slug: personSlugBase,
+      })
+      .onConflictDoNothing()
+      .returning({ id: players.id });
+
+    if (insertedPlayer.length > 0) {
+      createdPlayersFromPa += 1;
+      playerIds.add(insertedPlayer[0].id);
+      continue;
+    }
+
+    const [conflictedPlayer] = await db
+      .select({ id: players.id })
+      .from(players)
+      .where(eq(players.slug, personSlugBase))
+      .limit(1);
+    if (conflictedPlayer) playerIds.add(conflictedPlayer.id);
   }
 
   for (const competitionId of Array.from(competitionIds)) {
@@ -70,5 +197,7 @@ export async function syncArticleEntitiesFromTags(articleId: string, tags: strin
     insertedTeams: teamIds.size,
     insertedPlayers: playerIds.size,
     insertedManagers: managerIds.size,
+    createdPlayersFromPa,
+    createdManagersFromPa,
   };
 }

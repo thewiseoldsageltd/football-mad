@@ -3,15 +3,16 @@ import fs from "fs/promises";
 import path from "path";
 import { and, eq } from "drizzle-orm";
 import { db } from "../server/db";
-import { competitions, entityAliases, mvpCompetitions, teams } from "../shared/schema";
+import { competitions, entityAliases, managers, mvpCompetitions, players, teams } from "../shared/schema";
+import { normalizeEntityAlias } from "../server/lib/entity-alias-resolver";
 
 type AliasItem = { slug: string; aliases: string[] };
-type AliasConfig = { teams: AliasItem[]; competitions: AliasItem[] };
+type AliasConfig = { teams: AliasItem[]; competitions: AliasItem[]; players?: AliasItem[]; managers?: AliasItem[] };
 
 type EntityType = "competition" | "team" | "player" | "manager";
 
 function normalizeAlias(value: string): string {
-  return value.trim().toLowerCase();
+  return normalizeEntityAlias(value);
 }
 
 async function upsertAlias(entityType: EntityType, entityId: string, alias: string): Promise<boolean> {
@@ -63,6 +64,12 @@ async function main() {
   const teamBySlug = new Map(
     (await db.select({ id: teams.id, slug: teams.slug }).from(teams)).map((t) => [t.slug, t]),
   );
+  const playerBySlug = new Map(
+    (await db.select({ id: players.id, slug: players.slug }).from(players)).map((p) => [p.slug, p]),
+  );
+  const managerBySlug = new Map(
+    (await db.select({ id: managers.id, slug: managers.slug }).from(managers)).map((m) => [m.slug, m]),
+  );
 
   for (const item of config.competitions ?? []) {
     const comp = compBySlug.get(item.slug);
@@ -85,6 +92,30 @@ async function main() {
     }
     for (const alias of item.aliases ?? []) {
       if (await upsertAlias("team", team.id, alias)) insertedByType.team += 1;
+    }
+  }
+
+  for (const item of config.players ?? []) {
+    const player = playerBySlug.get(item.slug);
+    if (!player) {
+      console.warn(`[seed-entity-aliases-mvp] player slug not found: ${item.slug}`);
+      skippedMissing += 1;
+      continue;
+    }
+    for (const alias of item.aliases ?? []) {
+      if (await upsertAlias("player", player.id, alias)) insertedByType.player += 1;
+    }
+  }
+
+  for (const item of config.managers ?? []) {
+    const manager = managerBySlug.get(item.slug);
+    if (!manager) {
+      console.warn(`[seed-entity-aliases-mvp] manager slug not found: ${item.slug}`);
+      skippedMissing += 1;
+      continue;
+    }
+    for (const alias of item.aliases ?? []) {
+      if (await upsertAlias("manager", manager.id, alias)) insertedByType.manager += 1;
     }
   }
 

@@ -2027,6 +2027,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         insertedTeams: 0,
         insertedPlayers: 0,
         insertedManagers: 0,
+        createdPlayersFromPa: 0,
+        createdManagersFromPa: 0,
         error: (err as Error).message,
       });
     }
