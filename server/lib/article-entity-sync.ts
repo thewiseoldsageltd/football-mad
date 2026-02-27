@@ -11,6 +11,9 @@ const PA_GENERIC_TAG_STOPWORDS = new Set([
   "competition discipline",
   "discipline",
   "stade oceane",
+  "club news",
+  "match report",
+  "match reports",
 ]);
 
 function normalizePaTag(s: string): string {
