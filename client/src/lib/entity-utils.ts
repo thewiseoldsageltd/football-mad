@@ -34,6 +34,19 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+/**
+ * Formats Goalserve-enriched competition labels for UI display only.
+ * Examples:
+ * - "Premier League (England) [1204]" -> "Premier League"
+ * - "UEFA Champions League (Eurocups) [1005]" -> "UEFA Champions League"
+ */
+export function formatCompetitionName(name: string): string {
+  if (!name) return "";
+  const withoutId = name.replace(/\s*\[\d+\]\s*$/, "");
+  const withoutTrailingParen = withoutId.replace(/\s*\([^)]*\)\s*$/, "");
+  return withoutTrailingParen.trim();
+}
+
 const KNOWN_COMPETITIONS = [
   // English
   "Premier League", "Championship", "League One", "League Two",
@@ -449,6 +462,7 @@ function toEntityData(
   name: string,
   opts?: { slug?: string; color?: string | null; iconUrl?: string }
 ): EntityData {
+  const displayName = type === "competition" ? formatCompetitionName(name) : name;
   const slug = opts?.slug ?? slugify(name);
   const href =
     type === "competition"
@@ -460,11 +474,11 @@ function toEntityData(
           : `/managers/${slug}`;
   return {
     type,
-    name,
+    name: displayName,
     slug,
     color: opts?.color,
     iconUrl: opts?.iconUrl,
-    fallbackText: name.slice(0, 2).toUpperCase(),
+    fallbackText: displayName.slice(0, 2).toUpperCase(),
     href,
   };
 }
