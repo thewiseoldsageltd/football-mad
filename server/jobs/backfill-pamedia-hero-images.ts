@@ -11,6 +11,7 @@ import { eq, and, ilike } from "drizzle-orm";
 import { resizeToHero1280x720Webp, uploadBufferToR2Key } from "../lib/r2";
 import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 import { runWithJobContext } from "../lib/job-context";
+import { ARTICLE_SOURCE_PA_MEDIA } from "../lib/sources";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL ?? "https://img.footballmad.co.uk").replace(/\/$/, "");
@@ -71,7 +72,7 @@ export async function runBackfillPaMediaHeroImages(): Promise<{
         .from(articles)
         .where(
           and(
-            eq(articles.source, "pa_media"),
+            eq(articles.source, ARTICLE_SOURCE_PA_MEDIA),
             ilike(articles.coverImage, "%/hero/%")
           )
         )

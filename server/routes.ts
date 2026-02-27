@@ -2022,6 +2022,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ok: false,
         processed: 0,
         updated: 0,
+        skippedInvalidDate: 0,
         insertedCompetitions: 0,
         insertedTeams: 0,
         insertedPlayers: 0,

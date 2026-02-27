@@ -18,6 +18,7 @@ import * as cheerio from "cheerio";
 import { uploadImageVariantsToR2, seoSlugFromText, shortStableHash } from "../lib/r2";
 import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 import { runWithJobContext } from "../lib/job-context";
+import { ARTICLE_SOURCE_PA_MEDIA } from "../lib/sources";
 
 const FETCH_TIMEOUT_MS = 10_000;
 const IMAGE_WIDTHS = [320, 640, 960, 1280] as const;
@@ -126,7 +127,7 @@ export async function runBackfillPaMediaInlineImages(): Promise<{
       .from(articles)
       .where(
         and(
-          eq(articles.source, "pa_media"),
+          eq(articles.source, ARTICLE_SOURCE_PA_MEDIA),
           ilike(articles.content, "%<img%"),
           not(ilike(articles.content, "%img.footballmad.co.uk%"))
         )
@@ -174,7 +175,7 @@ export async function runBackfillPaMediaInlineImages(): Promise<{
             if (!buf?.length) continue;
             const result = await uploadImageVariantsToR2({
               buffer: buf,
-              source: "pa_media",
+              source: ARTICLE_SOURCE_PA_MEDIA,
               articleId: articleId(row),
               kind: "inline",
               baseName,

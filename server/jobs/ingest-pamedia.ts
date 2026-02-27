@@ -19,8 +19,9 @@ import {
 import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 import { runWithJobContext } from "../lib/job-context";
 import { syncArticleEntitiesFromTags } from "../lib/article-entity-sync";
+import { ARTICLE_SOURCE_PA_MEDIA } from "../lib/sources";
 
-const PA_SOURCE = "pa_media";
+const PA_SOURCE = ARTICLE_SOURCE_PA_MEDIA;
 const PAMEDIA_JOB_STATE_KEY = "ingest_pamedia";
 const BASE_URL = process.env.PAMEDIA_API_BASE_URL ?? "https://content.api.pressassociation.io/v1";
 const FETCH_TIMEOUT_MS = 10_000;
