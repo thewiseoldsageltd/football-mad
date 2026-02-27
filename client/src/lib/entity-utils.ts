@@ -431,8 +431,10 @@ export function buildTagFallbackPills(tags: string[], limit: number): EntityData
   }));
 }
 
-type EntityLike = { name: string; slug: string };
-type TeamLike = Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor">;
+type EntityLike = { name: string; slug: string; salienceScore?: number | null };
+type TeamLike = Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor"> & {
+  salienceScore?: number | null;
+};
 
 export type PillSourceArticle = Article & {
   entityTeams?: TeamLike[];
@@ -489,6 +491,8 @@ export interface PillGroups {
   playerPills: EntityData[];
   managerPills: EntityData[];
 }
+
+type PillPlacement = "card" | "header" | "footer";
 
 interface ResolvedEntity {
   type: "competition" | "team" | "player" | "manager";
@@ -613,39 +617,43 @@ function dedupeByNameCaseInsensitive(pills: EntityData[]): EntityData[] {
 }
 
 export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []): PillGroups {
-  const competitions: EntityData[] = [];
-  const teamsOut: EntityData[] = [];
-  const players: EntityData[] = [];
-  const managersOut: EntityData[] = [];
-  const lookups = buildEntityLookups(article, teams);
+  const _unusedTeams = teams;
+  void _unusedTeams;
 
-  const pushFromMap = (map: Map<string, EntityLookupValue>, type: EntityData["type"], target: EntityData[]) => {
-    const seen = new Set<string>();
-    for (const entity of Array.from(map.values())) {
-      if (entity.type !== type) continue;
-      const key = `${entity.type}:${normalizeTagValue(entity.name)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      target.push(
-        toEntityData(entity.type, entity.name, {
-          slug: entity.slug,
-          color: entity.color,
-          iconUrl: entity.iconUrl,
-        }),
-      );
-    }
+  const sortBySalienceThenName = <T extends { name: string; salienceScore?: number | null }>(items: T[]): T[] => {
+    return [...items].sort((a, b) => {
+      const aScore = typeof a.salienceScore === "number" ? a.salienceScore : null;
+      const bScore = typeof b.salienceScore === "number" ? b.salienceScore : null;
+      if (aScore !== null || bScore !== null) {
+        const aRank = aScore ?? Number.NEGATIVE_INFINITY;
+        const bRank = bScore ?? Number.NEGATIVE_INFINITY;
+        if (bRank !== aRank) return bRank - aRank;
+      }
+      return a.name.localeCompare(b.name);
+    });
   };
 
-  pushFromMap(lookups.competitions, "competition", competitions);
-  pushFromMap(lookups.teams, "team", teamsOut);
-  pushFromMap(lookups.players, "player", players);
-  pushFromMap(lookups.managers, "manager", managersOut);
+  const mapCompetition = (c: EntityLike): EntityData =>
+    toEntityData("competition", c.name, {
+      slug: c.slug || slugify(c.name),
+      iconUrl: `/crests/comps/${c.slug || slugify(c.name)}.svg`,
+    });
+  const mapTeam = (t: TeamLike): EntityData =>
+    toEntityData("team", t.shortName || t.name, {
+      slug: t.slug || slugify(t.name),
+      color: t.primaryColor,
+      iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,
+    });
+  const mapPlayer = (p: EntityLike): EntityData =>
+    toEntityData("player", p.name, { slug: p.slug || slugify(p.name) });
+  const mapManager = (m: EntityLike): EntityData =>
+    toEntityData("manager", m.name, { slug: m.slug || slugify(m.name) });
 
   return {
-    competitionPills: dedupeByNameCaseInsensitive(competitions),
-    teamPills: dedupeByNameCaseInsensitive(teamsOut).slice(0, 2),
-    playerPills: dedupeByNameCaseInsensitive(players),
-    managerPills: dedupeByNameCaseInsensitive(managersOut),
+    competitionPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityCompetitions ?? []).map(mapCompetition)),
+    teamPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityTeams ?? []).map(mapTeam)),
+    playerPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityPlayers ?? []).map(mapPlayer)),
+    managerPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityManagers ?? []).map(mapManager)),
   };
 }
 
@@ -653,25 +661,39 @@ function flattenHierarchy(groups: PillGroups): EntityData[] {
   return [...groups.competitionPills, ...groups.teamPills, ...groups.playerPills, ...groups.managerPills];
 }
 
-export function buildPillsForCard(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
+export function selectEntityPills(
+  article: PillSourceArticle,
+  placement: PillPlacement,
+  teams: Team[] = [],
+): EntityData[] {
   const groups = buildPillGroups(article, teams);
-  const result: EntityData[] = [];
+  if (placement === "footer") {
+    return dedupeByNameCaseInsensitive(flattenHierarchy(groups));
+  }
 
+  const result: EntityData[] = [];
+  // Always start with graph hierarchy: competitions -> teams -> players -> managers
   if (groups.competitionPills[0]) result.push(groups.competitionPills[0]);
   result.push(...groups.teamPills.slice(0, 2));
 
-  if (result.length < 3) {
-    const people = [...groups.playerPills, ...groups.managerPills];
-    result.push(...people.slice(0, 3 - result.length));
+  if (placement === "card") {
+    // Cards never show players/managers.
+    return dedupeByNameCaseInsensitive(result).slice(0, 3);
   }
 
-  return dedupeByNameCaseInsensitive(result).slice(0, 3);
+  if (result.length < 4 && groups.playerPills[0]) result.push(groups.playerPills[0]);
+  if (result.length < 4 && groups.managerPills[0]) result.push(groups.managerPills[0]);
+  return dedupeByNameCaseInsensitive(result).slice(0, 4);
+}
+
+export function buildPillsForCard(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
+  return selectEntityPills(article, "card", teams);
 }
 
 export function buildPillsForHeader(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
-  return dedupeByNameCaseInsensitive(flattenHierarchy(buildPillGroups(article, teams))).slice(0, 4);
+  return selectEntityPills(article, "header", teams);
 }
 
 export function buildPillsForFooter(article: PillSourceArticle, teams: Team[] = []): EntityData[] {
-  return dedupeByNameCaseInsensitive(flattenHierarchy(buildPillGroups(article, teams)));
+  return selectEntityPills(article, "footer", teams);
 }
