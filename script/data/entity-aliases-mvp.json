@@ -1,11 +1,13 @@
 {
   "competitions": [
-    { "slug": "premier-league", "aliases": ["premier league", "epl", "english premier league"] },
-    { "slug": "championship", "aliases": ["championship", "efl championship"] },
+    { "slug": "premier-league-england-1204", "aliases": ["premier league", "epl", "english premier league"] },
+    { "slug": "championship-england-1205", "aliases": ["championship", "efl championship"] },
     { "slug": "league-one", "aliases": ["league one", "efl league one"] },
     { "slug": "league-two", "aliases": ["league two", "efl league two"] },
-    { "slug": "fa-cup", "aliases": ["fa cup", "the fa cup"] },
-    { "slug": "efl-cup", "aliases": ["efl cup", "carabao cup", "league cup"] }
+    { "slug": "fa-cup-england-1198", "aliases": ["fa cup", "the fa cup"] },
+    { "slug": "efl-cup-england-1199", "aliases": ["efl cup", "carabao cup", "league cup"] },
+    { "slug": "uefa-champions-league-eurocups-1005", "aliases": ["champions league", "uefa champions league"] },
+    { "slug": "uefa-europa-league-eurocups-1007", "aliases": ["europa league", "uefa europa league"] }
   ],
   "teams": [
     { "slug": "arsenal", "aliases": ["arsenal", "gunners"] },
