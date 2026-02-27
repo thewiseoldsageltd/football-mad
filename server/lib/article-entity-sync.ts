@@ -10,6 +10,7 @@ const PA_GENERIC_TAG_STOPWORDS = new Set([
   "sports",
   "competition discipline",
   "discipline",
+  "stade oceane",
 ]);
 
 function normalizePaTag(s: string): string {
@@ -25,6 +26,8 @@ function isGenericPaTag(s: string): boolean {
   const n = normalizePaTag(s);
   if (!n) return true;
   if (PA_GENERIC_TAG_STOPWORDS.has(n)) return true;
+  if (/\bvs\b/.test(n)) return true;
+  if (/\b v \b/.test(` ${n} `)) return true;
   if (n.length <= 2) return true;
   return false;
 }

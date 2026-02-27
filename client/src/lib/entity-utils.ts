@@ -42,9 +42,34 @@ function slugify(name: string): string {
  */
 export function formatCompetitionName(name: string): string {
   if (!name) return "";
-  const withoutId = name.replace(/\s*\[\d+\]\s*$/, "");
+  const withoutId = name.replace(/\s*\[[^\]]*\]\s*$/, "");
   const withoutTrailingParen = withoutId.replace(/\s*\([^)]*\)\s*$/, "");
-  return withoutTrailingParen.trim();
+  const cleaned = withoutTrailingParen.trim();
+  return cleaned.replace(/^French\s+(Ligue\s+[12])$/i, "$1");
+}
+
+function inTitleBoost(articleTitle: string, entityName: string): boolean {
+  const t = normalizeText(articleTitle);
+  const n = normalizeText(entityName);
+  if (!t || !n) return false;
+  return t.includes(n);
+}
+
+function sortWithTitleBoost<T extends { name: string; salienceScore?: number | null }>(
+  items: T[],
+  articleTitle: string,
+): T[] {
+  return [...items].sort((a, b) => {
+    const aTitle = inTitleBoost(articleTitle, a.name) ? 1 : 0;
+    const bTitle = inTitleBoost(articleTitle, b.name) ? 1 : 0;
+    if (aTitle !== bTitle) return bTitle - aTitle;
+
+    const aSal = a.salienceScore ?? 0;
+    const bSal = b.salienceScore ?? 0;
+    if (aSal !== bSal) return bSal - aSal;
+
+    return a.name.localeCompare(b.name);
+  });
 }
 
 const KNOWN_COMPETITIONS = [
@@ -620,19 +645,6 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
   const _unusedTeams = teams;
   void _unusedTeams;
 
-  const sortBySalienceThenName = <T extends { name: string; salienceScore?: number | null }>(items: T[]): T[] => {
-    return [...items].sort((a, b) => {
-      const aScore = typeof a.salienceScore === "number" ? a.salienceScore : null;
-      const bScore = typeof b.salienceScore === "number" ? b.salienceScore : null;
-      if (aScore !== null || bScore !== null) {
-        const aRank = aScore ?? Number.NEGATIVE_INFINITY;
-        const bRank = bScore ?? Number.NEGATIVE_INFINITY;
-        if (bRank !== aRank) return bRank - aRank;
-      }
-      return a.name.localeCompare(b.name);
-    });
-  };
-
   const mapCompetition = (c: EntityLike): EntityData =>
     toEntityData("competition", c.name, {
       slug: c.slug || slugify(c.name),
@@ -650,10 +662,10 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
     toEntityData("manager", m.name, { slug: m.slug || slugify(m.name) });
 
   return {
-    competitionPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityCompetitions ?? []).map(mapCompetition)),
-    teamPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityTeams ?? []).map(mapTeam)),
-    playerPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityPlayers ?? []).map(mapPlayer)),
-    managerPills: dedupeByNameCaseInsensitive(sortBySalienceThenName(article.entityManagers ?? []).map(mapManager)),
+    competitionPills: dedupeByNameCaseInsensitive(sortWithTitleBoost(article.entityCompetitions ?? [], article.title).map(mapCompetition)),
+    teamPills: dedupeByNameCaseInsensitive(sortWithTitleBoost(article.entityTeams ?? [], article.title).map(mapTeam)),
+    playerPills: dedupeByNameCaseInsensitive(sortWithTitleBoost(article.entityPlayers ?? [], article.title).map(mapPlayer)),
+    managerPills: dedupeByNameCaseInsensitive(sortWithTitleBoost(article.entityManagers ?? [], article.title).map(mapManager)),
   };
 }
 
