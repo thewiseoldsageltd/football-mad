@@ -50,20 +50,9 @@ export function formatCompetitionName(name: string): string {
   if (!name) return "";
   const withoutId = name.replace(/\s*\[[^\]]*\]\s*$/, "");
   const withoutTrailingParen = withoutId.replace(/\s*\([^)]*\)\s*$/, "");
-  const cleaned = withoutTrailingParen.trim();
-  const formatted = cleaned.replace(/^French\s+(Ligue\s+[12])$/i, "$1");
-  const norm = normalizeKey(formatted);
-  if (COMP_PILL_DISPLAY_BY_NAME_NORM[norm]) {
-    return COMP_PILL_DISPLAY_BY_NAME_NORM[norm];
-  }
-  // MVP display normalization for PA/Goalserve League 1/2 variants.
-  if (/\bleague\s*1\b/i.test(formatted) || /\bleague\s*one\b/i.test(formatted)) {
-    return "League One";
-  }
-  if (/\bleague\s*2\b/i.test(formatted) || /\bleague\s*two\b/i.test(formatted)) {
-    return "League Two";
-  }
-  return formatted;
+  const cleaned = withoutTrailingParen.trim().replace(/^French\s+(Ligue\s+[12])$/i, "$1");
+  const norm = normalizeKey(cleaned);
+  return COMP_PILL_DISPLAY_BY_NAME_NORM[norm] ?? cleaned;
 }
 
 function formatTeamPillLabel(team: { slug?: string; name: string }): string {
