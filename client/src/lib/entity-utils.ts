@@ -51,8 +51,12 @@ export function formatCompetitionName(name: string): string {
   const withoutId = name.replace(/\s*\[[^\]]*\]\s*$/, "");
   const withoutTrailingParen = withoutId.replace(/\s*\([^)]*\)\s*$/, "");
   const cleaned = withoutTrailingParen.trim();
-  const deFrench = cleaned.replace(/^French\s+(Ligue\s+[12])$/i, "$1");
-  return COMP_PILL_DISPLAY_BY_NAME_NORM[normalizeKey(deFrench)] ?? deFrench;
+  const formatted = cleaned.replace(/^French\s+(Ligue\s+[12])$/i, "$1");
+  const norm = normalizeKey(formatted);
+  if (COMP_PILL_DISPLAY_BY_NAME_NORM[norm]) {
+    return COMP_PILL_DISPLAY_BY_NAME_NORM[norm];
+  }
+  return formatted;
 }
 
 function formatTeamPillLabel(team: { slug?: string; name: string }): string {
