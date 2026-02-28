@@ -311,6 +311,8 @@ const COMP_VARIANT_DISPLAY_PAIRS: Array<[string, string]> = [
   ["Championship", "Championship"],
   ["League One", "League One"],
   ["League Two", "League Two"],
+  ["League 1", "League One"],
+  ["League 2", "League Two"],
   ["National League", "National League"],
   ["FA Cup", "FA Cup"],
   ["EFL Cup", "EFL Cup"],
