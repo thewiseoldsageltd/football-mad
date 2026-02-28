@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { COMP_PILL_DISPLAY_BY_NAME_NORM, normalizeKey } from "@/lib/pill-display-names";
 
 export type TaxonomyPillVariant = "team" | "competition" | "default";
 
@@ -71,6 +72,10 @@ export function TaxonomyPill({
   "data-testid": testId,
 }: TaxonomyPillProps) {
   const isEntityPill = variant === "team" || variant === "competition";
+  const displayLabel =
+    variant === "competition"
+      ? (COMP_PILL_DISPLAY_BY_NAME_NORM[normalizeKey(label.trim())] ?? label.trim())
+      : label;
   
   const accentColor = variant === "team" 
     ? (teamColor || "#334155")
@@ -95,7 +100,7 @@ export function TaxonomyPill({
       return (
         <CrestWithFallback 
           src={crestUrl} 
-          alt={label}
+          alt={displayLabel}
           fallbackIcon={<Trophy className="h-4 w-4 text-slate-500 dark:text-slate-400" />}
         />
       );
@@ -125,7 +130,7 @@ export function TaxonomyPill({
     >
       {accentColor && <AccentBar color={accentColor} />}
       {pillIcon}
-      <span className="text-foreground">{label}</span>
+      <span className="text-foreground">{displayLabel}</span>
     </div>
   );
 
