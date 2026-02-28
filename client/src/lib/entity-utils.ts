@@ -56,6 +56,13 @@ export function formatCompetitionName(name: string): string {
   if (COMP_PILL_DISPLAY_BY_NAME_NORM[norm]) {
     return COMP_PILL_DISPLAY_BY_NAME_NORM[norm];
   }
+  // MVP display normalization for PA/Goalserve League 1/2 variants.
+  if (/\bleague\s*1\b/i.test(formatted) || /\bleague\s*one\b/i.test(formatted)) {
+    return "League One";
+  }
+  if (/\bleague\s*2\b/i.test(formatted) || /\bleague\s*two\b/i.test(formatted)) {
+    return "League Two";
+  }
   return formatted;
 }
 
