@@ -39,7 +39,7 @@ CREATE TABLE pa_entity_alias_map (
   public_slug TEXT,
   goalserve_slug TEXT,
   pa_tag_name TEXT NOT NULL,
-  pa_tag_name_normalized TEXT NOT NULL,
+  pa_tag_name_normalized TEXT NOT NULL DEFAULT '',
   display_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -69,9 +69,9 @@ TRUNCATE TABLE pa_entity_map_raw RESTART IDENTITY;
 TRUNCATE TABLE pa_entity_alias_map RESTART IDENTITY;
 
 \copy pa_entity_map_raw (source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_names, display_name) FROM 'football_mad_mappings_corrected.csv' WITH (FORMAT csv, HEADER true);
-\copy pa_entity_alias_map (source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_name, pa_tag_name_normalized, display_name) FROM 'football_mad_mappings_normalized.csv' WITH (FORMAT csv, HEADER true);
+\copy pa_entity_alias_map (source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_name, display_name) FROM 'football_mad_mappings_normalized.csv' WITH (FORMAT csv, HEADER true);
 
 -- Safety normalization pass (keeps lookup keys consistent)
 UPDATE pa_entity_alias_map
-SET pa_tag_name_normalized = lower(trim(pa_tag_name_normalized))
-WHERE pa_tag_name_normalized <> lower(trim(pa_tag_name_normalized));
+SET pa_tag_name_normalized = regexp_replace(replace(lower(trim(pa_tag_name)), '-', ' '), '\s+', ' ', 'g')
+WHERE pa_tag_name_normalized IS DISTINCT FROM regexp_replace(replace(lower(trim(pa_tag_name)), '-', ' '), '\s+', ' ', 'g');
