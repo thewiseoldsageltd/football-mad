@@ -70,8 +70,8 @@ TRUNCATE TABLE pa_entity_alias_map RESTART IDENTITY;
 
 -- Safety normalization pass (keeps lookup keys consistent)
 UPDATE pa_entity_alias_map
-SET pa_tag_name_normalized = regexp_replace(replace(lower(trim(pa_tag_name)), '-', ' '), '\s+', ' ', 'g')
-WHERE pa_tag_name_normalized IS DISTINCT FROM regexp_replace(replace(lower(trim(pa_tag_name)), '-', ' '), '\s+', ' ', 'g');
+SET pa_tag_name_normalized = regexp_replace(replace(regexp_replace(lower(trim(pa_tag_name)), '^tag:[[:space:]]*', ''), '-', ' '), '[[:space:]]+', ' ', 'g')
+WHERE pa_tag_name_normalized IS DISTINCT FROM regexp_replace(replace(regexp_replace(lower(trim(pa_tag_name)), '^tag:[[:space:]]*', ''), '-', ' '), '[[:space:]]+', ' ', 'g');
 
 ALTER TABLE pa_entity_alias_map
 ALTER COLUMN pa_tag_name_normalized SET NOT NULL;

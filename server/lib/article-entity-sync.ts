@@ -18,6 +18,7 @@ export function normalizePaTagForAliasLookup(tag: string): string {
   return tag
     .toLowerCase()
     .trim()
+    .replace(/^tag:\s*/, "")
     .replace(/-/g, " ")
     .replace(/\s+/g, " ");
 }
