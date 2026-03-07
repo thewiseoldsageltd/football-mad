@@ -39,7 +39,7 @@ CREATE TABLE pa_entity_alias_map (
   public_slug TEXT,
   goalserve_slug TEXT,
   pa_tag_name TEXT NOT NULL,
-  pa_tag_name_normalized TEXT NOT NULL DEFAULT '',
+  pa_tag_name_normalized TEXT,
   display_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -59,9 +59,6 @@ CREATE INDEX IF NOT EXISTS pa_entity_alias_map_entity_idx
 CREATE INDEX IF NOT EXISTS pa_entity_alias_map_alias_norm_idx
   ON pa_entity_alias_map (pa_tag_name_normalized);
 
-CREATE UNIQUE INDEX IF NOT EXISTS pa_entity_alias_map_unique_idx
-  ON pa_entity_alias_map (source, pa_tag_name_normalized, entity_type, entity_id);
-
 COMMIT;
 
 -- Idempotent reload: replace imported data with latest generated CSVs
@@ -75,3 +72,9 @@ TRUNCATE TABLE pa_entity_alias_map RESTART IDENTITY;
 UPDATE pa_entity_alias_map
 SET pa_tag_name_normalized = regexp_replace(replace(lower(trim(pa_tag_name)), '-', ' '), '\s+', ' ', 'g')
 WHERE pa_tag_name_normalized IS DISTINCT FROM regexp_replace(replace(lower(trim(pa_tag_name)), '-', ' '), '\s+', ' ', 'g');
+
+ALTER TABLE pa_entity_alias_map
+ALTER COLUMN pa_tag_name_normalized SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS pa_entity_alias_map_unique_idx
+  ON pa_entity_alias_map (source, pa_tag_name_normalized, entity_type, entity_id);
