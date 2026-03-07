@@ -68,28 +68,8 @@ COMMIT;
 TRUNCATE TABLE pa_entity_map_raw RESTART IDENTITY;
 TRUNCATE TABLE pa_entity_alias_map RESTART IDENTITY;
 
-\copy pa_entity_map_raw (
-  source,
-  entity_type,
-  entity_id,
-  entity_slug,
-  public_slug,
-  goalserve_slug,
-  pa_tag_names,
-  display_name
-) FROM 'football_mad_mappings_corrected.csv' WITH (FORMAT csv, HEADER true);
-
-\copy pa_entity_alias_map (
-  source,
-  entity_type,
-  entity_id,
-  entity_slug,
-  public_slug,
-  goalserve_slug,
-  pa_tag_name,
-  pa_tag_name_normalized,
-  display_name
-) FROM 'football_mad_mappings_normalized.csv' WITH (FORMAT csv, HEADER true);
+\copy pa_entity_map_raw (source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_names, display_name) FROM 'football_mad_mappings_corrected.csv' WITH (FORMAT csv, HEADER true);
+\copy pa_entity_alias_map (source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_name, pa_tag_name_normalized, display_name) FROM 'football_mad_mappings_normalized.csv' WITH (FORMAT csv, HEADER true);
 
 -- Safety normalization pass (keeps lookup keys consistent)
 UPDATE pa_entity_alias_map
