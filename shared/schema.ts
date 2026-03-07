@@ -912,6 +912,21 @@ export const insertEntityAliasSchema = createInsertSchema(entityAliases).omit({ 
 export type InsertEntityAlias = z.infer<typeof insertEntityAliasSchema>;
 export type EntityAlias = typeof entityAliases.$inferSelect;
 
+// ============ PA ENTITY ALIAS MAP (spreadsheet import source of truth) ============
+export const paEntityAliasMap = pgTable("pa_entity_alias_map", {
+  id: integer("id"),
+  source: text("source").notNull(),
+  entityType: text("entity_type").notNull(), // 'team', 'player', 'manager', 'competition'
+  entityId: text("entity_id").notNull(),
+  entitySlug: text("entity_slug"),
+  publicSlug: text("public_slug"),
+  goalserveSlug: text("goalserve_slug"),
+  paTagName: text("pa_tag_name").notNull(),
+  paTagNameNormalized: text("pa_tag_name_normalized").notNull(),
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at"),
+});
+
 // ============ TEAM MANAGERS (current manager per team) ============
 export const teamManagers = pgTable("team_managers", {
   teamId: varchar("team_id").primaryKey().references(() => teams.id, { onDelete: "cascade" }).notNull(),

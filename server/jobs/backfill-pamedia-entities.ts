@@ -62,9 +62,7 @@ export async function runBackfillPaMediaEntities(days: number): Promise<Backfill
         console.warn(`[backfill-pamedia-entities] skip invalid publishedAt articleId=${row.id} slug=${row.slug}`);
         continue;
       }
-      const stats = await syncArticleEntitiesFromTags(row.id, (row.tags as string[] | null) ?? [], {
-        allowPaPeopleFallback: true,
-      });
+      const stats = await syncArticleEntitiesFromTags(row.id, (row.tags as string[] | null) ?? []);
       const insertedTotal =
         stats.insertedCompetitions +
         stats.insertedTeams +
