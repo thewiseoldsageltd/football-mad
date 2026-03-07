@@ -5,11 +5,13 @@ This folder contains the database import setup for spreadsheet-derived PA mappin
 ## Tables
 
 - `pa_entity_map_raw`
-  - Raw, corrected mapping rows from the source spreadsheet export.
+  - Raw, corrected mapping rows from the source spreadsheet export (`football_mad_mappings_corrected.csv`).
+  - Shape: `source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_names, display_name`
   - Useful for auditing and diffing generated mapping batches.
 
 - `pa_entity_alias_map`
-  - Normalized alias lookup table.
+  - Normalized alias lookup table (`football_mad_mappings_normalized.csv`).
+  - Shape: `source, entity_type, entity_id, entity_slug, public_slug, goalserve_slug, pa_tag_name, pa_tag_name_normalized, display_name`
   - **Source of truth** for PA tag/alias -> canonical entity resolution.
 
 ## Files expected at import time

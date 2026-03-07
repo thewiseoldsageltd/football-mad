@@ -13,32 +13,34 @@
 
 BEGIN;
 
-CREATE TABLE IF NOT EXISTS pa_entity_map_raw (
+-- Recreate import tables so schema exactly matches generated CSV shape.
+DROP TABLE IF EXISTS pa_entity_map_raw;
+DROP TABLE IF EXISTS pa_entity_alias_map;
+
+CREATE TABLE pa_entity_map_raw (
   id BIGSERIAL PRIMARY KEY,
   source TEXT NOT NULL,
-  pa_tag TEXT NOT NULL,
-  pa_tag_normalized TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
-  entity_name TEXT,
   entity_slug TEXT,
-  confidence NUMERIC,
-  notes TEXT,
+  public_slug TEXT,
+  goalserve_slug TEXT,
+  pa_tag_names TEXT,
+  display_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS pa_entity_alias_map (
+CREATE TABLE pa_entity_alias_map (
   id BIGSERIAL PRIMARY KEY,
   source TEXT NOT NULL,
-  alias TEXT NOT NULL,
-  alias_normalized TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
-  entity_name TEXT,
   entity_slug TEXT,
-  is_primary BOOLEAN NOT NULL DEFAULT false,
-  confidence NUMERIC,
-  notes TEXT,
+  public_slug TEXT,
+  goalserve_slug TEXT,
+  pa_tag_name TEXT NOT NULL,
+  pa_tag_name_normalized TEXT NOT NULL,
+  display_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -47,18 +49,18 @@ CREATE INDEX IF NOT EXISTS pa_entity_map_raw_source_idx
   ON pa_entity_map_raw (source);
 CREATE INDEX IF NOT EXISTS pa_entity_map_raw_entity_idx
   ON pa_entity_map_raw (entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS pa_entity_map_raw_tag_norm_idx
-  ON pa_entity_map_raw (pa_tag_normalized);
+CREATE INDEX IF NOT EXISTS pa_entity_map_raw_tag_names_idx
+  ON pa_entity_map_raw (pa_tag_names);
 
 CREATE INDEX IF NOT EXISTS pa_entity_alias_map_source_idx
   ON pa_entity_alias_map (source);
 CREATE INDEX IF NOT EXISTS pa_entity_alias_map_entity_idx
   ON pa_entity_alias_map (entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS pa_entity_alias_map_alias_norm_idx
-  ON pa_entity_alias_map (alias_normalized);
+  ON pa_entity_alias_map (pa_tag_name_normalized);
 
 CREATE UNIQUE INDEX IF NOT EXISTS pa_entity_alias_map_unique_idx
-  ON pa_entity_alias_map (source, alias_normalized, entity_type, entity_id);
+  ON pa_entity_alias_map (source, pa_tag_name_normalized, entity_type, entity_id);
 
 COMMIT;
 
@@ -68,34 +70,28 @@ TRUNCATE TABLE pa_entity_alias_map RESTART IDENTITY;
 
 \copy pa_entity_map_raw (
   source,
-  pa_tag,
-  pa_tag_normalized,
   entity_type,
   entity_id,
-  entity_name,
   entity_slug,
-  confidence,
-  notes
+  public_slug,
+  goalserve_slug,
+  pa_tag_names,
+  display_name
 ) FROM 'football_mad_mappings_corrected.csv' WITH (FORMAT csv, HEADER true);
 
 \copy pa_entity_alias_map (
   source,
-  alias,
-  alias_normalized,
   entity_type,
   entity_id,
-  entity_name,
   entity_slug,
-  is_primary,
-  confidence,
-  notes
+  public_slug,
+  goalserve_slug,
+  pa_tag_name,
+  pa_tag_name_normalized,
+  display_name
 ) FROM 'football_mad_mappings_normalized.csv' WITH (FORMAT csv, HEADER true);
 
 -- Safety normalization pass (keeps lookup keys consistent)
-UPDATE pa_entity_map_raw
-SET pa_tag_normalized = lower(trim(pa_tag_normalized))
-WHERE pa_tag_normalized <> lower(trim(pa_tag_normalized));
-
 UPDATE pa_entity_alias_map
-SET alias_normalized = lower(trim(alias_normalized))
-WHERE alias_normalized <> lower(trim(alias_normalized));
+SET pa_tag_name_normalized = lower(trim(pa_tag_name_normalized))
+WHERE pa_tag_name_normalized <> lower(trim(pa_tag_name_normalized));
