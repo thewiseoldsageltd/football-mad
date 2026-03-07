@@ -5,6 +5,7 @@ import {
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
   competitions, articleCompetitions,
+  paEntityAliasMap,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -25,6 +26,7 @@ import {
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
 } from "@shared/schema";
+import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
@@ -159,6 +161,39 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private async getPaOverrideMap(
+    entityType: "team" | "competition",
+    entityIds: string[],
+  ): Promise<Map<string, { name?: string; slug?: string }>> {
+    if (entityIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        entityId: paEntityAliasMap.entityId,
+        displayName: paEntityAliasMap.displayName,
+        publicSlug: paEntityAliasMap.publicSlug,
+      })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+          inArray(paEntityAliasMap.entityType, [entityType, `${entityType}s`]),
+          inArray(paEntityAliasMap.entityId, entityIds),
+        ),
+      );
+
+    const out = new Map<string, { name?: string; slug?: string }>();
+    for (const row of rows) {
+      if (!out.has(row.entityId)) {
+        out.set(row.entityId, {
+          name: row.displayName ?? undefined,
+          slug: row.publicSlug ?? undefined,
+        });
+      }
+    }
+    return out;
+  }
+
   // Teams
   async getTeams(): Promise<Team[]> {
     return db.select().from(teams).orderBy(teams.name);
@@ -407,12 +442,34 @@ export class DatabaseStorage implements IStorage {
       .where(eq(articleCompetitions.articleId, article.id))
       .orderBy(desc(articleCompetitions.salienceScore));
 
+    const isPaMediaArticle = article.source === ARTICLE_SOURCE_PA_MEDIA;
+    const teamOverrideMap = isPaMediaArticle
+      ? await this.getPaOverrideMap("team", teamRows.map((row) => row.id))
+      : new Map<string, { name?: string; slug?: string }>();
+    const competitionOverrideMap = isPaMediaArticle
+      ? await this.getPaOverrideMap("competition", competitionRows.map((row) => row.id))
+      : new Map<string, { name?: string; slug?: string }>();
+
     return {
       ...article,
-      entityTeams: teamRows,
+      entityTeams: teamRows.map((row) => {
+        const override = teamOverrideMap.get(row.id);
+        return {
+          ...row,
+          name: override?.name || row.name,
+          slug: override?.slug || row.slug,
+        };
+      }),
       entityPlayers: playerRows,
       entityManagers: managerRows,
-      entityCompetitions: competitionRows,
+      entityCompetitions: competitionRows.map((row) => {
+        const override = competitionOverrideMap.get(row.id);
+        return {
+          ...row,
+          name: override?.name || row.name,
+          slug: override?.slug || row.slug,
+        };
+      }),
     };
   }
 
@@ -513,6 +570,32 @@ export class DatabaseStorage implements IStorage {
         .where(inArray(articleManagers.articleId, articleIds)),
     ]);
 
+    const paArticleRows = await db
+      .select({ id: articles.id })
+      .from(articles)
+      .where(and(inArray(articles.id, articleIds), eq(articles.source, ARTICLE_SOURCE_PA_MEDIA)));
+    const paArticleIds = new Set(paArticleRows.map((row) => row.id));
+
+    const paTeamEntityIds = Array.from(
+      new Set(
+        teamRows
+          .filter((row) => paArticleIds.has(row.articleId))
+          .map((row) => row.id),
+      ),
+    );
+    const paCompetitionEntityIds = Array.from(
+      new Set(
+        competitionRows
+          .filter((row) => paArticleIds.has(row.articleId))
+          .map((row) => row.id),
+      ),
+    );
+
+    const [teamOverrideMap, competitionOverrideMap] = await Promise.all([
+      this.getPaOverrideMap("team", paTeamEntityIds),
+      this.getPaOverrideMap("competition", paCompetitionEntityIds),
+    ]);
+
     const compMap = new Map<string, EntityLite[]>();
     const teamMap = new Map<string, EntityLite[]>();
     const playerMap = new Map<string, EntityLite[]>();
@@ -520,11 +603,21 @@ export class DatabaseStorage implements IStorage {
 
     for (const row of competitionRows) {
       if (!compMap.has(row.articleId)) compMap.set(row.articleId, []);
-      compMap.get(row.articleId)!.push({ id: row.id, name: row.name, slug: row.slug });
+      const override = paArticleIds.has(row.articleId) ? competitionOverrideMap.get(row.id) : undefined;
+      compMap.get(row.articleId)!.push({
+        id: row.id,
+        name: override?.name || row.name,
+        slug: override?.slug || row.slug,
+      });
     }
     for (const row of teamRows) {
       if (!teamMap.has(row.articleId)) teamMap.set(row.articleId, []);
-      teamMap.get(row.articleId)!.push({ id: row.id, name: row.name, slug: row.slug });
+      const override = paArticleIds.has(row.articleId) ? teamOverrideMap.get(row.id) : undefined;
+      teamMap.get(row.articleId)!.push({
+        id: row.id,
+        name: override?.name || row.name,
+        slug: override?.slug || row.slug,
+      });
     }
     for (const row of playerRows) {
       if (!playerMap.has(row.articleId)) playerMap.set(row.articleId, []);

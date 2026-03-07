@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -62,6 +62,7 @@ import {
   setPamediaRunnerConfig,
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
+import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 let liveMatchesCache: any = null;
@@ -7047,6 +7048,78 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .from(articleCompetitions)
         .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
         .where(eq(articleCompetitions.articleId, article.id));
+
+      if (article.source === ARTICLE_SOURCE_PA_MEDIA) {
+        const teamIds = Array.from(new Set(linkedTeams.map((row) => row.id)));
+        const competitionIds = Array.from(new Set(linkedCompetitions.map((row) => row.id)));
+
+        const [teamOverrideRows, competitionOverrideRows] = await Promise.all([
+          teamIds.length > 0
+            ? db
+              .select({
+                entityId: paEntityAliasMap.entityId,
+                displayName: paEntityAliasMap.displayName,
+                publicSlug: paEntityAliasMap.publicSlug,
+              })
+              .from(paEntityAliasMap)
+              .where(
+                and(
+                  eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+                  inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+                  inArray(paEntityAliasMap.entityId, teamIds),
+                ),
+              )
+            : Promise.resolve([]),
+          competitionIds.length > 0
+            ? db
+              .select({
+                entityId: paEntityAliasMap.entityId,
+                displayName: paEntityAliasMap.displayName,
+                publicSlug: paEntityAliasMap.publicSlug,
+              })
+              .from(paEntityAliasMap)
+              .where(
+                and(
+                  eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+                  inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
+                  inArray(paEntityAliasMap.entityId, competitionIds),
+                ),
+              )
+            : Promise.resolve([]),
+        ]);
+
+        const teamOverrideMap = new Map<string, { name?: string; slug?: string }>();
+        for (const row of teamOverrideRows) {
+          if (!teamOverrideMap.has(row.entityId)) {
+            teamOverrideMap.set(row.entityId, {
+              name: row.displayName ?? undefined,
+              slug: row.publicSlug ?? undefined,
+            });
+          }
+        }
+
+        const competitionOverrideMap = new Map<string, { name?: string; slug?: string }>();
+        for (const row of competitionOverrideRows) {
+          if (!competitionOverrideMap.has(row.entityId)) {
+            competitionOverrideMap.set(row.entityId, {
+              name: row.displayName ?? undefined,
+              slug: row.publicSlug ?? undefined,
+            });
+          }
+        }
+
+        linkedTeams.forEach((team) => {
+          const override = teamOverrideMap.get(team.id);
+          if (override?.name) team.name = override.name;
+          if (override?.slug) team.slug = override.slug;
+        });
+
+        linkedCompetitions.forEach((competition) => {
+          const override = competitionOverrideMap.get(competition.id);
+          if (override?.name) competition.name = override.name;
+          if (override?.slug) competition.slug = override.slug;
+        });
+      }
       
       // Find more-like-this articles (share entities or same competition)
       let moreLikeThis: any[] = [];
