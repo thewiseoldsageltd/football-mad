@@ -2,6 +2,8 @@
 
 This folder contains the database import setup for spreadsheet-derived PA mapping data.
 
+Operational note: CSV import is bootstrap/reference only. Ongoing mapping maintenance should be DB-first via `script/manage-pa-alias.ts`.
+
 ## Tables
 
 - `pa_entity_map_raw`
