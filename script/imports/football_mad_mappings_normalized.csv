@@ -1,0 +1,502 @@
+source,entity_type,entity_id,entity_slug,public_slug,goalserve_slug,pa_tag_name,display_name
+pa_media,competition,fd4a17bb-f84d-41f1-a3b8-e84251529735,premier-league-england-1204,premier-league,1204,tag:premier-league,Premier League
+pa_media,competition,fd4a17bb-f84d-41f1-a3b8-e84251529735,premier-league-england-1204,premier-league,1204,tag:english-premier-league,Premier League
+pa_media,competition,fd4a17bb-f84d-41f1-a3b8-e84251529735,premier-league-england-1204,premier-league,1204,tag:epl,Premier League
+pa_media,competition,e0213a3e-2a8e-4f5f-be09-924631577d72,championship-england-1205,championship,1205,tag:championship,Championship
+pa_media,competition,e0213a3e-2a8e-4f5f-be09-924631577d72,championship-england-1205,championship,1205,tag:efl-championship,Championship
+pa_media,competition,e0213a3e-2a8e-4f5f-be09-924631577d72,championship-england-1205,championship,1205,tag:skybet-championship,Championship
+pa_media,competition,7eef6b5f-94b1-400b-92b8-33c69d473215,league-one,league-one,1206,tag:league-one,League One
+pa_media,competition,7eef6b5f-94b1-400b-92b8-33c69d473215,league-one,league-one,1206,tag:league-1,League One
+pa_media,competition,7eef6b5f-94b1-400b-92b8-33c69d473215,league-one,league-one,1206,tag:efl-league-one,League One
+pa_media,competition,7eef6b5f-94b1-400b-92b8-33c69d473215,league-one,league-one,1206,tag:efl-league-1,League One
+pa_media,competition,7eef6b5f-94b1-400b-92b8-33c69d473215,league-one,league-one,1206,tag:skybet-league-one,League One
+pa_media,competition,73daf38c-b400-4d9d-a608-732809c97aea,league-two,league-two,1197,tag:league-two,League Two
+pa_media,competition,73daf38c-b400-4d9d-a608-732809c97aea,league-two,league-two,1197,tag:league-2,League Two
+pa_media,competition,73daf38c-b400-4d9d-a608-732809c97aea,league-two,league-two,1197,tag:efl-league-two,League Two
+pa_media,competition,73daf38c-b400-4d9d-a608-732809c97aea,league-two,league-two,1197,tag:efl-league-2,League Two
+pa_media,competition,73daf38c-b400-4d9d-a608-732809c97aea,league-two,league-two,1197,tag:skybet-league-two,League Two
+pa_media,competition,8997ad5d-43ec-44c2-ae42-83de03eca9d6,national-league,national-league,1203,tag:national-league,National League
+pa_media,competition,8997ad5d-43ec-44c2-ae42-83de03eca9d6,national-league,national-league,1203,tag:vanarama-national-league,National League
+pa_media,competition,8997ad5d-43ec-44c2-ae42-83de03eca9d6,national-league,national-league,1203,tag:enterprise-national-league,National League
+pa_media,competition,0672c360-4097-4f56-a6c0-a606cdb69797,fa-cup-england-1198,fa-cup,1198,tag:fa-cup,FA Cup
+pa_media,competition,0672c360-4097-4f56-a6c0-a606cdb69797,fa-cup-england-1198,fa-cup,1198,tag:emirates-fa-cup,FA Cup
+pa_media,competition,8e412ddb-a3d7-4661-970f-c159076a0b7f,efl-cup-england-1199,efl-cup,1199,tag:efl-cup,EFL Cup
+pa_media,competition,8e412ddb-a3d7-4661-970f-c159076a0b7f,efl-cup-england-1199,efl-cup,1199,tag:league-cup,EFL Cup
+pa_media,competition,8e412ddb-a3d7-4661-970f-c159076a0b7f,efl-cup-england-1199,efl-cup,1199,tag:carabao-cup,EFL Cup
+pa_media,competition,bda4474c-e199-47a2-90da-e8411fb08e66,premier-league-scotland-1370,scottish-premiership,1370,tag:scottish-premiership,Scottish Premiership
+pa_media,competition,bda4474c-e199-47a2-90da-e8411fb08e66,premier-league-scotland-1370,scottish-premiership,1370,tag:scottish-premier-league,Scottish Premiership
+pa_media,competition,dd157bb6-3cc9-4961-a839-fcd1573ce5cf,division1-scotland-1373,scottish-championship,1373,tag:scottish-championship,Scottish Championship
+pa_media,competition,29a22c92-59e3-4c53-81b7-e63b81dd50ca,division2-scotland-1376,scottish-league-one,1376,tag:scottish-league-one,Scottish League One
+pa_media,competition,29a22c92-59e3-4c53-81b7-e63b81dd50ca,division2-scotland-1376,scottish-league-one,1376,tag:scottish-league-1,Scottish League One
+pa_media,competition,58da6cb0-efca-4f94-bb59-ef7f53f9a738,division3-scotland-1375,scottish-league-two,1375,tag:scottish-league-two,Scottish League Two
+pa_media,competition,58da6cb0-efca-4f94-bb59-ef7f53f9a738,division3-scotland-1375,scottish-league-two,1375,tag:scottish-league-2,Scottish League Two
+pa_media,competition,11739957-8457-4317-9f21-5119bcd1320b,fa-cup-scotland-1371,scottish-cup,1371,tag;scottish-cup,Scottish Cup
+pa_media,competition,11739957-8457-4317-9f21-5119bcd1320b,fa-cup-scotland-1371,scottish-cup,1371,tag:scottish-fa-cup,Scottish Cup
+pa_media,competition,37c5a9ba-c37a-4d6b-b091-72a1f118c82b,league-cup-scotland-1372,scottish-league-cup,1372,tag:scottish-league-cup,Scottish League Cup
+pa_media,competition,37c5a9ba-c37a-4d6b-b091-72a1f118c82b,league-cup-scotland-1372,scottish-league-cup,1372,tag:viaplay-cup,Scottish League Cup
+pa_media,competition,37c5a9ba-c37a-4d6b-b091-72a1f118c82b,league-cup-scotland-1372,scottish-league-cup,1372,tag:premier-sports-cup,Scottish League Cup
+pa_media,competition,c7ce468a-f3ce-4417-923a-48ccc058b48d,primera-spain-1399,la-liga,1399,tag:la-liga,La Liga
+pa_media,competition,c7ce468a-f3ce-4417-923a-48ccc058b48d,primera-spain-1399,la-liga,1399,tag:laliga,La Liga
+pa_media,competition,c7ce468a-f3ce-4417-923a-48ccc058b48d,primera-spain-1399,la-liga,1399,tag:spanish-la-liga,La Liga
+pa_media,competition,c7ce468a-f3ce-4417-923a-48ccc058b48d,primera-spain-1399,la-liga,1399,tag:spanish-laliga,La Liga
+pa_media,competition,718032bf-1ab7-4ec3-b018-6534c8fe5690,copa-del-rey,copa-del-rey,202,tag:copa-del-rey,Copa del Rey
+pa_media,competition,718032bf-1ab7-4ec3-b018-6534c8fe5690,copa-del-rey,copa-del-rey,202,tag:spanish-copa-del-rey,Copa del Rey
+pa_media,competition,ad7310c6-04c3-4087-ba66-2dbff5cdcc7f,serie-a-italy-1269,serie-a,1269,tag:serie-a,Serie A
+pa_media,competition,ad7310c6-04c3-4087-ba66-2dbff5cdcc7f,serie-a-italy-1269,serie-a,1269,tag:italy-serie-a,Serie A
+pa_media,competition,4ece8b2a-0678-404f-b5bc-7b6e82bc5133,coppa-italia-italy-1264,coppa-italia,1264,tag:coppa-italia,Coppa Italia
+pa_media,competition,cf80526a-1159-49a1-bb13-0a04b691caec,bundesliga-germany-1229,bundesliga,1229,tag:bundesliga,Bundesliga
+pa_media,competition,cf80526a-1159-49a1-bb13-0a04b691caec,bundesliga-germany-1229,bundesliga,1229,tag:german-bundesliga,Bundesliga
+pa_media,competition,16c00c70-662f-4bfa-b693-9ade6e101c76,dfb-pokal,dfb-pokal,202,tag:dfb-pokal,DFB-Pokal
+pa_media,competition,16c00c70-662f-4bfa-b693-9ade6e101c76,dfb-pokal,dfb-pokal,202,tag:german-dfb-pokal,DFB-Pokal
+pa_media,competition,1a1f86c2-af1f-4075-81e2-57b45269b17f,ligue-1-france-1221,ligue-1,1221,tag:ligue-1,Ligue 1
+pa_media,competition,1a1f86c2-af1f-4075-81e2-57b45269b17f,ligue-1-france-1221,ligue-1,1221,tag:french-ligue-1,Ligue 1
+pa_media,competition,cf1f1d8d-19a5-4642-995f-388c517d03e7,coupe-de-france,coupe-de-france,231,tag:coupe-de-france,Coupe de France
+pa_media,competition,81259a53-6cba-41a3-8ab9-a53f04003b1f,uefa-champions-league-eurocups-1005,uefa-champions-league,1005,tag:champions-league,Champions League
+pa_media,competition,81259a53-6cba-41a3-8ab9-a53f04003b1f,uefa-champions-league-eurocups-1005,uefa-champions-league,1005,tag:uefa-champions-league,Champions League
+pa_media,competition,25469f4d-d1a5-4aba-8ff4-ba89a8eaae6e,uefa-europa-league-eurocups-1007,uefa-europa-league,1007,tag:europa-league,Europa League
+pa_media,competition,25469f4d-d1a5-4aba-8ff4-ba89a8eaae6e,uefa-europa-league-eurocups-1007,uefa-europa-league,1007,tag:uefa-europa-league,Europa League
+pa_media,competition,0028c6f2-e126-4ab8-9ac6-7a88bd8fb85d,europa-conference-league-eurocups-18853,uefa-conference-league,18853,tag:conference-league,Conference League
+pa_media,competition,0028c6f2-e126-4ab8-9ac6-7a88bd8fb85d,europa-conference-league-eurocups-18853,uefa-conference-league,18853,tag:uefa-conference-league,Conference League
+pa_media,team,b023293c-1619-4eaf-b664-49fc67241bb4,arsenal,arsenal,9002,tag:arsenal,Arsenal
+pa_media,team,b023293c-1619-4eaf-b664-49fc67241bb4,arsenal,arsenal,9002,tag:arsenal-fc,Arsenal
+pa_media,team,2b8d6db0-8973-4ee1-9095-ad3e0b3278c2,aston-villa,aston-villa,9008,tag:aston-villa,Aston Villa
+pa_media,team,2b8d6db0-8973-4ee1-9095-ad3e0b3278c2,aston-villa,aston-villa,9008,tag:aston-villa-fc,Aston Villa
+pa_media,team,930598bb-032d-4bee-bfac-30a56ac71d37,bournemouth,bournemouth,9053,tag:bournemouth,Bournemouth
+pa_media,team,930598bb-032d-4bee-bfac-30a56ac71d37,bournemouth,bournemouth,9053,tag:afc-bournemouth,Bournemouth
+pa_media,team,0107ca7f-f82e-49af-b22c-2c4b756494e9,brentford,brentford,9059,tag:brentford,Brentford
+pa_media,team,0107ca7f-f82e-49af-b22c-2c4b756494e9,brentford,brentford,9059,tag:brentford-fc,Brentford
+pa_media,team,9ec9ea10-ffa8-4fa1-900b-575774ba11a9,brighton,brighton-and-hove-albion,9065,tag:brighton,Brighton
+pa_media,team,9ec9ea10-ffa8-4fa1-900b-575774ba11a9,brighton,brighton-and-hove-albion,9065,tag:brighton-and-hove-albion,Brighton
+pa_media,team,eb3a8c48-9afa-497a-ab3f-401141898a50,burnley,burnley,9072,tag:burnley,Burnley
+pa_media,team,eb3a8c48-9afa-497a-ab3f-401141898a50,burnley,burnley,9072,tag:burnley-fc,Burnley
+pa_media,team,4bc08d26-702e-49bc-94ff-30ca7c54a230,chelsea,chelsea,9092,tag:chelsea,Chelsea
+pa_media,team,4bc08d26-702e-49bc-94ff-30ca7c54a230,chelsea,chelsea,9092,tag:chelsea-fc,Chelsea
+pa_media,team,cf72c5c3-3895-45e5-8350-e9ba7c128bca,crystal-palace,crystal-palace,9127,tag:crystal-palace,Crystal Palace
+pa_media,team,cf72c5c3-3895-45e5-8350-e9ba7c128bca,crystal-palace,crystal-palace,9127,tag:crystal-palace-fc,Crystal Palace
+pa_media,team,e0ed5fb6-ddc1-4c4f-b0be-623b2d2324ad,everton,everton,9158,tag:everton,Everton
+pa_media,team,e0ed5fb6-ddc1-4c4f-b0be-623b2d2324ad,everton,everton,9158,tag:everton-fc,Everton
+pa_media,team,79bc04c0-f8ec-4c2a-8b58-2786f25d3f5e,fulham,fulham,9175,tag:fulham,Fulham
+pa_media,team,79bc04c0-f8ec-4c2a-8b58-2786f25d3f5e,fulham,fulham,9175,tag:fulham-fc,Fulham
+pa_media,team,91d01576-9457-43ea-a1ef-371c701232d2,leeds,leeds-united,9238,tag:leeds,Leeds
+pa_media,team,91d01576-9457-43ea-a1ef-371c701232d2,leeds,leeds-united,9238,tag:leeds-united,Leeds
+pa_media,team,c3440c2a-91eb-4108-b681-9401e35a5e29,liverpool,liverpool,9249,tag:liverpool,Liverpool
+pa_media,team,c3440c2a-91eb-4108-b681-9401e35a5e29,liverpool,liverpool,9249,tag:liverpool-fc,Liverpool
+pa_media,team,fe94e739-9b70-4e0e-9e23-e0e601b018d9,manchester-city,manchester-city,9259,tag:manchester-city,Man City
+pa_media,team,fe94e739-9b70-4e0e-9e23-e0e601b018d9,manchester-city,manchester-city,9259,tag:man-city,Man City
+pa_media,team,1e3a078f-c46d-492a-99ec-97d4ed24c8f5,manchester-utd,manchester-united,9260,tag:manchester-united,Man Utd
+pa_media,team,1e3a078f-c46d-492a-99ec-97d4ed24c8f5,manchester-utd,manchester-united,9260,tag:manchester-utd,Man Utd
+pa_media,team,1e3a078f-c46d-492a-99ec-97d4ed24c8f5,manchester-utd,manchester-united,9260,tag:man-utd,Man Utd
+pa_media,team,1e3a078f-c46d-492a-99ec-97d4ed24c8f5,manchester-utd,manchester-united,9260,tag:man-united,Man Utd
+pa_media,team,15a6ef4b-4d2f-4cec-9dd8-a88da68c074f,newcastle,newcastle,9287,tag:newcastle,Newcastle
+pa_media,team,15a6ef4b-4d2f-4cec-9dd8-a88da68c074f,newcastle,newcastle,9287,tag:newcastle-united,Newcastle
+pa_media,team,15a6ef4b-4d2f-4cec-9dd8-a88da68c074f,newcastle,newcastle,9287,tag:newcastle-utd,Newcastle
+pa_media,team,7a8c198d-9dd2-4f7d-a445-f60f140182a4,nottingham,nottingham-forest,9297,tag:nottingham-forest,Nott'm Forest
+pa_media,team,7a8c198d-9dd2-4f7d-a445-f60f140182a4,nottingham,nottingham-forest,9297,tag:nottm-forest,Nott'm Forest
+pa_media,team,fe2e21e3-f2db-4fe2-808b-9057a65f237e,sunderland,sunderland,9384,tag:sunderland,Sunderland
+pa_media,team,fe2e21e3-f2db-4fe2-808b-9057a65f237e,sunderland,sunderland,9384,tag:sunderland-afc,Sunderland
+pa_media,team,5b5d3391-daf9-49a2-9e17-d298de47c592,tottenham,tottenham-hotspur,9406,tag:tottenham,Tottenham
+pa_media,team,5b5d3391-daf9-49a2-9e17-d298de47c592,tottenham,tottenham-hotspur,9406,tag:tottenham-hotspur,Tottenham
+pa_media,team,5b5d3391-daf9-49a2-9e17-d298de47c592,tottenham,tottenham-hotspur,9406,tag:spurs,Tottenham
+pa_media,team,e684405d-a591-4bb8-b7fd-fae3916a81d0,west-ham,west-ham-united,9427,tag:west-ham,West Ham
+pa_media,team,e684405d-a591-4bb8-b7fd-fae3916a81d0,west-ham,west-ham-united,9427,tag:west-ham-united,West Ham
+pa_media,team,a92c6eea-5992-4779-b78c-c9f7114ab1b1,wolves,wolverhamption-wanderers,9446,tag:wolves,Wolves
+pa_media,team,a92c6eea-5992-4779-b78c-c9f7114ab1b1,wolves,wolverhamption-wanderers,9446,tag:wolverhampton-wanderers,Wolves
+pa_media,team,769cc9b7-949c-4f32-976c-05aa10579dc0,birmingham,birmingham-city,9039,tag:birmingham,Birmingham
+pa_media,team,769cc9b7-949c-4f32-976c-05aa10579dc0,birmingham,birmingham-city,9039,tag:birmingham-city,Birmingham
+pa_media,team,b1ef7002-a5ed-4a2a-a9d1-59d42a09ed40,blackburn,blackburn-rovers,9044,tag:blackburn,Blackburn
+pa_media,team,b1ef7002-a5ed-4a2a-a9d1-59d42a09ed40,blackburn,blackburn-rovers,9044,tag:blackburn-rovers,Blackburn
+pa_media,team,00a1b1a6-a2d5-4309-9c77-56fbcbbc4f16,bristol-city,bristol-city,9066,tag:bristol-city,Bristol City
+pa_media,team,40d5af31-8195-4c02-b61c-b27bd986d229,charlton,charlton-athletic,9088,tag:charlton,Charlton
+pa_media,team,40d5af31-8195-4c02-b61c-b27bd986d229,charlton,charlton-athletic,9088,tag:charlton-athletic,Charlton
+pa_media,team,0b08ff37-f8ca-4c8c-a4e0-a5245c8aab64,coventry,coventry-city,9116,tag:coventry,Coventry
+pa_media,team,0b08ff37-f8ca-4c8c-a4e0-a5245c8aab64,coventry,coventry-city,9116,tag:coventry-city,Coventry
+pa_media,team,cf4b6f27-b8a6-4f79-aaf6-90d8665b3460,derby,derby-county,9133,tag:derby,Derby
+pa_media,team,cf4b6f27-b8a6-4f79-aaf6-90d8665b3460,derby,derby-county,9133,tag:derby-county,Derby
+pa_media,team,05a1e061-8d6f-4d78-a5a4-6e96f97c2b3f,hull,hull-city,9221,tag:hull,Hull City
+pa_media,team,05a1e061-8d6f-4d78-a5a4-6e96f97c2b3f,hull,hull-city,9221,tag:hull-city,Hull City
+pa_media,team,99983cc4-af64-4959-ba61-bf03b7439246,ipswich,ipswich-town,9227,tag:ipswich,Ipswich
+pa_media,team,99983cc4-af64-4959-ba61-bf03b7439246,ipswich,ipswich-town,9227,tag:ipswich-town,Ipswich
+pa_media,team,3e565624-e38e-40b0-bf4e-98f5f4b94390,leicester,leicester-city,9240,tag:leicester,Leicester
+pa_media,team,3e565624-e38e-40b0-bf4e-98f5f4b94390,leicester,leicester-city,9240,tag:leicester-city,Leicester
+pa_media,team,742efd83-b2f6-412a-8892-5426c6736bb6,middlesbrough,middlesbrough,9274,tag:middlesbrough,Middlesbrough
+pa_media,team,742efd83-b2f6-412a-8892-5426c6736bb6,middlesbrough,middlesbrough,9274,tag:middlesbrough-fc,Middlesbrough
+pa_media,team,248bc3a3-3fe0-4fd2-9bd2-d7251ee4284d,millwall,millwall,9276,tag:millwall,Millwall
+pa_media,team,248bc3a3-3fe0-4fd2-9bd2-d7251ee4284d,millwall,millwall,9276,tag:millwall-fc,Millwall
+pa_media,team,8380f25c-d48c-423c-9776-1bec67603d87,norwich,norwich-city,9296,tag:norwich,Norwich
+pa_media,team,8380f25c-d48c-423c-9776-1bec67603d87,norwich,norwich-city,9296,tag:norwich-city,Norwich
+pa_media,team,2c4b4e78-8b07-4370-af02-86ee99572705,oxford-utd,oxford-united,9306,tag:oxford,Oxford
+pa_media,team,2c4b4e78-8b07-4370-af02-86ee99572705,oxford-utd,oxford-united,9306,tag:oxford-united,Oxford
+pa_media,team,5d53457f-913a-48bc-af70-02a234f8cbaa,portsmouth,portsmouth,9314,tag:portsmouth,Portsmouth
+pa_media,team,5d53457f-913a-48bc-af70-02a234f8cbaa,portsmouth,portsmouth,9314,tag:portsmouth-fc,Portsmouth
+pa_media,team,26edc9f3-22bf-47b2-b504-3f8374ee9c78,preston,preston-north-end,9317,tag:preston,Preston
+pa_media,team,26edc9f3-22bf-47b2-b504-3f8374ee9c78,preston,preston-north-end,9317,tag:preston-north-end,Preston
+pa_media,team,26edc9f3-22bf-47b2-b504-3f8374ee9c78,preston,preston-north-end,9317,tag:preston-ne,Preston
+pa_media,team,d2cd54a0-c498-412f-afed-56e6f90a5b00,qpr,queens-park-rangers,9318,tag:qpr,QPR 
+pa_media,team,d2cd54a0-c498-412f-afed-56e6f90a5b00,qpr,queens-park-rangers,9318,tag:queens-park-rangers,QPR 
+pa_media,team,e2109d8e-5f4a-4f6c-a668-4544979ad9ff,sheffield-utd,sheffield-united,9348,tag:sheffield-utd,Sheff Utd
+pa_media,team,e2109d8e-5f4a-4f6c-a668-4544979ad9ff,sheffield-utd,sheffield-united,9348,tag:sheffield-united,Sheff Utd
+pa_media,team,e2109d8e-5f4a-4f6c-a668-4544979ad9ff,sheffield-utd,sheffield-united,9348,tag:sheff-utd,Sheff Utd
+pa_media,team,2659b471-e8ac-4fad-9dec-92929529aac7,sheffield-wed,sheffield-Wednesday,9349,tag:sheff-wed,Sheff Wed
+pa_media,team,2659b471-e8ac-4fad-9dec-92929529aac7,sheffield-wed,sheffield-Wednesday,9349,tag:sheffield-Wednesday,Sheff Wed
+pa_media,team,2659b471-e8ac-4fad-9dec-92929529aac7,sheffield-wed,sheffield-Wednesday,9349,tag:sheffield-wed,Sheff Wed
+pa_media,team,db4e9e70-f66a-4ec8-b0cf-6777047cdfec,southampton,southampton,9363,tag:southampton,Southampton
+pa_media,team,db4e9e70-f66a-4ec8-b0cf-6777047cdfec,southampton,southampton,9363,tag:southampton-fc,Southampton
+pa_media,team,db4e9e70-f66a-4ec8-b0cf-6777047cdfec,southampton,southampton,9363,tag:soton,Southampton
+pa_media,team,25df1ced-0ef0-4459-9b27-24bd05444989,stoke,stoke-city,9378,tag:stoke,Stoke
+pa_media,team,25df1ced-0ef0-4459-9b27-24bd05444989,stoke,stoke-city,9378,tag:stoke-city,Stoke
+pa_media,team,fabbad54-655d-46d8-a413-c8a8d17edb1b,swansea,swansea-city,9387,tag:swansea,Swansea
+pa_media,team,fabbad54-655d-46d8-a413-c8a8d17edb1b,swansea,swansea-city,9387,tag:swansea-city,Swansea
+pa_media,team,794702ea-48ce-45b9-aef9-1a8b078ea7de,watford,watford,9423,tag:watford,Watford
+pa_media,team,794702ea-48ce-45b9-aef9-1a8b078ea7de,watford,watford,9423,tag:watford-fc,Watford
+pa_media,team,39f15fa1-962f-463d-ae06-441f5a521638,west-brom,west-bromwich-albion,9426,tag:west-brom,West Brom
+pa_media,team,39f15fa1-962f-463d-ae06-441f5a521638,west-brom,west-bromwich-albion,9426,tag:west-bromwich-albion,West Brom
+pa_media,team,39f15fa1-962f-463d-ae06-441f5a521638,west-brom,west-bromwich-albion,9426,tag:wba,West Brom
+pa_media,team,8dfe8a29-ee01-4a03-b9c3-38aa4dd7c1ee,wrexham,wrexham,9453,tag:wrexham,Wrexham
+pa_media,team,8dfe8a29-ee01-4a03-b9c3-38aa4dd7c1ee,wrexham,wrexham,9453,tag:wrexham-afc,Wrexham
+pa_media,team,8cccd94f-c5d4-4055-a4c8-ba135b2401d2,afc-wimbledon,afc-wimbledon,8994,tag:afc-wimbledon,AFC Wimbledon
+pa_media,team,8cccd94f-c5d4-4055-a4c8-ba135b2401d2,afc-wimbledon,afc-wimbledon,8994,tag:wimbledon,AFC Wimbledon
+pa_media,team,e5b93089-cb2d-45f0-9bbc-2c16c8c3408e,barnsley,barnsley,9021,tag:barnsley,Barnsley
+pa_media,team,e5b93089-cb2d-45f0-9bbc-2c16c8c3408e,barnsley,barnsley,9021,tag:barnsley-fc,Barnsley
+pa_media,team,134f1171-024d-4a1c-a7b1-110ff1f857f2,blackpool,blackpool,9045,tag:blackpool,Blackpool
+pa_media,team,134f1171-024d-4a1c-a7b1-110ff1f857f2,blackpool,blackpool,9045,tag:blackpool-fc,Blackpool
+pa_media,team,366c8f9c-55ea-4c40-95f9-52e3c314e30c,bolton,bolton-wanderers,9048,tag:bolton,Bolton
+pa_media,team,366c8f9c-55ea-4c40-95f9-52e3c314e30c,bolton,bolton-wanderers,9048,tag:bolton-wanderers,Bolton
+pa_media,team,5db63403-90de-41f5-a915-1df628583ac8,bradford-city,bradford-city,9056,tag:bradford,Bradford
+pa_media,team,5db63403-90de-41f5-a915-1df628583ac8,bradford-city,bradford-city,9056,tag:bradford-city,Bradford
+pa_media,team,1f55a1b1-b641-4d6c-bb70-f059d819981a,burton,burton-albion,9074,tag:burton,Burton
+pa_media,team,1f55a1b1-b641-4d6c-bb70-f059d819981a,burton,burton-albion,9074,taG:burton-albion,Burton
+pa_media,team,7ba15699-9026-48e2-8a6d-6c7f74d0be48,cardiff,cardiff-city,9083,tag:cardiff,Cardiff
+pa_media,team,7ba15699-9026-48e2-8a6d-6c7f74d0be48,cardiff,cardiff-city,9083,tag:cardiff-city,Cardiff
+pa_media,team,f5facd0e-7562-449f-920a-7f3f37208407,doncaster,doncaster-rovers,9135,tag:doncaster,Doncaster
+pa_media,team,f5facd0e-7562-449f-920a-7f3f37208407,doncaster,doncaster-rovers,9135,tag:doncaster-rovers,Doncaster
+pa_media,team,a74d7154-57c6-4d55-b03c-75734bab6d43,exeter,exeter-city,9160,tag:exeter,Exeter
+pa_media,team,a74d7154-57c6-4d55-b03c-75734bab6d43,exeter,exeter-city,9160,tag:exeter-city,Exeter
+pa_media,team,aec6a025-bcf7-4c12-9ba7-8c846facf4a7,huddersfield,huddersfield-town,9220,tag:huddersfield,Huddersfield
+pa_media,team,aec6a025-bcf7-4c12-9ba7-8c846facf4a7,huddersfield,huddersfield-town,9220,tag:huddersfield-town,Huddersfield
+pa_media,team,fa714dbe-63b9-46f2-bc33-e417fdccee9b,leyton-orient,leyton-orient,9246,tag:leyton-orient,Leyton Orient
+pa_media,team,fa714dbe-63b9-46f2-bc33-e417fdccee9b,leyton-orient,leyton-orient,9246,tag:leyton-orient-fc,Leyton Orient
+pa_media,team,7042ff58-ba18-4df4-8946-18810e949a18,lincoln,lincoln-city,9247,tag:lincoln,Lincoln
+pa_media,team,7042ff58-ba18-4df4-8946-18810e949a18,lincoln,lincoln-city,9247,tag:lincoln-city,Lincoln
+pa_media,team,6792b6e5-6f22-44c1-b6fb-63e14a8553e6,luton,luton-town,9253,tag:luton,Luton
+pa_media,team,6792b6e5-6f22-44c1-b6fb-63e14a8553e6,luton,luton-town,9253,tag:luton-town,Luton
+pa_media,team,0a0df817-7a6e-4e2b-ac70-ca2d913f70b5,mansfield,mansfield-town,9262,tag:mansfield,Mansfield
+pa_media,team,0a0df817-7a6e-4e2b-ac70-ca2d913f70b5,mansfield,mansfield-town,9262,tag:mansfield-town,Mansfield
+pa_media,team,3d39d6ea-3b56-4b42-ba65-b9545648b66b,northampton,northampton-town,9293,tag:northampton,Northampton
+pa_media,team,3d39d6ea-3b56-4b42-ba65-b9545648b66b,northampton,northampton-town,9293,tag:northampton-town,Northampton
+pa_media,team,3838f918-fbe8-446c-b18e-aedd9245f1e2,peterborough,peterborough-united,9309,tag:peterborough,Peterborough
+pa_media,team,3838f918-fbe8-446c-b18e-aedd9245f1e2,peterborough,peterborough-united,9309,tag:peterborough-united,Peterborough
+pa_media,team,3f8877bd-8cf7-496d-a39d-fbac4f819fc2,plymouth,plymouth-argyle,9311,tag:plymouth,Plymouth
+pa_media,team,3f8877bd-8cf7-496d-a39d-fbac4f819fc2,plymouth,plymouth-argyle,9311,tag:plymouth-argyle,Plymouth
+pa_media,team,8962b9eb-be64-4673-83fa-e26c11758c37,port-vale,port-vale,9313,tag:port-vale,Port Vale
+pa_media,team,8962b9eb-be64-4673-83fa-e26c11758c37,port-vale,port-vale,9313,tag:port-vale-fc,Port Vale
+pa_media,team,9c311981-608f-499f-9c1e-04307a8caae5,reading,reading,9324,tag:reading,Reading
+pa_media,team,9c311981-608f-499f-9c1e-04307a8caae5,reading,reading,9324,tag:reading-fc,Reading
+pa_media,team,8556c258-a7ce-4144-ac66-96eee3348545,rotherham,rotherham-united,9333,tag:rotherham,Rotherham
+pa_media,team,8556c258-a7ce-4144-ac66-96eee3348545,rotherham,rotherham-united,9333,tag:rotherham-united,Rotherham
+pa_media,team,47dd8cd8-3906-45b2-8bb3-1f6a8c93ab50,stevenage,stevenage,9374,tag:stevenage,Stevenage
+pa_media,team,47dd8cd8-3906-45b2-8bb3-1f6a8c93ab50,stevenage,stevenage,9374,tag:stevenage-fc,Stevenage
+pa_media,team,de392702-aa79-48bd-8619-f18808d81804,stockport-county,stockport-county,9376,tag:stockport,Stockport
+pa_media,team,de392702-aa79-48bd-8619-f18808d81804,stockport-county,stockport-county,9376,tag:stockport-county,Stockport
+pa_media,team,286db175-7d5e-4297-96a1-8121fda6d08c,wigan,wigan-athletic,9434,tag:wigan,Wigan
+pa_media,team,286db175-7d5e-4297-96a1-8121fda6d08c,wigan,wigan-athletic,9434,tag:wigan-athletic,Wigan
+pa_media,team,f1ed5324-1152-4751-be91-fad9bb9191e3,wycombe,wycombe-wanderers,9455,tag:wycombe,Wycombe
+pa_media,team,f1ed5324-1152-4751-be91-fad9bb9191e3,wycombe,wycombe-wanderers,9455,tag:wycombe-wanderers,Wycombe
+pa_media,team,5c3ddccb-822a-40eb-be48-27a7a7308e2a,accrington,accrington-stanley,8987,tag:accrington,Accrington
+pa_media,team,5c3ddccb-822a-40eb-be48-27a7a7308e2a,accrington,accrington-stanley,8987,tag:accrington-stanley,Accrington
+pa_media,team,afc72fac-56bf-46a9-8c5d-706e62a3ef75,barnet,barnet,9020,tag:barnet,Barnet
+pa_media,team,afc72fac-56bf-46a9-8c5d-706e62a3ef75,barnet,barnet,9020,tag:barnet-fc,Barnet
+pa_media,team,41c9b3b5-6b90-43d3-99dd-9850d8a6dceb,barrow,barrow,9022,tag:barrow,Barrow
+pa_media,team,41c9b3b5-6b90-43d3-99dd-9850d8a6dceb,barrow,barrow,9022,tag:barrow-fc,Barrow
+pa_media,team,b60f2696-3acd-4878-b3ed-593ce0305057,bristol-rovers,bristol-rovers,9067,tag:bristol-rovers,Bristol Rovers
+pa_media,team,70b3af8c-2708-4db9-8d7b-0726e1af0c6e,bromley,bromley,9068,tag:bromley,Bromley
+pa_media,team,70b3af8c-2708-4db9-8d7b-0726e1af0c6e,bromley,bromley,9068,tag:bromley-fc,Bromley
+pa_media,team,e65edf22-152b-4dd4-8e9a-6765afd35c93,cambridge-utd,cambridge-united,9080,tag:cambridge,Cambridge
+pa_media,team,e65edf22-152b-4dd4-8e9a-6765afd35c93,cambridge-utd,cambridge-united,9080,tag:cambridge-united,Cambridge
+pa_media,team,fb87360b-0154-4c48-ac24-291778063259,cheltenham,cheltenham-town,9093,tag:cheltenham,Cheltenham
+pa_media,team,fb87360b-0154-4c48-ac24-291778063259,cheltenham,cheltenham-town,9093,tag:cheltenham-town,Cheltenham
+pa_media,team,3140438f-cf69-4263-bffe-90b538ac9523,chesterfield,chesterfield,9097,tag:chesterfield,Chesterfield
+pa_media,team,3140438f-cf69-4263-bffe-90b538ac9523,chesterfield,chesterfield,9097,tag:chesterfield-fc,Chesterfield
+pa_media,team,5cf5afd1-e728-4357-b601-d5241b61d95f,colchester,colchester-united,9106,tag:colchester,Colchester
+pa_media,team,5cf5afd1-e728-4357-b601-d5241b61d95f,colchester,colchester-united,9106,tag:colchester-united,Colchester
+pa_media,team,0138d004-68e7-4297-9af1-df5ab5388350,crawley,crawley-town,9120,tag:crawley,Crawley
+pa_media,team,0138d004-68e7-4297-9af1-df5ab5388350,crawley,crawley-town,9120,tag:crawley-town,Crawley
+pa_media,team,0e7d174a-2428-4756-8c4f-1e9c2e5a81b1,crewe,crewe-alexandra,9122,tag:crewe,Crewe
+pa_media,team,0e7d174a-2428-4756-8c4f-1e9c2e5a81b1,crewe,crewe-alexandra,9122,tag:crewe-alexandra,Crewe
+pa_media,team,986ae018-4b1c-4399-bb8b-77d66c20fa99,fleetwood,fleetwood-town,9168,tag:fleetwood,Fleetwood
+pa_media,team,986ae018-4b1c-4399-bb8b-77d66c20fa99,fleetwood,fleetwood-town,9168,tag:fleetwood-town,Fleetwood
+pa_media,team,7ccfe511-1da8-467c-b773-fc5c3860bfc8,gillingham,gillingham,9179,tag:gillingham,Gillingham
+pa_media,team,7ccfe511-1da8-467c-b773-fc5c3860bfc8,gillingham,gillingham,9179,tag:gillingham-fc,Gillingham
+pa_media,team,a7626a14-77de-48fb-926d-d30b39bf40b9,grimsby,grimsby-town,9191,tag:grimsby,Grimsby
+pa_media,team,a7626a14-77de-48fb-926d-d30b39bf40b9,grimsby,grimsby-town,9191,tag:grimsby-town,Grimsby
+pa_media,team,01c978a3-9ccc-4efa-a6ed-bd0f7be57c72,harrogate,harrogate-town,9200,tag:harrogate,Harrogate
+pa_media,team,01c978a3-9ccc-4efa-a6ed-bd0f7be57c72,harrogate,harrogate-town,9200,tag:harrogate-town,Harrogate
+pa_media,team,be060fcd-6c9e-4cb9-a03c-c7c763eb2e4e,mk-dons,mk-dons,9277,tag:mk-dons,MK Dons
+pa_media,team,1c0cc3ec-8d54-4484-9acc-4dcdafbc33c1,newport,newport-county,9288,tag:newport,Newport
+pa_media,team,1c0cc3ec-8d54-4484-9acc-4dcdafbc33c1,newport,newport-county,9288,tag:newport-county,Newport
+pa_media,team,027b6ca3-3678-45f9-924c-8d824662c064,notts-co,notts-county,9298,tag:notts-county,Notts County
+pa_media,team,810a3be6-5036-4033-87ac-dafb68fd175c,oldham,oldham-athletic,9301,tag:oldham,Oldham
+pa_media,team,810a3be6-5036-4033-87ac-dafb68fd175c,oldham,oldham-athletic,9301,tag:oldham-athletic,Oldham
+pa_media,team,968e41a2-0e20-477d-ae1d-8ce5df6e1b9a,salford,salford-city,9342,tag:salford,Salford
+pa_media,team,968e41a2-0e20-477d-ae1d-8ce5df6e1b9a,salford,salford-city,9342,tag:salford-city,Salford
+pa_media,team,78f2dd97-cf1f-4947-8f1e-d258071143e7,shrewsbury,shrewsbury-town,9354,tag:shrewsbury,Shrewsbury
+pa_media,team,78f2dd97-cf1f-4947-8f1e-d258071143e7,shrewsbury,shrewsbury-town,9354,tag:shrewsbury-town,Shrewsbury
+pa_media,team, 79037aab-e6de-4752-9056-c00fed3687b1,swindon,swindon-town,9389,tag:swindon,Swindon
+pa_media,team, 79037aab-e6de-4752-9056-c00fed3687b1,swindon,swindon-town,9389,tag:swindon-town,Swindon
+pa_media,team,4eda63a1-803c-420f-a0bf-b5fe898bf559,tranmere,tranmere-rovers,9408,tag:tranmere,Tranmere
+pa_media,team,4eda63a1-803c-420f-a0bf-b5fe898bf559,tranmere,tranmere-rovers,9408,tag:tranmere-rovers,Tranmere
+pa_media,team,c6d913ae-9058-4e72-8449-a1feaf2ee3bb,walsall,walsall,9416,tag:walsall,Walsall
+pa_media,team,c6d913ae-9058-4e72-8449-a1feaf2ee3bb,walsall,walsall,9416,tag:walsall-fc,Walsall
+pa_media,team,3d10b237-d842-474b-aab8-b51964b23656,aldershot,aldershot-town,8995,tag:aldershot,Aldershot
+pa_media,team,3d10b237-d842-474b-aab8-b51964b23656,aldershot,aldershot-town,8995,tag:aldershot-town,Aldershot
+pa_media,team,37744e8b-3a16-4a78-87d0-e5115fad8b32,altrincham,altrincham,8999,tag:altrincham,Altrincham
+pa_media,team,37744e8b-3a16-4a78-87d0-e5115fad8b32,altrincham,altrincham,8999,tag:altrincham-fc,Altrincham
+pa_media,team,e05ff125-5e70-42ad-8639-7583e13d3f05,boreham-wood,boreham-wood,9050,tag:boreham-wood,Boreham Wood
+pa_media,team,e05ff125-5e70-42ad-8639-7583e13d3f05,boreham-wood,boreham-wood,9050,tag:boreham-wood-fc,Boreham Wood
+pa_media,team,ae5f76c0-2a32-43bd-a8c2-46f3df221f98,boston-utd,boston-united,9052,tag:boston,Boston
+pa_media,team,ae5f76c0-2a32-43bd-a8c2-46f3df221f98,boston-utd,boston-united,9052,tag:boston-united,Boston
+pa_media,team,5b367ba6-9a5e-41ce-9f65-e197ab7849b8,brackley-town,brackley-town,9054,tag:brackley,Brackley
+pa_media,team,5b367ba6-9a5e-41ce-9f65-e197ab7849b8,brackley-town,brackley-town,9054,tag:brackley-town,Brackley
+pa_media,team,14a33085-fcc9-42e6-a197-e01e005e3403,braintree,braintree-town,9058,tag:braintree,Braintree
+pa_media,team,14a33085-fcc9-42e6-a197-e01e005e3403,braintree,braintree-town,9058,tag:braintree-town,Braintree
+pa_media,team,38e68978-42f8-40aa-a98d-0ca155a79a82,carlisle,carlisle-united,9084,tag:carlisle,Carlisle
+pa_media,team,38e68978-42f8-40aa-a98d-0ca155a79a82,carlisle,carlisle-united,9084,tag:carlisle-united,Carlisle
+pa_media,team,34be87fa-3c89-4793-8b6d-e28abfb82696,eastleigh,eastleigh,9148,tag:eastleigh,Eastleigh
+pa_media,team,34be87fa-3c89-4793-8b6d-e28abfb82696,eastleigh,eastleigh,9148,tag:eastleigh-fc,Eastleigh
+pa_media,team,19aec4bd-2f66-4a94-8296-78315f4bbfb8,fc-halifax,halifax-town,9194,tag:halifax,Halifax
+pa_media,team,19aec4bd-2f66-4a94-8296-78315f4bbfb8,fc-halifax,halifax-town,9194,tag:halifax-town,Halifax
+pa_media,team,3771b764-be56-404d-9c8e-7d7e66a9019d,forest-green,forest-green-rovers,9171,tag:forest-green,Forest Green
+pa_media,team,3771b764-be56-404d-9c8e-7d7e66a9019d,forest-green,forest-green-rovers,9171,tag:forest-green-rovers,Forest Green
+pa_media,team,1edcf8ea-2bab-48db-aa5b-4d9af4c9832d,gateshead,gateshead,9178,tag:gateshead,Gateshead
+pa_media,team,1edcf8ea-2bab-48db-aa5b-4d9af4c9832d,gateshead,gateshead,9178,tag:gateshead-fc,Gateshead
+pa_media,team,862cefbb-be72-40cc-b840-c0f6e913a17d,hartlepool,hartlepool-united,9202,tag:hartlepool,Hartlepool
+pa_media,team,862cefbb-be72-40cc-b840-c0f6e913a17d,hartlepool,hartlepool-united,9202,tag:hartlepool-united,Hartlepool
+pa_media,team,9727ec05-d266-43cd-b918-867f946a01b9,morecambe,morecambe,9280,tag:morecambe,Morecambe
+pa_media,team,9727ec05-d266-43cd-b918-867f946a01b9,morecambe,morecambe,9280,tag:morecambe-fc,Morecambe
+pa_media,team,7bbcd28b-e9d6-421c-b439-db5328ce5db8,rochdale,rochdale,9329,tag:rochdale,Rochdale
+pa_media,team,7bbcd28b-e9d6-421c-b439-db5328ce5db8,rochdale,rochdale,9329,tag:rochdale-fc,Rochdale
+pa_media,team,d063d3e1-93db-4b9a-90c6-bbf52bd7bedb,scunthorpe,scunthorpe-united,9345,tag:scunthorpe,Scunthorpe
+pa_media,team,d063d3e1-93db-4b9a-90c6-bbf52bd7bedb,scunthorpe,scunthorpe-united,9345,tag:scunthorpe-united,Scunthorpe
+pa_media,team,e01f45e5-39b9-4087-bcb4-4921b54757ad,solihull-moors,solihull-moors,9361,tag:solihull-moors,Solihull Moors
+pa_media,team,e01f45e5-39b9-4087-bcb4-4921b54757ad,solihull-moors,solihull-moors,9361,tag:solihull-moors-fc,Solihull Moors
+pa_media,team,b5fa74a9-fd79-4e30-8914-0114c1d4e105,southend,southend-united,9354,tag:southend,Southend
+pa_media,team,b5fa74a9-fd79-4e30-8914-0114c1d4e105,southend,southend-united,9354,tag:southend-united,Southend
+pa_media,team,c7711976-43c6-4317-a660-531e97948711,sutton,sutton-united,9386,tag:sutton,Sutton
+pa_media,team,c7711976-43c6-4317-a660-531e97948711,sutton,sutton-united,9386,tag:sutton-united,Sutton
+pa_media,team,b675ede2-ed56-45bd-8b0a-f9100325fedf,tamworth,tamworth,9390,tag:tamworth,Tamworth
+pa_media,team,b675ede2-ed56-45bd-8b0a-f9100325fedf,tamworth,tamworth,9390,tag:tamworth-fc,Tamworth
+pa_media,team,3f8af3c6-ec2a-4c75-b1b0-f79969e8a2ef,truro,truro-city,9409,tag:truro,Truro City
+pa_media,team,3f8af3c6-ec2a-4c75-b1b0-f79969e8a2ef,truro,truro-city,9409,tag:truro-city,Truro City
+pa_media,team,3f8af3c6-ec2a-4c75-b1b0-f79969e8a2ef,truro,truro-city,9409,tag:truro-city-fc,Truro City
+pa_media,team,61bd91d8-c339-4010-b843-392adec5ccda,wealdstone,wealdstone,9424,tag:wealdstone,Wealdstone
+pa_media,team,61bd91d8-c339-4010-b843-392adec5ccda,wealdstone,wealdstone,9424,tag:wealdstone-fc,Wealdstone
+pa_media,team,ec36f9e0-b0ee-451f-aacf-dcfff7b044cb,woking,woking,9445,tag:woking,Woking
+pa_media,team,ec36f9e0-b0ee-451f-aacf-dcfff7b044cb,woking,woking,9445,tag:woking-fc,Woking
+pa_media,team,0cb03664-58d5-475a-bc3d-f77e63791fcd,yeovil,yeovil-town,9459,tag:yeovil,Yeovil
+pa_media,team,0cb03664-58d5-475a-bc3d-f77e63791fcd,yeovil,yeovil-town,9459,tag:yeovil-town,Yeovil
+pa_media,team,43bda0a2-d4fa-433b-be62-b5cd1975d632,york-city,york-city,9460,tag:york,York City
+pa_media,team,43bda0a2-d4fa-433b-be62-b5cd1975d632,york-city,york-city,9460,tag:york-city,York City
+pa_media,team,2579c03b-2b3c-4a51-9a51-18e3265b5988,aberdeen,aberdeen,15033,tag:aberdeen,Aberdeen
+pa_media,team,2579c03b-2b3c-4a51-9a51-18e3265b5988,aberdeen,aberdeen,15033,tag:aberdeen-fc,Aberdeen
+pa_media,team,5fe45a28-7851-46de-a749-0d74b5ba703f,airdrieonians,airdrieonians,15034,tag:airdrie,Airdrie
+pa_media,team,5fe45a28-7851-46de-a749-0d74b5ba703f,airdrieonians,airdrieonians,15034,airdreonians,Airdrie
+pa_media,team,0b7818a2-7d80-401a-9de2-763dc2b87e90,alloa,alloa-athletic,15036,tag:alloa,Alloa
+pa_media,team,0b7818a2-7d80-401a-9de2-763dc2b87e90,alloa,alloa-athletic,15036,tag:alloa-athletic,Alloa
+pa_media,team,feace498-d15c-4101-945e-0e38144ef248,annan,annan-athletic,15037,tag:annan,Annan
+pa_media,team,feace498-d15c-4101-945e-0e38144ef248,annan,annan-athletic,15037,tag:annan-athletic,Annan
+pa_media,team,6a8f9d4c-b5a4-422d-8975-3c3555353d0d,arbroath,arbroath,15038,tag:arbroath,Arbroath
+pa_media,team,6a8f9d4c-b5a4-422d-8975-3c3555353d0d,arbroath,arbroath,15038,tag:arbroath-fc,Arbroath
+pa_media,team,2788fd5c-ec3a-4664-8e48-cc460facd55b,ayr,ayr-united,15040,tag:ayr,Ayr
+pa_media,team,2788fd5c-ec3a-4664-8e48-cc460facd55b,ayr,ayr-united,15040,tag:ayr-united,Ayr
+pa_media,team,d0ec37d6-1798-4b0e-8443-b59216a79b8c,celtic,celtic,15049,tag:celtic,Celtic
+pa_media,team,d0ec37d6-1798-4b0e-8443-b59216a79b8c,celtic,celtic,15049,tag:celtic-fc,Celtic
+pa_media,team,76c301b5-0be4-4870-9abd-dda5bb0293fb,clyde,clyde,15052,tag:clyde,Clyde
+pa_media,team,76c301b5-0be4-4870-9abd-dda5bb0293fb,clyde,clyde,15052,tag:clyde-fc,Clyde
+pa_media,team,894b92b9-6efc-4eea-b766-67c6c2601400,cove-rangers,cove-rangers,15055,tag:cove-rangers,Cove Rangers
+pa_media,team,9e6eca8a-e21c-4ee4-8aea-213b5d8f4050,dumbarton,dumbarton,15062,tag:dumbarton,Dumbarton
+pa_media,team,9e6eca8a-e21c-4ee4-8aea-213b5d8f4050,dumbarton,dumbarton,15062,tag:dumbarton-fc,Dumbarton
+pa_media,team,f9c530bc-fc32-4b10-aa00-e2e5243c57b8,dundee-fc,dundee,15063,tag:dundee,Dundee
+pa_media,team,f9c530bc-fc32-4b10-aa00-e2e5243c57b8,dundee-fc,dundee,15063,tag:dundee-fc,Dundee
+pa_media,team,0a919bd8-7677-4d42-82d7-b1a922788f60,dundee-united,dundee-united,15064,tag:dundee-united,Dundee United
+pa_media,team,d03e46d5-7236-4a61-a4e3-9e9a58c51575,dunfermline,dunfermline-athletic,15065,tag:dunfermline,Dunfermline
+pa_media,team,d03e46d5-7236-4a61-a4e3-9e9a58c51575,dunfermline,dunfermline-athletic,15065,tag:dunfermline-athletic,Dunfermline
+pa_media,team,0460db01-ff47-4005-98df-803defab2383,east-fife,east-fife,15066,tag:east-fife,East Fife
+pa_media,team,a75452ac-c350-4cad-984c-e2848583fabe,east-kilbride,east-kilbride,23819,tag:east-kilbride,East Kilbride
+pa_media,team,205346b5-ff1e-4237-a8e8-2b94e6eec7be,edinburgh-city,edinburgh-city,15069,tag:edinburgh,Edinburgh
+pa_media,team,205346b5-ff1e-4237-a8e8-2b94e6eec7be,edinburgh-city,edinburgh-city,15069,tag:edinburgh-city,Edinburgh
+pa_media,team,29352f07-be0a-4494-b423-077d1769edde,elgin-city,elgin-city,15071,tag:elgin,Elgin
+pa_media,team,29352f07-be0a-4494-b423-077d1769edde,elgin-city,elgin-city,15071,tag:elgin-city,Elgin
+pa_media,team,43774d69-6ea7-4aa6-a66f-bad15de63032,falkirk,falkirk,15072,tag:falkirk,Falkirk
+pa_media,team,43774d69-6ea7-4aa6-a66f-bad15de63032,falkirk,falkirk,15072,tag:falkirk-fc,Falkirk
+pa_media,team,1a020f7c-c151-43d0-bfd6-4573301c8865,forfar-athletic,forfar-athletic,15073,tag:forfar,Forfar
+pa_media,team,1a020f7c-c151-43d0-bfd6-4573301c8865,forfar-athletic,forfar-athletic,15073,tag:forfar-athletic,Forfar
+pa_media,team,5174aa47-9f35-4959-9e73-46d3986ca892,morton,greenock-morton,15082,tag:morton,Greenock Morton
+pa_media,team,5174aa47-9f35-4959-9e73-46d3986ca892,morton,greenock-morton,15082,tag:greenock-morton,Greenock Morton
+pa_media,team,d24de925-717e-4c7b-8d65-0656cf621db2,hamilton,hamilton-academical,15084,tag:hamilton,Hamliton
+pa_media,team,d24de925-717e-4c7b-8d65-0656cf621db2,hamilton,hamilton-academical,15084,tag:hamilton-academical,Hamliton
+pa_media,team,b7c8250b-800a-4a57-a4c0-39c75b5c6099,hearts,hearts,15086,tag:hearts,Hearts
+pa_media,team,b7c8250b-800a-4a57-a4c0-39c75b5c6099,hearts,hearts,15086,tag:heart-of-midlothian,Hearts
+pa_media,team,13c8d238-825f-45a0-957d-f430913a1d13,hibernian,hibernian,15088,tag:hibernian,Hibernian
+pa_media,team,13c8d238-825f-45a0-957d-f430913a1d13,hibernian,hibernian,15088,tag:hibernian-fc,Hibernian
+pa_media,team,29121cb5-3757-40be-9216-7194d84f1e8d,inverness,inverness-caledonian-thistle,15090,tag:inverness,Inverness CT
+pa_media,team,29121cb5-3757-40be-9216-7194d84f1e8d,inverness,inverness-caledonian-thistle,15090,tag:inverness-ct,Inverness CT
+pa_media,team,29121cb5-3757-40be-9216-7194d84f1e8d,inverness,inverness-caledonian-thistle,15090,tag:inverness-caledonian-thistle,Inverness CT
+pa_media,team,fb860a01-08a6-40ab-8119-2f0b8c43d42f,kelty-hearts,kelty-hearts,24872,tag:kelty-hearts,Kelty Hearts
+pa_media,team,2ec036f8-a116-4f79-87da-c6866948c06b,kilmarnock,kilmarnock,15095,tag:kilmarnock,Kilmarnock
+pa_media,team,2ec036f8-a116-4f79-87da-c6866948c06b,kilmarnock,kilmarnock,15095,tag:kilmarnock-fc,Kilmarnock
+pa_media,team,9591f936-f859-4ccf-9006-971b728988a9,livingston,livingston,15097,tag:livingston,Livingston
+pa_media,team,9591f936-f859-4ccf-9006-971b728988a9,livingston,livingston,15097,tag:livingston-fc,Livingston
+pa_media,team,e2927947-3eda-4fb7-876a-80e9b6502e8d,montrose,montrose,15101,tag:montrose,Montrose
+pa_media,team,e2927947-3eda-4fb7-876a-80e9b6502e8d,montrose,montrose,15101,tag:montrose-fc,Montrose
+pa_media,team,17ed2948-210d-4357-bdd0-26616d64b528,motherwell,motherwell,15102,tag:motherwell,Motherwell
+pa_media,team,17ed2948-210d-4357-bdd0-26616d64b528,motherwell,motherwell,15102,tag:motherwell-fc,Motherwell
+pa_media,team,139cea1e-00b3-4d42-baa3-b3d9ed235610,partick-thistle,partick-thistle,15105,tag:partick,Partick
+pa_media,team,139cea1e-00b3-4d42-baa3-b3d9ed235610,partick-thistle,partick-thistle,15105,tag:partick-thistle,Partick
+pa_media,team,a971125e-f1d7-4bd4-86a9-748dec23e5a2,peterhead,peterhead,15107,tag:peterhead,Peterhead
+pa_media,team,a971125e-f1d7-4bd4-86a9-748dec23e5a2,peterhead,peterhead,15107,tag:peterhead-fc,Peterhead
+pa_media,team,cd01daf9-70cd-41e9-a83d-bb3c7529214d,queen-of-south,queen-of-the-south,15110,tag:queen-of-the-south,Queen of the South
+pa_media,team,cd01daf9-70cd-41e9-a83d-bb3c7529214d,queen-of-south,queen-of-the-south,15110,tag:queen-of-south,Queen of the South
+pa_media,team,cd01daf9-70cd-41e9-a83d-bb3c7529214d,queen-of-south,queen-of-the-south,15110,tag:qots,Queen of the South
+pa_media,team,86d52b17-b55d-42b0-a674-b1050c20e3ae,queen-s-park,queens-park,15111,tag:queens-park,Queen's Park
+pa_media,team,7ddabd12-2a92-472e-b633-ebed5c2b0764,raith,raith-rovers,15112,tag:raith,Raith Rovers
+pa_media,team,7ddabd12-2a92-472e-b633-ebed5c2b0764,raith,raith-rovers,15112,tag:raith-rovers,Raith Rovers
+pa_media,team,0f5d12fe-32c5-4190-a23a-676d0f688cc2,rangers,rangers,15113,tag:rangers,Rangers
+pa_media,team,0f5d12fe-32c5-4190-a23a-676d0f688cc2,rangers,rangers,15113,tag:rangers-fc,Rangers
+pa_media,team,1c9ab714-5553-4178-af9c-fc33142a4fec,ross-county,ross-county,15114,tag:ross-county,Ross County
+pa_media,team,f3105e5d-4da2-4771-baef-5ac1a41ea4ab,st-johnstone,st-johnstone,15119,tag:st-johnstone,St. Johnstone
+pa_media,team,f3105e5d-4da2-4771-baef-5ac1a41ea4ab,st-johnstone,st-johnstone,15119,tag:st-johnstone-fc,St. Johnstone
+pa_media,team,d53e046b-e6aa-4471-b113-e36b3fb9248a,st-mirren,st-mirren,15120,tag:st-mirren,St. Mirren
+pa_media,team,d53e046b-e6aa-4471-b113-e36b3fb9248a,st-mirren,st-mirren,15120,tag:st-mirren-fc,St. Mirren
+pa_media,team,7797dcc2-46b3-459d-8fd4-d527b8dba125,stenhousemuir,stenhousemuir,15121,tag:stenhousemuir,Stenhousemuir
+pa_media,team,7797dcc2-46b3-459d-8fd4-d527b8dba125,stenhousemuir,stenhousemuir,15121,tag:stenhousemuir-fc,Stenhousemuir
+pa_media,team,d878dd4a-ba0c-4300-9e08-841a1dd59599,stirling,stirling-albion,15122,tag:stirling,Stirling Albion
+pa_media,team,d878dd4a-ba0c-4300-9e08-841a1dd59599,stirling,stirling-albion,15122,tag:stirling-albion,Stirling Albion
+pa_media,team,daa52581-6d65-4035-a8de-bbfb300cd8de,stranraer,stranraer,15123,tag:stranraer,Stranraer
+pa_media,team,daa52581-6d65-4035-a8de-bbfb300cd8de,stranraer,stranraer,15123,tag:stranraer-fc,Stranraer
+pa_media,team,f280a2aa-c7cb-49e2-9fec-05a6a1cf7de8,spartans,spartans,15117,tag:spartans,Spartans
+pa_media,team,f280a2aa-c7cb-49e2-9fec-05a6a1cf7de8,spartans,spartans,15117,tag:the-spartans,Spartans
+pa_media,team,a678dc0b-4489-4f72-ba79-9ed17f6eec27,ath-bilbao,athletic-bilbao,15679,tag:athletic-club,Athletic Bilbao
+pa_media,team,a678dc0b-4489-4f72-ba79-9ed17f6eec27,ath-bilbao,athletic-bilbao,15679,tag:athletic-bilbao,Athletic Bilbao
+pa_media,team,6da165e9-ca22-4b84-891e-34eb4857c5ce,atl-madrid,atletico-madrid,15692,tag:atletico-madrid,Atletico Madrid
+pa_media,team,6da165e9-ca22-4b84-891e-34eb4857c5ce,atl-madrid,atletico-madrid,15692,tag:atletico-de-madrid,Atletico Madrid
+pa_media,team,7fae214b-b058-40f2-b767-d9740f6854cd,celta-vigo,celta-vigo,15934,tag:celta-vigo,Celta Vigo
+pa_media,team,7fae214b-b058-40f2-b767-d9740f6854cd,celta-vigo,celta-vigo,15934,tag:celta,Celta Vigo
+pa_media,team,7fae214b-b058-40f2-b767-d9740f6854cd,celta-vigo,celta-vigo,15934,tag:celta-de-vigo,Celta Vigo
+pa_media,team,12644973-7059-4d16-ace0-c6051a883d7c,alaves,deportivo-alaves,15997,tag:alaves,Alaves
+pa_media,team,12644973-7059-4d16-ace0-c6051a883d7c,alaves,deportivo-alaves,15997,tag:deportivo-alaves,Alaves
+pa_media,team,c478e42f-41d1-484e-9a4d-9c3ae4d9686e,elche,elche,16007,tag:elche,Elche
+pa_media,team,c478e42f-41d1-484e-9a4d-9c3ae4d9686e,elche,elche,16007,tag:elche-fc,Elche
+pa_media,team,2acf4d3a-e33a-42d8-82c3-795bcc34f708,espanyol,espanyol,16009,tag:espanyol,Espanyol
+pa_media,team,2acf4d3a-e33a-42d8-82c3-795bcc34f708,espanyol,espanyol,16009,tag:rcd-espanyol,Espanyol
+pa_media,team,e0849fd9-fbec-4242-aef7-c22388f5f799,barcelona,fc-barcelona,15702,tag:barcelona,Barcelona
+pa_media,team,e0849fd9-fbec-4242-aef7-c22388f5f799,barcelona,fc-barcelona,15702,tag:fc-barcelona,Barcelona
+pa_media,team,bac8cba4-280d-42ed-9d3a-f93638675a21,getafe,getafe,16017,tag:getafe,Getafe
+pa_media,team,bac8cba4-280d-42ed-9d3a-f93638675a21,getafe,getafe,16017,tag:getafe-cf,Getafe
+pa_media,team,3ac9d235-e12c-46c3-b771-eeed2d02709c,girona,girona,16021,tag:girona,Girona
+pa_media,team,3ac9d235-e12c-46c3-b771-eeed2d02709c,girona,girona,16021,tag:girona-fc,Girona
+pa_media,team,f6dbc686-c5b2-4924-bb29-6eb332243ab4,levante,levante,16043,tag:levante,Levante
+pa_media,team,f6dbc686-c5b2-4924-bb29-6eb332243ab4,levante,levante,16043,tag:levante-ud,Levante
+pa_media,team,8ab8feb2-5c3c-49e8-960e-7715de1f7e2b,mallorca,mallorca,16052,tag:mallorca,Mallorca
+pa_media,team,8ab8feb2-5c3c-49e8-960e-7715de1f7e2b,mallorca,mallorca,16052,tag:rcd-mallorca,Mallorca
+pa_media,team,04e19da6-e543-4df0-8389-5f927737fd0c,osasuna,osasuna,16079,tag:osasuna,Osasuna
+pa_media,team,68616cab-749b-475a-93ea-31cb23448b65,rayo-vallecano,rayo-vallecano,16098,tag:real-vallecano,Rayo Vallecano
+pa_media,team,68616cab-749b-475a-93ea-31cb23448b65,rayo-vallecano,rayo-vallecano,16098,tag:vallecano,Rayo Vallecano
+pa_media,team,dfddef75-79a1-4d73-9871-35229ec2ff6d,real-betis,real-betis,16107,tag:real-betis,Real Betis
+pa_media,team,dfddef75-79a1-4d73-9871-35229ec2ff6d,real-betis,real-betis,16107,tag:betis,Real Betis
+pa_media,team,a6c38ab0-980b-449a-b04c-5f908e813928,real-madrid,real-madrid,16110,tag:real-madrid,Real Madrid
+pa_media,team,a6c38ab0-980b-449a-b04c-5f908e813928,real-madrid,real-madrid,16110,tag:real-madrid-cf,Real Madrid
+pa_media,team,d157cb18-17a4-4e50-9c4b-21f395987e07,oviedo,real-oviedo,16115,tag:oviedo,Real Oviedo
+pa_media,team,d157cb18-17a4-4e50-9c4b-21f395987e07,oviedo,real-oviedo,16115,tag:real-oviedo,Real Oviedo
+pa_media,team,90d44dda-1485-4f74-be37-cf6ef679b278,real-sociedad,real-sociedad,16117,tag:real-sociedad,Real Sociedad
+pa_media,team,90d44dda-1485-4f74-be37-cf6ef679b278,real-sociedad,real-sociedad,16117,tag:sociedad,Real Sociedad
+pa_media,team,007c1791-6c64-4bac-8975-cadd2e98c3ad,sevilla,sevilla,16175,tag:sevilla,Sevilla
+pa_media,team,007c1791-6c64-4bac-8975-cadd2e98c3ad,sevilla,sevilla,16175,tag:sevilla-fc,Sevilla
+pa_media,team,97200276-aaa0-4ae3-9985-df50b79823ac,valencia,valencia,16261,tag:valencia,Valencia
+pa_media,team,97200276-aaa0-4ae3-9985-df50b79823ac,valencia,valencia,16261,tag:valencia-cf,Valencia
+pa_media,team,3a85d9d0-3b53-4726-8313-fea784e2c52c,villarreal,villarreal,16270,tag:villarreal,Villarreal
+pa_media,team,3a85d9d0-3b53-4726-8313-fea784e2c52c,villarreal,villarreal,16270,tag:villarreal-cf,Villarreal
+pa_media,team,8ced811d-96b2-4c9e-a261-82a4ef545086,ac-milan,ac-milan,11938,tag:ac-milan,AC Milan
+pa_media,team,8ced811d-96b2-4c9e-a261-82a4ef545086,ac-milan,ac-milan,11938,tag:milan,AC Milan
+pa_media,team,8a7d9a34-f4bc-4cf1-9caa-2981f2c0f788,atalanta,atalanta,11811,tag:atalanta,Atalanta
+pa_media,team,ca0fcc41-0f3c-4710-81f9-d7c38dfc8f40,bologna,bologna,11822,tag:bologna,Bologna
+pa_media,team,4f7ababa-6d4f-42d5-9512-7c06a8075473,cagliari,cagliari,11830,tag:cagliari,Cagliari
+pa_media,team,6f547890-cb85-46a4-8a7e-23f42b5037ed,como,como,11856,tag:como,Como
+pa_media,team,1025ee31-1407-4cb5-948c-55638c2ccde4,cremonese,cremonese,11859,tag:cremonese,Cremonese
+pa_media,team,51131085-0ab9-4c36-9f70-5fc841f8659b,fiorentina,fiorentina,11894,tag:fiorentina,Fiorentina
+pa_media,team,2353e47a-e2fc-45bc-9efe-8ea43c997b3c,genoa,genoa,11903,tag:genoa,Genoa
+pa_media,team,c8930360-88d8-4ee1-b3e9-95ab62e1a741,inter,inter-milan,11917,tag:inter-milan,Inter Milan
+pa_media,team,c8930360-88d8-4ee1-b3e9-95ab62e1a741,inter,inter-milan,11917,tag:inter,Inter Milan
+pa_media,team,4c2eff7a-32f2-45fa-aa1b-702e08beef50,juventus,juventus,11922,tag:juventus,Juventus
+pa_media,team,4c2eff7a-32f2-45fa-aa1b-702e08beef50,juventus,juventus,11922,tag:juve,Juventus
+pa_media,team,47e8e196-ca8e-4adf-a669-6e5e467a78a2,lazio,lazio,11925,tag:lazio,Lazio
+pa_media,team,bd3b4c90-5900-4c22-8226-60349c3659a9,lecce,lecce,11926,tag:lecce,Lecce
+pa_media,team,b7dc3915-3e1a-4e34-8553-e72774a1786e,napoli,napoli,11947,tag:napoli,Napoli
+pa_media,team,e88e7f81-e213-45da-9f73-95d543d94a7f,parma,parma,11959,tag:parma,Parma
+pa_media,team,3a65762e-28cf-4d68-b373-4cf79973ff4a,pisa,pisa,11968,tag:pisa,Pisa
+pa_media,team,47dd17da-a1f8-490e-8825-65bc6dd00f50,as-roma,as-roma,11998,tag:as-roma,Roma
+pa_media,team,47dd17da-a1f8-490e-8825-65bc6dd00f50,as-roma,as-roma,11998,tag:roma,Roma
+pa_media,team,1f3fdc92-59fe-4b92-b1eb-51d96a4c0d00,sassuolo,sassuolo,12013,tag:sassuolo,Sassuolo
+pa_media,team,9b02d2ff-4432-43a3-be99-fead3bfdd614,torino,torino,12046,tag:torino,Torino
+pa_media,team,666acd3b-77f5-459a-9018-185309de2967,udinese,udinese,12051,tag:udinese,Udinese
+pa_media,team,3ac92549-8bf3-49b0-85d9-036f7dd674ca,verona,verona,11914,tag:verona,Verona
+pa_media,team,19649d30-7f08-4769-99c4-33c6401becdd,augsburg,augsburg,10269,tag:augsburg,Augsburg
+pa_media,team,f035ae7d-4040-4fe9-98fa-e5430b5a6af1,bayer-levekusen,bayer-levekusen,10281,tag:bayer-leverkusen,Bayer Leverkusen
+pa_media,team,f035ae7d-4040-4fe9-98fa-e5430b5a6af1,bayer-levekusen,bayer-levekusen,10281,tag:leverkusen,Bayer Leverkusen
+pa_media,team,6f0c801f-3680-4295-aace-026146b6d969,bayern-munich,bayern-munich,10285,tag:bayern-munich,Bayern Munich
+pa_media,team,6f0c801f-3680-4295-aace-026146b6d969,bayern-munich,bayern-munich,10285,tag:bayern,Bayern Munich
+pa_media,team,f44d810e-5cf6-4c01-b339-f9c07ca21b2a,dortmund,borussia-dortmund,10303,tag:borussia-dortmund,Borussia Dortmund
+pa_media,team,f44d810e-5cf6-4c01-b339-f9c07ca21b2a,dortmund,borussia-dortmund,10303,tag:dortmund,Borussia Dortmund
+pa_media,team,e25c4ebf-96c1-4e5d-90b2-8bec6f1d393e,b-monchengladbach,borussia-monchengladbach,10307,tag:borussia-monchengladbach,Borussia M
+pa_media,team,e25c4ebf-96c1-4e5d-90b2-8bec6f1d393e,b-monchengladbach,borussia-monchengladbach,10307,tag:borussia,Borussia M
+pa_media,team,e25c4ebf-96c1-4e5d-90b2-8bec6f1d393e,b-monchengladbach,borussia-monchengladbach,10307,tag:borussia-m,Borussia M
+pa_media,team,55376064-ad28-4e20-9112-8ec4a4021846,fc-koln,cologne,10476,tag:cologne,Cologne
+pa_media,team,55376064-ad28-4e20-9112-8ec4a4021846,fc-koln,cologne,10476,tag:fc-cologne,Cologne
+pa_media,team,55376064-ad28-4e20-9112-8ec4a4021846,fc-koln,cologne,10476,tag:fc-koln,Cologne
+pa_media,team,2e013edb-2579-4dc8-8dc3-405fe2187297,eintracht-frankfurt,eintracht-frankfurt,10347,tag:eintracht-frankfurt,Eintracht Frankfurt
+pa_media,team,2e013edb-2579-4dc8-8dc3-405fe2187297,eintracht-frankfurt,eintracht-frankfurt,10347,tag:frankfurt,Eintracht Frankfurt
+pa_media,team,f9daf20e-0125-439b-9393-124e0aac5b1d,freiburg,freiburg,10382,tag:freiburg,Freiburg
+pa_media,team,5cfc9132-7191-4ab5-ba63-8e88ee3cf705,hamburger-sv,hamburg,10419,tag:hamburg,Hamburg
+pa_media,team,3300110a-7d8f-499e-b42f-a553f117ed33,heidenheim,heidenheim,10433,tag:heidenheim,Heidenheim
+pa_media,team,0f06d57c-6980-4ac6-a549-89898fa455d8,hoffenheim,hoffenheim,10442,tag:hoffenheim,Hoffenheim
+pa_media,team,0f06d57c-6980-4ac6-a549-89898fa455d8,hoffenheim,hoffenheim,10442,tag:fc-hoffenheim,Hoffenheim
+pa_media,team,d2be6eec-8a82-4fab-b92d-53e4a6a30623,mainz,mainz,10388,tag:mainz,Mainz
+pa_media,team,fa076541-90cc-4858-b12f-0eac309ceff4,rb-leipzig,rb-leipzig,10552,tag:rb-leipzig,RB Leipzig
+pa_media,team,fa076541-90cc-4858-b12f-0eac309ceff4,rb-leipzig,rb-leipzig,10552,tag:leipzig,RB Leipzig
+pa_media,team,f7daf265-407e-424d-b321-12a52bedc5a8,st-pauli,st-pauli,10603,tag:st-pauli,St. Pauli
+pa_media,team,799ba363-9eca-41af-b5ed-3cf94dc8eea7,union-berlin,union-berlin,10631,tag:union-berlin,Union Berlin
+pa_media,team,3009dfcf-c1e9-43d3-a7ea-d5379c7220cd,stuttgart,vfb-stuttgart,10646,tag:vfb-stuttgart,VfB Stuttgart
+pa_media,team,3009dfcf-c1e9-43d3-a7ea-d5379c7220cd,stuttgart,vfb-stuttgart,10646,tag:stuttgart,VfB Stuttgart
+pa_media,team,7d9a9ab4-742b-4658-ad2b-f09fa5c40641,werder-bremen,werder-bremen,10677,tag:werder-bremen,Werder Bremen
+pa_media,team,b93e9116-5c8a-4e0a-a74a-196ae9641380,wolfsburg,wolfsburg,10653,tag:wolfsburg,Wolfsburg
+pa_media,team,ded65e3d-0740-4840-9b13-a24087bf7e41,psg,paris-st-germain,10061,tag:psg,PSG
+pa_media,team,ded65e3d-0740-4840-9b13-a24087bf7e41,psg,paris-st-germain,10061,tag:paris-st-germain,PSG
+pa_media,team,91bba7f7-ef2e-4d36-a700-aa6c67645cc8,lens,rc-lens,9998,tag:lens,Lens
+pa_media,team,91bba7f7-ef2e-4d36-a700-aa6c67645cc8,lens,rc-lens,9998,tag:rc-lens,Lens
+pa_media,team,5ed026ee-bb59-4908-8534-a9ead39911cc,lyon,olympique-lyonnais,10040,tag:lyon,Lyon
+pa_media,team,5ed026ee-bb59-4908-8534-a9ead39911cc,lyon,olympique-lyonnais,10040,tag:olympique-lyonnais,Lyon
+pa_media,team,38ac6662-99ef-417a-a577-81602ba083ec,marseille,olympique-marseille,10042,tag:marseille,Marseille
+pa_media,team,38ac6662-99ef-417a-a577-81602ba083ec,marseille,olympique-marseille,10042,tag:olympique-marseille,Marseille
+pa_media,team,38ac6662-99ef-417a-a577-81602ba083ec,marseille,olympique-marseille,10042,tag:olympique-de-marseille,Marseille
+pa_media,team,0a33ead6-f82d-49d9-9d5a-d7fd01009c5d,rennes,rennes,10122,tag:rennes,Rennes
+pa_media,team,3b5e8f4b-cc64-4907-ad5b-fa2b60396d2a,lille,losc-lille,10004,tag:lille,Lille
+pa_media,team,3b5e8f4b-cc64-4907-ad5b-fa2b60396d2a,lille,losc-lille,10004,tag:losc-lille,Lille
+pa_media,team,cdb053dd-1149-4558-9b68-1c91826e9293,strasbourg,strasbourg,10124,tag:strasbourg,Strasbourg
+pa_media,team,0d941391-f9b0-4584-b610-f0f58970fbfa,monaco,as-monaco,10020,tag:monaco,Monaco
+pa_media,team,0d941391-f9b0-4584-b610-f0f58970fbfa,monaco,as-monaco,10020,tag:as-monaco,Monaco
+pa_media,team,399955ac-ddf9-4e0f-98ed-b9b95ddd9158,lorient,fc-lorient,10007,tag:lorient,Lorient
+pa_media,team,399955ac-ddf9-4e0f-98ed-b9b95ddd9158,lorient,fc-lorient,10007,tag:fc-lorient,Lorient
+pa_media,team,189f4ea8-b43a-4836-a5fd-d0cc255ba318,toulouse,toulouse,10134,tag:toulouse,Toulouse
+pa_media,team,189f4ea8-b43a-4836-a5fd-d0cc255ba318,toulouse,toulouse,10134,tag:toulouse-fc,Toulouse
+pa_media,team,ad6c3634-372e-4df1-a63b-daf84872a1f3,brest,brest,9880,tag:brest,Brest
+pa_media,team,3da98b4f-09f4-43cb-bc07-e397eaaaed31,angers,angers-sco,9831,tag:angers,Angers
+pa_media,team,3da98b4f-09f4-43cb-bc07-e397eaaaed31,angers,angers-sco,9831,tag:angers-sco,Angers
+pa_media,team,25d9de7a-d83e-4cc2-8e9d-bb3f2c1d9c28,le-havre,le-havre-ac,9992,tag:le-havre,Le Havre
+pa_media,team,25d9de7a-d83e-4cc2-8e9d-bb3f2c1d9c28,le-havre,le-havre-ac,9992,tag:le-havre-ac,Le Havre
+pa_media,team,59dae9ea-e7bd-426a-b700-8fc3736a1718,nice,ogc-nice,10033,tag:nice,Nice
+pa_media,team,59dae9ea-e7bd-426a-b700-8fc3736a1718,nice,ogc-nice,10033,tag:ogc-nice,Nice
+pa_media,team,294e2319-c1dd-4a0e-844d-6275d46b6c73,paris-fc,paris-fc,10050,tag:paris-fc,Paris FC
+pa_media,team,531fbd4e-03b6-40b0-8fec-7ef7beba15b4,auxerre,aj-auxerre,9860,tag:auxerre,Auxerre
+pa_media,team,531fbd4e-03b6-40b0-8fec-7ef7beba15b4,auxerre,aj-auxerre,9860,tag:aj-auxerre,Auxerre
+pa_media,team,d65868a9-abdc-4567-8058-dd935ea708aa,nantes,fc-nantes,10031,tag:nantes,Nantes
+pa_media,team,d65868a9-abdc-4567-8058-dd935ea708aa,nantes,fc-nantes,10031,tag:fc-nantes,Nantes
+pa_media,team,b1b722d7-2cec-4dfd-827f-0583bc9ba19b,metz,fc-metz,10018,tag:metz,Metz
+pa_media,team,b1b722d7-2cec-4dfd-827f-0583bc9ba19b,metz,fc-metz,10018,tag:fc-metz,Metz
