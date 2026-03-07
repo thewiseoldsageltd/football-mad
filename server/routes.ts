@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -62,7 +62,7 @@ import {
   setPamediaRunnerConfig,
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
-import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
+import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 let liveMatchesCache: any = null;
@@ -7025,7 +7025,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(articles.id, article.id));
       
       // Fetch linked entities
-      const linkedTeams = await db
+      let linkedTeams = await db
         .select({ id: teams.id, name: teams.name, slug: teams.slug, logoUrl: teams.logoUrl })
         .from(articleTeams)
         .innerJoin(teams, eq(articleTeams.teamId, teams.id))
@@ -7043,83 +7043,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .innerJoin(managers, eq(articleManagers.managerId, managers.id))
         .where(eq(articleManagers.articleId, article.id));
       
-      const linkedCompetitions = await db
+      let linkedCompetitions = await db
         .select({ id: competitions.id, name: competitions.name, slug: competitions.slug })
         .from(articleCompetitions)
         .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
         .where(eq(articleCompetitions.articleId, article.id));
-
-      if (article.source === ARTICLE_SOURCE_PA_MEDIA) {
-        const teamIds = Array.from(new Set(linkedTeams.map((row) => row.id)));
-        const competitionIds = Array.from(new Set(linkedCompetitions.map((row) => row.id)));
-
-        const [teamOverrideRows, competitionOverrideRows] = await Promise.all([
-          teamIds.length > 0
-            ? db
-              .select({
-                entityId: paEntityAliasMap.entityId,
-                displayName: paEntityAliasMap.displayName,
-                publicSlug: paEntityAliasMap.publicSlug,
-              })
-              .from(paEntityAliasMap)
-              .where(
-                and(
-                  eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-                  inArray(paEntityAliasMap.entityType, ["team", "teams"]),
-                  inArray(paEntityAliasMap.entityId, teamIds),
-                ),
-              )
-            : Promise.resolve([]),
-          competitionIds.length > 0
-            ? db
-              .select({
-                entityId: paEntityAliasMap.entityId,
-                displayName: paEntityAliasMap.displayName,
-                publicSlug: paEntityAliasMap.publicSlug,
-              })
-              .from(paEntityAliasMap)
-              .where(
-                and(
-                  eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-                  inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
-                  inArray(paEntityAliasMap.entityId, competitionIds),
-                ),
-              )
-            : Promise.resolve([]),
-        ]);
-
-        const teamOverrideMap = new Map<string, { name?: string; slug?: string }>();
-        for (const row of teamOverrideRows) {
-          if (!teamOverrideMap.has(row.entityId)) {
-            teamOverrideMap.set(row.entityId, {
-              name: row.displayName ?? undefined,
-              slug: row.publicSlug ?? undefined,
-            });
-          }
-        }
-
-        const competitionOverrideMap = new Map<string, { name?: string; slug?: string }>();
-        for (const row of competitionOverrideRows) {
-          if (!competitionOverrideMap.has(row.entityId)) {
-            competitionOverrideMap.set(row.entityId, {
-              name: row.displayName ?? undefined,
-              slug: row.publicSlug ?? undefined,
-            });
-          }
-        }
-
-        linkedTeams.forEach((team) => {
-          const override = teamOverrideMap.get(team.id);
-          if (override?.name) team.name = override.name;
-          if (override?.slug) team.slug = override.slug;
-        });
-
-        linkedCompetitions.forEach((competition) => {
-          const override = competitionOverrideMap.get(competition.id);
-          if (override?.name) competition.name = override.name;
-          if (override?.slug) competition.slug = override.slug;
-        });
-      }
+      const presenter = new EntityPresentationResolver();
+      const [teamPresentationMap, competitionPresentationMap] = await Promise.all([
+        presenter.resolveTeams(linkedTeams.map((row) => row.id), { source: article.source }),
+        presenter.resolveCompetitions(linkedCompetitions.map((row) => row.id), { source: article.source }),
+      ]);
+      linkedTeams = linkedTeams.map((team) => {
+        const presentation = teamPresentationMap.get(team.id);
+        return {
+          ...team,
+          name: presentation?.name || team.name,
+          slug: presentation?.slug || team.slug,
+          logoUrl: presentation?.logoUrl ?? team.logoUrl,
+        };
+      });
+      linkedCompetitions = linkedCompetitions.map((competition) => {
+        const presentation = competitionPresentationMap.get(competition.id);
+        return {
+          ...competition,
+          name: presentation?.name || competition.name,
+          slug: presentation?.slug || competition.slug,
+        };
+      });
       
       // Find more-like-this articles (share entities or same competition)
       let moreLikeThis: any[] = [];

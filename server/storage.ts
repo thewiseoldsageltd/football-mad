@@ -5,7 +5,6 @@ import {
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
   competitions, articleCompetitions,
-  paEntityAliasMap,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -26,6 +25,7 @@ import {
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
 } from "@shared/schema";
+import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 
 // Minimal entity data for article pills
@@ -161,39 +161,6 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private async getPaOverrideMap(
-    entityType: "team" | "competition",
-    entityIds: string[],
-  ): Promise<Map<string, { name?: string; slug?: string }>> {
-    if (entityIds.length === 0) return new Map();
-
-    const rows = await db
-      .select({
-        entityId: paEntityAliasMap.entityId,
-        displayName: paEntityAliasMap.displayName,
-        publicSlug: paEntityAliasMap.publicSlug,
-      })
-      .from(paEntityAliasMap)
-      .where(
-        and(
-          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-          inArray(paEntityAliasMap.entityType, [entityType, `${entityType}s`]),
-          inArray(paEntityAliasMap.entityId, entityIds),
-        ),
-      );
-
-    const out = new Map<string, { name?: string; slug?: string }>();
-    for (const row of rows) {
-      if (!out.has(row.entityId)) {
-        out.set(row.entityId, {
-          name: row.displayName ?? undefined,
-          slug: row.publicSlug ?? undefined,
-        });
-      }
-    }
-    return out;
-  }
-
   // Teams
   async getTeams(): Promise<Team[]> {
     return db.select().from(teams).orderBy(teams.name);
@@ -441,29 +408,27 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
       .where(eq(articleCompetitions.articleId, article.id))
       .orderBy(desc(articleCompetitions.salienceScore));
-
-    const isPaMediaArticle = article.source === ARTICLE_SOURCE_PA_MEDIA;
-    const teamOverrideMap = isPaMediaArticle
-      ? await this.getPaOverrideMap("team", teamRows.map((row) => row.id))
-      : new Map<string, { name?: string; slug?: string }>();
-    const competitionOverrideMap = isPaMediaArticle
-      ? await this.getPaOverrideMap("competition", competitionRows.map((row) => row.id))
-      : new Map<string, { name?: string; slug?: string }>();
+    const presenter = new EntityPresentationResolver();
+    const [teamPresentationMap, competitionPresentationMap] = await Promise.all([
+      presenter.resolveTeams(teamRows.map((row) => row.id), { source: article.source }),
+      presenter.resolveCompetitions(competitionRows.map((row) => row.id), { source: article.source }),
+    ]);
 
     return {
       ...article,
       entityTeams: teamRows.map((row) => {
-        const override = teamOverrideMap.get(row.id);
+        const override = teamPresentationMap.get(row.id);
         return {
           ...row,
           name: override?.name || row.name,
           slug: override?.slug || row.slug,
+          logoUrl: override?.logoUrl ?? row.logoUrl,
         };
       }),
       entityPlayers: playerRows,
       entityManagers: managerRows,
       entityCompetitions: competitionRows.map((row) => {
-        const override = competitionOverrideMap.get(row.id);
+        const override = competitionPresentationMap.get(row.id);
         return {
           ...row,
           name: override?.name || row.name,
@@ -570,6 +535,8 @@ export class DatabaseStorage implements IStorage {
         .where(inArray(articleManagers.articleId, articleIds)),
     ]);
 
+    const presenter = new EntityPresentationResolver();
+
     const paArticleRows = await db
       .select({ id: articles.id })
       .from(articles)
@@ -591,9 +558,31 @@ export class DatabaseStorage implements IStorage {
       ),
     );
 
-    const [teamOverrideMap, competitionOverrideMap] = await Promise.all([
-      this.getPaOverrideMap("team", paTeamEntityIds),
-      this.getPaOverrideMap("competition", paCompetitionEntityIds),
+    const nonPaTeamEntityIds = Array.from(
+      new Set(
+        teamRows
+          .filter((row) => !paArticleIds.has(row.articleId))
+          .map((row) => row.id),
+      ),
+    );
+    const nonPaCompetitionEntityIds = Array.from(
+      new Set(
+        competitionRows
+          .filter((row) => !paArticleIds.has(row.articleId))
+          .map((row) => row.id),
+      ),
+    );
+
+    const [
+      paTeamPresentationMap,
+      paCompetitionPresentationMap,
+      nonPaTeamPresentationMap,
+      nonPaCompetitionPresentationMap,
+    ] = await Promise.all([
+      presenter.resolveTeams(paTeamEntityIds, { source: ARTICLE_SOURCE_PA_MEDIA }),
+      presenter.resolveCompetitions(paCompetitionEntityIds, { source: ARTICLE_SOURCE_PA_MEDIA }),
+      presenter.resolveTeams(nonPaTeamEntityIds, { source: null }),
+      presenter.resolveCompetitions(nonPaCompetitionEntityIds, { source: null }),
     ]);
 
     const compMap = new Map<string, EntityLite[]>();
@@ -603,20 +592,24 @@ export class DatabaseStorage implements IStorage {
 
     for (const row of competitionRows) {
       if (!compMap.has(row.articleId)) compMap.set(row.articleId, []);
-      const override = paArticleIds.has(row.articleId) ? competitionOverrideMap.get(row.id) : undefined;
+      const presentation = paArticleIds.has(row.articleId)
+        ? paCompetitionPresentationMap.get(row.id)
+        : nonPaCompetitionPresentationMap.get(row.id);
       compMap.get(row.articleId)!.push({
         id: row.id,
-        name: override?.name || row.name,
-        slug: override?.slug || row.slug,
+        name: presentation?.name || row.name,
+        slug: presentation?.slug || row.slug,
       });
     }
     for (const row of teamRows) {
       if (!teamMap.has(row.articleId)) teamMap.set(row.articleId, []);
-      const override = paArticleIds.has(row.articleId) ? teamOverrideMap.get(row.id) : undefined;
+      const presentation = paArticleIds.has(row.articleId)
+        ? paTeamPresentationMap.get(row.id)
+        : nonPaTeamPresentationMap.get(row.id);
       teamMap.get(row.articleId)!.push({
         id: row.id,
-        name: override?.name || row.name,
-        slug: override?.slug || row.slug,
+        name: presentation?.name || row.name,
+        slug: presentation?.slug || row.slug,
       });
     }
     for (const row of playerRows) {
