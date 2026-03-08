@@ -1,15 +1,58 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import { ArrowLeft, Trophy, Activity, ArrowRightLeft, Calendar, Clock, Shirt, MapPin, ChevronRight, Star } from "lucide-react";
+import { ArrowLeft, Trophy, Activity, ArrowRightLeft, Calendar, Shirt, MapPin, ChevronRight, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { MainLayout } from "@/components/layout/main-layout";
 import { teamHub } from "@/lib/urls";
-import { getPlayerProfile, type GoalservePlayerProfile, type CareerSeasonRow, type TransferEntry, type SidelinedEntry, type TrophyEntry } from "@/lib/mock/goalserveMock";
+import type { Team } from "@shared/schema";
+
+type CareerSeasonRow = {
+  season?: string | number | null;
+  club?: string | null;
+  apps?: string | number | null;
+  goals?: string | number | null;
+  assists?: string | number | null;
+  minutes?: string | number | null;
+};
+
+type TransferEntry = {
+  date: string;
+  from: string;
+  to: string;
+  fee: string;
+};
+
+type SidelinedEntry = {
+  type: "injury" | "suspension";
+  start: string;
+  end: string;
+  description: string;
+};
+
+type TrophyEntry = {
+  competition: string;
+  season: string;
+};
+
+type PlayerApiResponse = {
+  id: string;
+  name: string;
+  slug: string;
+  position?: string | null;
+  nationality?: string | null;
+  age?: number | null;
+  imageUrl?: string | null;
+  team?: Team | null;
+  // Future-proof optional fields if backend adds them.
+  country?: string | null;
+  height?: string | null;
+  preferredFoot?: string | null;
+};
 
 function getInitials(name: string): string {
   const parts = name.split(" ");
@@ -22,16 +65,6 @@ function getInitials(name: string): string {
 function formatStat(value: string | number | undefined | null): string {
   if (value === undefined || value === null || value === "") return "–";
   return String(value);
-}
-
-function StatBlock({ label, value }: { label: string; value: string | number | undefined | null }) {
-  const displayValue = formatStat(value);
-  return (
-    <div className="text-center p-3 rounded-lg bg-muted/50">
-      <div className="text-2xl font-bold">{displayValue}</div>
-      <div className="text-xs text-muted-foreground">{label}</div>
-    </div>
-  );
 }
 
 function CareerTable({ data }: { data: CareerSeasonRow[] }) {
@@ -196,9 +229,28 @@ export default function PlayerProfilePage() {
   const slug = params?.slug || "";
   const [activeTab, setActiveTab] = useState("domesticLeague");
 
-  const player = useMemo(() => {
-    return getPlayerProfile(slug);
-  }, [slug]);
+  const { data: player, isLoading } = useQuery<PlayerApiResponse>({
+    queryKey: ["/api/players", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/players/${slug}`);
+      if (!res.ok) {
+        if (res.status === 404) return null;
+        throw new Error("Failed to fetch player profile");
+      }
+      return res.json();
+    },
+    enabled: Boolean(slug),
+  });
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <h1 className="text-2xl font-bold mb-4">Loading player profile...</h1>
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!player) {
     return (
@@ -219,17 +271,28 @@ export default function PlayerProfilePage() {
     );
   }
 
+  const currentClubName = player.team?.name ?? null;
+  const currentClubSlug = player.team?.slug ?? null;
   const initials = getInitials(player.name);
-  const summary = player.seasonSummary;
+  const careerStatsTabs = {
+    domesticLeague: [] as CareerSeasonRow[],
+    domesticCups: [] as CareerSeasonRow[],
+    intlClubCups: [] as CareerSeasonRow[],
+    international: [] as CareerSeasonRow[],
+  };
+  const transfers: TransferEntry[] = [];
+  const sidelined: SidelinedEntry[] = [];
+  const trophies: TrophyEntry[] = [];
+  const country = player.country ?? player.nationality ?? null;
 
   return (
     <MainLayout>
       <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
-        {player.currentClubSlug && (
-          <Link href={teamHub(player.currentClubSlug)}>
+        {currentClubSlug && (
+          <Link href={teamHub(currentClubSlug)}>
             <Button variant="ghost" size="sm" className="mb-2" data-testid="link-back-to-team">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to {player.currentClubName}
+              Back to {currentClubName}
             </Button>
           </Link>
         )}
@@ -238,8 +301,8 @@ export default function PlayerProfilePage() {
           <CardHeader className="pb-4">
             <div className="flex flex-col sm:flex-row items-start gap-6">
               <Avatar className="h-24 w-24 sm:h-32 sm:w-32">
-                {player.imageBase64 ? (
-                  <AvatarImage src={`data:image/jpeg;base64,${player.imageBase64}`} alt={player.name} />
+                {player.imageUrl ? (
+                  <AvatarImage src={player.imageUrl} alt={player.name} />
                 ) : null}
                 <AvatarFallback className="text-2xl sm:text-3xl bg-primary/10 text-primary">
                   {initials}
@@ -248,11 +311,11 @@ export default function PlayerProfilePage() {
               <div className="flex-1">
                 <CardTitle className="text-2xl sm:text-3xl">{player.name}</CardTitle>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <Badge variant="secondary" className="text-sm">{player.positionText}</Badge>
-                  {player.nationality && (
+                  <Badge variant="secondary" className="text-sm">{player.position ?? "Unknown position"}</Badge>
+                  {country && (
                     <span className="text-sm text-muted-foreground flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
-                      {player.nationality}
+                      {country}
                     </span>
                   )}
                 </div>
@@ -273,10 +336,10 @@ export default function PlayerProfilePage() {
                     <span>Preferred foot: {player.preferredFoot}</span>
                   )}
                 </div>
-                {player.currentClubName && player.currentClubSlug && (
-                  <Link href={teamHub(player.currentClubSlug)}>
+                {currentClubName && currentClubSlug && (
+                  <Link href={teamHub(currentClubSlug)}>
                     <span className="inline-flex items-center text-sm text-primary hover:underline mt-2 cursor-pointer" data-testid="link-club">
-                      {player.currentClubName} <ChevronRight className="h-4 w-4" />
+                      {currentClubName} <ChevronRight className="h-4 w-4" />
                     </span>
                   </Link>
                 )}
@@ -293,16 +356,8 @@ export default function PlayerProfilePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-              <StatBlock label="Minutes" value={summary.minutes} />
-              <StatBlock label="Apps" value={summary.appearances} />
-              <StatBlock label="Goals" value={summary.goals} />
-              <StatBlock label="Assists" value={summary.assists} />
-              <StatBlock 
-                label="Cards" 
-                value={`${summary.yellowcards}/${summary.redcards}`} 
-              />
-              <StatBlock label="Rating" value={summary.rating} />
+            <div className="text-center text-muted-foreground py-8">
+              No season stats available yet.
             </div>
           </CardContent>
         </Card>
@@ -321,16 +376,16 @@ export default function PlayerProfilePage() {
                 <TabsTrigger value="international" data-testid="tab-international">Intl</TabsTrigger>
               </TabsList>
               <TabsContent value="domesticLeague">
-                <CareerTable data={player.careerStatsTabs.domesticLeague} />
+                <CareerTable data={careerStatsTabs.domesticLeague} />
               </TabsContent>
               <TabsContent value="domesticCups">
-                <CareerTable data={player.careerStatsTabs.domesticCups} />
+                <CareerTable data={careerStatsTabs.domesticCups} />
               </TabsContent>
               <TabsContent value="intlClubCups">
-                <CareerTable data={player.careerStatsTabs.intlClubCups} />
+                <CareerTable data={careerStatsTabs.intlClubCups} />
               </TabsContent>
               <TabsContent value="international">
-                <CareerTable data={player.careerStatsTabs.international} />
+                <CareerTable data={careerStatsTabs.international} />
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -345,7 +400,7 @@ export default function PlayerProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <TransferTimeline transfers={player.transfers} />
+              <TransferTimeline transfers={transfers} />
             </CardContent>
           </Card>
 
@@ -357,7 +412,7 @@ export default function PlayerProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <SidelinedTimeline sidelined={player.sidelined} />
+              <SidelinedTimeline sidelined={sidelined} />
             </CardContent>
           </Card>
         </div>
@@ -370,7 +425,7 @@ export default function PlayerProfilePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TrophyList trophies={player.trophies} />
+            <TrophyList trophies={trophies} />
           </CardContent>
         </Card>
       </div>
