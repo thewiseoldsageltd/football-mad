@@ -41,9 +41,15 @@ interface FplAvailabilityWithRag extends FplPlayerAvailability {
   effectiveChance: number | null;
 }
 
-interface NewsFiltersResponse {
+interface TeamArchiveResponse {
   articles: Article[];
-  appliedFilters: Record<string, unknown>;
+  nextCursor: string | null;
+  hasMore: boolean;
+  appliedContext: {
+    entityType: "team";
+    entitySlug: string;
+    entityId: string | null;
+  };
 }
 
 const VALID_TABS = ["latest", "injuries", "discipline", "transfers", "matches", "squad", "fans"] as const;
@@ -132,12 +138,18 @@ function LatestTabContent({
   articles, 
   isLoading, 
   teamName,
-  teamColor
+  teamColor,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: { 
   articles: Article[]; 
   isLoading: boolean;
   teamName: string;
   teamColor?: string;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
 }) {
   const sortedArticles = useMemo(() => {
     return [...articles].sort((a, b) => {
@@ -172,10 +184,19 @@ function LatestTabContent({
   }
 
   return (
-    <div className="grid sm:grid-cols-2 gap-4">
-      {sortedArticles.map((article) => (
-        <ArticleCard key={article.id} article={article} teamColor={teamColor} />
-      ))}
+    <div className="space-y-4">
+      <div className="grid sm:grid-cols-2 gap-4">
+        {sortedArticles.map((article) => (
+          <ArticleCard key={article.id} article={article} teamColor={teamColor} />
+        ))}
+      </div>
+      {hasMore && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={onLoadMore} disabled={isLoadingMore}>
+            {isLoadingMore ? "Loading..." : "Load more"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2511,15 +2532,41 @@ export default function TeamHubPage() {
     },
   });
 
-  const { data: newsData, isLoading: newsLoading } = useQuery<NewsFiltersResponse>({
-    queryKey: ["/api/news", "team", slug],
+  const { data: teamArchiveData, isLoading: newsLoading } = useQuery<TeamArchiveResponse>({
+    queryKey: ["/api/news/archive/team", slug],
     queryFn: async () => {
-      const res = await fetch(`/api/news?teams=${slug}`);
+      const res = await fetch(`/api/news/archive/team/${slug}?limit=15`);
       if (!res.ok) throw new Error("Failed to fetch team news");
       return res.json();
     },
     enabled: !!team,
   });
+  const [teamArchiveArticles, setTeamArchiveArticles] = useState<Article[]>([]);
+  const [teamArchiveCursor, setTeamArchiveCursor] = useState<string | null>(null);
+  const [teamArchiveHasMore, setTeamArchiveHasMore] = useState(false);
+  const [isLoadingMoreTeamArchive, setIsLoadingMoreTeamArchive] = useState(false);
+  useEffect(() => {
+    if (!teamArchiveData) return;
+    setTeamArchiveArticles(teamArchiveData.articles ?? []);
+    setTeamArchiveCursor(teamArchiveData.nextCursor ?? null);
+    setTeamArchiveHasMore(Boolean(teamArchiveData.hasMore));
+  }, [teamArchiveData]);
+  const handleLoadMoreTeamArchive = async () => {
+    if (!teamArchiveCursor || !teamArchiveHasMore || isLoadingMoreTeamArchive) return;
+    setIsLoadingMoreTeamArchive(true);
+    try {
+      const res = await fetch(
+        `/api/news/archive/team/${slug}?limit=15&cursor=${encodeURIComponent(teamArchiveCursor)}`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch more team archive news");
+      const payload: TeamArchiveResponse = await res.json();
+      setTeamArchiveArticles((prev) => [...prev, ...(payload.articles ?? [])]);
+      setTeamArchiveCursor(payload.nextCursor ?? null);
+      setTeamArchiveHasMore(Boolean(payload.hasMore));
+    } finally {
+      setIsLoadingMoreTeamArchive(false);
+    }
+  };
 
   const { data: matches } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
     queryKey: ["/api/matches", "team", slug],
@@ -2654,7 +2701,7 @@ export default function TeamHubPage() {
     new Date(m.kickoffTime) <= now && m.status === "finished"
   ).slice(-5).reverse();
 
-  const articles = newsData?.articles || [];
+  const articles = teamArchiveArticles;
 
   const injuryRelatedArticles = useMemo(() => {
     const injuryKeywords = ["injury", "injured", "injur", "fitness", "recovery", "return", "sidelined", "setback", "hamstring", "acl", "knee", "ankle", "muscle", "surgery"];
@@ -2843,6 +2890,9 @@ export default function TeamHubPage() {
                 isLoading={newsLoading} 
                 teamName={team.name}
                 teamColor={team.primaryColor ?? undefined}
+                hasMore={teamArchiveHasMore}
+                isLoadingMore={isLoadingMoreTeamArchive}
+                onLoadMore={handleLoadMoreTeamArchive}
               />
             )}
 

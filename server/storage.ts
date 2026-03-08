@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc, ilike, sql, or, inArray, gte, gt, isNull, lt } from "drizzle-orm";
+import { eq, and, desc, ilike, sql, or, inArray, gte, gt, isNull, isNotNull, lt } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
@@ -77,6 +77,24 @@ export interface NewsUpdatesResponse {
   serverTime: string;
 }
 
+export interface NewsArchiveParams {
+  entityType: "competition" | "team" | "player" | "manager";
+  entitySlug: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface NewsArchiveResponse {
+  articles: any[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  appliedContext: {
+    entityType: "competition" | "team" | "player" | "manager";
+    entitySlug: string;
+    entityId: string | null;
+  };
+}
+
 type EntityLite = { id: string; name: string; slug: string };
 type ArticleWithEntityArrays = {
   entityCompetitions: EntityLite[];
@@ -106,6 +124,7 @@ export interface IStorage {
   incrementArticleViews(id: string): Promise<void>;
   getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse>;
   getNewsUpdates(params: NewsUpdatesParams): Promise<NewsUpdatesResponse>;
+  getNewsArchiveByEntity(params: NewsArchiveParams): Promise<NewsArchiveResponse>;
   
   // Matches
   getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
@@ -297,7 +316,12 @@ export class DatabaseStorage implements IStorage {
     const fallbackRows = await db
       .select()
       .from(managers)
-      .where(inArray(managers.currentTeamId, Array.from(mvpTeamIds)))
+      .where(
+        and(
+          isNotNull(managers.currentTeamId),
+          inArray(managers.currentTeamId, Array.from(mvpTeamIds)),
+        ),
+      )
       .orderBy(managers.name);
     const fallbackManagers = fallbackRows.filter((row) => !canonicalById.has(row.id));
 
@@ -1090,6 +1114,141 @@ export class DatabaseStorage implements IStorage {
       articles: withEntities,
       nextCursor,
       serverTime,
+    };
+  }
+
+  async getNewsArchiveByEntity(params: NewsArchiveParams): Promise<NewsArchiveResponse> {
+    const { entityType, entitySlug, cursor } = params;
+    const limit = Math.min(Math.max(1, params.limit ?? 15), 50);
+
+    const listFields = {
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      coverImage: articles.coverImage,
+      heroImageCredit: articles.heroImageCredit,
+      authorName: articles.authorName,
+      publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+      updatedAt: articles.updatedAt,
+      sourceUpdatedAt: articles.sourceUpdatedAt,
+      sortAt: articles.sortAt,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      isFeatured: articles.isFeatured,
+      isTrending: articles.isTrending,
+      isBreaking: articles.isBreaking,
+      viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount,
+    };
+
+    const resolved =
+      entityType === "competition"
+        ? await db
+            .select({ id: competitions.id })
+            .from(competitions)
+            .where(eq(competitions.slug, entitySlug))
+            .limit(1)
+        : entityType === "team"
+          ? await db
+              .select({ id: teams.id })
+              .from(teams)
+              .where(eq(teams.slug, entitySlug))
+              .limit(1)
+          : entityType === "player"
+            ? await db
+                .select({ id: players.id })
+                .from(players)
+                .where(eq(players.slug, entitySlug))
+                .limit(1)
+            : await db
+                .select({ id: managers.id })
+                .from(managers)
+                .where(eq(managers.slug, entitySlug))
+                .limit(1);
+
+    const entityId = resolved[0]?.id ?? null;
+    if (!entityId) {
+      return {
+        articles: [],
+        nextCursor: null,
+        hasMore: false,
+        appliedContext: { entityType, entitySlug, entityId: null },
+      };
+    }
+
+    const articleIdsByEntity =
+      entityType === "competition"
+        ? await db
+            .selectDistinct({ articleId: articleCompetitions.articleId })
+            .from(articleCompetitions)
+            .where(eq(articleCompetitions.competitionId, entityId))
+        : entityType === "team"
+          ? await db
+              .selectDistinct({ articleId: articleTeams.articleId })
+              .from(articleTeams)
+              .where(eq(articleTeams.teamId, entityId))
+          : entityType === "player"
+            ? await db
+                .selectDistinct({ articleId: articlePlayers.articleId })
+                .from(articlePlayers)
+                .where(eq(articlePlayers.playerId, entityId))
+            : await db
+                .selectDistinct({ articleId: articleManagers.articleId })
+                .from(articleManagers)
+                .where(eq(articleManagers.managerId, entityId));
+
+    const articleIdList = articleIdsByEntity.map((row) => row.articleId);
+    if (articleIdList.length === 0) {
+      return {
+        articles: [],
+        nextCursor: null,
+        hasMore: false,
+        appliedContext: { entityType, entitySlug, entityId },
+      };
+    }
+
+    const conditions: any[] = [inArray(articles.id, articleIdList)];
+    if (cursor) {
+      const parts = cursor.split("|");
+      if (parts.length === 2) {
+        const [cursorSortAt, cursorId] = parts;
+        const cursorDate = new Date(cursorSortAt);
+        conditions.push(
+          or(
+            lt(articles.sortAt, cursorDate),
+            and(eq(articles.sortAt, cursorDate), lt(articles.id, cursorId)),
+          ),
+        );
+      }
+    }
+
+    const rows = await db
+      .select(listFields)
+      .from(articles)
+      .where(and(...conditions))
+      .orderBy(desc(articles.sortAt), desc(articles.id))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const rawSlice = hasMore ? rows.slice(0, limit) : rows;
+    const normalizedRows = rawSlice.map((row) => this.normalizeArticleListRow(row));
+    const articlesToReturn = await this.attachEntityArraysToArticles(normalizedRows);
+
+    let nextCursor: string | null = null;
+    if (hasMore && articlesToReturn.length > 0) {
+      const lastArticle = articlesToReturn[articlesToReturn.length - 1];
+      const sortAtValue = lastArticle.sortAt || lastArticle.sourceUpdatedAt || lastArticle.publishedAt || lastArticle.createdAt;
+      if (sortAtValue) nextCursor = `${new Date(sortAtValue).toISOString()}|${lastArticle.id}`;
+    }
+
+    return {
+      articles: articlesToReturn,
+      nextCursor,
+      hasMore,
+      appliedContext: { entityType, entitySlug, entityId },
     };
   }
 

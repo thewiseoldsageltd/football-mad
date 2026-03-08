@@ -605,6 +605,94 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/news/archive/competition/:slug", async (req, res) => {
+    try {
+      const limitParam = parseInt(req.query.limit as string, 10) || 15;
+      const limit = Math.min(Math.max(1, limitParam), 50);
+      const cursor = req.query.cursor as string | undefined;
+      const result = await storage.getNewsArchiveByEntity({
+        entityType: "competition",
+        entitySlug: req.params.slug,
+        limit,
+        cursor,
+      });
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching competition archive:", error);
+      res.status(500).json({ error: "Failed to fetch competition archive" });
+    }
+  });
+
+  app.get("/api/news/archive/team/:slug", async (req, res) => {
+    try {
+      const limitParam = parseInt(req.query.limit as string, 10) || 15;
+      const limit = Math.min(Math.max(1, limitParam), 50);
+      const cursor = req.query.cursor as string | undefined;
+      const result = await storage.getNewsArchiveByEntity({
+        entityType: "team",
+        entitySlug: req.params.slug,
+        limit,
+        cursor,
+      });
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching team archive:", error);
+      res.status(500).json({ error: "Failed to fetch team archive" });
+    }
+  });
+
+  app.get("/api/news/archive/player/:slug", async (req, res) => {
+    try {
+      const limitParam = parseInt(req.query.limit as string, 10) || 15;
+      const limit = Math.min(Math.max(1, limitParam), 50);
+      const cursor = req.query.cursor as string | undefined;
+      const result = await storage.getNewsArchiveByEntity({
+        entityType: "player",
+        entitySlug: req.params.slug,
+        limit,
+        cursor,
+      });
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching player archive:", error);
+      res.status(500).json({ error: "Failed to fetch player archive" });
+    }
+  });
+
+  app.get("/api/news/archive/manager/:slug", async (req, res) => {
+    try {
+      const limitParam = parseInt(req.query.limit as string, 10) || 15;
+      const limit = Math.min(Math.max(1, limitParam), 50);
+      const cursor = req.query.cursor as string | undefined;
+      const result = await storage.getNewsArchiveByEntity({
+        entityType: "manager",
+        entitySlug: req.params.slug,
+        limit,
+        cursor,
+      });
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching manager archive:", error);
+      res.status(500).json({ error: "Failed to fetch manager archive" });
+    }
+  });
+
   // GET /api/news/updates - Incremental updates for polling
   app.get("/api/news/updates", async (req, res) => {
     try {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { ArrowLeft, Trophy, Activity, ArrowRightLeft, Calendar, Shirt, MapPin, ChevronRight, Star } from "lucide-react";
@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MainLayout } from "@/components/layout/main-layout";
+import { ArticleCard } from "@/components/cards/article-card";
+import { ArticleCardSkeleton } from "@/components/skeletons";
 import { teamHub } from "@/lib/urls";
-import type { Team } from "@shared/schema";
+import type { Team, Article } from "@shared/schema";
 
 type CareerSeasonRow = {
   season?: string | number | null;
@@ -52,6 +54,17 @@ type PlayerApiResponse = {
   country?: string | null;
   height?: string | null;
   preferredFoot?: string | null;
+};
+
+type PlayerArchiveResponse = {
+  articles: Article[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  appliedContext: {
+    entityType: "player";
+    entitySlug: string;
+    entityId: string | null;
+  };
 };
 
 function getInitials(name: string): string {
@@ -241,6 +254,41 @@ export default function PlayerProfilePage() {
     },
     enabled: Boolean(slug),
   });
+  const { data: archiveData, isLoading: archiveLoading } = useQuery<PlayerArchiveResponse>({
+    queryKey: ["/api/news/archive/player", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/news/archive/player/${slug}?limit=9`);
+      if (!res.ok) throw new Error("Failed to fetch player archive");
+      return res.json();
+    },
+    enabled: Boolean(slug),
+  });
+  const [archiveArticles, setArchiveArticles] = useState<Article[]>([]);
+  const [archiveCursor, setArchiveCursor] = useState<string | null>(null);
+  const [archiveHasMore, setArchiveHasMore] = useState(false);
+  const [archiveLoadingMore, setArchiveLoadingMore] = useState(false);
+  useEffect(() => {
+    if (!archiveData) return;
+    setArchiveArticles(archiveData.articles ?? []);
+    setArchiveCursor(archiveData.nextCursor ?? null);
+    setArchiveHasMore(Boolean(archiveData.hasMore));
+  }, [archiveData]);
+  const loadMoreArchive = async () => {
+    if (!archiveCursor || !archiveHasMore || archiveLoadingMore) return;
+    setArchiveLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/news/archive/player/${slug}?limit=9&cursor=${encodeURIComponent(archiveCursor)}`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch more player archive");
+      const payload: PlayerArchiveResponse = await res.json();
+      setArchiveArticles((prev) => [...prev, ...(payload.articles ?? [])]);
+      setArchiveCursor(payload.nextCursor ?? null);
+      setArchiveHasMore(Boolean(payload.hasMore));
+    } finally {
+      setArchiveLoadingMore(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -426,6 +474,41 @@ export default function PlayerProfilePage() {
           </CardHeader>
           <CardContent>
             <TrophyList trophies={trophies} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Related News</CardTitle>
+            <CardDescription>Archive mentions for {player.name}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {archiveLoading ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <ArticleCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : archiveArticles.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                No related archive articles yet.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {archiveArticles.map((article) => (
+                    <ArticleCard key={article.id} article={article} />
+                  ))}
+                </div>
+                {archiveHasMore && (
+                  <div className="flex justify-center">
+                    <Button variant="outline" onClick={loadMoreArchive} disabled={archiveLoadingMore}>
+                      {archiveLoadingMore ? "Loading..." : "Load more"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

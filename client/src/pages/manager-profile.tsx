@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MainLayout } from "@/components/layout/main-layout";
 import { teamHub } from "@/lib/urls";
+import { ArticleCard } from "@/components/cards/article-card";
+import { ArticleCardSkeleton } from "@/components/skeletons";
+import type { Article } from "@shared/schema";
+import { useEffect, useState } from "react";
 
 type ManagerApiResponse = {
   id: string;
@@ -19,6 +23,17 @@ type ManagerApiResponse = {
     name: string;
     slug: string;
   } | null;
+};
+
+type ManagerArchiveResponse = {
+  articles: Article[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  appliedContext: {
+    entityType: "manager";
+    entitySlug: string;
+    entityId: string | null;
+  };
 };
 
 export default function ManagerProfilePage() {
@@ -36,6 +51,41 @@ export default function ManagerProfilePage() {
     },
     enabled: Boolean(slug),
   });
+  const { data: archiveData, isLoading: archiveLoading } = useQuery<ManagerArchiveResponse>({
+    queryKey: ["/api/news/archive/manager", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/news/archive/manager/${slug}?limit=9`);
+      if (!res.ok) throw new Error("Failed to fetch manager archive");
+      return res.json();
+    },
+    enabled: Boolean(slug),
+  });
+  const [archiveArticles, setArchiveArticles] = useState<Article[]>([]);
+  const [archiveCursor, setArchiveCursor] = useState<string | null>(null);
+  const [archiveHasMore, setArchiveHasMore] = useState(false);
+  const [archiveLoadingMore, setArchiveLoadingMore] = useState(false);
+  useEffect(() => {
+    if (!archiveData) return;
+    setArchiveArticles(archiveData.articles ?? []);
+    setArchiveCursor(archiveData.nextCursor ?? null);
+    setArchiveHasMore(Boolean(archiveData.hasMore));
+  }, [archiveData]);
+  const loadMoreArchive = async () => {
+    if (!archiveCursor || !archiveHasMore || archiveLoadingMore) return;
+    setArchiveLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/news/archive/manager/${slug}?limit=9&cursor=${encodeURIComponent(archiveCursor)}`,
+      );
+      if (!res.ok) throw new Error("Failed to fetch more manager archive");
+      const payload: ManagerArchiveResponse = await res.json();
+      setArchiveArticles((prev) => [...prev, ...(payload.articles ?? [])]);
+      setArchiveCursor(payload.nextCursor ?? null);
+      setArchiveHasMore(Boolean(payload.hasMore));
+    } finally {
+      setArchiveLoadingMore(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -109,6 +159,40 @@ export default function ManagerProfilePage() {
                 <p className="text-sm">Career history, trophies, and detailed information will be available here.</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg">Related News</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {archiveLoading ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <ArticleCardSkeleton key={i} />
+                ))}
+              </div>
+            ) : archiveArticles.length === 0 ? (
+              <div className="text-center text-muted-foreground py-6">
+                No related archive articles yet.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {archiveArticles.map((article) => (
+                    <ArticleCard key={article.id} article={article} />
+                  ))}
+                </div>
+                {archiveHasMore && (
+                  <div className="flex justify-center">
+                    <Button variant="outline" onClick={loadMoreArchive} disabled={archiveLoadingMore}>
+                      {archiveLoadingMore ? "Loading..." : "Load more"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

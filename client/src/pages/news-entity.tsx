@@ -1,10 +1,11 @@
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
 import { Newspaper, Shield, Trophy } from "lucide-react";
-import { isTeamSlug } from "@/lib/urls";
 import type { Article } from "@shared/schema";
+import { Button } from "@/components/ui/button";
 
 interface NewsEntityPageProps {
   slug: string;
@@ -21,10 +22,57 @@ function formatEntityName(slug: string): string {
 export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps) {
   const entityName = formatEntityName(slug);
   const isTeam = entityType === "team";
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const { data: articles, isLoading } = useQuery<Article[]>({
-    queryKey: ["/api/articles", { tag: slug }],
+  const endpoint = useMemo(() => {
+    if (entityType === "competition") return `/api/news/archive/competition/${slug}`;
+    if (entityType === "team") return `/api/news/archive/team/${slug}`;
+    return null;
+  }, [entityType, slug]);
+
+  const { data, isLoading } = useQuery<{
+    articles: Article[];
+    nextCursor: string | null;
+    hasMore: boolean;
+    appliedContext: {
+      entityType: "competition" | "team";
+      entitySlug: string;
+      entityId: string | null;
+    };
+  }>({
+    queryKey: [endpoint, "first-page"],
+    queryFn: async () => {
+      const res = await fetch(`${endpoint}?limit=15`);
+      if (!res.ok) throw new Error("Failed to fetch archive");
+      return res.json();
+    },
+    enabled: Boolean(endpoint),
   });
+
+  useEffect(() => {
+    if (!data) return;
+    setArticles(data.articles ?? []);
+    setNextCursor(data.nextCursor ?? null);
+    setHasMore(Boolean(data.hasMore));
+  }, [data]);
+
+  const loadMore = async () => {
+    if (!endpoint || !nextCursor || !hasMore || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(`${endpoint}?limit=15&cursor=${encodeURIComponent(nextCursor)}`);
+      if (!res.ok) throw new Error("Failed to fetch more archive results");
+      const payload = await res.json();
+      setArticles((prev) => [...prev, ...(payload.articles ?? [])]);
+      setNextCursor(payload.nextCursor ?? null);
+      setHasMore(Boolean(payload.hasMore));
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   return (
     <MainLayout>
@@ -51,11 +99,20 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
               <ArticleCardSkeleton key={i} />
             ))}
           </div>
-        ) : articles && articles.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {articles.map((article) => (
-              <ArticleCard key={article.id} article={article} />
-            ))}
+        ) : articles.length > 0 ? (
+          <div className="space-y-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {articles.map((article) => (
+                <ArticleCard key={article.id} article={article} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="flex justify-center">
+                <Button onClick={loadMore} disabled={isLoadingMore} variant="outline">
+                  {isLoadingMore ? "Loading..." : "Load more"}
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-12">

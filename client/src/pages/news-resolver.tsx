@@ -1,5 +1,5 @@
 import { useRoute, Redirect } from "wouter";
-import { isEntitySlug, isTeamSlug, parseMatchSlug, matchDetail } from "@/lib/urls";
+import { isCompetitionSlug, isTeamSlug, parseMatchSlug, matchDetail } from "@/lib/urls";
 import NewsEntityPage from "./news-entity";
 import ArticlePage from "./article";
 import NotFound from "./not-found";
@@ -24,9 +24,15 @@ export default function NewsResolver() {
     return <NotFound />;
   }
 
-  if (isEntitySlug(slug)) {
-    const entityType = isTeamSlug(slug) ? "team" : "competition";
-    return <NewsEntityPage slug={slug} entityType={entityType} />;
+  // Deterministic entity routing precedence:
+  // 1) competition archive slugs
+  // 2) team archive slugs
+  if (isCompetitionSlug(slug)) {
+    return <NewsEntityPage slug={slug} entityType="competition" />;
+  }
+
+  if (isTeamSlug(slug)) {
+    return <NewsEntityPage slug={slug} entityType="team" />;
   }
 
   return <ArticlePage />;
