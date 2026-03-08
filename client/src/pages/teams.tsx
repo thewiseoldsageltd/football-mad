@@ -5,21 +5,41 @@ import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Shield } from "lucide-react";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 
-const COMPETITIONS = [
-  { value: "all", label: "All" },
-  { value: "Premier League", label: "Premier League" },
-  { value: "Championship", label: "Championship" },
-  { value: "La Liga", label: "La Liga" },
-  { value: "Bundesliga", label: "Bundesliga" },
-  { value: "Serie A", label: "Serie A" },
-  { value: "Ligue 1", label: "Ligue 1" },
-];
+type NewsNavTeam = {
+  id: string;
+  name: string;
+  slug: string;
+  shortName: string | null;
+};
+
+type NewsNavCompetition = {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  filterValue: string;
+  teams: NewsNavTeam[];
+};
+
+type NewsNavResponse = {
+  competitions: NewsNavCompetition[];
+  refinement?: {
+    teamsByCompetition: {
+      competitionId: string;
+      competitionName: string;
+      competitionSlug: string;
+      competitionFilterValue: string;
+      teams: NewsNavTeam[];
+    }[];
+    players: Array<{ id: string; name: string; slug?: string }>;
+  };
+};
 
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
@@ -60,6 +80,9 @@ export default function TeamsPage() {
   const { data: teams, isLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
   });
+  const { data: newsNav, isLoading: navLoading } = useQuery<NewsNavResponse>({
+    queryKey: ["/api/news/nav"],
+  });
 
   const { data: followedTeamIds } = useQuery<string[]>({
     queryKey: ["/api/follows"],
@@ -92,10 +115,44 @@ export default function TeamsPage() {
     },
   });
 
+  const competitionTabs = useMemo(() => {
+    const comps = newsNav?.competitions ?? [];
+    return [
+      { value: "all", label: "All" },
+      ...comps.map((c) => ({ value: c.filterValue, label: c.name })),
+    ];
+  }, [newsNav]);
+
+  const selectedCompetitionTeamIds = useMemo(() => {
+    if (competition === "all") return null;
+    const groups = (newsNav?.refinement?.teamsByCompetition ?? []).length > 0
+      ? newsNav!.refinement!.teamsByCompetition
+      : (newsNav?.competitions ?? []).map((c) => ({
+        competitionId: c.id,
+        competitionName: c.name,
+        competitionSlug: c.slug,
+        competitionFilterValue: c.filterValue,
+        teams: c.teams,
+      }));
+    const selected = groups.find((g) => g.competitionFilterValue === competition);
+    if (!selected) return new Set<string>();
+    return new Set(selected.teams.map((t) => t.id));
+  }, [competition, newsNav]);
+
+  const mvpTeamIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const comp of newsNav?.competitions ?? []) {
+      for (const team of comp.teams ?? []) ids.add(team.id);
+    }
+    return ids;
+  }, [newsNav]);
+
   const filteredTeams = teams
-    ?.filter((team) => {
+    ?.filter((team) => mvpTeamIds.has(team.id))
+    .filter((team) => {
       const matchesSearch = team.name.toLowerCase().includes(search.toLowerCase());
-      const matchesCompetition = competition === "all" || team.league === competition;
+      const selectedTeamIds = selectedCompetitionTeamIds;
+      const matchesCompetition = selectedTeamIds == null ? true : selectedTeamIds.has(team.id);
       return matchesSearch && matchesCompetition;
     })
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
@@ -131,7 +188,7 @@ export default function TeamsPage() {
           {/* Desktop: Tabs left, Search right */}
           <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
             <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-competition">
-              {COMPETITIONS.map((comp) => (
+              {competitionTabs.map((comp) => (
                 <TabsTrigger 
                   key={comp.value}
                   value={comp.value} 
@@ -168,7 +225,7 @@ export default function TeamsPage() {
                 }}
               >
                 <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-competition-mobile">
-                  {COMPETITIONS.map((comp) => (
+                  {competitionTabs.map((comp) => (
                     <TabsTrigger 
                       key={comp.value}
                       value={comp.value} 
@@ -202,7 +259,7 @@ export default function TeamsPage() {
           </div>
         </Tabs>
 
-        {isLoading ? (
+        {isLoading || navLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 20 }).map((_, i) => (
               <TeamCardSkeleton key={i} />
