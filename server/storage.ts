@@ -4,7 +4,7 @@ import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
-  competitions, articleCompetitions, playerTeamMemberships,
+  competitions, articleCompetitions, paEntityAliasMap, playerTeamMemberships,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -21,7 +21,6 @@ import {
   type FplPlayerAvailability,
   type Manager,
   type Competition,
-  NEWS_COMPETITIONS,
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
 } from "@shared/schema";
@@ -691,10 +690,71 @@ export class DatabaseStorage implements IStorage {
     const conditions: any[] = [];
     
     if (comp !== "all") {
-      const compConfig = NEWS_COMPETITIONS[comp as keyof typeof NEWS_COMPETITIONS];
-      if (compConfig && "dbValue" in compConfig) {
-        conditions.push(eq(articles.competition, compConfig.dbValue));
+      const [competitionBySlug] = await db
+        .select({ id: competitions.id })
+        .from(competitions)
+        .where(eq(competitions.slug, comp))
+        .limit(1);
+
+      const competitionId = competitionBySlug
+        ? competitionBySlug.id
+        : (
+          await db
+            .select({ id: paEntityAliasMap.entityId })
+            .from(paEntityAliasMap)
+            .where(
+              and(
+                eq(paEntityAliasMap.source, "pa_media"),
+                inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
+                eq(paEntityAliasMap.publicSlug, comp),
+              ),
+            )
+            .limit(1)
+        )[0]?.id;
+
+      if (!competitionId) {
+        return {
+          articles: [],
+          appliedFilters: {
+            comp,
+            type,
+            teams: teamSlugs,
+            myTeams: false,
+            sort,
+            range,
+            breaking,
+            total: 0,
+          },
+          nextCursor: null,
+          hasMore: false,
+        };
       }
+
+      const articleIdsByCompetition = await db
+        .selectDistinct({ articleId: articleCompetitions.articleId })
+        .from(articleCompetitions)
+        .where(eq(articleCompetitions.competitionId, competitionId));
+
+      const articleIdList = articleIdsByCompetition.map((a) => a.articleId);
+      if (articleIdList.length === 0) {
+        return {
+          articles: [],
+          appliedFilters: {
+            comp,
+            type,
+            teams: teamSlugs,
+            myTeams: false,
+            sort,
+            range,
+            breaking,
+            total: 0,
+          },
+          nextCursor: null,
+          hasMore: false,
+        };
+      }
+
+      conditions.push(inArray(articles.id, articleIdList));
     }
     
     if (type.length > 0) {

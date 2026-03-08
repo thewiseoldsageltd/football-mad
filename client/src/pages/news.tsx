@@ -257,11 +257,9 @@ export default function NewsPage() {
   });
 
   useEffect(() => {
-    if (filters.comp === "all" || !newsNav) return;
-    const selected = newsNav.competitions.find((comp) => comp.filterValue === filters.comp);
-    if (!selected) return;
-    setNavGroup(getCompetitionNavGroup(selected.filterValue));
-  }, [filters.comp, newsNav]);
+    if (filters.comp === "all") return;
+    setNavGroup(getCompetitionNavGroup(filters.comp));
+  }, [filters.comp]);
 
   const teams: Team[] | undefined = useMemo(() => {
     if (!newsNav) return undefined;

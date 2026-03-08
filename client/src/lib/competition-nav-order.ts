@@ -1,9 +1,28 @@
-import { cupCompetitions, europeCompetitions, leagueCompetitions } from "@/data/tables-mock";
-
 const TABLES_ORDER_SLUGS = [
-  ...leagueCompetitions.map((comp) => comp.id),
-  ...cupCompetitions.map((comp) => comp.id),
-  ...europeCompetitions.map((comp) => comp.id),
+  "premier-league",
+  "championship",
+  "league-one",
+  "league-two",
+  "national-league",
+  "scottish-premiership",
+  "scottish-championship",
+  "scottish-league-one",
+  "scottish-league-two",
+  "la-liga",
+  "serie-a",
+  "bundesliga",
+  "ligue-1",
+  "fa-cup",
+  "efl-cup",
+  "scottish-cup",
+  "scottish-league-cup",
+  "copa-del-rey",
+  "coppa-italia",
+  "dfb-pokal",
+  "coupe-de-france",
+  "champions-league",
+  "europa-league",
+  "conference-league",
 ] as const;
 
 const ORDER_ALIAS_BY_SLUG: Record<string, string> = {
