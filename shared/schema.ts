@@ -696,12 +696,66 @@ export type InsertFplPlayerAvailability = z.infer<typeof insertFplPlayerAvailabi
 export type FplPlayerAvailability = typeof fplPlayerAvailability.$inferSelect;
 
 // ============ NEWS FILTER CONSTANTS & SCHEMAS ============
+export const NEWS_COMPETITION_SLUGS = [
+  "all",
+  "premier-league",
+  "championship",
+  "league-one",
+  "league-two",
+  "national-league",
+  "scottish-premiership",
+  "scottish-championship",
+  "scottish-league-one",
+  "scottish-league-two",
+  "fa-cup",
+  "efl-cup",
+  "scottish-cup",
+  "scottish-league-cup",
+  "copa-del-rey",
+  "coppa-italia",
+  "dfb-pokal",
+  "coupe-de-france",
+  "bundesliga",
+  "la-liga",
+  "serie-a",
+  "ligue-1",
+  "uefa-champions-league",
+  "uefa-europa-league",
+  "uefa-conference-league",
+  // Legacy aliases still accepted to avoid breaking existing deep links.
+  "champions-league",
+  "europa-league",
+  "conference-league",
+] as const;
+
+export type NewsCompetitionSlug = typeof NEWS_COMPETITION_SLUGS[number];
+
 export const NEWS_COMPETITIONS = {
   all: { value: "all", label: "All", slug: "all" },
   "premier-league": { value: "premier-league", label: "Premier League", slug: "premier-league", dbValue: "Premier League" },
   "championship": { value: "championship", label: "Championship", slug: "championship", dbValue: "Championship" },
   "league-one": { value: "league-one", label: "League One", slug: "league-one", dbValue: "League One" },
   "league-two": { value: "league-two", label: "League Two", slug: "league-two", dbValue: "League Two" },
+  "national-league": { value: "national-league", label: "National League", slug: "national-league" },
+  "scottish-premiership": { value: "scottish-premiership", label: "Scottish Premiership", slug: "scottish-premiership" },
+  "scottish-championship": { value: "scottish-championship", label: "Scottish Championship", slug: "scottish-championship" },
+  "scottish-league-one": { value: "scottish-league-one", label: "Scottish League One", slug: "scottish-league-one" },
+  "scottish-league-two": { value: "scottish-league-two", label: "Scottish League Two", slug: "scottish-league-two" },
+  "fa-cup": { value: "fa-cup", label: "FA Cup", slug: "fa-cup" },
+  "efl-cup": { value: "efl-cup", label: "EFL Cup", slug: "efl-cup" },
+  "scottish-cup": { value: "scottish-cup", label: "Scottish Cup", slug: "scottish-cup" },
+  "scottish-league-cup": { value: "scottish-league-cup", label: "Scottish League Cup", slug: "scottish-league-cup" },
+  "copa-del-rey": { value: "copa-del-rey", label: "Copa del Rey", slug: "copa-del-rey" },
+  "coppa-italia": { value: "coppa-italia", label: "Coppa Italia", slug: "coppa-italia" },
+  "dfb-pokal": { value: "dfb-pokal", label: "DFB-Pokal", slug: "dfb-pokal" },
+  "coupe-de-france": { value: "coupe-de-france", label: "Coupe de France", slug: "coupe-de-france" },
+  "bundesliga": { value: "bundesliga", label: "Bundesliga", slug: "bundesliga" },
+  "la-liga": { value: "la-liga", label: "La Liga", slug: "la-liga" },
+  "serie-a": { value: "serie-a", label: "Serie A", slug: "serie-a" },
+  "ligue-1": { value: "ligue-1", label: "Ligue 1", slug: "ligue-1" },
+  "uefa-champions-league": { value: "uefa-champions-league", label: "Champions League", slug: "uefa-champions-league" },
+  "uefa-europa-league": { value: "uefa-europa-league", label: "Europa League", slug: "uefa-europa-league" },
+  "uefa-conference-league": { value: "uefa-conference-league", label: "Conference League", slug: "uefa-conference-league" },
 } as const;
 
 export const NEWS_CONTENT_TYPES = {
@@ -729,7 +783,7 @@ export const NEWS_TIME_RANGES = {
 } as const;
 
 export const newsFiltersSchema = z.object({
-  comp: z.enum(["all", "premier-league", "championship", "league-one", "league-two"]).default("all"),
+  comp: z.enum(NEWS_COMPETITION_SLUGS).default("all"),
   type: z.string().optional().transform(val => val ? val.split(",").filter(Boolean) : []),
   teams: z.string().optional(),
   sort: z.enum(["latest", "trending", "discussed", "for-you"]).default("latest"),

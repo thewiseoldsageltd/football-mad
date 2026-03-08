@@ -1,19 +1,22 @@
 import { useCallback, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
 import { 
-  NEWS_COMPETITIONS, 
+  NEWS_COMPETITION_SLUGS,
   NEWS_CONTENT_TYPES, 
   NEWS_SORT_OPTIONS, 
-  NEWS_TIME_RANGES 
+  NEWS_TIME_RANGES,
+  type NewsCompetitionSlug,
 } from "@shared/schema";
 
-export type CompetitionSlug = keyof typeof NEWS_COMPETITIONS;
+const NEWS_COMPETITION_SLUG_SET = new Set<string>(NEWS_COMPETITION_SLUGS);
+
+export type CompetitionValue = NewsCompetitionSlug;
 export type ContentTypeSlug = keyof typeof NEWS_CONTENT_TYPES;
 export type SortOption = keyof typeof NEWS_SORT_OPTIONS;
 export type TimeRange = keyof typeof NEWS_TIME_RANGES;
 
 export interface NewsFiltersState {
-  comp: CompetitionSlug;
+  comp: CompetitionValue;
   type: ContentTypeSlug[];
   teams: string[];
   myTeams: boolean;
@@ -40,14 +43,16 @@ export interface UseNewsFiltersReturn {
 function parseSearchParams(search: string): NewsFiltersState {
   const params = new URLSearchParams(search);
   
-  const comp = (params.get("comp") || "all") as CompetitionSlug;
+  const compRaw = params.get("comp") || "all";
   const typeParam = params.get("type");
   const teamsParam = params.get("teams");
   const sort = (params.get("sort") || "latest") as SortOption;
   const range = (params.get("range") || "all") as TimeRange;
   const breaking = params.get("breaking") === "true";
   
-  const validComp = Object.keys(NEWS_COMPETITIONS).includes(comp) ? comp : "all";
+  const validComp: CompetitionValue = NEWS_COMPETITION_SLUG_SET.has(compRaw)
+    ? (compRaw as CompetitionValue)
+    : "all";
   const validSort = Object.keys(NEWS_SORT_OPTIONS).includes(sort) ? sort : "latest";
   const validRange = Object.keys(NEWS_TIME_RANGES).includes(range) ? range : "all";
   
