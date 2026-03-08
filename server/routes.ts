@@ -459,9 +459,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/news/nav", async (_req, res) => {
     try {
       const compFilterByDbValue = new Map<string, string>();
+      const compFilterBySlug = new Map<string, string>();
       for (const [key, value] of Object.entries(NEWS_COMPETITIONS)) {
         const dbValue = "dbValue" in value && typeof value.dbValue === "string" ? value.dbValue : value.label;
         compFilterByDbValue.set(dbValue, key);
+        compFilterBySlug.set(value.slug, key);
       }
 
       const rows = await db
@@ -486,6 +488,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(competitions.isPriority, true))
         .orderBy(asc(competitions.name), asc(teams.name));
 
+      const presenter = new EntityPresentationResolver();
+      const competitionPresentation = await presenter.resolveCompetitions(
+        Array.from(new Set(rows.map((r) => r.compId))),
+        { source: "pa_media" },
+      );
+
       const compMap = new Map<string, {
         id: string; name: string; slug: string; sortOrder: number; filterValue: string | null;
         teams: { id: string; name: string; slug: string; shortName: string | null }[];
@@ -494,13 +502,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const r of rows) {
         let comp = compMap.get(r.compId);
         if (!comp) {
+          const presented = competitionPresentation.get(r.compId);
+          const compName = presented?.name ?? r.compName;
+          const compSlug = presented?.slug ?? r.compSlug;
           const fallbackSortOrder = compMap.size;
           comp = {
             id: r.compId,
-            name: r.compName,
-            slug: r.compSlug,
+            name: compName,
+            slug: compSlug,
             sortOrder: fallbackSortOrder,
-            filterValue: compFilterByDbValue.get(r.compName) ?? null,
+            filterValue: compFilterByDbValue.get(compName) ?? compFilterBySlug.get(compSlug) ?? null,
             teams: [],
           };
           compMap.set(r.compId, comp);
