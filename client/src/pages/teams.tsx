@@ -3,14 +3,14 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Search, Shield } from "lucide-react";
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
+import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 
 type NewsNavTeam = {
   id: string;
@@ -48,36 +48,6 @@ export default function TeamsPage() {
   const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
-  
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [showLeftFade, setShowLeftFade] = useState(false);
-  const [showRightFade, setShowRightFade] = useState(false);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    const isScrollable = scrollWidth > clientWidth;
-    setShowLeftFade(isScrollable && scrollLeft > 0);
-    setShowRightFade(isScrollable && scrollLeft + clientWidth < scrollWidth - 1);
-  }, []);
-
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    
-    handleScroll();
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    
-    const resizeObserver = new ResizeObserver(handleScroll);
-    resizeObserver.observe(el);
-    
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      resizeObserver.disconnect();
-    };
-  }, [handleScroll]);
 
   const { data: teams, isLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
@@ -227,31 +197,13 @@ export default function TeamsPage() {
           </div>
         </div>
 
-        <Tabs value={competition} onValueChange={handleCompetitionChange} className="w-full">
-          {/* Desktop: Tabs left, Search right */}
-          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
-            <div className="flex items-center gap-4 min-w-0">
-              <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
-                <TabsList className="h-auto gap-1" data-testid="tabs-teams-groups">
-                  <TabsTrigger value="leagues" data-testid="tab-teams-group-leagues">Leagues</TabsTrigger>
-                  <TabsTrigger value="cups" data-testid="tab-teams-group-cups">Cups</TabsTrigger>
-                  <TabsTrigger value="europe" data-testid="tab-teams-group-europe">Europe</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="h-6 w-px bg-border shrink-0" />
-              <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-competition">
-                {visibleCompetitionTabs.map((comp) => (
-                  <TabsTrigger
-                    key={comp.value}
-                    value={comp.value}
-                    data-testid={`tab-competition-${comp.value}`}
-                  >
-                    {comp.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
+        <GroupedCompetitionNav
+          selectedGroup={navGroup}
+          onGroupChange={handleNavGroupChange}
+          selectedCompetition={competition}
+          onCompetitionChange={handleCompetitionChange}
+          competitions={visibleCompetitionTabs}
+          rightDesktopSlot={(
             <div className="relative shrink-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -263,48 +215,8 @@ export default function TeamsPage() {
                 data-testid="input-search-teams"
               />
             </div>
-          </div>
-
-          {/* Mobile: Scrollable tabs with dynamic fades, then centered search */}
-          <div className="md:hidden space-y-4 mb-6">
-            <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
-              <TabsList className="grid grid-cols-3 w-full" data-testid="tabs-teams-groups-mobile">
-                <TabsTrigger value="leagues" data-testid="tab-teams-group-leagues-mobile">Leagues</TabsTrigger>
-                <TabsTrigger value="cups" data-testid="tab-teams-group-cups-mobile">Cups</TabsTrigger>
-                <TabsTrigger value="europe" data-testid="tab-teams-group-europe-mobile">Europe</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <div className="relative">
-              <div 
-                ref={scrollContainerRef}
-                className="overflow-x-auto scrollbar-hide"
-                style={{ 
-                  WebkitOverflowScrolling: 'touch',
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none'
-                }}
-              >
-                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-competition-mobile">
-                  {visibleCompetitionTabs.map((comp) => (
-                    <TabsTrigger 
-                      key={comp.value}
-                      value={comp.value} 
-                      className="whitespace-nowrap"
-                      data-testid={`tab-competition-${comp.value}-mobile`}
-                    >
-                      {comp.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-              {showLeftFade && (
-                <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-              )}
-              {showRightFade && (
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
-              )}
-            </div>
-
+          )}
+          rightMobileSlot={(
             <div className="relative">
               <Input
                 type="search"
@@ -316,8 +228,16 @@ export default function TeamsPage() {
               />
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>
-          </div>
-        </Tabs>
+          )}
+          desktopGroupTabsTestId="tabs-teams-groups"
+          desktopCompetitionTabsTestId="tabs-competition"
+          mobileGroupTabsTestId="tabs-teams-groups-mobile"
+          mobileCompetitionTabsTestId="tabs-competition-mobile"
+          desktopGroupTabTestIdPrefix="tab-teams-group"
+          desktopCompetitionTabTestIdPrefix="tab-competition"
+          mobileGroupTabTestIdPrefix="tab-teams-group"
+          mobileCompetitionTabTestIdPrefix="tab-competition"
+        />
 
         {isLoading || navLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

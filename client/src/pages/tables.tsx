@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -7,11 +7,11 @@ import { Trophy, Loader2 } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { CupProgress } from "@/components/tables/cup-progress";
 import { EuropeProgress } from "@/components/tables/europe-progress";
-import { TablesTopTabs } from "@/components/tables/tables-top-tabs";
-import { TablesCompetitionTabs } from "@/components/tables/tables-competition-tabs";
 import { TablesFilters } from "@/components/tables/tables-filters";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
+import { leagueCompetitions, cupCompetitions, europeCompetitions } from "@/data/tables-mock";
+import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 
 // Season slug helpers: "2025/26" <-> "2025-26"
 function seasonApiToSlug(apiSeason: string): string {
@@ -136,77 +136,6 @@ export default function TablesPage() {
     setLocation(`/tables/${leagueSlug}/${newSlug}`, { replace: false });
   }, [leagueSlug, setLocation]);
 
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const competitionScrollRef = useRef<HTMLDivElement>(null);
-  const [showTopLeftFade, setShowTopLeftFade] = useState(false);
-  const [showTopRightFade, setShowTopRightFade] = useState(false);
-  const [showCompLeftFade, setShowCompLeftFade] = useState(false);
-  const [showCompRightFade, setShowCompRightFade] = useState(false);
-
-  const updateFades = useCallback(() => {
-    const topEl = topScrollRef.current;
-    if (topEl) {
-      const { scrollLeft, scrollWidth, clientWidth } = topEl;
-      const isScrollable = scrollWidth > clientWidth;
-      setShowTopLeftFade(isScrollable && scrollLeft > 0);
-      setShowTopRightFade(isScrollable && scrollLeft + clientWidth < scrollWidth - 1);
-    }
-
-    const compEl = competitionScrollRef.current;
-    if (compEl) {
-      const { scrollLeft, scrollWidth, clientWidth } = compEl;
-      const isScrollable = scrollWidth > clientWidth;
-      setShowCompLeftFade(isScrollable && scrollLeft > 0);
-      setShowCompRightFade(isScrollable && scrollLeft + clientWidth < scrollWidth - 1);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (topScrollRef.current) {
-      topScrollRef.current.scrollLeft = 0;
-    }
-    if (competitionScrollRef.current) {
-      competitionScrollRef.current.scrollLeft = 0;
-    }
-    setShowTopLeftFade(false);
-    setShowCompLeftFade(false);
-    requestAnimationFrame(updateFades);
-  }, [updateFades]);
-
-  useEffect(() => {
-    if (competitionScrollRef.current) {
-      competitionScrollRef.current.scrollLeft = 0;
-    }
-    setShowCompLeftFade(false);
-    requestAnimationFrame(updateFades);
-  }, [topTab, updateFades]);
-
-  useEffect(() => {
-    const topEl = topScrollRef.current;
-    const compEl = competitionScrollRef.current;
-
-    const handleScroll = () => updateFades();
-
-    if (topEl) {
-      topEl.addEventListener("scroll", handleScroll, { passive: true });
-      const topObserver = new ResizeObserver(updateFades);
-      topObserver.observe(topEl);
-    }
-
-    if (compEl) {
-      compEl.addEventListener("scroll", handleScroll, { passive: true });
-      const compObserver = new ResizeObserver(updateFades);
-      compObserver.observe(compEl);
-    }
-
-    updateFades();
-
-    return () => {
-      topEl?.removeEventListener("scroll", handleScroll);
-      compEl?.removeEventListener("scroll", handleScroll);
-    };
-  }, [updateFades, topTab]);
-
   const goalserveLeagueId = useMemo(
     () => getGoalserveLeagueId(leagueSlug),
     [leagueSlug]
@@ -240,6 +169,24 @@ export default function TablesPage() {
   }, [standingsData]);
 
   const currentLeagueConfig = getLeagueBySlug(leagueSlug);
+  const selectedCompetition = topTab === "leagues" ? leagueSlug : topTab === "cups" ? cupCompetition : europeCompetition;
+  const visibleCompetitions = useMemo(() => {
+    if (topTab === "leagues") return leagueCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
+    if (topTab === "cups") return cupCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
+    return europeCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
+  }, [topTab]);
+
+  const handleCompetitionChange = useCallback((value: string) => {
+    if (topTab === "leagues") {
+      handleLeagueChange(value);
+      return;
+    }
+    if (topTab === "cups") {
+      setCupCompetition(value);
+      return;
+    }
+    setEuropeCompetition(value);
+  }, [handleLeagueChange, topTab]);
 
   const renderLeaguesContent = () => {
     if (!goalserveLeagueId) {
@@ -328,92 +275,34 @@ export default function TablesPage() {
           </div>
         </div>
 
-        {/* Desktop Layout */}
-        <div className="hidden md:block mb-6">
-          <div className="bg-muted/50 rounded-lg p-2">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                <TablesTopTabs value={topTab} onValueChange={setTopTab} />
-
-                <div className="h-6 w-px bg-border shrink-0" />
-
-                <div className="overflow-x-auto scrollbar-hide">
-                  <TablesCompetitionTabs
-                    topTab={topTab}
-                    leagueCompetition={leagueSlug}
-                    europeCompetition={europeCompetition}
-                    cupCompetition={cupCompetition}
-                    onLeagueChange={handleLeagueChange}
-                    onEuropeChange={setEuropeCompetition}
-                    onCupChange={setCupCompetition}
-                  />
-                </div>
-              </div>
-
-              <TablesFilters
-                season={season}
-                onSeasonChange={handleSeasonChange}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Layout */}
-        <div className="md:hidden space-y-4 mb-6">
-          <div className="relative">
-            <div
-              ref={topScrollRef}
-              className="overflow-x-auto scrollbar-hide"
-              style={{
-                WebkitOverflowScrolling: "touch",
-                scrollbarWidth: "none",
-                msOverflowStyle: "none",
-              }}
-            >
-              <TablesTopTabs value={topTab} onValueChange={setTopTab} mobile />
-            </div>
-            {showTopLeftFade && (
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-            )}
-            {showTopRightFade && (
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
-            )}
-          </div>
-
-          <div className="relative">
-            <div
-              ref={competitionScrollRef}
-              className="overflow-x-auto scrollbar-hide"
-              style={{
-                WebkitOverflowScrolling: "touch",
-                scrollbarWidth: "none",
-                msOverflowStyle: "none",
-              }}
-            >
-              <TablesCompetitionTabs
-                topTab={topTab}
-                leagueCompetition={leagueSlug}
-                europeCompetition={europeCompetition}
-                cupCompetition={cupCompetition}
-                onLeagueChange={handleLeagueChange}
-                onEuropeChange={setEuropeCompetition}
-                onCupChange={setCupCompetition}
-              />
-            </div>
-            {showCompLeftFade && (
-              <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-            )}
-            {showCompRightFade && (
-              <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
-            )}
-          </div>
-
-          <TablesFilters
-            season={season}
-            onSeasonChange={handleSeasonChange}
-            mobile
-          />
-        </div>
+        <GroupedCompetitionNav
+          selectedGroup={topTab}
+          onGroupChange={setTopTab}
+          selectedCompetition={selectedCompetition}
+          onCompetitionChange={handleCompetitionChange}
+          competitions={visibleCompetitions}
+          rightDesktopSlot={(
+            <TablesFilters
+              season={season}
+              onSeasonChange={handleSeasonChange}
+            />
+          )}
+          rightMobileSlot={(
+            <TablesFilters
+              season={season}
+              onSeasonChange={handleSeasonChange}
+              mobile
+            />
+          )}
+          desktopGroupTabsTestId="tabs-top"
+          desktopCompetitionTabsTestId="tabs-competition"
+          mobileGroupTabsTestId="tabs-top-mobile"
+          mobileCompetitionTabsTestId="tabs-competition-mobile"
+          desktopGroupTabTestIdPrefix="tab-top"
+          desktopCompetitionTabTestIdPrefix={topTab === "leagues" ? "tab-league" : topTab === "cups" ? "tab-cup" : "tab-europe"}
+          mobileGroupTabTestIdPrefix="tab-top"
+          mobileCompetitionTabTestIdPrefix="tab-competition"
+        />
 
         {renderContent()}
       </div>

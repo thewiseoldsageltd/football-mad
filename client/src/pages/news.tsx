@@ -1,10 +1,10 @@
-import { useMemo, useEffect, useState, useRef, useCallback } from "react";
+import { useMemo, useEffect, useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useNewsFilters, type CompetitionValue } from "@/hooks/use-news-filters";
 import { type Team, type NewsFiltersResponse } from "@shared/schema";
 import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
+import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
 interface NavCompetition {
@@ -84,35 +85,6 @@ export default function NewsPage() {
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [drawerComp, setDrawerComp] = useState<CompetitionValue>(filters.comp);
   const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
-  
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [showLeftFade, setShowLeftFade] = useState(false);
-  const [showRightFade, setShowRightFade] = useState(true);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    
-    const { scrollLeft, scrollWidth, clientWidth } = el;
-    setShowLeftFade(scrollLeft > 0);
-    setShowRightFade(scrollLeft + clientWidth < scrollWidth - 1);
-  }, []);
-
-  useEffect(() => {
-    const el = scrollContainerRef.current;
-    if (!el) return;
-    
-    handleScroll();
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    
-    const resizeObserver = new ResizeObserver(handleScroll);
-    resizeObserver.observe(el);
-    
-    return () => {
-      el.removeEventListener("scroll", handleScroll);
-      resizeObserver.disconnect();
-    };
-  }, [handleScroll]);
 
   useEffect(() => {
     setDrawerComp(filters.comp);
@@ -502,103 +474,55 @@ export default function NewsPage() {
         </div>
 
         <Tabs value={filters.comp} onValueChange={handleCompetitionChange} className="w-full">
-          {/* Desktop: Tabs + Filters on same row */}
-          <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
-            <div className="flex items-center gap-4 min-w-0">
-              <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
-                <TabsList className="h-auto gap-1" data-testid="tabs-news-groups">
-                  <TabsTrigger value="leagues" data-testid="tab-news-group-leagues">Leagues</TabsTrigger>
-                  <TabsTrigger value="cups" data-testid="tab-news-group-cups">Cups</TabsTrigger>
-                  <TabsTrigger value="europe" data-testid="tab-news-group-europe">Europe</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <div className="h-6 w-px bg-border shrink-0" />
-              <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-news">
-                {visibleCompetitionTabs.map((comp) => (
-                  <TabsTrigger
-                    key={comp.value}
-                    value={comp.value}
-                    data-testid={`tab-competition-${comp.value}`}
-                  >
-                    {comp.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </div>
-
-            <Button 
-              variant="outline" 
-              className="gap-2 shrink-0" 
-              onClick={() => setIsFiltersOpen(true)}
-              data-testid="button-filters"
-              aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {activeFilterCount}
-                </Badge>
-              )}
-            </Button>
-          </div>
-
-          {/* Mobile: Full-width scrollable tabs with full labels */}
-          <div className="md:hidden space-y-4 mb-6">
-            <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
-              <TabsList className="grid grid-cols-3 w-full" data-testid="tabs-news-groups-mobile">
-                <TabsTrigger value="leagues" data-testid="tab-news-group-leagues-mobile">Leagues</TabsTrigger>
-                <TabsTrigger value="cups" data-testid="tab-news-group-cups-mobile">Cups</TabsTrigger>
-                <TabsTrigger value="europe" data-testid="tab-news-group-europe-mobile">Europe</TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <div className="relative">
-              <div 
-                ref={scrollContainerRef}
-                className="overflow-x-auto scrollbar-hide"
-                style={{ 
-                  WebkitOverflowScrolling: 'touch',
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none'
-                }}
+          <GroupedCompetitionNav
+            selectedGroup={navGroup}
+            onGroupChange={handleNavGroupChange}
+            selectedCompetition={filters.comp}
+            onCompetitionChange={handleCompetitionChange}
+            competitions={visibleCompetitionTabs}
+            rightDesktopSlot={(
+              <Button 
+                variant="outline" 
+                className="gap-2 shrink-0" 
+                onClick={() => setIsFiltersOpen(true)}
+                data-testid="button-filters"
+                aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
               >
-                <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-news-mobile">
-                  {visibleCompetitionTabs.map((comp) => (
-                    <TabsTrigger 
-                      key={comp.value}
-                      value={comp.value} 
-                      className="whitespace-nowrap"
-                      data-testid={`tab-competition-${comp.value}-mobile`}
-                    >
-                      {comp.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </div>
-              {showLeftFade && (
-                <div className="pointer-events-none absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-background to-transparent" />
-              )}
-              {showRightFade && (
-                <div className="pointer-events-none absolute inset-y-0 right-0 w-4 bg-gradient-to-l from-background to-transparent" />
-              )}
-            </div>
-
-            <Button 
-              variant="outline" 
-              className="w-full gap-2" 
-              onClick={() => setIsFiltersOpen(true)}
-              data-testid="button-filters-mobile"
-              aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-1">
-                  {activeFilterCount}
-                </Badge>
-              )}
-            </Button>
-          </div>
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            rightMobileSlot={(
+              <Button 
+                variant="outline" 
+                className="w-full gap-2" 
+                onClick={() => setIsFiltersOpen(true)}
+                data-testid="button-filters-mobile"
+                aria-label={activeFilterCount > 0 ? `Filters, ${activeFilterCount} active` : "Filters"}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            )}
+            desktopGroupTabsTestId="tabs-news-groups"
+            desktopCompetitionTabsTestId="tabs-news"
+            mobileGroupTabsTestId="tabs-news-groups-mobile"
+            mobileCompetitionTabsTestId="tabs-news-mobile"
+            desktopGroupTabTestIdPrefix="tab-news-group"
+            desktopCompetitionTabTestIdPrefix="tab-competition"
+            mobileGroupTabTestIdPrefix="tab-news-group"
+            mobileCompetitionTabTestIdPrefix="tab-competition"
+          />
 
           {/* Simplified Filter Drawer - Single scroll, Team + Player only */}
           <Sheet open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
