@@ -11,7 +11,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { SlidersHorizontal, Search, X, Users, Newspaper } from "lucide-react";
@@ -45,18 +44,25 @@ interface NewsNavResponse {
   };
 }
 
-const MOCK_PLAYERS = [
-  { id: "1", name: "Mohamed Salah", teamSlug: "liverpool" },
-  { id: "2", name: "Erling Haaland", teamSlug: "manchester-city" },
-  { id: "3", name: "Bukayo Saka", teamSlug: "arsenal" },
-  { id: "4", name: "Cole Palmer", teamSlug: "chelsea" },
-  { id: "5", name: "Bruno Fernandes", teamSlug: "manchester-united" },
-  { id: "6", name: "Son Heung-min", teamSlug: "tottenham" },
-  { id: "7", name: "Alexander Isak", teamSlug: "newcastle" },
-  { id: "8", name: "Ollie Watkins", teamSlug: "aston-villa" },
-  { id: "9", name: "Jean-Philippe Mateta", teamSlug: "crystal-palace" },
-  { id: "10", name: "Dominic Solanke", teamSlug: "tottenham" },
-];
+const FLYOUT_LEAGUE_COMPETITION_ORDER = [
+  "premier-league",
+  "championship",
+  "league-one",
+  "league-two",
+  "national-league",
+  "scottish-premiership",
+  "scottish-championship",
+  "scottish-league-one",
+  "scottish-league-two",
+  "la-liga",
+  "serie-a",
+  "bundesliga",
+  "ligue-1",
+] as const;
+
+const FLYOUT_LEAGUE_ORDER_INDEX = new Map<string, number>(
+  FLYOUT_LEAGUE_COMPETITION_ORDER.map((slug, index) => [slug, index]),
+);
 
 export default function NewsPage() {
   const [location] = useLocation();
@@ -82,14 +88,8 @@ export default function NewsPage() {
   }, []);
   
   const [teamSearch, setTeamSearch] = useState("");
-  const [playerSearch, setPlayerSearch] = useState("");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [drawerComp, setDrawerComp] = useState<CompetitionValue>(filters.comp);
   const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
-
-  useEffect(() => {
-    setDrawerComp(filters.comp);
-  }, [filters.comp]);
 
   const apiQueryString = buildApiQueryString();
   
@@ -327,11 +327,9 @@ export default function NewsPage() {
         teams: comp.teams,
       }));
     return groups
+      .filter((comp) => FLYOUT_LEAGUE_ORDER_INDEX.has(comp.competitionFilterValue))
       .map((comp) => {
         let compTeams = comp.teams;
-        if (drawerComp !== "all") {
-          if (comp.competitionFilterValue !== drawerComp) return null;
-        }
         if (teamSearch) {
           compTeams = compTeams.filter(
             (t) => t.name.toLowerCase().includes(lc) || t.shortName?.toLowerCase().includes(lc),
@@ -343,6 +341,7 @@ export default function NewsPage() {
           name: comp.competitionName,
           slug: comp.competitionSlug,
           filterValue: comp.competitionFilterValue,
+          order: FLYOUT_LEAGUE_ORDER_INDEX.get(comp.competitionFilterValue) ?? Number.MAX_SAFE_INTEGER,
           teams: compTeams,
         };
       })
@@ -351,16 +350,11 @@ export default function NewsPage() {
       name: string;
       slug: string;
       filterValue: CompetitionValue;
+      order: number;
       teams: NavTeam[];
     }>;
-  }, [newsNav, teamSearch, drawerComp]);
-
-  const filteredPlayers = useMemo(() => {
-    if (!playerSearch) return [];
-    return MOCK_PLAYERS.filter(p => 
-      p.name.toLowerCase().includes(playerSearch.toLowerCase())
-    );
-  }, [playerSearch]);
+  }, [newsNav, teamSearch])
+    .sort((a, b) => a.order - b.order);
 
   const followedTeams = useMemo(() => {
     if (!teams) return [];
@@ -453,13 +447,6 @@ export default function NewsPage() {
     } else {
       toggleTeam(teamSlug);
     }
-  };
-
-  const handleDrawerCompChange = (value: string) => {
-    const newComp = value as CompetitionValue;
-    setDrawerComp(newComp);
-    setTeamSearch("");
-    setFilter("comp", newComp);
   };
 
   return (
@@ -626,46 +613,23 @@ export default function NewsPage() {
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input 
                         placeholder="Search players..."
-                        value={playerSearch}
-                        onChange={(e) => setPlayerSearch(e.target.value)}
+                        value=""
                         className="pl-9"
                         data-testid="input-player-search"
+                        disabled
                       />
                     </div>
-                    {filteredPlayers.length > 0 && (
-                      <div className="mt-2 space-y-1 border rounded-md p-2">
-                        {filteredPlayers.map((player) => (
-                          <div 
-                            key={player.id} 
-                            className="text-sm py-1 px-2 hover:bg-muted rounded cursor-pointer"
-                            onClick={() => setPlayerSearch(player.name)}
-                            data-testid={`player-option-${player.id}`}
-                          >
-                            {player.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Player refinement is coming soon.
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <SheetFooter className="shrink-0 border-t pt-4 mt-4 flex-col gap-3 sm:flex-col">
-                <div className="w-full">
-                  <Label className="text-xs text-muted-foreground mb-1 block">Competition</Label>
-                  <Select value={drawerComp} onValueChange={handleDrawerCompChange}>
-                    <SelectTrigger className="w-full" data-testid="select-drawer-competition">
-                      <SelectValue placeholder="Select competition" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {allCompetitionTabs.map((comp) => (
-                        <SelectItem key={comp.value} value={comp.value}>
-                          {comp.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <SheetFooter className="shrink-0 border-t pt-4 mt-4">
+                <p className="text-xs text-muted-foreground">
+                  Player refinement will be enabled here once player entities are available in the mapping layer.
+                </p>
               </SheetFooter>
             </SheetContent>
           </Sheet>
