@@ -1144,32 +1144,58 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount,
     };
 
-    const resolved =
-      entityType === "competition"
-        ? await db
-            .select({ id: competitions.id })
-            .from(competitions)
-            .where(eq(competitions.slug, entitySlug))
-            .limit(1)
-        : entityType === "team"
-          ? await db
-              .select({ id: teams.id })
-              .from(teams)
-              .where(eq(teams.slug, entitySlug))
-              .limit(1)
-          : entityType === "player"
-            ? await db
-                .select({ id: players.id })
-                .from(players)
-                .where(eq(players.slug, entitySlug))
-                .limit(1)
-            : await db
-                .select({ id: managers.id })
-                .from(managers)
-                .where(eq(managers.slug, entitySlug))
-                .limit(1);
+    let entityId: string | null = null;
+    if (entityType === "competition") {
+      const [competitionBySlugOrCanonical] = await db
+        .select({ id: competitions.id })
+        .from(competitions)
+        .where(
+          or(
+            eq(competitions.slug, entitySlug),
+            eq(competitions.canonicalSlug, entitySlug),
+          ),
+        )
+        .limit(1);
 
-    const entityId = resolved[0]?.id ?? null;
+      if (competitionBySlugOrCanonical) {
+        entityId = competitionBySlugOrCanonical.id;
+      } else {
+        const [competitionByPublicSlug] = await db
+          .select({ id: paEntityAliasMap.entityId })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
+              eq(paEntityAliasMap.publicSlug, entitySlug),
+            ),
+          )
+          .limit(1);
+        entityId = competitionByPublicSlug?.id ?? null;
+      }
+    } else if (entityType === "team") {
+      const [team] = await db
+        .select({ id: teams.id })
+        .from(teams)
+        .where(eq(teams.slug, entitySlug))
+        .limit(1);
+      entityId = team?.id ?? null;
+    } else if (entityType === "player") {
+      const [player] = await db
+        .select({ id: players.id })
+        .from(players)
+        .where(eq(players.slug, entitySlug))
+        .limit(1);
+      entityId = player?.id ?? null;
+    } else {
+      const [manager] = await db
+        .select({ id: managers.id })
+        .from(managers)
+        .where(eq(managers.slug, entitySlug))
+        .limit(1);
+      entityId = manager?.id ?? null;
+    }
+
     if (!entityId) {
       return {
         articles: [],
