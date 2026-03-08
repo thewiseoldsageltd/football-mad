@@ -22,7 +22,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
-import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player } from "@shared/schema";
+import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -2045,9 +2045,15 @@ type SquadPosition = "GK" | "DEF" | "MID" | "FWD";
 
 function toSquadPosition(position: string | null | undefined): SquadPosition {
   const p = (position ?? "").trim().toUpperCase();
-  if (p === "G" || p === "GK" || p.includes("GOAL")) return "GK";
-  if (p === "D" || p === "DEF" || p.includes("DEF")) return "DEF";
-  if (p === "M" || p === "MID" || p.includes("MID")) return "MID";
+  if (p === "G" || p === "GK" || p === "GOALKEEPER") return "GK";
+  if (p === "D" || p === "DEF" || p === "DEFENDER") return "DEF";
+  if (p === "M" || p === "MID" || p === "MIDFIELDER") return "MID";
+  if (p === "A" || p === "FWD" || p === "FW" || p === "ATTACKER" || p === "FORWARD") return "FWD";
+  const first = p.charAt(0);
+  if (first === "G") return "GK";
+  if (first === "D") return "DEF";
+  if (first === "M") return "MID";
+  if (first === "A" || first === "F") return "FWD";
   return "FWD";
 }
 
@@ -2090,7 +2096,7 @@ function DbPlayerCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-medium text-sm truncate">{player.name}</h4>
-                <span className="text-xs text-muted-foreground">#{player.number}</span>
+                <span className="text-xs text-muted-foreground">#{player.number ?? "N/A"}</span>
               </div>
               
               <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -2123,11 +2129,11 @@ function DbPlayerCard({
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Nation</div>
-                <div className="text-sm font-medium">{player.nationality || "–"}</div>
+                <div className="text-sm font-medium">{player.nationality || "Not listed"}</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">No.</div>
-                <div className="text-sm font-medium">{player.number ?? "–"}</div>
+                <div className="text-sm font-medium">{player.number ?? "N/A"}</div>
               </div>
             </div>
           </div>
@@ -2247,7 +2253,7 @@ function SquadTabContent({
           <h3 className="text-lg font-semibold mb-3">Manager</h3>
           <Card className="border-dashed">
             <CardContent className="py-6 text-center text-muted-foreground">
-              Manager: TBC
+              Manager data unavailable
             </CardContent>
           </Card>
         </section>
@@ -2576,6 +2582,18 @@ export default function TeamHubPage() {
     enabled: !!team,
   });
 
+  const { data: teamManagers } = useQuery<Manager[]>({
+    queryKey: ["/api/teams", team?.id, "managers"],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${team?.id}/managers`);
+      if (!res.ok) throw new Error("Failed to fetch team managers");
+      return res.json();
+    },
+    enabled: !!team?.id,
+  });
+
+  const currentManagerName = teamManagers?.[0]?.name ?? team?.manager ?? null;
+
   const { data: followedTeamIds } = useQuery<string[]>({
     queryKey: ["/api/follows"],
     queryFn: async () => {
@@ -2744,7 +2762,7 @@ export default function TeamHubPage() {
               </h1>
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 text-white/80 text-sm">
                 {team.stadiumName && <span>{team.stadiumName}</span>}
-                {team.manager && <span>Manager: {team.manager}</span>}
+                {currentManagerName && <span>Manager: {currentManagerName}</span>}
                 {team.founded && <span>Est. {team.founded}</span>}
               </div>
             </div>
@@ -2877,7 +2895,7 @@ export default function TeamHubPage() {
                 teamSlug={slug}
                 players={squadPlayers || []}
                 isLoading={squadLoading}
-                manager={team.manager}
+                manager={currentManagerName}
                 teamName={team.name}
               />
             )}
