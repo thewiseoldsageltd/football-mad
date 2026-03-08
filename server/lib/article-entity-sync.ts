@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { articleCompetitions, articleManagers, articlePlayers, articleTeams, paEntityAliasMap } from "@shared/schema";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./sources";
+import { MvpGraphBoundary } from "./mvp-graph-boundary";
 
 export interface EntitySyncStats {
   tagsPassed: number;
@@ -84,25 +85,38 @@ export async function syncArticleEntitiesFromTags(
     else if (entityType === "manager") managerIds.add(row.entityId);
   }
 
-  for (const competitionId of Array.from(competitionIds)) {
+  const boundary = new MvpGraphBoundary();
+  const [
+    allowedCompetitionIds,
+    allowedTeamIds,
+    allowedPlayerIds,
+    allowedManagerIds,
+  ] = await Promise.all([
+    boundary.filterCompetitionIds(Array.from(competitionIds)),
+    boundary.filterTeamIds(Array.from(teamIds)),
+    boundary.filterPlayerIds(Array.from(playerIds)),
+    boundary.filterManagerIds(Array.from(managerIds)),
+  ]);
+
+  for (const competitionId of Array.from(allowedCompetitionIds)) {
     await db
       .insert(articleCompetitions)
       .values({ articleId, competitionId, source: "tag", salienceScore: 100 })
       .onConflictDoNothing();
   }
-  for (const teamId of Array.from(teamIds)) {
+  for (const teamId of Array.from(allowedTeamIds)) {
     await db
       .insert(articleTeams)
       .values({ articleId, teamId, source: "tag", salienceScore: 100 })
       .onConflictDoNothing();
   }
-  for (const playerId of Array.from(playerIds)) {
+  for (const playerId of Array.from(allowedPlayerIds)) {
     await db
       .insert(articlePlayers)
       .values({ articleId, playerId, source: "tag", salienceScore: 100 })
       .onConflictDoNothing();
   }
-  for (const managerId of Array.from(managerIds)) {
+  for (const managerId of Array.from(allowedManagerIds)) {
     await db
       .insert(articleManagers)
       .values({ articleId, managerId, source: "tag", salienceScore: 100 })
@@ -110,16 +124,16 @@ export async function syncArticleEntitiesFromTags(
   }
 
   console.log(
-    `[article-entity-sync] articleId=${articleId} tagsRead=${rawTagNames.length} aliasMatches=${resolved} inserted competition=${competitionIds.size} team=${teamIds.size} player=${playerIds.size} manager=${managerIds.size}`,
+    `[article-entity-sync] articleId=${articleId} tagsRead=${rawTagNames.length} aliasMatches=${resolved} inserted competition=${allowedCompetitionIds.size} team=${allowedTeamIds.size} player=${allowedPlayerIds.size} manager=${allowedManagerIds.size}`,
   );
 
   return {
     tagsPassed: normalizedTags.length,
     resolved,
-    insertedCompetitions: competitionIds.size,
-    insertedTeams: teamIds.size,
-    insertedPlayers: playerIds.size,
-    insertedManagers: managerIds.size,
+    insertedCompetitions: allowedCompetitionIds.size,
+    insertedTeams: allowedTeamIds.size,
+    insertedPlayers: allowedPlayerIds.size,
+    insertedManagers: allowedManagerIds.size,
     createdPlayersFromPa: 0,
     createdManagersFromPa: 0,
   };

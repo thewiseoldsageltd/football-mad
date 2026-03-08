@@ -26,6 +26,7 @@ import {
 } from "@shared/schema";
 import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
+import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
@@ -182,10 +183,17 @@ export class DatabaseStorage implements IStorage {
 
   // Players
   async getAllPlayers(): Promise<Player[]> {
-    return db.select().from(players).orderBy(players.name);
+    const allPlayers = await db.select().from(players).orderBy(players.name);
+    const boundary = new MvpGraphBoundary();
+    const allowedPlayerIds = await boundary.filterPlayerIds(allPlayers.map((row) => row.id));
+    return allPlayers.filter((row) => allowedPlayerIds.has(row.id));
   }
 
   async getPlayersByTeam(teamId: string): Promise<Player[]> {
+    const boundary = new MvpGraphBoundary();
+    const isMvpTeam = await boundary.isMvpTeam(teamId);
+    if (!isMvpTeam) return [];
+
     const now = new Date();
     const activeMemberships = await db
       .select({
@@ -252,6 +260,9 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
 
     const resolvedTeamId = latestActiveMembership?.teamId ?? player.teamId ?? null;
+    const boundary = new MvpGraphBoundary();
+    if (!resolvedTeamId || !(await boundary.isMvpTeam(resolvedTeamId))) return undefined;
+
     const [team] = resolvedTeamId
       ? await db.select().from(teams).where(eq(teams.id, resolvedTeamId)).limit(1)
       : [];
@@ -269,15 +280,24 @@ export class DatabaseStorage implements IStorage {
 
   // Managers
   async getAllManagers(): Promise<Manager[]> {
-    return db.select().from(managers).orderBy(managers.name);
+    const allManagers = await db.select().from(managers).orderBy(managers.name);
+    const boundary = new MvpGraphBoundary();
+    const allowedManagerIds = await boundary.filterManagerIds(allManagers.map((row) => row.id));
+    return allManagers.filter((row) => allowedManagerIds.has(row.id));
   }
 
   async getManagerBySlug(slug: string): Promise<Manager | undefined> {
     const [manager] = await db.select().from(managers).where(eq(managers.slug, slug));
+    if (!manager) return undefined;
+    const boundary = new MvpGraphBoundary();
+    if (!(await boundary.filterManagerIds([manager.id])).has(manager.id)) return undefined;
     return manager;
   }
 
   async getManagersByTeamId(teamId: string): Promise<Manager[]> {
+    const boundary = new MvpGraphBoundary();
+    const isMvpTeam = await boundary.isMvpTeam(teamId);
+    if (!isMvpTeam) return [];
     return db.select().from(managers).where(eq(managers.currentTeamId, teamId)).orderBy(managers.name);
   }
 
@@ -403,8 +423,10 @@ export class DatabaseStorage implements IStorage {
     const [article] = await db.select().from(articles).where(eq(articles.slug, slug));
     if (!article) return undefined;
 
+    const boundary = new MvpGraphBoundary();
+
     // Fetch linked teams with provenance
-    const teamRows = await db
+    let teamRows = await db
       .select({
         id: teams.id,
         name: teams.name,
@@ -419,9 +441,10 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(teams, eq(articleTeams.teamId, teams.id))
       .where(eq(articleTeams.articleId, article.id))
       .orderBy(desc(articleTeams.salienceScore));
+    teamRows = await boundary.filterRowsById(teamRows, "team");
 
     // Fetch linked players with provenance
-    const playerRows = await db
+    let playerRows = await db
       .select({
         id: players.id,
         name: players.name,
@@ -433,9 +456,10 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(players, eq(articlePlayers.playerId, players.id))
       .where(eq(articlePlayers.articleId, article.id))
       .orderBy(desc(articlePlayers.salienceScore));
+    playerRows = await boundary.filterRowsById(playerRows, "player");
 
     // Fetch linked managers with provenance
-    const managerRows = await db
+    let managerRows = await db
       .select({
         id: managers.id,
         name: managers.name,
@@ -447,9 +471,10 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(managers, eq(articleManagers.managerId, managers.id))
       .where(eq(articleManagers.articleId, article.id))
       .orderBy(desc(articleManagers.salienceScore));
+    managerRows = await boundary.filterRowsById(managerRows, "manager");
 
     // Fetch linked competitions with provenance
-    const competitionRows = await db
+    let competitionRows = await db
       .select({
         id: competitions.id,
         name: competitions.name,
@@ -461,6 +486,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
       .where(eq(articleCompetitions.articleId, article.id))
       .orderBy(desc(articleCompetitions.salienceScore));
+    competitionRows = await boundary.filterRowsById(competitionRows, "competition");
     const presenter = new EntityPresentationResolver();
     const [teamPresentationMap, competitionPresentationMap] = await Promise.all([
       presenter.resolveTeams(teamRows.map((row) => row.id), { source: article.source }),
@@ -545,7 +571,7 @@ export class DatabaseStorage implements IStorage {
 
     const articleIds = rows.map((r) => r.id);
 
-    const [competitionRows, teamRows, playerRows, managerRows] = await Promise.all([
+    let [competitionRows, teamRows, playerRows, managerRows] = await Promise.all([
       db
         .select({
           articleId: articleCompetitions.articleId,
@@ -586,6 +612,13 @@ export class DatabaseStorage implements IStorage {
         .from(articleManagers)
         .innerJoin(managers, eq(articleManagers.managerId, managers.id))
         .where(inArray(articleManagers.articleId, articleIds)),
+    ]);
+    const boundary = new MvpGraphBoundary();
+    [competitionRows, teamRows, playerRows, managerRows] = await Promise.all([
+      boundary.filterRowsById(competitionRows, "competition"),
+      boundary.filterRowsById(teamRows, "team"),
+      boundary.filterRowsById(playerRows, "player"),
+      boundary.filterRowsById(managerRows, "manager"),
     ]);
 
     const presenter = new EntityPresentationResolver();

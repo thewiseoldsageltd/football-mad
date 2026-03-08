@@ -16,6 +16,7 @@ import {
   articleCompetitions,
 } from "@shared/schema";
 import { eq, desc, or, lt, and } from "drizzle-orm";
+import { MvpGraphBoundary } from "../lib/mvp-graph-boundary";
 
 const ENRICH_SOURCE = "enrich";
 const LIMIT_TEAMS = 3;
@@ -132,6 +133,22 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
     db.select({ id: managers.id, name: managers.name, slug: managers.slug }).from(managers),
     db.select({ id: competitions.id, name: competitions.name, slug: competitions.slug, canonicalSlug: competitions.canonicalSlug }).from(competitions),
   ]);
+  const boundary = new MvpGraphBoundary();
+  const [
+    allowedTeamIds,
+    allowedPlayerIds,
+    allowedManagerIds,
+    allowedCompetitionIds,
+  ] = await Promise.all([
+    boundary.filterTeamIds(allTeams.map((row) => row.id)),
+    boundary.filterPlayerIds(allPlayers.map((row) => row.id)),
+    boundary.filterManagerIds(allManagers.map((row) => row.id)),
+    boundary.filterCompetitionIds(allCompetitions.map((row) => row.id)),
+  ]);
+  const mvpTeams = allTeams.filter((row) => allowedTeamIds.has(row.id));
+  const mvpPlayers = allPlayers.filter((row) => allowedPlayerIds.has(row.id));
+  const mvpManagers = allManagers.filter((row) => allowedManagerIds.has(row.id));
+  const mvpCompetitions = allCompetitions.filter((row) => allowedCompetitionIds.has(row.id));
 
   // Pending, or stuck in 'processing' for > 5 min (resumable).
   const staleProcessing = new Date(Date.now() - 5 * 60 * 1000);
@@ -184,7 +201,7 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
         excerptWords,
         bodyWords,
         bodyLen,
-        allTeams,
+        mvpTeams,
         (t) => aliasTerms(t.name, t.slug, t.shortName),
         LIMIT_TEAMS
       );
@@ -193,7 +210,7 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
         excerptWords,
         bodyWords,
         bodyLen,
-        allPlayers,
+        mvpPlayers,
         (p) => aliasTerms(p.name, p.slug),
         LIMIT_PLAYERS
       );
@@ -202,7 +219,7 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
         excerptWords,
         bodyWords,
         bodyLen,
-        allManagers,
+        mvpManagers,
         (m) => aliasTerms(m.name, m.slug),
         LIMIT_MANAGERS
       );
@@ -211,7 +228,7 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
         excerptWords,
         bodyWords,
         bodyLen,
-        allCompetitions,
+        mvpCompetitions,
         (c) => aliasTerms(c.name, c.slug, c.canonicalSlug),
         LIMIT_COMPETITIONS
       );

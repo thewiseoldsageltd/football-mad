@@ -63,6 +63,7 @@ import {
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
+import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 let liveMatchesCache: any = null;
@@ -5678,6 +5679,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     return result;
   };
+
+  const filterExtractedEntitiesToMvpBoundary = async (
+    mentions: ExtractedEntities,
+  ): Promise<ExtractedEntities> => {
+    const boundary = new MvpGraphBoundary();
+    const [allowedTeamIds, allowedPlayerIds, allowedManagerIds, allowedCompetitionIds] =
+      await Promise.all([
+        boundary.filterTeamIds(mentions.teams.map((row) => row.id)),
+        boundary.filterPlayerIds(mentions.players.map((row) => row.id)),
+        boundary.filterManagerIds(mentions.managers.map((row) => row.id)),
+        boundary.filterCompetitionIds(mentions.competitions.map((row) => row.id)),
+      ]);
+
+    return {
+      teams: mentions.teams.filter((row) => allowedTeamIds.has(row.id)),
+      players: mentions.players.filter((row) => allowedPlayerIds.has(row.id)),
+      managers: mentions.managers.filter((row) => allowedManagerIds.has(row.id)),
+      competitions: mentions.competitions.filter((row) => allowedCompetitionIds.has(row.id)),
+    };
+  };
   
   const extractEntityMentions = async (
     text: string,
@@ -5987,7 +6008,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Extract entity mentions with salience scoring
-      const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, tags);
+      const mentions = await filterExtractedEntitiesToMvpBoundary(
+        await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, tags),
+      );
       
       // Clear existing entity links
       await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
@@ -6199,7 +6222,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Extract entity mentions with salience scoring
-      const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
+      const mentions = await filterExtractedEntitiesToMvpBoundary(
+        await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags),
+      );
       
       // Clear and re-link entities with provenance
       await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
@@ -6569,7 +6594,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
             
             // Extract and link entities with salience scoring
-            const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
+            const mentions = await filterExtractedEntitiesToMvpBoundary(
+              await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags),
+            );
             
             await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
             await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -6823,7 +6850,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     
     // Extract and link entities with salience scoring
-    const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
+    const mentions = await filterExtractedEntitiesToMvpBoundary(
+      await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags),
+    );
     
     await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
     await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -7066,13 +7095,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .innerJoin(teams, eq(articleTeams.teamId, teams.id))
         .where(eq(articleTeams.articleId, article.id));
       
-      const linkedPlayers = await db
+      let linkedPlayers = await db
         .select({ id: players.id, name: players.name, slug: players.slug, imageUrl: players.imageUrl, position: players.position })
         .from(articlePlayers)
         .innerJoin(players, eq(articlePlayers.playerId, players.id))
         .where(eq(articlePlayers.articleId, article.id));
       
-      const linkedManagers = await db
+      let linkedManagers = await db
         .select({ id: managers.id, name: managers.name, slug: managers.slug })
         .from(articleManagers)
         .innerJoin(managers, eq(articleManagers.managerId, managers.id))
@@ -7083,6 +7112,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .from(articleCompetitions)
         .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
         .where(eq(articleCompetitions.articleId, article.id));
+      const boundary = new MvpGraphBoundary();
+      [linkedTeams, linkedPlayers, linkedManagers, linkedCompetitions] = await Promise.all([
+        boundary.filterRowsById(linkedTeams, "team"),
+        boundary.filterRowsById(linkedPlayers, "player"),
+        boundary.filterRowsById(linkedManagers, "manager"),
+        boundary.filterRowsById(linkedCompetitions, "competition"),
+      ]);
       const presenter = new EntityPresentationResolver();
       const [teamPresentationMap, competitionPresentationMap] = await Promise.all([
         presenter.resolveTeams(linkedTeams.map((row) => row.id), { source: article.source }),
