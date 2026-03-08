@@ -4,13 +4,13 @@ import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Search, Shield } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
-import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
+import { sortCompetitionItemsLikeTables } from "@/lib/competition-nav-order";
 
 type NewsNavTeam = {
   id: string;
@@ -45,7 +45,6 @@ type NewsNavResponse = {
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
   const [competition, setCompetition] = useState("all");
-  const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
@@ -89,51 +88,17 @@ export default function TeamsPage() {
 
   const allCompetitionTabs = useMemo(() => {
     const comps = newsNav?.competitions ?? [];
-    return [
+    const tabs = [
       { value: "all", label: "All" },
       ...comps.map((c) => ({ value: c.filterValue, label: c.name })),
     ];
+    const allTab = tabs[0];
+    const ordered = sortCompetitionItemsLikeTables(tabs.slice(1));
+    return [allTab, ...ordered];
   }, [newsNav]);
-
-  const groupedCompetitionTabs = useMemo(() => {
-    const groups: Record<CompetitionNavGroup, Array<{ value: string; label: string }>> = {
-      leagues: [],
-      cups: [],
-      europe: [],
-    };
-    for (const tab of allCompetitionTabs) {
-      if (tab.value === "all") continue;
-      groups[getCompetitionNavGroup(tab.value)].push(tab);
-    }
-    return groups;
-  }, [allCompetitionTabs]);
-
-  const visibleCompetitionTabs = useMemo(() => {
-    const allTab = allCompetitionTabs.find((tab) => tab.value === "all");
-    const groupTabs = groupedCompetitionTabs[navGroup] ?? [];
-    return allTab ? [allTab, ...groupTabs] : groupTabs;
-  }, [allCompetitionTabs, groupedCompetitionTabs, navGroup]);
-
-  useEffect(() => {
-    if (competition === "all") return;
-    setNavGroup(getCompetitionNavGroup(competition));
-  }, [competition]);
 
   const handleCompetitionChange = (value: string) => {
     setCompetition(value);
-    if (value !== "all") {
-      setNavGroup(getCompetitionNavGroup(value));
-    }
-  };
-
-  const handleNavGroupChange = (value: string) => {
-    const nextGroup = value as CompetitionNavGroup;
-    setNavGroup(nextGroup);
-    if (competition === "all") return;
-    const currentGroup = getCompetitionNavGroup(competition);
-    if (currentGroup !== nextGroup) {
-      setCompetition("all");
-    }
   };
 
   const selectedCompetitionTeamIds = useMemo(() => {
@@ -198,11 +163,10 @@ export default function TeamsPage() {
         </div>
 
         <GroupedCompetitionNav
-          selectedGroup={navGroup}
-          onGroupChange={handleNavGroupChange}
+          showGroupTabs={false}
           selectedCompetition={competition}
           onCompetitionChange={handleCompetitionChange}
-          competitions={visibleCompetitionTabs}
+          competitions={allCompetitionTabs}
           rightDesktopSlot={(
             <div className="relative shrink-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -229,13 +193,9 @@ export default function TeamsPage() {
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             </div>
           )}
-          desktopGroupTabsTestId="tabs-teams-groups"
           desktopCompetitionTabsTestId="tabs-competition"
-          mobileGroupTabsTestId="tabs-teams-groups-mobile"
           mobileCompetitionTabsTestId="tabs-competition-mobile"
-          desktopGroupTabTestIdPrefix="tab-teams-group"
           desktopCompetitionTabTestIdPrefix="tab-competition"
-          mobileGroupTabTestIdPrefix="tab-teams-group"
           mobileCompetitionTabTestIdPrefix="tab-competition"
         />
 

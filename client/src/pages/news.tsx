@@ -20,6 +20,7 @@ import { useNewsFilters, type CompetitionValue } from "@/hooks/use-news-filters"
 import { type Team, type NewsFiltersResponse } from "@shared/schema";
 import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
+import { sortCompetitionItemsLikeTables } from "@/lib/competition-nav-order";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
 interface NavCompetition {
@@ -391,7 +392,10 @@ export default function NewsPage() {
     const deduped = new Map<CompetitionValue, { value: CompetitionValue; label: string; subheading: string }>();
     deduped.set(allTab.value, allTab);
     for (const tab of mvpTabs) deduped.set(tab.value, tab);
-    return Array.from(deduped.values());
+    const dedupedTabs = Array.from(deduped.values());
+    const withoutAll = dedupedTabs.filter((tab) => tab.value !== "all");
+    const ordered = sortCompetitionItemsLikeTables(withoutAll);
+    return [allTab, ...ordered];
   }, [newsNav]);
 
   const groupedCompetitionTabs = useMemo(() => {
