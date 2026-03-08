@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
+import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
 
 type NewsNavTeam = {
   id: string;
@@ -44,6 +45,7 @@ type NewsNavResponse = {
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
   const [competition, setCompetition] = useState("all");
+  const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
   
@@ -115,13 +117,54 @@ export default function TeamsPage() {
     },
   });
 
-  const competitionTabs = useMemo(() => {
+  const allCompetitionTabs = useMemo(() => {
     const comps = newsNav?.competitions ?? [];
     return [
       { value: "all", label: "All" },
       ...comps.map((c) => ({ value: c.filterValue, label: c.name })),
     ];
   }, [newsNav]);
+
+  const groupedCompetitionTabs = useMemo(() => {
+    const groups: Record<CompetitionNavGroup, Array<{ value: string; label: string }>> = {
+      leagues: [],
+      cups: [],
+      europe: [],
+    };
+    for (const tab of allCompetitionTabs) {
+      if (tab.value === "all") continue;
+      groups[getCompetitionNavGroup(tab.value)].push(tab);
+    }
+    return groups;
+  }, [allCompetitionTabs]);
+
+  const visibleCompetitionTabs = useMemo(() => {
+    const allTab = allCompetitionTabs.find((tab) => tab.value === "all");
+    const groupTabs = groupedCompetitionTabs[navGroup] ?? [];
+    return allTab ? [allTab, ...groupTabs] : groupTabs;
+  }, [allCompetitionTabs, groupedCompetitionTabs, navGroup]);
+
+  useEffect(() => {
+    if (competition === "all") return;
+    setNavGroup(getCompetitionNavGroup(competition));
+  }, [competition]);
+
+  const handleCompetitionChange = (value: string) => {
+    setCompetition(value);
+    if (value !== "all") {
+      setNavGroup(getCompetitionNavGroup(value));
+    }
+  };
+
+  const handleNavGroupChange = (value: string) => {
+    const nextGroup = value as CompetitionNavGroup;
+    setNavGroup(nextGroup);
+    if (competition === "all") return;
+    const currentGroup = getCompetitionNavGroup(competition);
+    if (currentGroup !== nextGroup) {
+      setCompetition("all");
+    }
+  };
 
   const selectedCompetitionTeamIds = useMemo(() => {
     if (competition === "all") return null;
@@ -184,20 +227,30 @@ export default function TeamsPage() {
           </div>
         </div>
 
-        <Tabs value={competition} onValueChange={setCompetition} className="w-full">
+        <Tabs value={competition} onValueChange={handleCompetitionChange} className="w-full">
           {/* Desktop: Tabs left, Search right */}
           <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
-            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-competition">
-              {competitionTabs.map((comp) => (
-                <TabsTrigger 
-                  key={comp.value}
-                  value={comp.value} 
-                  data-testid={`tab-competition-${comp.value}`}
-                >
-                  {comp.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="flex items-center gap-4 min-w-0">
+              <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
+                <TabsList className="h-auto gap-1" data-testid="tabs-teams-groups">
+                  <TabsTrigger value="leagues" data-testid="tab-teams-group-leagues">Leagues</TabsTrigger>
+                  <TabsTrigger value="cups" data-testid="tab-teams-group-cups">Cups</TabsTrigger>
+                  <TabsTrigger value="europe" data-testid="tab-teams-group-europe">Europe</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="h-6 w-px bg-border shrink-0" />
+              <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-competition">
+                {visibleCompetitionTabs.map((comp) => (
+                  <TabsTrigger
+                    key={comp.value}
+                    value={comp.value}
+                    data-testid={`tab-competition-${comp.value}`}
+                  >
+                    {comp.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
             <div className="relative shrink-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -214,6 +267,13 @@ export default function TeamsPage() {
 
           {/* Mobile: Scrollable tabs with dynamic fades, then centered search */}
           <div className="md:hidden space-y-4 mb-6">
+            <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
+              <TabsList className="grid grid-cols-3 w-full" data-testid="tabs-teams-groups-mobile">
+                <TabsTrigger value="leagues" data-testid="tab-teams-group-leagues-mobile">Leagues</TabsTrigger>
+                <TabsTrigger value="cups" data-testid="tab-teams-group-cups-mobile">Cups</TabsTrigger>
+                <TabsTrigger value="europe" data-testid="tab-teams-group-europe-mobile">Europe</TabsTrigger>
+              </TabsList>
+            </Tabs>
             <div className="relative">
               <div 
                 ref={scrollContainerRef}
@@ -225,7 +285,7 @@ export default function TeamsPage() {
                 }}
               >
                 <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-competition-mobile">
-                  {competitionTabs.map((comp) => (
+                  {visibleCompetitionTabs.map((comp) => (
                     <TabsTrigger 
                       key={comp.value}
                       value={comp.value} 

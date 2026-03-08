@@ -16,8 +16,9 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { SlidersHorizontal, Search, X, Users, Newspaper } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { useNewsFilters, type CompetitionSlug } from "@/hooks/use-news-filters";
-import { NEWS_COMPETITIONS, type Team, type NewsFiltersResponse } from "@shared/schema";
+import { useNewsFilters, type CompetitionValue } from "@/hooks/use-news-filters";
+import { type Team, type NewsFiltersResponse } from "@shared/schema";
+import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
 interface NavCompetition {
@@ -25,7 +26,7 @@ interface NavCompetition {
   name: string;
   slug: string;
   sortOrder: number;
-  filterValue: CompetitionSlug | null;
+  filterValue: CompetitionValue;
   teams: NavTeam[];
 }
 interface NewsNavResponse {
@@ -35,7 +36,7 @@ interface NewsNavResponse {
       competitionId: string;
       competitionName: string;
       competitionSlug: string;
-      competitionFilterValue: CompetitionSlug | null;
+      competitionFilterValue: CompetitionValue;
       teams: NavTeam[];
     }[];
     players: Array<{ id: string; name: string; slug?: string }>;
@@ -81,7 +82,8 @@ export default function NewsPage() {
   const [teamSearch, setTeamSearch] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [drawerComp, setDrawerComp] = useState<CompetitionSlug>(filters.comp);
+  const [drawerComp, setDrawerComp] = useState<CompetitionValue>(filters.comp);
+  const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
   
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
@@ -281,6 +283,13 @@ export default function NewsPage() {
     queryKey: ["/api/news/nav"],
   });
 
+  useEffect(() => {
+    if (filters.comp === "all" || !newsNav) return;
+    const selected = newsNav.competitions.find((comp) => comp.filterValue === filters.comp);
+    if (!selected) return;
+    setNavGroup(getCompetitionNavGroup(selected.filterValue));
+  }, [filters.comp, newsNav]);
+
   const teams: Team[] | undefined = useMemo(() => {
     if (!newsNav) return undefined;
     const seen = new Set<string>();
@@ -370,7 +379,7 @@ export default function NewsPage() {
       id: string;
       name: string;
       slug: string;
-      filterValue: CompetitionSlug | null;
+      filterValue: CompetitionValue;
       teams: NavTeam[];
     }>;
   }, [newsNav, teamSearch, drawerComp]);
@@ -394,30 +403,62 @@ export default function NewsPage() {
     filters.teams.length > 0 || filters.myTeams,
   ].filter(Boolean).length;
 
-  const competitionTabs = useMemo(() => {
+  const allCompetitionTabs = useMemo(() => {
     const allTab = {
-      value: "all" as CompetitionSlug,
-      label: NEWS_COMPETITIONS.all.label,
+      value: "all" as CompetitionValue,
+      label: "All",
       subheading: "The latest football news, analysis, and insights",
     };
     if (!newsNav) return [allTab];
     const mvpTabs = newsNav.competitions
-      .filter((comp) => comp.filterValue !== null)
       .map((comp) => ({
-        value: comp.filterValue as CompetitionSlug,
+        value: comp.filterValue,
         label: comp.name,
         subheading: `The latest ${comp.name} news and analysis`,
       }));
-    const deduped = new Map<CompetitionSlug, { value: CompetitionSlug; label: string; subheading: string }>();
+    const deduped = new Map<CompetitionValue, { value: CompetitionValue; label: string; subheading: string }>();
     deduped.set(allTab.value, allTab);
     for (const tab of mvpTabs) deduped.set(tab.value, tab);
     return Array.from(deduped.values());
   }, [newsNav]);
 
-  const currentCompetition = competitionTabs.find((c) => c.value === filters.comp) ?? competitionTabs[0];
+  const groupedCompetitionTabs = useMemo(() => {
+    const groups: Record<CompetitionNavGroup, Array<{ value: CompetitionValue; label: string; subheading: string }>> = {
+      leagues: [],
+      cups: [],
+      europe: [],
+    };
+    for (const tab of allCompetitionTabs) {
+      if (tab.value === "all") continue;
+      groups[getCompetitionNavGroup(tab.value)].push(tab);
+    }
+    return groups;
+  }, [allCompetitionTabs]);
+
+  const visibleCompetitionTabs = useMemo(() => {
+    const allTab = allCompetitionTabs.find((tab) => tab.value === "all");
+    const groupTabs = groupedCompetitionTabs[navGroup] ?? [];
+    return allTab ? [allTab, ...groupTabs] : groupTabs;
+  }, [allCompetitionTabs, groupedCompetitionTabs, navGroup]);
+
+  const currentCompetition = allCompetitionTabs.find((c) => c.value === filters.comp) ?? allCompetitionTabs[0];
 
   const handleCompetitionChange = (value: string) => {
-    setFilter("comp", value as CompetitionSlug);
+    const nextValue = value as CompetitionValue;
+    setFilter("comp", nextValue);
+    if (nextValue !== "all") {
+      setNavGroup(getCompetitionNavGroup(nextValue));
+    }
+  };
+
+  const handleNavGroupChange = (value: string) => {
+    const nextGroup = value as CompetitionNavGroup;
+    setNavGroup(nextGroup);
+    if (filters.comp === "all") return;
+    const currentGroup = getCompetitionNavGroup(filters.comp);
+    if (currentGroup !== nextGroup) {
+      setFilter("comp", "all");
+    }
   };
 
   const handleMyTeamsToggle = () => {
@@ -441,7 +482,7 @@ export default function NewsPage() {
   };
 
   const handleDrawerCompChange = (value: string) => {
-    const newComp = value as CompetitionSlug;
+    const newComp = value as CompetitionValue;
     setDrawerComp(newComp);
     setTeamSearch("");
     setFilter("comp", newComp);
@@ -463,17 +504,27 @@ export default function NewsPage() {
         <Tabs value={filters.comp} onValueChange={handleCompetitionChange} className="w-full">
           {/* Desktop: Tabs + Filters on same row */}
           <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
-            <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-news">
-              {competitionTabs.map((comp) => (
-                <TabsTrigger 
-                  key={comp.value}
-                  value={comp.value} 
-                  data-testid={`tab-competition-${comp.value}`}
-                >
-                  {comp.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="flex items-center gap-4 min-w-0">
+              <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
+                <TabsList className="h-auto gap-1" data-testid="tabs-news-groups">
+                  <TabsTrigger value="leagues" data-testid="tab-news-group-leagues">Leagues</TabsTrigger>
+                  <TabsTrigger value="cups" data-testid="tab-news-group-cups">Cups</TabsTrigger>
+                  <TabsTrigger value="europe" data-testid="tab-news-group-europe">Europe</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <div className="h-6 w-px bg-border shrink-0" />
+              <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-news">
+                {visibleCompetitionTabs.map((comp) => (
+                  <TabsTrigger
+                    key={comp.value}
+                    value={comp.value}
+                    data-testid={`tab-competition-${comp.value}`}
+                  >
+                    {comp.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
 
             <Button 
               variant="outline" 
@@ -494,6 +545,13 @@ export default function NewsPage() {
 
           {/* Mobile: Full-width scrollable tabs with full labels */}
           <div className="md:hidden space-y-4 mb-6">
+            <Tabs value={navGroup} onValueChange={handleNavGroupChange}>
+              <TabsList className="grid grid-cols-3 w-full" data-testid="tabs-news-groups-mobile">
+                <TabsTrigger value="leagues" data-testid="tab-news-group-leagues-mobile">Leagues</TabsTrigger>
+                <TabsTrigger value="cups" data-testid="tab-news-group-cups-mobile">Cups</TabsTrigger>
+                <TabsTrigger value="europe" data-testid="tab-news-group-europe-mobile">Europe</TabsTrigger>
+              </TabsList>
+            </Tabs>
             <div className="relative">
               <div 
                 ref={scrollContainerRef}
@@ -505,7 +563,7 @@ export default function NewsPage() {
                 }}
               >
                 <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-news-mobile">
-                  {competitionTabs.map((comp) => (
+                  {visibleCompetitionTabs.map((comp) => (
                     <TabsTrigger 
                       key={comp.value}
                       value={comp.value} 
@@ -674,7 +732,7 @@ export default function NewsPage() {
                       <SelectValue placeholder="Select competition" />
                     </SelectTrigger>
                     <SelectContent>
-                      {competitionTabs.map((comp) => (
+                      {allCompetitionTabs.map((comp) => (
                         <SelectItem key={comp.value} value={comp.value}>
                           {comp.label}
                         </SelectItem>
@@ -718,7 +776,7 @@ export default function NewsPage() {
             </div>
           )}
 
-          {competitionTabs.map((comp) => (
+          {allCompetitionTabs.map((comp) => (
             <TabsContent key={comp.value} value={comp.value}>
               {featuredArticle && !isLoading && comp.value === filters.comp && (
                 <section className="mb-8">
