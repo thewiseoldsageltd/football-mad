@@ -20,15 +20,27 @@ import { useNewsFilters, type CompetitionSlug } from "@/hooks/use-news-filters";
 import { NEWS_COMPETITIONS, type Team, type NewsFiltersResponse } from "@shared/schema";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
-interface NavCompetition { id: string; name: string; slug: string; sortOrder: number; teams: NavTeam[] }
-interface NewsNavResponse { competitions: NavCompetition[] }
-
-const competitionsList = Object.values(NEWS_COMPETITIONS).map(comp => ({
-  ...comp,
-  subheading: comp.value === "all" 
-    ? "The latest football news, analysis, and insights"
-    : `The latest ${comp.label} news and analysis`
-}));
+interface NavCompetition {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  filterValue: CompetitionSlug | null;
+  teams: NavTeam[];
+}
+interface NewsNavResponse {
+  competitions: NavCompetition[];
+  refinement?: {
+    teamsByCompetition: {
+      competitionId: string;
+      competitionName: string;
+      competitionSlug: string;
+      competitionFilterValue: CompetitionSlug | null;
+      teams: NavTeam[];
+    }[];
+    players: Array<{ id: string; name: string; slug?: string }>;
+  };
+}
 
 const MOCK_PLAYERS = [
   { id: "1", name: "Mohamed Salah", teamSlug: "liverpool" },
@@ -325,13 +337,20 @@ export default function NewsPage() {
   const groupedTeams = useMemo(() => {
     if (!newsNav) return [];
     const lc = teamSearch.toLowerCase();
-    return newsNav.competitions
+    const groups = (newsNav.refinement?.teamsByCompetition ?? []).length > 0
+      ? newsNav.refinement!.teamsByCompetition
+      : newsNav.competitions.map((comp) => ({
+        competitionId: comp.id,
+        competitionName: comp.name,
+        competitionSlug: comp.slug,
+        competitionFilterValue: comp.filterValue,
+        teams: comp.teams,
+      }));
+    return groups
       .map((comp) => {
         let compTeams = comp.teams;
         if (drawerComp !== "all") {
-          const compData = NEWS_COMPETITIONS[drawerComp as keyof typeof NEWS_COMPETITIONS];
-          const compLabel = compData && "dbValue" in compData ? compData.dbValue : compData?.label;
-          if (compLabel && comp.name !== compLabel) return null;
+          if (comp.competitionFilterValue !== drawerComp) return null;
         }
         if (teamSearch) {
           compTeams = compTeams.filter(
@@ -339,9 +358,21 @@ export default function NewsPage() {
           );
         }
         if (compTeams.length === 0) return null;
-        return { ...comp, teams: compTeams };
+        return {
+          id: comp.competitionId,
+          name: comp.competitionName,
+          slug: comp.competitionSlug,
+          filterValue: comp.competitionFilterValue,
+          teams: compTeams,
+        };
       })
-      .filter(Boolean) as NavCompetition[];
+      .filter(Boolean) as Array<{
+      id: string;
+      name: string;
+      slug: string;
+      filterValue: CompetitionSlug | null;
+      teams: NavTeam[];
+    }>;
   }, [newsNav, teamSearch, drawerComp]);
 
   const filteredPlayers = useMemo(() => {
@@ -363,7 +394,27 @@ export default function NewsPage() {
     filters.teams.length > 0 || filters.myTeams,
   ].filter(Boolean).length;
 
-  const currentCompetition = competitionsList.find(c => c.value === filters.comp);
+  const competitionTabs = useMemo(() => {
+    const allTab = {
+      value: "all" as CompetitionSlug,
+      label: NEWS_COMPETITIONS.all.label,
+      subheading: "The latest football news, analysis, and insights",
+    };
+    if (!newsNav) return [allTab];
+    const mvpTabs = newsNav.competitions
+      .filter((comp) => comp.filterValue !== null)
+      .map((comp) => ({
+        value: comp.filterValue as CompetitionSlug,
+        label: comp.name,
+        subheading: `The latest ${comp.name} news and analysis`,
+      }));
+    const deduped = new Map<CompetitionSlug, { value: CompetitionSlug; label: string; subheading: string }>();
+    deduped.set(allTab.value, allTab);
+    for (const tab of mvpTabs) deduped.set(tab.value, tab);
+    return Array.from(deduped.values());
+  }, [newsNav]);
+
+  const currentCompetition = competitionTabs.find((c) => c.value === filters.comp) ?? competitionTabs[0];
 
   const handleCompetitionChange = (value: string) => {
     setFilter("comp", value as CompetitionSlug);
@@ -413,7 +464,7 @@ export default function NewsPage() {
           {/* Desktop: Tabs + Filters on same row */}
           <div className="hidden md:flex md:items-center md:justify-between gap-4 mb-6">
             <TabsList className="flex-wrap h-auto gap-1" data-testid="tabs-news">
-              {competitionsList.map((comp) => (
+              {competitionTabs.map((comp) => (
                 <TabsTrigger 
                   key={comp.value}
                   value={comp.value} 
@@ -454,7 +505,7 @@ export default function NewsPage() {
                 }}
               >
                 <TabsList className="inline-flex h-auto gap-1 w-max" data-testid="tabs-news-mobile">
-                  {competitionsList.map((comp) => (
+                  {competitionTabs.map((comp) => (
                     <TabsTrigger 
                       key={comp.value}
                       value={comp.value} 
@@ -623,7 +674,7 @@ export default function NewsPage() {
                       <SelectValue placeholder="Select competition" />
                     </SelectTrigger>
                     <SelectContent>
-                      {competitionsList.map((comp) => (
+                      {competitionTabs.map((comp) => (
                         <SelectItem key={comp.value} value={comp.value}>
                           {comp.label}
                         </SelectItem>
@@ -667,7 +718,7 @@ export default function NewsPage() {
             </div>
           )}
 
-          {competitionsList.map((comp) => (
+          {competitionTabs.map((comp) => (
             <TabsContent key={comp.value} value={comp.value}>
               {featuredArticle && !isLoading && comp.value === filters.comp && (
                 <section className="mb-8">

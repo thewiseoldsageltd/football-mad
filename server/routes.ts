@@ -458,6 +458,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== NEWS NAV (MVP competitions + their teams) ==========
   app.get("/api/news/nav", async (_req, res) => {
     try {
+      const compFilterByDbValue = new Map<string, string>();
+      for (const [key, value] of Object.entries(NEWS_COMPETITIONS)) {
+        const dbValue = "dbValue" in value && typeof value.dbValue === "string" ? value.dbValue : value.label;
+        compFilterByDbValue.set(dbValue, key);
+      }
+
       const rows = await db
         .select({
           compId: competitions.id,
@@ -483,14 +489,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(mvpCompetitions.sortOrder), asc(competitions.name), asc(teams.name));
 
       const compMap = new Map<string, {
-        id: string; name: string; slug: string; sortOrder: number;
+        id: string; name: string; slug: string; sortOrder: number; filterValue: string | null;
         teams: { id: string; name: string; slug: string; shortName: string | null }[];
       }>();
 
       for (const r of rows) {
         let comp = compMap.get(r.compId);
         if (!comp) {
-          comp = { id: r.compId, name: r.compName, slug: r.compSlug, sortOrder: r.sortOrder, teams: [] };
+          comp = {
+            id: r.compId,
+            name: r.compName,
+            slug: r.compSlug,
+            sortOrder: r.sortOrder,
+            filterValue: compFilterByDbValue.get(r.compName) ?? null,
+            teams: [],
+          };
           compMap.set(r.compId, comp);
         }
         if (r.teamId && !comp.teams.some((t) => t.id === r.teamId)) {
@@ -499,7 +512,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-      res.json({ competitions: result });
+      res.json({
+        competitions: result,
+        refinement: {
+          teamsByCompetition: result.map((comp) => ({
+            competitionId: comp.id,
+            competitionName: comp.name,
+            competitionSlug: comp.slug,
+            competitionFilterValue: comp.filterValue,
+            teams: comp.teams,
+          })),
+          players: [],
+        },
+      });
     } catch (err) {
       console.error("[news/nav] Error:", err);
       res.status(500).json({ error: "Failed to fetch news nav" });
