@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, NEWS_COMPETITIONS } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -458,13 +458,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== NEWS NAV (MVP competitions + their teams) ==========
   app.get("/api/news/nav", async (_req, res) => {
     try {
-      const compFilterByDbValue = new Map<string, string>();
-      const compFilterBySlug = new Map<string, string>();
-      for (const [key, value] of Object.entries(NEWS_COMPETITIONS)) {
-        const dbValue = "dbValue" in value && typeof value.dbValue === "string" ? value.dbValue : value.label;
-        compFilterByDbValue.set(dbValue, key);
-        compFilterBySlug.set(value.slug, key);
-      }
+      const filterSlugOverridesByName = new Map<string, string>([
+        ["copa del rey", "copa-del-rey"],
+        ["coppa italia", "coppa-italia"],
+        ["dfb-pokal", "dfb-pokal"],
+        ["coupe de france", "coupe-de-france"],
+      ]);
 
       const rows = await db
         .select({
@@ -495,7 +494,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
 
       const compMap = new Map<string, {
-        id: string; name: string; slug: string; sortOrder: number; filterValue: string | null;
+        id: string; name: string; slug: string; sortOrder: number; filterValue: string;
         teams: { id: string; name: string; slug: string; shortName: string | null }[];
       }>();
 
@@ -505,13 +504,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const presented = competitionPresentation.get(r.compId);
           const compName = presented?.name ?? r.compName;
           const compSlug = presented?.slug ?? r.compSlug;
+          const filterSlug = filterSlugOverridesByName.get(compName.toLowerCase()) ?? compSlug;
           const fallbackSortOrder = compMap.size;
           comp = {
             id: r.compId,
             name: compName,
             slug: compSlug,
             sortOrder: fallbackSortOrder,
-            filterValue: compFilterByDbValue.get(compName) ?? compFilterBySlug.get(compSlug) ?? null,
+            filterValue: filterSlug,
             teams: [],
           };
           compMap.set(r.compId, comp);
