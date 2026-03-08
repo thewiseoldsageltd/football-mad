@@ -4,7 +4,7 @@ import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
-  competitions, articleCompetitions, paEntityAliasMap, playerTeamMemberships,
+  competitions, articleCompetitions, paEntityAliasMap, playerTeamMemberships, teamManagers,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -280,25 +280,92 @@ export class DatabaseStorage implements IStorage {
 
   // Managers
   async getAllManagers(): Promise<Manager[]> {
-    const allManagers = await db.select().from(managers).orderBy(managers.name);
     const boundary = new MvpGraphBoundary();
-    const allowedManagerIds = await boundary.filterManagerIds(allManagers.map((row) => row.id));
-    return allManagers.filter((row) => allowedManagerIds.has(row.id));
+    const mvpTeamIds = await boundary.getMvpTeamIds();
+    if (mvpTeamIds.size === 0) return [];
+
+    const canonicalRows = await db
+      .select({ manager: managers })
+      .from(teamManagers)
+      .innerJoin(managers, eq(teamManagers.managerId, managers.id))
+      .where(inArray(teamManagers.teamId, Array.from(mvpTeamIds)))
+      .orderBy(managers.name);
+
+    const canonicalById = new Map(canonicalRows.map((row) => [row.manager.id, row.manager]));
+    const canonicalManagers = Array.from(canonicalById.values());
+
+    const fallbackRows = await db
+      .select()
+      .from(managers)
+      .where(inArray(managers.currentTeamId, Array.from(mvpTeamIds)))
+      .orderBy(managers.name);
+    const fallbackManagers = fallbackRows.filter((row) => !canonicalById.has(row.id));
+
+    if (fallbackManagers.length > 0) {
+      console.warn(
+        `[manager-read-drift] getAllManagers using fallback currentTeamId rows=${fallbackManagers.length}`,
+      );
+    }
+
+    return [...canonicalManagers, ...fallbackManagers].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async getManagerBySlug(slug: string): Promise<Manager | undefined> {
+  async getManagerBySlug(slug: string): Promise<(Manager & { team?: Team | null }) | undefined> {
     const [manager] = await db.select().from(managers).where(eq(managers.slug, slug));
     if (!manager) return undefined;
+
     const boundary = new MvpGraphBoundary();
-    if (!(await boundary.filterManagerIds([manager.id])).has(manager.id)) return undefined;
-    return manager;
+    const mvpTeamIds = await boundary.getMvpTeamIds();
+
+    const [canonicalTeamRow] = await db
+      .select({
+        teamId: teamManagers.teamId,
+        team: teams,
+      })
+      .from(teamManagers)
+      .innerJoin(teams, eq(teamManagers.teamId, teams.id))
+      .where(eq(teamManagers.managerId, manager.id))
+      .limit(1);
+
+    if (canonicalTeamRow?.teamId && mvpTeamIds.has(canonicalTeamRow.teamId)) {
+      return { ...manager, currentTeamId: canonicalTeamRow.teamId, team: canonicalTeamRow.team };
+    }
+
+    if (manager.currentTeamId && mvpTeamIds.has(manager.currentTeamId)) {
+      const [team] = await db.select().from(teams).where(eq(teams.id, manager.currentTeamId)).limit(1);
+      console.warn(
+        `[manager-read-drift] getManagerBySlug fallback managerId=${manager.id} slug=${slug} currentTeamId=${manager.currentTeamId}`,
+      );
+      return { ...manager, team: team ?? null };
+    }
+
+    return undefined;
   }
 
   async getManagersByTeamId(teamId: string): Promise<Manager[]> {
     const boundary = new MvpGraphBoundary();
     const isMvpTeam = await boundary.isMvpTeam(teamId);
     if (!isMvpTeam) return [];
-    return db.select().from(managers).where(eq(managers.currentTeamId, teamId)).orderBy(managers.name);
+
+    const canonicalRows = await db
+      .select({ manager: managers })
+      .from(teamManagers)
+      .innerJoin(managers, eq(teamManagers.managerId, managers.id))
+      .where(eq(teamManagers.teamId, teamId))
+      .orderBy(managers.name);
+    if (canonicalRows.length > 0) return canonicalRows.map((row) => row.manager);
+
+    const fallbackRows = await db
+      .select()
+      .from(managers)
+      .where(eq(managers.currentTeamId, teamId))
+      .orderBy(managers.name);
+    if (fallbackRows.length > 0) {
+      console.warn(
+        `[manager-read-drift] getManagersByTeamId fallback teamId=${teamId} managers=${fallbackRows.length}`,
+      );
+    }
+    return fallbackRows;
   }
 
   async upsertManager(data: {

@@ -1,7 +1,8 @@
 import { db } from "../db";
-import { players, managers, playerTeamMemberships, teamManagers, squadsSnapshots, teams } from "@shared/schema";
+import { players, managers, playerTeamMemberships, squadsSnapshots, teams } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import crypto from "crypto";
+import { upsertCurrentManagerMapping } from "../lib/manager-current-mapping";
 
 const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
 const GOALSERVE_BASE = "https://www.goalserve.com";
@@ -190,7 +191,7 @@ export async function upsertGoalserveSquads(
       if (existingManager) {
         managerId = existingManager.id;
         await db.update(managers)
-          .set({ name: coachName, currentTeamId: teamId })
+          .set({ name: coachName })
           .where(eq(managers.id, managerId));
       } else {
         try {
@@ -199,7 +200,6 @@ export async function upsertGoalserveSquads(
               name: coachName,
               slug: managerSlug,
               goalserveManagerId: coachId,
-              currentTeamId: teamId,
             })
             .onConflictDoNothing()
             .returning({ id: managers.id });
@@ -227,12 +227,7 @@ export async function upsertGoalserveSquads(
       }
 
       if (managerId) {
-        await db.insert(teamManagers)
-          .values({ teamId, managerId, asOf: asOfDate })
-          .onConflictDoUpdate({
-            target: teamManagers.teamId,
-            set: { managerId, asOf: asOfDate },
-          });
+        await upsertCurrentManagerMapping({ teamId, managerId, asOf: asOfDate });
         insertedTeamManagersCount++;
       }
     }

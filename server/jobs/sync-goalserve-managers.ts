@@ -2,6 +2,7 @@ import { db } from "../db";
 import { managers, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
+import { upsertCurrentManagerMapping } from "../lib/manager-current-mapping";
 
 function slugify(text: string): string {
   return text
@@ -196,6 +197,11 @@ export async function syncGoalserveManagers(leagueId: string): Promise<{
       const goalserveId = gsManager.goalserveManagerId || `mgr_${gsManager.goalserveTeamId}_${managerSlug}`;
 
       if (existingManager) {
+        await upsertCurrentManagerMapping({
+          managerId: existingManager.id,
+          teamId: dbTeam.id,
+          asOf: new Date(),
+        });
         const needsUpdate =
           existingManager.currentTeamId !== dbTeam.id ||
           existingManager.goalserveManagerId !== goalserveId;
@@ -204,7 +210,6 @@ export async function syncGoalserveManagers(leagueId: string): Promise<{
           await db
             .update(managers)
             .set({
-              currentTeamId: dbTeam.id,
               goalserveManagerId: goalserveId,
             })
             .where(eq(managers.id, existingManager.id));
@@ -226,9 +231,13 @@ export async function syncGoalserveManagers(leagueId: string): Promise<{
             name: gsManager.name,
             slug: finalSlug,
             nationality: gsManager.nationality,
-            currentTeamId: dbTeam.id,
             goalserveManagerId: goalserveId,
           }).returning();
+          await upsertCurrentManagerMapping({
+            managerId: inserted_.id,
+            teamId: dbTeam.id,
+            asOf: new Date(),
+          });
           
           inserted++;
           
@@ -251,10 +260,14 @@ export async function syncGoalserveManagers(leagueId: string): Promise<{
               await db
                 .update(managers)
                 .set({
-                  currentTeamId: dbTeam.id,
                   goalserveManagerId: goalserveId,
                 })
                 .where(eq(managers.id, found.id));
+              await upsertCurrentManagerMapping({
+                managerId: found.id,
+                teamId: dbTeam.id,
+                asOf: new Date(),
+              });
               updated++;
             } else {
               skipped++;

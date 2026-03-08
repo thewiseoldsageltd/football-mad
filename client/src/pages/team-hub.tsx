@@ -1965,15 +1965,6 @@ function mapPositionToGroup(position: string | null | undefined): PositionGroup 
   return "MID";
 }
 
-function createManagerSlug(managerName: string): string {
-  return managerName
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .trim();
-}
-
 function PlayerCard({ player }: { player: Player }) {
   return (
     <Link href={playerProfile(player.slug)}>
@@ -2013,21 +2004,19 @@ function PlayerCard({ player }: { player: Player }) {
   );
 }
 
-function ManagerCard({ managerName, teamName }: { managerName: string; teamName: string }) {
-  const slug = createManagerSlug(managerName);
-  
+function ManagerCard({ manager, teamName }: { manager: Pick<Manager, "name" | "slug">; teamName: string }) {
   return (
-    <Link href={managerProfile(slug)}>
+    <Link href={managerProfile(manager.slug)}>
       <Card className="hover-elevate cursor-pointer">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
               <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
-                {managerName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                {manager.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
-              <h4 className="font-semibold text-lg">{managerName}</h4>
+              <h4 className="font-semibold text-lg">{manager.name}</h4>
               <p className="text-sm text-muted-foreground">Manager / Head Coach</p>
               <p className="text-xs text-muted-foreground mt-1">{teamName}</p>
             </div>
@@ -2147,13 +2136,13 @@ function SquadTabContent({
   teamSlug,
   players,
   isLoading,
-  manager, 
+  manager,
   teamName 
 }: { 
   teamSlug: string;
   players: Player[];
   isLoading: boolean;
-  manager: string | null | undefined;
+  manager: Pick<Manager, "name" | "slug"> | null | undefined;
   teamName: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -2244,7 +2233,7 @@ function SquadTabContent({
       {manager && (
         <section>
           <h3 className="text-lg font-semibold mb-3">Manager</h3>
-          <ManagerCard managerName={manager} teamName={teamName} />
+          <ManagerCard manager={manager} teamName={teamName} />
         </section>
       )}
 
@@ -2592,7 +2581,9 @@ export default function TeamHubPage() {
     enabled: !!team?.id,
   });
 
-  const currentManagerName = teamManagers?.[0]?.name ?? team?.manager ?? null;
+  const currentManager = teamManagers?.[0]
+    ? { name: teamManagers[0].name, slug: teamManagers[0].slug }
+    : null;
 
   const { data: followedTeamIds } = useQuery<string[]>({
     queryKey: ["/api/follows"],
@@ -2762,7 +2753,7 @@ export default function TeamHubPage() {
               </h1>
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 text-white/80 text-sm">
                 {team.stadiumName && <span>{team.stadiumName}</span>}
-                {currentManagerName && <span>Manager: {currentManagerName}</span>}
+                {currentManager && <span>Manager: {currentManager.name}</span>}
                 {team.founded && <span>Est. {team.founded}</span>}
               </div>
             </div>
@@ -2895,7 +2886,7 @@ export default function TeamHubPage() {
                 teamSlug={slug}
                 players={squadPlayers || []}
                 isLoading={squadLoading}
-                manager={currentManagerName}
+                manager={currentManager}
                 teamName={team.name}
               />
             )}

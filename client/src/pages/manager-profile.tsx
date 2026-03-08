@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { ArrowLeft, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -5,27 +6,76 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MainLayout } from "@/components/layout/main-layout";
+import { teamHub } from "@/lib/urls";
 
-function slugToName(slug: string): string {
-  return slug
-    .split("-")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
+type ManagerApiResponse = {
+  id: string;
+  name: string;
+  slug: string;
+  nationality?: string | null;
+  currentTeamId?: string | null;
+  team?: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+};
 
 export default function ManagerProfilePage() {
   const [, params] = useRoute("/managers/:slug");
-  const slug = params?.slug || "";
-  const managerName = slugToName(slug);
+  const slug = params?.slug ?? "";
+  const { data: manager, isLoading } = useQuery<ManagerApiResponse | null>({
+    queryKey: ["/api/managers", slug],
+    queryFn: async () => {
+      const res = await fetch(`/api/managers/${slug}`);
+      if (!res.ok) {
+        if (res.status === 404) return null;
+        throw new Error("Failed to fetch manager profile");
+      }
+      return res.json();
+    },
+    enabled: Boolean(slug),
+  });
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <h1 className="text-2xl font-bold mb-4">Loading manager profile...</h1>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  if (!manager) {
+    return (
+      <MainLayout>
+        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+          <h1 className="text-2xl font-bold mb-4">Manager not found</h1>
+          <p className="text-muted-foreground mb-6">
+            The manager profile is unavailable or out of current MVP scope.
+          </p>
+          <Link href="/teams">
+            <Button variant="ghost" size="sm" data-testid="link-back-to-teams">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Teams
+            </Button>
+          </Link>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  const managerName = manager.name;
   const initials = managerName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <MainLayout>
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <Link href="/teams">
+        <Link href={manager.team?.slug ? teamHub(manager.team.slug) : "/teams"}>
           <Button variant="ghost" size="sm" className="mb-6" data-testid="link-back-to-teams">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Teams
+            {manager.team?.name ? `Back to ${manager.team.name}` : "Back to Teams"}
           </Button>
         </Link>
 
@@ -42,6 +92,12 @@ export default function ManagerProfilePage() {
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="secondary">Manager / Head Coach</Badge>
                 </div>
+                {manager.team?.name && (
+                  <p className="text-sm text-muted-foreground mt-2">{manager.team.name}</p>
+                )}
+                {manager.nationality && (
+                  <p className="text-sm text-muted-foreground mt-1">{manager.nationality}</p>
+                )}
               </div>
             </div>
           </CardHeader>
