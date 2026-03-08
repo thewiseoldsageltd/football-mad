@@ -1,10 +1,10 @@
 import { db } from "./db";
-import { eq, and, desc, ilike, sql, or, inArray, gte, lt } from "drizzle-orm";
+import { eq, and, desc, ilike, sql, or, inArray, gte, gt, isNull, lt } from "drizzle-orm";
 import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
-  competitions, articleCompetitions,
+  competitions, articleCompetitions, playerTeamMemberships,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -187,25 +187,79 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlayersByTeam(teamId: string): Promise<Player[]> {
-    return db.select().from(players).where(eq(players.teamId, teamId));
+    const now = new Date();
+    const activeMemberships = await db
+      .select({
+        id: playerTeamMemberships.id,
+        playerId: playerTeamMemberships.playerId,
+        teamId: playerTeamMemberships.teamId,
+        startDate: playerTeamMemberships.startDate,
+        createdAt: playerTeamMemberships.createdAt,
+      })
+      .from(playerTeamMemberships)
+      .where(or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)))
+      .orderBy(
+        desc(playerTeamMemberships.startDate),
+        desc(playerTeamMemberships.createdAt),
+        desc(playerTeamMemberships.id),
+      );
+
+    const latestActiveMembershipByPlayer = new Map<string, string>();
+    for (const row of activeMemberships) {
+      if (!latestActiveMembershipByPlayer.has(row.playerId)) {
+        latestActiveMembershipByPlayer.set(row.playerId, row.teamId);
+      }
+    }
+
+    const currentPlayerIds = Array.from(latestActiveMembershipByPlayer.entries())
+      .filter(([, currentTeamId]) => currentTeamId === teamId)
+      .map(([playerId]) => playerId);
+
+    // Safety fallback for teams where memberships have not been ingested yet.
+    if (currentPlayerIds.length === 0) {
+      return db
+        .select()
+        .from(players)
+        .where(eq(players.teamId, teamId))
+        .orderBy(players.name);
+    }
+
+    return db
+      .select()
+      .from(players)
+      .where(inArray(players.id, currentPlayerIds))
+      .orderBy(players.name);
   }
 
   async getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined> {
-    const result = await db
-      .select({
-        player: players,
-        team: teams,
-      })
-      .from(players)
-      .leftJoin(teams, eq(players.teamId, teams.id))
-      .where(eq(players.slug, slug))
+    const [player] = await db.select().from(players).where(eq(players.slug, slug)).limit(1);
+    if (!player) return undefined;
+
+    const now = new Date();
+    const [latestActiveMembership] = await db
+      .select({ teamId: playerTeamMemberships.teamId })
+      .from(playerTeamMemberships)
+      .where(
+        and(
+          eq(playerTeamMemberships.playerId, player.id),
+          or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)),
+        ),
+      )
+      .orderBy(
+        desc(playerTeamMemberships.startDate),
+        desc(playerTeamMemberships.createdAt),
+        desc(playerTeamMemberships.id),
+      )
       .limit(1);
 
-    if (result.length === 0) return undefined;
+    const resolvedTeamId = latestActiveMembership?.teamId ?? player.teamId ?? null;
+    const [team] = resolvedTeamId
+      ? await db.select().from(teams).where(eq(teams.id, resolvedTeamId)).limit(1)
+      : [];
 
     return {
-      ...result[0].player,
-      team: result[0].team,
+      ...player,
+      team: team ?? null,
     };
   }
 

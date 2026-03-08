@@ -3,7 +3,6 @@ import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
 import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { getSquadData, getPlayerSlugFromSquadPlayer, type GoalserveSquadPlayer, type GoalservePosition, type AvailabilityEntry } from "@/lib/mock/goalserveMock";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -2042,42 +2041,43 @@ function ManagerCard({ managerName, teamName }: { managerName: string; teamName:
   );
 }
 
-function getGoalservePositionLabel(position: GoalservePosition): string {
-  switch (position) {
-    case "G": return "GK";
-    case "D": return "DEF";
-    case "M": return "MID";
-    case "A": return "FWD";
-    default: return position;
-  }
+type SquadPosition = "GK" | "DEF" | "MID" | "FWD";
+
+function toSquadPosition(position: string | null | undefined): SquadPosition {
+  const p = (position ?? "").trim().toUpperCase();
+  if (p === "G" || p === "GK" || p.includes("GOAL")) return "GK";
+  if (p === "D" || p === "DEF" || p.includes("DEF")) return "DEF";
+  if (p === "M" || p === "MID" || p.includes("MID")) return "MID";
+  return "FWD";
 }
 
-function getGoalservePositionColor(position: GoalservePosition): string {
+function getSquadPositionColor(position: SquadPosition): string {
   switch (position) {
-    case "G": return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-    case "D": return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
-    case "M": return "bg-green-500/10 text-green-600 dark:text-green-400";
-    case "A": return "bg-red-500/10 text-red-600 dark:text-red-400";
+    case "GK": return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+    case "DEF": return "bg-blue-500/10 text-blue-600 dark:text-blue-400";
+    case "MID": return "bg-green-500/10 text-green-600 dark:text-green-400";
+    case "FWD": return "bg-red-500/10 text-red-600 dark:text-red-400";
     default: return "bg-muted text-muted-foreground";
   }
 }
 
-function GoalservePlayerCard({ 
-  player, 
-  toMiss, 
-  questionable 
-}: { 
-  player: GoalserveSquadPlayer; 
-  toMiss: AvailabilityEntry[]; 
-  questionable: AvailabilityEntry[];
+function normalizePersonName(value: string): string {
+  return value.toLowerCase().trim().replace(/\s+/g, " ");
+}
+
+function DbPlayerCard({
+  player,
+  availability,
+}: {
+  player: Player;
+  availability?: FplAvailabilityWithRag;
 }) {
-  const playerSlug = getPlayerSlugFromSquadPlayer(player);
-  const isMissing = toMiss.find((e) => e.playerId === player.id);
-  const isQuestionable = questionable.find((e) => e.playerId === player.id);
-  const isGoalkeeper = player.position === "G";
+  const squadPosition = toSquadPosition(player.position);
+  const isMissing = availability?.bucket === "OUT" || availability?.bucket === "SUSPENDED" || availability?.bucket === "LEFT_CLUB";
+  const isQuestionable = availability?.bucket === "COIN_FLIP" || availability?.bucket === "DOUBTFUL";
 
   return (
-    <Link href={playerProfile(playerSlug)}>
+    <Link href={playerProfile(player.slug)}>
       <Card className="hover-elevate cursor-pointer transition-all h-full" data-testid={`card-player-${player.id}`}>
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
@@ -2094,8 +2094,8 @@ function GoalservePlayerCard({
               </div>
               
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge variant="outline" className={`text-xs ${getGoalservePositionColor(player.position)}`}>
-                  {getGoalservePositionLabel(player.position)}
+                <Badge variant="outline" className={`text-xs ${getSquadPositionColor(squadPosition)}`}>
+                  {squadPosition}
                 </Badge>
                 
                 {isMissing && (
@@ -2116,34 +2116,19 @@ function GoalservePlayerCard({
           </div>
           
           <div className="mt-3 pt-3 border-t">
-            <div className="grid grid-cols-5 gap-1 text-center">
+            <div className="grid grid-cols-3 gap-1 text-center">
               <div>
-                <div className="text-xs text-muted-foreground">Mins</div>
-                <div className="text-sm font-medium">{player.minutes || "–"}</div>
+                <div className="text-xs text-muted-foreground">Age</div>
+                <div className="text-sm font-medium">{player.age ?? "–"}</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Apps</div>
-                <div className="text-sm font-medium">{player.appearances || "–"}</div>
+                <div className="text-xs text-muted-foreground">Nation</div>
+                <div className="text-sm font-medium">{player.nationality || "–"}</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Goals</div>
-                <div className="text-sm font-medium">{player.goals || "0"}</div>
+                <div className="text-xs text-muted-foreground">No.</div>
+                <div className="text-sm font-medium">{player.number ?? "–"}</div>
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Asst</div>
-                <div className="text-sm font-medium">{player.assists || "0"}</div>
-              </div>
-              {isGoalkeeper ? (
-                <div>
-                  <div className="text-xs text-muted-foreground">Saves</div>
-                  <div className="text-sm font-medium">{player.saves || "0"}</div>
-                </div>
-              ) : (
-                <div>
-                  <div className="text-xs text-muted-foreground">Rating</div>
-                  <div className="text-sm font-medium">{player.rating || "–"}</div>
-                </div>
-              )}
             </div>
           </div>
         </CardContent>
@@ -2154,34 +2139,38 @@ function GoalservePlayerCard({
 
 function SquadTabContent({ 
   teamSlug,
+  players,
+  isLoading,
   manager, 
   teamName 
 }: { 
   teamSlug: string;
+  players: Player[];
+  isLoading: boolean;
   manager: string | null | undefined;
   teamName: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [positionFilter, setPositionFilter] = useState<"all" | "GK" | "DEF" | "MID" | "FWD">("all");
-  const [sortBy, setSortBy] = useState<"rating" | "minutes" | "goals" | "assists" | "number">("rating");
+  const [sortBy, setSortBy] = useState<"name" | "number" | "age" | "position">("name");
 
-  const squadData = useMemo(() => {
-    return getSquadData(teamSlug);
-  }, [teamSlug]);
+  const { data: availability } = useQuery<FplAvailabilityWithRag[]>({
+    queryKey: ["/api/teams", teamSlug, "availability", "squad-tab"],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${teamSlug}/availability?sort=recent`);
+      if (!res.ok) throw new Error("Failed to fetch availability");
+      return res.json();
+    },
+    enabled: !!teamSlug,
+  });
 
-  const players = squadData?.players || [];
-  const toMiss = squadData?.to_miss || [];
-  const questionable = squadData?.questionable || [];
-
-  const mapGoalservePosition = (pos: GoalservePosition): "GK" | "DEF" | "MID" | "FWD" => {
-    switch (pos) {
-      case "G": return "GK";
-      case "D": return "DEF";
-      case "M": return "MID";
-      case "A": return "FWD";
-      default: return "MID";
+  const availabilityByName = useMemo(() => {
+    const map = new Map<string, FplAvailabilityWithRag>();
+    for (const entry of availability ?? []) {
+      map.set(normalizePersonName(entry.playerName), entry);
     }
-  };
+    return map;
+  }, [availability]);
 
   const filteredAndSortedPlayers = useMemo(() => {
     let result = [...players];
@@ -2192,21 +2181,19 @@ function SquadTabContent({
     }
     
     if (positionFilter !== "all") {
-      result = result.filter(p => mapGoalservePosition(p.position) === positionFilter);
+      result = result.filter(p => toSquadPosition(p.position) === positionFilter);
     }
     
     result.sort((a, b) => {
       switch (sortBy) {
-        case "rating":
-          return parseFloat(b.rating || "0") - parseFloat(a.rating || "0");
-        case "minutes":
-          return parseInt(b.minutes || "0") - parseInt(a.minutes || "0");
-        case "goals":
-          return parseInt(b.goals || "0") - parseInt(a.goals || "0");
-        case "assists":
-          return parseInt(b.assists || "0") - parseInt(a.assists || "0");
+        case "name":
+          return a.name.localeCompare(b.name);
         case "number":
-          return parseInt(a.number || "99") - parseInt(b.number || "99");
+          return (a.number ?? 999) - (b.number ?? 999);
+        case "age":
+          return (b.age ?? -1) - (a.age ?? -1);
+        case "position":
+          return toSquadPosition(a.position).localeCompare(toSquadPosition(b.position));
         default:
           return 0;
       }
@@ -2218,12 +2205,12 @@ function SquadTabContent({
   const groupedPlayers = useMemo(() => {
     if (positionFilter !== "all") return null;
     
-    const groups: Record<"GK" | "DEF" | "MID" | "FWD", GoalserveSquadPlayer[]> = { 
+    const groups: Record<"GK" | "DEF" | "MID" | "FWD", Player[]> = { 
       GK: [], DEF: [], MID: [], FWD: [] 
     };
     
     filteredAndSortedPlayers.forEach(p => {
-      const group = mapGoalservePosition(p.position);
+      const group = toSquadPosition(p.position);
       groups[group].push(p);
     });
     
@@ -2299,17 +2286,18 @@ function SquadTabContent({
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="rating">Rating</SelectItem>
-                <SelectItem value="minutes">Minutes</SelectItem>
-                <SelectItem value="goals">Goals</SelectItem>
-                <SelectItem value="assists">Assists</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
                 <SelectItem value="number">Shirt No.</SelectItem>
+                <SelectItem value="age">Age</SelectItem>
+                <SelectItem value="position">Position</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        {players.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center text-muted-foreground py-8">Loading squad...</div>
+        ) : players.length === 0 ? (
           <EmptyState
             icon={UserCircle2}
             title="Squad data coming soon"
@@ -2333,11 +2321,10 @@ function SquadTabContent({
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {groupPlayers.map(player => (
-                      <GoalservePlayerCard
+                      <DbPlayerCard
                         key={player.id}
                         player={player}
-                        toMiss={toMiss}
-                        questionable={questionable}
+                        availability={availabilityByName.get(normalizePersonName(player.name))}
                       />
                     ))}
                   </div>
@@ -2348,11 +2335,10 @@ function SquadTabContent({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredAndSortedPlayers.map(player => (
-              <GoalservePlayerCard
+              <DbPlayerCard
                 key={player.id}
                 player={player}
-                toMiss={toMiss}
-                questionable={questionable}
+                availability={availabilityByName.get(normalizePersonName(player.name))}
               />
             ))}
           </div>
@@ -2889,6 +2875,8 @@ export default function TeamHubPage() {
             {activeTab === "squad" && (
               <SquadTabContent 
                 teamSlug={slug}
+                players={squadPlayers || []}
+                isLoading={squadLoading}
                 manager={team.manager}
                 teamName={team.name}
               />
