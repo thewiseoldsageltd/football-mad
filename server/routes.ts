@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships, NEWS_COMPETITIONS } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, NEWS_COMPETITIONS } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -469,24 +469,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           compId: competitions.id,
           compName: competitions.name,
           compSlug: competitions.slug,
-          sortOrder: mvpCompetitions.sortOrder,
           teamId: teams.id,
           teamName: teams.name,
           teamSlug: teams.slug,
           teamShortName: teams.shortName,
         })
-        .from(mvpCompetitions)
-        .innerJoin(competitions, eq(mvpCompetitions.competitionId, competitions.id))
-        .innerJoin(
+        .from(competitions)
+        .leftJoin(
           competitionTeamMemberships,
           and(
             eq(competitionTeamMemberships.competitionId, competitions.id),
             eq(competitionTeamMemberships.isCurrent, true),
           ),
         )
-        .innerJoin(teams, eq(competitionTeamMemberships.teamId, teams.id))
-        .where(eq(mvpCompetitions.enabled, true))
-        .orderBy(asc(mvpCompetitions.sortOrder), asc(competitions.name), asc(teams.name));
+        .leftJoin(teams, eq(competitionTeamMemberships.teamId, teams.id))
+        .where(eq(competitions.isPriority, true))
+        .orderBy(asc(competitions.name), asc(teams.name));
 
       const compMap = new Map<string, {
         id: string; name: string; slug: string; sortOrder: number; filterValue: string | null;
@@ -496,11 +494,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const r of rows) {
         let comp = compMap.get(r.compId);
         if (!comp) {
+          const fallbackSortOrder = compMap.size;
           comp = {
             id: r.compId,
             name: r.compName,
             slug: r.compSlug,
-            sortOrder: r.sortOrder,
+            sortOrder: fallbackSortOrder,
             filterValue: compFilterByDbValue.get(r.compName) ?? null,
             teams: [],
           };
