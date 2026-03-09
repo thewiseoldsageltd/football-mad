@@ -36,11 +36,15 @@ function normalizeMappedEntityType(entityType: string): "competition" | "team" |
 export async function syncArticleEntitiesFromTags(
   articleId: string,
   tags: string[],
+  options?: { dryRun?: boolean },
 ): Promise<EntitySyncStats> {
-  await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
-  await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
-  await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
-  await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+  const dryRun = options?.dryRun === true;
+  if (!dryRun) {
+    await db.delete(articleCompetitions).where(eq(articleCompetitions.articleId, articleId));
+    await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
+    await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
+    await db.delete(articleManagers).where(eq(articleManagers.articleId, articleId));
+  }
 
   const competitionIds = new Set<string>();
   const teamIds = new Set<string>();
@@ -98,33 +102,35 @@ export async function syncArticleEntitiesFromTags(
     boundary.filterManagerIds(Array.from(managerIds)),
   ]);
 
-  for (const competitionId of Array.from(allowedCompetitionIds)) {
-    await db
-      .insert(articleCompetitions)
-      .values({ articleId, competitionId, source: "tag", salienceScore: 100 })
-      .onConflictDoNothing();
-  }
-  for (const teamId of Array.from(allowedTeamIds)) {
-    await db
-      .insert(articleTeams)
-      .values({ articleId, teamId, source: "tag", salienceScore: 100 })
-      .onConflictDoNothing();
-  }
-  for (const playerId of Array.from(allowedPlayerIds)) {
-    await db
-      .insert(articlePlayers)
-      .values({ articleId, playerId, source: "tag", salienceScore: 100 })
-      .onConflictDoNothing();
-  }
-  for (const managerId of Array.from(allowedManagerIds)) {
-    await db
-      .insert(articleManagers)
-      .values({ articleId, managerId, source: "tag", salienceScore: 100 })
-      .onConflictDoNothing();
+  if (!dryRun) {
+    for (const competitionId of Array.from(allowedCompetitionIds)) {
+      await db
+        .insert(articleCompetitions)
+        .values({ articleId, competitionId, source: "tag", salienceScore: 100 })
+        .onConflictDoNothing();
+    }
+    for (const teamId of Array.from(allowedTeamIds)) {
+      await db
+        .insert(articleTeams)
+        .values({ articleId, teamId, source: "tag", salienceScore: 100 })
+        .onConflictDoNothing();
+    }
+    for (const playerId of Array.from(allowedPlayerIds)) {
+      await db
+        .insert(articlePlayers)
+        .values({ articleId, playerId, source: "tag", salienceScore: 100 })
+        .onConflictDoNothing();
+    }
+    for (const managerId of Array.from(allowedManagerIds)) {
+      await db
+        .insert(articleManagers)
+        .values({ articleId, managerId, source: "tag", salienceScore: 100 })
+        .onConflictDoNothing();
+    }
   }
 
   console.log(
-    `[article-entity-sync] articleId=${articleId} tagsRead=${rawTagNames.length} aliasMatches=${resolved} inserted competition=${allowedCompetitionIds.size} team=${allowedTeamIds.size} player=${allowedPlayerIds.size} manager=${allowedManagerIds.size}`,
+    `[article-entity-sync] articleId=${articleId} dryRun=${dryRun} tagsRead=${rawTagNames.length} aliasMatches=${resolved} inserted competition=${allowedCompetitionIds.size} team=${allowedTeamIds.size} player=${allowedPlayerIds.size} manager=${allowedManagerIds.size}`,
   );
 
   return {

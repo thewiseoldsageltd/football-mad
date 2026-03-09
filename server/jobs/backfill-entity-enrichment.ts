@@ -456,17 +456,52 @@ async function processTagBatch(
   const cursorId = last.id;
 
   if (dryRun) {
+    let processedArticles = 0;
+    let updatedArticles = 0;
+    let unchangedArticles = 0;
+    let errorArticles = 0;
+    let insertedCompetitions = 0;
+    let insertedTeams = 0;
+    let insertedPlayers = 0;
+    let insertedManagers = 0;
+    let aliasMatches = 0;
+
+    for (const row of rows) {
+      try {
+        const stats = await syncArticleEntitiesFromTags(row.id, (row.tags ?? []) as string[], {
+          dryRun: true,
+        });
+        const insertedTotal =
+          stats.insertedCompetitions +
+          stats.insertedTeams +
+          stats.insertedPlayers +
+          stats.insertedManagers;
+        if (insertedTotal > 0) updatedArticles += 1;
+        else unchangedArticles += 1;
+        insertedCompetitions += stats.insertedCompetitions;
+        insertedTeams += stats.insertedTeams;
+        insertedPlayers += stats.insertedPlayers;
+        insertedManagers += stats.insertedManagers;
+        aliasMatches += stats.resolved;
+      } catch (err) {
+        errorArticles += 1;
+        console.error("[entity-backfill:tags:dry-run] article failed", row.id, err);
+      } finally {
+        processedArticles += 1;
+      }
+    }
+
     return {
       scannedArticles: rows.length,
-      processedArticles: rows.length,
-      updatedArticles: 0,
-      unchangedArticles: rows.length,
-      errorArticles: 0,
-      insertedCompetitions: 0,
-      insertedTeams: 0,
-      insertedPlayers: 0,
-      insertedManagers: 0,
-      aliasMatches: 0,
+      processedArticles,
+      updatedArticles,
+      unchangedArticles,
+      errorArticles,
+      insertedCompetitions,
+      insertedTeams,
+      insertedPlayers,
+      insertedManagers,
+      aliasMatches,
       staleRecovered: 0,
       cursorSortAt,
       cursorId,
