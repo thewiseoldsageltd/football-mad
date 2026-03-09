@@ -303,6 +303,17 @@ function deterministicResidualScopeCondition() {
   );
 }
 
+function enrichQueueCondition() {
+  const staleProcessing = new Date(Date.now() - STALE_PROCESSING_MINUTES * 60 * 1000);
+  return or(
+    eq(articles.entityEnrichStatus, "pending"),
+    and(
+      eq(articles.entityEnrichStatus, "processing"),
+      lt(articles.entityEnrichAttemptedAt, staleProcessing),
+    ),
+  );
+}
+
 async function fetchTagLaneBatch(
   checkpoint: BackfillCheckpoint,
   batchSize: number,
@@ -333,7 +344,11 @@ async function fetchDeterministicLaneBatch(
       attemptedAt: articles.entityEnrichAttemptedAt,
     })
     .from(articles)
-    .where(cursor ? and(deterministicResidualScopeCondition(), cursor) : deterministicResidualScopeCondition())
+    .where(
+      cursor
+        ? and(deterministicResidualScopeCondition(), enrichQueueCondition(), cursor)
+        : and(deterministicResidualScopeCondition(), enrichQueueCondition()),
+    )
     .orderBy(desc(articles.sortAt), desc(articles.id))
     .limit(batchSize);
 }
@@ -622,15 +637,6 @@ async function processDeterministicBatch(
     getLaneLinkTotals(articleIds),
     getEntityTableTotals(articleIds),
   ]);
-
-  await db
-    .update(articles)
-    .set({
-      entityEnrichStatus: "pending",
-      entityEnrichAttemptedAt: null,
-      entityEnrichError: null,
-    })
-    .where(inArray(articles.id, articleIds));
 
   const enriched = await enrichPendingArticles({
     limit: articleIds.length,
