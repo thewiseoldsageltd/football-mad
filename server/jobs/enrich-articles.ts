@@ -15,7 +15,7 @@ import {
   articleManagers,
   articleCompetitions,
 } from "@shared/schema";
-import { eq, desc, or, lt, and } from "drizzle-orm";
+import { eq, desc, or, lt, and, inArray } from "drizzle-orm";
 import { MvpGraphBoundary } from "../lib/mvp-graph-boundary";
 
 const ENRICH_SOURCE = "enrich";
@@ -112,6 +112,7 @@ function matchEntities<T extends { id: string }>(
 export interface EnrichPendingArticlesOptions {
   limit?: number;
   timeBudgetMs?: number;
+  articleIds?: string[];
 }
 
 /** Process up to `limit` pending articles, stop when time budget exceeded. */
@@ -120,7 +121,7 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
   done: number;
   errors: number;
 }> {
-  const { limit = 50, timeBudgetMs = DEFAULT_TIME_BUDGET_MS } = options;
+  const { limit = 50, timeBudgetMs = DEFAULT_TIME_BUDGET_MS, articleIds } = options;
   const start = Date.now();
   let processed = 0;
   let done = 0;
@@ -152,6 +153,14 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
 
   // Pending, or stuck in 'processing' for > 5 min (resumable).
   const staleProcessing = new Date(Date.now() - 5 * 60 * 1000);
+  const statusCondition = or(
+    eq(articles.entityEnrichStatus, "pending"),
+    and(
+      eq(articles.entityEnrichStatus, "processing"),
+      lt(articles.entityEnrichAttemptedAt, staleProcessing)
+    )
+  );
+
   const pending = await db
     .select({
       id: articles.id,
@@ -161,13 +170,12 @@ export async function enrichPendingArticles(options: EnrichPendingArticlesOption
     })
     .from(articles)
     .where(
-      or(
-        eq(articles.entityEnrichStatus, "pending"),
-        and(
-          eq(articles.entityEnrichStatus, "processing"),
-          lt(articles.entityEnrichAttemptedAt, staleProcessing)
+      articleIds && articleIds.length > 0
+        ? and(
+          statusCondition,
+          inArray(articles.id, articleIds),
         )
-      )
+        : statusCondition
     )
     .orderBy(desc(articles.publishedAt))
     .limit(limit);

@@ -54,6 +54,12 @@ import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-image
 import { runBackfillPaMediaEntities } from "./jobs/backfill-pamedia-entities";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
 import {
+  getEntityBackfillStatus,
+  resetEntityBackfillCheckpoint,
+  runEntityBackfill,
+  type EntityBackfillMode,
+} from "./jobs/backfill-entity-enrichment";
+import {
   getPamediaStatus,
   markPamediaEnabled,
   markPamediaRunCompleted,
@@ -2155,6 +2161,113 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         createdPlayersFromPa: 0,
         createdManagersFromPa: 0,
         error: (err as Error).message,
+      });
+    }
+  });
+
+  app.post("/api/jobs/entity-backfill/run", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
+    const run = await startJobRun("entity_backfill", {
+      triggeredBy: "api",
+      query: req.query,
+    });
+    try {
+      await runWithJobContext(run.id, async () => {
+        const modeRaw = String(req.query.mode ?? "all").trim().toLowerCase();
+        const mode: EntityBackfillMode =
+          modeRaw === "tags" || modeRaw === "deterministic" || modeRaw === "all"
+            ? (modeRaw as EntityBackfillMode)
+            : "all";
+
+        const batchSizeRaw = parseInt(String(req.query.batchSize ?? "200"), 10);
+        const timeBudgetRaw = parseInt(String(req.query.timeBudgetMs ?? "30000"), 10);
+        const maxBatchesRaw = parseInt(String(req.query.maxBatches ?? "20"), 10);
+        const dryRun = String(req.query.dryRun ?? "false").toLowerCase() === "true";
+
+        const batchSize = Number.isFinite(batchSizeRaw) ? Math.min(Math.max(batchSizeRaw, 1), 1000) : 200;
+        const timeBudgetMs = Number.isFinite(timeBudgetRaw) ? Math.min(Math.max(timeBudgetRaw, 1000), 300000) : 30000;
+        const maxBatches = Number.isFinite(maxBatchesRaw) ? Math.min(Math.max(maxBatchesRaw, 1), 500) : 20;
+
+        const result = await runEntityBackfill({
+          mode,
+          batchSize,
+          timeBudgetMs,
+          maxBatches,
+          dryRun,
+          runId: run.id,
+        });
+
+        const finishCounters: Record<string, number | undefined> = {
+          scanned_articles: result.counters.scanned_articles,
+          processed_articles: result.counters.processed_articles,
+          updated_articles: result.counters.updated_articles,
+          unchanged_articles: result.counters.unchanged_articles,
+          error_articles: result.counters.error_articles,
+          inserted_competitions: result.counters.inserted_competitions,
+          inserted_teams: result.counters.inserted_teams,
+          inserted_players: result.counters.inserted_players,
+          inserted_managers: result.counters.inserted_managers,
+          alias_matches: result.counters.alias_matches,
+          stale_recovered: result.counters.stale_recovered,
+          time_ms: result.counters.time_ms,
+          batch_size: batchSize,
+          max_batches: maxBatches,
+        };
+
+        const status = result.ok && result.stoppedReason === "done" ? "success" : "partial";
+        await finishJobRun(run.id, {
+          status,
+          counters: finishCounters,
+          stoppedReason: result.stoppedReason,
+          error: null,
+        });
+
+        res.status(200).json({ runId: run.id, ...result });
+      });
+    } catch (err) {
+      await finishJobRun(run.id, { status: "error", error: String(err) });
+      res.status(500).json({
+        ok: false,
+        runId: run.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  app.get("/api/jobs/entity-backfill/status", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (_req, res) => {
+    try {
+      const status = await getEntityBackfillStatus();
+      res.status(200).json({
+        ok: true,
+        status,
+      });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  app.post("/api/jobs/entity-backfill/reset", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
+    try {
+      const laneRaw = String(req.query.lane ?? "all").trim().toLowerCase();
+      const lane =
+        laneRaw === "tags" || laneRaw === "deterministic" || laneRaw === "all"
+          ? (laneRaw as "tags" | "deterministic" | "all")
+          : "all";
+      const confirmation = String(req.query.confirm ?? "").trim();
+      if (confirmation !== "RESET") {
+        return res.status(400).json({
+          ok: false,
+          error: "Missing confirm=RESET",
+        });
+      }
+      const result = await resetEntityBackfillCheckpoint(lane);
+      res.status(200).json({ ok: true, ...result });
+    } catch (err) {
+      res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   });
