@@ -12,6 +12,19 @@ type Candidate = {
   paTagNameNormalized: string;
 };
 
+type CandidateBuildResult = {
+  candidates: Candidate[];
+  excludedAmbiguous: number;
+  invalidOrMissingTarget: number;
+  invalidDetails?: string[];
+};
+
+type CandidateClassification = {
+  attempted: number;
+  wouldInsert: Candidate[];
+  alreadyExists: Candidate[];
+};
+
 type CompetitionAliasSeed = {
   paTagName: string;
   slugCandidates: string[];
@@ -46,7 +59,7 @@ function parseArgs(argv: string[]): { dryRun: boolean } {
   return { dryRun };
 }
 
-async function fetchMvpPlayerCandidates(): Promise<Candidate[]> {
+async function fetchMvpPlayerCandidates(): Promise<CandidateBuildResult> {
   const result = await pool.query<{
     id: string;
     name: string;
@@ -82,9 +95,13 @@ async function fetchMvpPlayerCandidates(): Promise<Candidate[]> {
   `);
 
   const out: Candidate[] = [];
+  let excludedAmbiguous = 0;
   for (const row of result.rows) {
     const paTagNameNormalized = normalizePaTagName(row.name);
-    if (EXCLUDED_AMBIGUOUS_NORMALIZED.has(paTagNameNormalized)) continue;
+    if (EXCLUDED_AMBIGUOUS_NORMALIZED.has(paTagNameNormalized)) {
+      excludedAmbiguous += 1;
+      continue;
+    }
     out.push({
       entityType: "player",
       entityId: row.id,
@@ -94,10 +111,14 @@ async function fetchMvpPlayerCandidates(): Promise<Candidate[]> {
       paTagNameNormalized,
     });
   }
-  return out;
+  return {
+    candidates: out,
+    excludedAmbiguous,
+    invalidOrMissingTarget: 0,
+  };
 }
 
-async function fetchMvpManagerCandidates(): Promise<Candidate[]> {
+async function fetchMvpManagerCandidates(): Promise<CandidateBuildResult> {
   const result = await pool.query<{
     id: string;
     name: string;
@@ -128,9 +149,13 @@ async function fetchMvpManagerCandidates(): Promise<Candidate[]> {
   `);
 
   const out: Candidate[] = [];
+  let excludedAmbiguous = 0;
   for (const row of result.rows) {
     const paTagNameNormalized = normalizePaTagName(row.name);
-    if (EXCLUDED_AMBIGUOUS_NORMALIZED.has(paTagNameNormalized)) continue;
+    if (EXCLUDED_AMBIGUOUS_NORMALIZED.has(paTagNameNormalized)) {
+      excludedAmbiguous += 1;
+      continue;
+    }
     out.push({
       entityType: "manager",
       entityId: row.id,
@@ -140,11 +165,16 @@ async function fetchMvpManagerCandidates(): Promise<Candidate[]> {
       paTagNameNormalized,
     });
   }
-  return out;
+  return {
+    candidates: out,
+    excludedAmbiguous,
+    invalidOrMissingTarget: 0,
+  };
 }
 
-async function fetchCompetitionAliasCandidates(): Promise<Candidate[]> {
+async function fetchCompetitionAliasCandidates(): Promise<CandidateBuildResult> {
   const out: Candidate[] = [];
+  const invalidDetails: string[] = [];
   for (const seed of COMPETITION_ALIAS_SEEDS) {
     const rowRes = await pool.query<{
       id: string;
@@ -169,9 +199,10 @@ async function fetchCompetitionAliasCandidates(): Promise<Candidate[]> {
 
     const row = rowRes.rows[0];
     if (!row) {
-      throw new Error(
+      invalidDetails.push(
         `Could not resolve competition for seed "${seed.paTagName}" using slugs: ${seed.slugCandidates.join(", ")}`,
       );
+      continue;
     }
 
     out.push({
@@ -183,27 +214,98 @@ async function fetchCompetitionAliasCandidates(): Promise<Candidate[]> {
       paTagNameNormalized: normalizePaTagName(seed.paTagName),
     });
   }
-  return out;
+  return {
+    candidates: out,
+    excludedAmbiguous: 0,
+    invalidOrMissingTarget: invalidDetails.length,
+    invalidDetails,
+  };
 }
 
-function dedupeCandidates(candidates: Candidate[]): Candidate[] {
+function dedupeCandidates(candidates: Candidate[]): {
+  deduped: Candidate[];
+  droppedDuplicates: number;
+} {
   const seen = new Set<string>();
-  const out: Candidate[] = [];
+  const deduped: Candidate[] = [];
+  let droppedDuplicates = 0;
   for (const c of candidates) {
     const key = `${c.entityType}|${c.entityId}|${c.paTagNameNormalized}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) {
+      droppedDuplicates += 1;
+      continue;
+    }
     seen.add(key);
-    out.push(c);
+    deduped.push(c);
   }
-  return out;
+  return { deduped, droppedDuplicates };
 }
 
-async function insertAliasCandidates(candidates: Candidate[], dryRun: boolean): Promise<{
+async function classifyCandidatesByExisting(candidates: Candidate[]): Promise<CandidateClassification> {
+  if (candidates.length === 0) {
+    return { attempted: 0, wouldInsert: [], alreadyExists: [] };
+  }
+
+  const res = await pool.query<{ ord: string; already_exists: boolean }>(
+    `
+      WITH input_rows AS (
+        SELECT
+          x.entity_type::text AS entity_type,
+          x.entity_id::text AS entity_id,
+          x.pa_tag_name_normalized::text AS pa_tag_name_normalized,
+          x.ord::int AS ord
+        FROM unnest(
+          $1::text[],
+          $2::text[],
+          $3::text[]
+        ) WITH ORDINALITY AS x(entity_type, entity_id, pa_tag_name_normalized, ord)
+      )
+      SELECT
+        i.ord::text AS ord,
+        EXISTS (
+          SELECT 1
+          FROM pa_entity_alias_map am
+          WHERE am.source = $4
+            AND am.entity_type = i.entity_type
+            AND am.entity_id = i.entity_id
+            AND am.pa_tag_name_normalized = i.pa_tag_name_normalized
+        ) AS already_exists
+      FROM input_rows i
+      ORDER BY i.ord ASC
+    `,
+    [
+      candidates.map((c) => c.entityType),
+      candidates.map((c) => c.entityId),
+      candidates.map((c) => c.paTagNameNormalized),
+      SOURCE,
+    ],
+  );
+
+  const alreadyByOrd = new Map<number, boolean>();
+  for (const row of res.rows) {
+    alreadyByOrd.set(Number(row.ord), row.already_exists);
+  }
+
+  const alreadyExists: Candidate[] = [];
+  const wouldInsert: Candidate[] = [];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const ord = i + 1;
+    if (alreadyByOrd.get(ord)) alreadyExists.push(candidates[i]);
+    else wouldInsert.push(candidates[i]);
+  }
+
+  return {
+    attempted: candidates.length,
+    wouldInsert,
+    alreadyExists,
+  };
+}
+
+async function insertAliasCandidates(candidates: Candidate[]): Promise<{
   attempted: number;
   inserted: number;
 }> {
   if (candidates.length === 0) return { attempted: 0, inserted: 0 };
-  if (dryRun) return { attempted: candidates.length, inserted: 0 };
 
   const res = await pool.query<{ inserted: string }>(
     `
@@ -289,21 +391,39 @@ async function insertAliasCandidates(candidates: Candidate[], dryRun: boolean): 
 async function main(): Promise<void> {
   const { dryRun } = parseArgs(process.argv.slice(2));
 
-  const [playerCandidatesRaw, managerCandidatesRaw, competitionCandidatesRaw] = await Promise.all([
+  const [playerBuild, managerBuild, competitionBuild] = await Promise.all([
     fetchMvpPlayerCandidates(),
     fetchMvpManagerCandidates(),
     fetchCompetitionAliasCandidates(),
   ]);
 
-  const playerCandidates = dedupeCandidates(playerCandidatesRaw);
-  const managerCandidates = dedupeCandidates(managerCandidatesRaw);
-  const competitionCandidates = dedupeCandidates(competitionCandidatesRaw);
+  const playerDeduped = dedupeCandidates(playerBuild.candidates);
+  const managerDeduped = dedupeCandidates(managerBuild.candidates);
+  const competitionDeduped = dedupeCandidates(competitionBuild.candidates);
 
-  const [playerInsert, managerInsert, competitionInsert] = await Promise.all([
-    insertAliasCandidates(playerCandidates, dryRun),
-    insertAliasCandidates(managerCandidates, dryRun),
-    insertAliasCandidates(competitionCandidates, dryRun),
+  const [playerClassification, managerClassification, competitionClassification] = await Promise.all([
+    classifyCandidatesByExisting(playerDeduped.deduped),
+    classifyCandidatesByExisting(managerDeduped.deduped),
+    classifyCandidatesByExisting(competitionDeduped.deduped),
   ]);
+
+  if (!dryRun && competitionBuild.invalidOrMissingTarget > 0) {
+    throw new Error(
+      `Competition alias seeds missing targets: ${competitionBuild.invalidDetails?.join(" | ") ?? "(unknown)"}`,
+    );
+  }
+
+  const [playerInsert, managerInsert, competitionInsert] = dryRun
+    ? [
+      { attempted: playerClassification.attempted, inserted: 0 },
+      { attempted: managerClassification.attempted, inserted: 0 },
+      { attempted: competitionClassification.attempted, inserted: 0 },
+    ]
+    : await Promise.all([
+      insertAliasCandidates(playerClassification.wouldInsert),
+      insertAliasCandidates(managerClassification.wouldInsert),
+      insertAliasCandidates(competitionClassification.wouldInsert),
+    ]);
 
   console.log(
     JSON.stringify(
@@ -312,19 +432,32 @@ async function main(): Promise<void> {
         dryRun,
         excludedAmbiguousNormalized: Array.from(EXCLUDED_AMBIGUOUS_NORMALIZED),
         players: {
-          attempted: playerInsert.attempted,
+          attempted: playerClassification.attempted,
+          wouldInsert: playerClassification.wouldInsert.length,
+          alreadyExists: playerClassification.alreadyExists.length,
+          excludedAmbiguous: playerBuild.excludedAmbiguous,
+          invalidOrMissingTarget: playerBuild.invalidOrMissingTarget,
+          droppedInBatchDuplicate: playerDeduped.droppedDuplicates,
           inserted: playerInsert.inserted,
-          skippedExistingOrDuplicate: playerInsert.attempted - playerInsert.inserted,
         },
         managers: {
-          attempted: managerInsert.attempted,
+          attempted: managerClassification.attempted,
+          wouldInsert: managerClassification.wouldInsert.length,
+          alreadyExists: managerClassification.alreadyExists.length,
+          excludedAmbiguous: managerBuild.excludedAmbiguous,
+          invalidOrMissingTarget: managerBuild.invalidOrMissingTarget,
+          droppedInBatchDuplicate: managerDeduped.droppedDuplicates,
           inserted: managerInsert.inserted,
-          skippedExistingOrDuplicate: managerInsert.attempted - managerInsert.inserted,
         },
         competitions: {
-          attempted: competitionInsert.attempted,
+          attempted: competitionClassification.attempted,
+          wouldInsert: competitionClassification.wouldInsert.length,
+          alreadyExists: competitionClassification.alreadyExists.length,
+          excludedAmbiguous: competitionBuild.excludedAmbiguous,
+          invalidOrMissingTarget: competitionBuild.invalidOrMissingTarget,
+          invalidDetails: competitionBuild.invalidDetails ?? [],
+          droppedInBatchDuplicate: competitionDeduped.droppedDuplicates,
           inserted: competitionInsert.inserted,
-          skippedExistingOrDuplicate: competitionInsert.attempted - competitionInsert.inserted,
           seeds: COMPETITION_ALIAS_SEEDS.map((s) => s.paTagName),
         },
       },
