@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships } from "@shared/schema";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -70,8 +70,10 @@ import {
 import { normalizeText, computeSalienceScore } from "./utils/text";
 import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
+import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
+const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
 let liveMatchesCache: any = null;
 let liveMatchesLastFetch = 0;
 const LIVE_CACHE_TTL_MS = 30000; // 30 seconds
@@ -361,6 +363,90 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.end(body);
   }
 
+  async function resolveCanonicalTeamPublicSlug(requestSlug: string): Promise<string | null> {
+    const [teamByInternalSlug] = await db
+      .select({ id: teams.id, slug: teams.slug })
+      .from(teams)
+      .where(eq(teams.slug, requestSlug))
+      .limit(1);
+
+    if (teamByInternalSlug) {
+      const [alias] = await db
+        .select({ publicSlug: paEntityAliasMap.publicSlug })
+        .from(paEntityAliasMap)
+        .where(
+          and(
+            eq(paEntityAliasMap.source, "pa_media"),
+            inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+            eq(paEntityAliasMap.entityId, teamByInternalSlug.id),
+            drizzleSql`${paEntityAliasMap.publicSlug} IS NOT NULL AND trim(${paEntityAliasMap.publicSlug}) <> ''`,
+          ),
+        )
+        .limit(1);
+
+      const canonicalSlug = alias?.publicSlug ?? teamByInternalSlug.slug;
+      return canonicalSlug || null;
+    }
+
+    const aliasMatches = await db
+      .select({ entityId: paEntityAliasMap.entityId })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, "pa_media"),
+          inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+          eq(paEntityAliasMap.publicSlug, requestSlug),
+        ),
+      )
+      .limit(2);
+
+    const uniqueEntityIds = Array.from(new Set(aliasMatches.map((row) => row.entityId)));
+    if (uniqueEntityIds.length === 1) return requestSlug;
+    return null;
+  }
+
+  async function resolveCanonicalCompetitionSlug(requestSlug: string): Promise<string | null> {
+    const [competitionByCanonicalSlug] = await db
+      .select({ canonicalSlug: competitions.canonicalSlug, slug: competitions.slug })
+      .from(competitions)
+      .where(eq(competitions.canonicalSlug, requestSlug))
+      .limit(1);
+    if (competitionByCanonicalSlug) {
+      return competitionByCanonicalSlug.canonicalSlug || competitionByCanonicalSlug.slug || requestSlug;
+    }
+
+    const [competitionByAliasPublicSlug] = await db
+      .select({
+        canonicalSlug: competitions.canonicalSlug,
+        slug: competitions.slug,
+      })
+      .from(paEntityAliasMap)
+      .innerJoin(competitions, eq(paEntityAliasMap.entityId, competitions.id))
+      .where(
+        and(
+          eq(paEntityAliasMap.source, "pa_media"),
+          inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
+          eq(paEntityAliasMap.publicSlug, requestSlug),
+        ),
+      )
+      .limit(1);
+    if (competitionByAliasPublicSlug) {
+      return competitionByAliasPublicSlug.canonicalSlug || requestSlug;
+    }
+
+    const [competitionByInternalSlug] = await db
+      .select({ canonicalSlug: competitions.canonicalSlug, slug: competitions.slug })
+      .from(competitions)
+      .where(eq(competitions.slug, requestSlug))
+      .limit(1);
+    if (competitionByInternalSlug) {
+      return competitionByInternalSlug.canonicalSlug || competitionByInternalSlug.slug || requestSlug;
+    }
+
+    return null;
+  }
+
+
   app.get("/api/teams", async (req, res) => {
     try {
       const teams = await storage.getTeams();
@@ -495,10 +581,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(competitions.name), asc(teams.name));
 
       const presenter = new EntityPresentationResolver();
-      const competitionPresentation = await presenter.resolveCompetitions(
-        Array.from(new Set(rows.map((r) => r.compId))),
-        { source: "pa_media" },
-      );
+      const [competitionPresentation, teamPresentation] = await Promise.all([
+        presenter.resolveCompetitions(
+          Array.from(new Set(rows.map((r) => r.compId))),
+          { source: "pa_media" },
+        ),
+        presenter.resolveTeams(
+          Array.from(new Set(rows.map((r) => r.teamId).filter((id): id is string => Boolean(id)))),
+          { source: "pa_media" },
+        ),
+      ]);
 
       const compMap = new Map<string, {
         id: string; name: string; slug: string; sortOrder: number; filterValue: string;
@@ -524,7 +616,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           compMap.set(r.compId, comp);
         }
         if (r.teamId && !comp.teams.some((t) => t.id === r.teamId)) {
-          comp.teams.push({ id: r.teamId, name: r.teamName, slug: r.teamSlug, shortName: r.teamShortName });
+          const teamResolved = teamPresentation.get(r.teamId);
+          const resolvedSlug = teamResolved?.slug || r.teamSlug || "";
+          if (!resolvedSlug) continue;
+          comp.teams.push({
+            id: r.teamId,
+            name: teamResolved?.name || r.teamName || "Unknown Team",
+            slug: resolvedSlug,
+            shortName: r.teamShortName,
+          });
         }
       }
 
@@ -7410,6 +7510,123 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching article:", error);
       res.status(500).json({ error: "Failed to fetch article" });
+    }
+  });
+
+  // ========== PUBLIC ENTITY REDIRECTS (must run before SPA fallback) ==========
+  app.get("/teams/:slug", async (req, res, next) => {
+    try {
+      const requestedSlug = req.params.slug;
+      const canonicalSlug = await resolveCanonicalTeamPublicSlug(requestedSlug);
+      if (canonicalSlug && canonicalSlug !== requestedSlug) {
+        return res.redirect(301, `/teams/${canonicalSlug}`);
+      }
+      return next();
+    } catch (error) {
+      console.error("[canonical-team-redirect] Error:", error);
+      return next();
+    }
+  });
+
+  app.get("/competitions/:slug", async (req, res, next) => {
+    try {
+      const requestedSlug = req.params.slug;
+      const canonicalSlug = await resolveCanonicalCompetitionSlug(requestedSlug);
+      if (canonicalSlug && canonicalSlug !== requestedSlug) {
+        return res.redirect(301, `/competitions/${canonicalSlug}`);
+      }
+      return next();
+    } catch (error) {
+      console.error("[canonical-competition-redirect] Error:", error);
+      return next();
+    }
+  });
+
+  app.get("/tag/:slug", async (req, res) => {
+    try {
+      if (!ENABLE_TAG_REDIRECTS) {
+        return res.status(404).json({ error: "Not found" });
+      }
+
+      const normalizedTag = normalizePaTagForAliasLookup(req.params.slug ?? "");
+      if (!normalizedTag) {
+        return res.status(404).json({ error: "Not found" });
+      }
+
+      const rows = await db
+        .select({
+          entityType: paEntityAliasMap.entityType,
+          entityId: paEntityAliasMap.entityId,
+          publicSlug: paEntityAliasMap.publicSlug,
+        })
+        .from(paEntityAliasMap)
+        .where(
+          and(
+            eq(paEntityAliasMap.source, "pa_media"),
+            eq(paEntityAliasMap.paTagNameNormalized, normalizedTag),
+          ),
+        )
+        .limit(10);
+
+      const distinctTargets = Array.from(
+        new Map(
+          rows.map((row) => [`${row.entityType}:${row.entityId}`, row]),
+        ).values(),
+      );
+
+      if (distinctTargets.length !== 1) {
+        return res.status(404).json({ error: "Not found" });
+      }
+
+      const target = distinctTargets[0];
+      const normalizedType = target.entityType.toLowerCase();
+
+      if (normalizedType === "team" || normalizedType === "teams") {
+        const [team] = await db
+          .select({ slug: teams.slug })
+          .from(teams)
+          .where(eq(teams.id, target.entityId))
+          .limit(1);
+        const slug = target.publicSlug || team?.slug;
+        if (!slug) return res.status(404).json({ error: "Not found" });
+        return res.redirect(302, `/teams/${slug}`);
+      }
+
+      if (normalizedType === "competition" || normalizedType === "competitions") {
+        const [competition] = await db
+          .select({ canonicalSlug: competitions.canonicalSlug, slug: competitions.slug })
+          .from(competitions)
+          .where(eq(competitions.id, target.entityId))
+          .limit(1);
+        const slug = competition?.canonicalSlug || target.publicSlug || competition?.slug;
+        if (!slug) return res.status(404).json({ error: "Not found" });
+        return res.redirect(302, `/competitions/${slug}`);
+      }
+
+      if (normalizedType === "player" || normalizedType === "players") {
+        const [player] = await db
+          .select({ slug: players.slug })
+          .from(players)
+          .where(eq(players.id, target.entityId))
+          .limit(1);
+        if (!player?.slug) return res.status(404).json({ error: "Not found" });
+        return res.redirect(302, `/players/${player.slug}`);
+      }
+
+      if (normalizedType === "manager" || normalizedType === "managers") {
+        const [manager] = await db
+          .select({ slug: managers.slug })
+          .from(managers)
+          .where(eq(managers.id, target.entityId))
+          .limit(1);
+        if (!manager?.slug) return res.status(404).json({ error: "Not found" });
+        return res.redirect(302, `/managers/${manager.slug}`);
+      }
+
+      return res.status(404).json({ error: "Not found" });
+    } catch (error) {
+      console.error("[tag-redirect]", error);
+      return res.status(500).json({ error: "Failed to resolve tag redirect" });
     }
   });
 
