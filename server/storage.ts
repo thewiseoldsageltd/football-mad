@@ -27,6 +27,7 @@ import {
 import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
+import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
@@ -683,27 +684,60 @@ export class DatabaseStorage implements IStorage {
       presenter.resolveCompetitions(competitionRows.map((row) => row.id), { source: article.source }),
     ]);
 
+    const resolvedTeams = teamRows.map((row) => {
+      const override = teamPresentationMap.get(row.id);
+      return {
+        ...row,
+        name: override?.name || row.name,
+        slug: override?.slug || row.slug,
+        logoUrl: override?.logoUrl ?? row.logoUrl,
+      };
+    });
+
+    const resolvedCompetitions = competitionRows.map((row) => {
+      const override = competitionPresentationMap.get(row.id);
+      return {
+        ...row,
+        name: override?.name || row.name,
+        slug: override?.slug || row.slug,
+      };
+    });
+
+    const inlineEntities: InlineLinkEntity[] = [
+      ...resolvedCompetitions.map((row) => ({
+        id: row.id,
+        type: "competition" as const,
+        name: row.name,
+        href: `/competitions/${row.slug}`,
+      })),
+      ...resolvedTeams.map((row) => ({
+        id: row.id,
+        type: "team" as const,
+        name: row.name,
+        href: `/teams/${row.slug}`,
+      })),
+      ...playerRows.map((row) => ({
+        id: row.id,
+        type: "player" as const,
+        name: row.name,
+        href: `/players/${row.slug}`,
+      })),
+      ...managerRows.map((row) => ({
+        id: row.id,
+        type: "manager" as const,
+        name: row.name,
+        href: `/managers/${row.slug}`,
+      })),
+    ];
+    const linkedContent = linkArticleHtmlFirstMentions(article.content, inlineEntities);
+
     return {
       ...article,
-      entityTeams: teamRows.map((row) => {
-        const override = teamPresentationMap.get(row.id);
-        return {
-          ...row,
-          name: override?.name || row.name,
-          slug: override?.slug || row.slug,
-          logoUrl: override?.logoUrl ?? row.logoUrl,
-        };
-      }),
+      content: linkedContent,
+      entityTeams: resolvedTeams,
       entityPlayers: playerRows,
       entityManagers: managerRows,
-      entityCompetitions: competitionRows.map((row) => {
-        const override = competitionPresentationMap.get(row.id);
-        return {
-          ...row,
-          name: override?.name || row.name,
-          slug: override?.slug || row.slug,
-        };
-      }),
+      entityCompetitions: resolvedCompetitions,
     };
   }
 

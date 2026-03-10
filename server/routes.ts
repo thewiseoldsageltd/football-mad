@@ -71,6 +71,7 @@ import { normalizeText, computeSalienceScore } from "./utils/text";
 import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
+import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
@@ -7442,6 +7443,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           slug: presentation?.slug || competition.slug,
         };
       });
+
+      const inlineEntities: InlineLinkEntity[] = [
+        ...linkedCompetitions.map((c) => ({
+          id: c.id,
+          type: "competition" as const,
+          name: c.name,
+          href: `/competitions/${c.slug}`,
+        })),
+        ...linkedTeams.map((t) => ({
+          id: t.id,
+          type: "team" as const,
+          name: t.name,
+          href: `/teams/${t.slug}`,
+        })),
+        ...linkedPlayers.map((p) => ({
+          id: p.id,
+          type: "player" as const,
+          name: p.name,
+          href: `/players/${p.slug}`,
+        })),
+        ...linkedManagers.map((m) => ({
+          id: m.id,
+          type: "manager" as const,
+          name: m.name,
+          href: `/managers/${m.slug}`,
+        })),
+      ];
+      const linkedContent = linkArticleHtmlFirstMentions(article.content, inlineEntities);
       
       // Find more-like-this articles (share entities or same competition)
       let moreLikeThis: any[] = [];
@@ -7497,6 +7526,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({
         article: {
           ...article,
+          content: linkedContent,
           viewCount: (article.viewCount || 0) + 1,
         },
         entities: {
