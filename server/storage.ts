@@ -180,19 +180,108 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private async getTeamPublicSlugMap(teamIds: string[]): Promise<Map<string, string>> {
+    const uniqueIds = Array.from(new Set(teamIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        entityId: paEntityAliasMap.entityId,
+        publicSlug: paEntityAliasMap.publicSlug,
+        createdAt: paEntityAliasMap.createdAt,
+      })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+          inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+          inArray(paEntityAliasMap.entityId, uniqueIds),
+          isNotNull(paEntityAliasMap.publicSlug),
+          sql`trim(${paEntityAliasMap.publicSlug}) <> ''`,
+        ),
+      )
+      .orderBy(desc(paEntityAliasMap.createdAt));
+
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (!row.publicSlug) continue;
+      if (!map.has(row.entityId)) map.set(row.entityId, row.publicSlug);
+    }
+    return map;
+  }
+
+  private async resolveTeamIdByPublicSlug(publicSlug: string): Promise<string | undefined> {
+    const rows = await db
+      .select({ entityId: paEntityAliasMap.entityId })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+          inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+          eq(paEntityAliasMap.publicSlug, publicSlug),
+        ),
+      )
+      .limit(2);
+    const ids = Array.from(new Set(rows.map((row) => row.entityId)));
+    if (ids.length === 1) return ids[0];
+    if (ids.length > 1) {
+      console.warn(`[team-resolver] ambiguous public slug '${publicSlug}' matched multiple team ids`);
+    }
+    return undefined;
+  }
+
+  private async resolveEntityIdByPublicSlug(
+    publicSlug: string,
+    entityTypes: string[],
+  ): Promise<string | undefined> {
+    const rows = await db
+      .select({ entityId: paEntityAliasMap.entityId })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+          inArray(paEntityAliasMap.entityType, entityTypes as [string, ...string[]]),
+          eq(paEntityAliasMap.publicSlug, publicSlug),
+        ),
+      )
+      .limit(2);
+    const ids = Array.from(new Set(rows.map((row) => row.entityId)));
+    if (ids.length === 1) return ids[0];
+    if (ids.length > 1) {
+      console.warn(
+        `[entity-resolver] ambiguous public slug '${publicSlug}' matched multiple ids for [${entityTypes.join(", ")}]`,
+      );
+    }
+    return undefined;
+  }
+
   // Teams
   async getTeams(): Promise<Team[]> {
-    return db.select().from(teams).orderBy(teams.name);
+    const rows = await db.select().from(teams).orderBy(teams.name);
+    const slugMap = await this.getTeamPublicSlugMap(rows.map((row) => row.id));
+    return rows.map((row) => ({ ...row, slug: slugMap.get(row.id) ?? row.slug }));
   }
 
   async getTeamBySlug(slug: string): Promise<Team | undefined> {
-    const [team] = await db.select().from(teams).where(eq(teams.slug, slug));
-    return team;
+    const teamId = await this.resolveTeamIdByPublicSlug(slug);
+    if (teamId) {
+      const [teamByPublicSlug] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+      if (!teamByPublicSlug) return undefined;
+      const slugMap = await this.getTeamPublicSlugMap([teamByPublicSlug.id]);
+      return { ...teamByPublicSlug, slug: slugMap.get(teamByPublicSlug.id) ?? teamByPublicSlug.slug };
+    }
+
+    const [teamByInternalSlug] = await db.select().from(teams).where(eq(teams.slug, slug)).limit(1);
+    if (!teamByInternalSlug) return undefined;
+    const slugMap = await this.getTeamPublicSlugMap([teamByInternalSlug.id]);
+    return { ...teamByInternalSlug, slug: slugMap.get(teamByInternalSlug.id) ?? teamByInternalSlug.slug };
   }
 
   async getTeamById(id: string): Promise<Team | undefined> {
-    const [team] = await db.select().from(teams).where(eq(teams.id, id));
-    return team;
+    const [team] = await db.select().from(teams).where(eq(teams.id, id)).limit(1);
+    if (!team) return undefined;
+    const slugMap = await this.getTeamPublicSlugMap([team.id]);
+    return { ...team, slug: slugMap.get(team.id) ?? team.slug };
   }
 
   async createTeam(data: InsertTeam): Promise<Team> {
@@ -258,8 +347,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined> {
-    const [player] = await db.select().from(players).where(eq(players.slug, slug)).limit(1);
-    if (!player) return undefined;
+    let [player] = await db.select().from(players).where(eq(players.slug, slug)).limit(1);
+    if (!player) {
+      const playerId = await this.resolveEntityIdByPublicSlug(slug, ["player", "players"]);
+      if (!playerId) return undefined;
+      [player] = await db.select().from(players).where(eq(players.id, playerId)).limit(1);
+      if (!player) return undefined;
+    }
 
     const now = new Date();
     const [latestActiveMembership] = await db
@@ -335,8 +429,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getManagerBySlug(slug: string): Promise<(Manager & { team?: Team | null }) | undefined> {
-    const [manager] = await db.select().from(managers).where(eq(managers.slug, slug));
-    if (!manager) return undefined;
+    let [manager] = await db.select().from(managers).where(eq(managers.slug, slug));
+    if (!manager) {
+      const managerId = await this.resolveEntityIdByPublicSlug(slug, ["manager", "managers"]);
+      if (!managerId) return undefined;
+      [manager] = await db.select().from(managers).where(eq(managers.id, managerId)).limit(1);
+      if (!manager) return undefined;
+    }
 
     const boundary = new MvpGraphBoundary();
     const mvpTeamIds = await boundary.getMvpTeamIds();
@@ -899,8 +998,23 @@ export class DatabaseStorage implements IStorage {
     
     let teamIds: string[] = [];
     if (teamSlugs.length > 0) {
-      const teamResults = await db.select().from(teams).where(inArray(teams.slug, teamSlugs));
-      teamIds = teamResults.map(t => t.id);
+      const [teamResults, aliasTeamResults] = await Promise.all([
+        db.select({ id: teams.id }).from(teams).where(inArray(teams.slug, teamSlugs)),
+        db
+          .select({ id: paEntityAliasMap.entityId })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+              inArray(paEntityAliasMap.publicSlug, teamSlugs),
+            ),
+          ),
+      ]);
+      teamIds = Array.from(new Set([
+        ...teamResults.map((t) => t.id),
+        ...aliasTeamResults.map((t) => t.id),
+      ]));
     }
     
     // Lightweight fields for article list (no content/html)
@@ -1120,6 +1234,7 @@ export class DatabaseStorage implements IStorage {
   async getNewsArchiveByEntity(params: NewsArchiveParams): Promise<NewsArchiveResponse> {
     const { entityType, entitySlug, cursor } = params;
     const limit = Math.min(Math.max(1, params.limit ?? 15), 50);
+    let resolvedEntitySlug = entitySlug;
 
     const listFields = {
       id: articles.id,
@@ -1146,19 +1261,13 @@ export class DatabaseStorage implements IStorage {
 
     let entityId: string | null = null;
     if (entityType === "competition") {
-      const [competitionBySlugOrCanonical] = await db
+      const [competitionByCanonical] = await db
         .select({ id: competitions.id })
         .from(competitions)
-        .where(
-          or(
-            eq(competitions.slug, entitySlug),
-            eq(competitions.canonicalSlug, entitySlug),
-          ),
-        )
+        .where(eq(competitions.canonicalSlug, entitySlug))
         .limit(1);
-
-      if (competitionBySlugOrCanonical) {
-        entityId = competitionBySlugOrCanonical.id;
+      if (competitionByCanonical) {
+        entityId = competitionByCanonical.id;
       } else {
         const [competitionByPublicSlug] = await db
           .select({ id: paEntityAliasMap.entityId })
@@ -1171,29 +1280,121 @@ export class DatabaseStorage implements IStorage {
             ),
           )
           .limit(1);
-        entityId = competitionByPublicSlug?.id ?? null;
+        if (competitionByPublicSlug) {
+          entityId = competitionByPublicSlug.id;
+        } else {
+          const [competitionByInternalSlug] = await db
+            .select({ id: competitions.id })
+            .from(competitions)
+            .where(eq(competitions.slug, entitySlug))
+            .limit(1);
+          entityId = competitionByInternalSlug?.id ?? null;
+        }
+      }
+      if (entityId) {
+        const [canonicalCompetition] = await db
+          .select({ slug: competitions.slug, canonicalSlug: competitions.canonicalSlug })
+          .from(competitions)
+          .where(eq(competitions.id, entityId))
+          .limit(1);
+        resolvedEntitySlug =
+          canonicalCompetition?.canonicalSlug ||
+          canonicalCompetition?.slug ||
+          entitySlug;
       }
     } else if (entityType === "team") {
-      const [team] = await db
-        .select({ id: teams.id })
-        .from(teams)
-        .where(eq(teams.slug, entitySlug))
+      const [teamByPublicSlug] = await db
+        .select({ id: paEntityAliasMap.entityId })
+        .from(paEntityAliasMap)
+        .where(
+          and(
+            eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+            inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+            eq(paEntityAliasMap.publicSlug, entitySlug),
+          ),
+        )
         .limit(1);
-      entityId = team?.id ?? null;
+      if (teamByPublicSlug) {
+        entityId = teamByPublicSlug.id;
+      } else {
+        const [teamByInternalSlug] = await db
+          .select({ id: teams.id })
+          .from(teams)
+          .where(eq(teams.slug, entitySlug))
+          .limit(1);
+        entityId = teamByInternalSlug?.id ?? null;
+      }
+      if (entityId) {
+        const slugMap = await this.getTeamPublicSlugMap([entityId]);
+        const [canonicalTeam] = await db
+          .select({ slug: teams.slug })
+          .from(teams)
+          .where(eq(teams.id, entityId))
+          .limit(1);
+        resolvedEntitySlug = slugMap.get(entityId) ?? canonicalTeam?.slug ?? entitySlug;
+      }
     } else if (entityType === "player") {
       const [player] = await db
         .select({ id: players.id })
         .from(players)
         .where(eq(players.slug, entitySlug))
         .limit(1);
-      entityId = player?.id ?? null;
+      if (player) {
+        entityId = player.id;
+        resolvedEntitySlug = entitySlug;
+      } else {
+        const [playerByPublicSlug] = await db
+          .select({ id: paEntityAliasMap.entityId })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["player", "players"]),
+              eq(paEntityAliasMap.publicSlug, entitySlug),
+            ),
+          )
+          .limit(1);
+        entityId = playerByPublicSlug?.id ?? null;
+        if (entityId) {
+          const [canonicalPlayer] = await db
+            .select({ slug: players.slug })
+            .from(players)
+            .where(eq(players.id, entityId))
+            .limit(1);
+          resolvedEntitySlug = canonicalPlayer?.slug ?? entitySlug;
+        }
+      }
     } else {
       const [manager] = await db
         .select({ id: managers.id })
         .from(managers)
         .where(eq(managers.slug, entitySlug))
         .limit(1);
-      entityId = manager?.id ?? null;
+      if (manager) {
+        entityId = manager.id;
+        resolvedEntitySlug = entitySlug;
+      } else {
+        const [managerByPublicSlug] = await db
+          .select({ id: paEntityAliasMap.entityId })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["manager", "managers"]),
+              eq(paEntityAliasMap.publicSlug, entitySlug),
+            ),
+          )
+          .limit(1);
+        entityId = managerByPublicSlug?.id ?? null;
+        if (entityId) {
+          const [canonicalManager] = await db
+            .select({ slug: managers.slug })
+            .from(managers)
+            .where(eq(managers.id, entityId))
+            .limit(1);
+          resolvedEntitySlug = canonicalManager?.slug ?? entitySlug;
+        }
+      }
     }
 
     if (!entityId) {
@@ -1201,7 +1402,7 @@ export class DatabaseStorage implements IStorage {
         articles: [],
         nextCursor: null,
         hasMore: false,
-        appliedContext: { entityType, entitySlug, entityId: null },
+        appliedContext: { entityType, entitySlug: resolvedEntitySlug, entityId: null },
       };
     }
 
@@ -1232,7 +1433,7 @@ export class DatabaseStorage implements IStorage {
         articles: [],
         nextCursor: null,
         hasMore: false,
-        appliedContext: { entityType, entitySlug, entityId },
+        appliedContext: { entityType, entitySlug: resolvedEntitySlug, entityId },
       };
     }
 
@@ -1274,7 +1475,7 @@ export class DatabaseStorage implements IStorage {
       articles: articlesToReturn,
       nextCursor,
       hasMore,
-      appliedContext: { entityType, entitySlug, entityId },
+      appliedContext: { entityType, entitySlug: resolvedEntitySlug, entityId },
     };
   }
 
