@@ -67,22 +67,70 @@ function getItems(response: Record<string, unknown>): unknown[] {
   return Array.isArray(arr) ? arr : [];
 }
 
-/** Get best rendition href: original, then 16x9, then first available. */
+interface RenditionCandidate {
+  key: string;
+  href: string;
+  width: number;
+  height: number;
+}
+
+function getRenditionHrefValue(r: unknown): string | null {
+  if (typeof r === "string") return r;
+  if (r && typeof r === "object" && "href" in r) return (r as { href?: string }).href ?? null;
+  return null;
+}
+
+function getRenditionDimensionValue(r: unknown, key: "width" | "height"): number {
+  if (!r || typeof r !== "object") return 0;
+  const value = (r as Record<string, unknown>)[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = parseInt(value, 10);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function getRenditionPenalty(key: string): number {
+  const k = key.toLowerCase();
+  // Prefer uncropped editorial assets over derivative crops/thumbs where possible.
+  if (k.includes("16x9") || k.includes("hero")) return 4;
+  if (k.includes("crop") || k.includes("thumb") || k.includes("thumbnail") || k.includes("square")) return 3;
+  return 0;
+}
+
+/** Get best rendition href: original/uncropped first, then largest non-cropped fallback. */
 function getRenditionHref(assoc: Record<string, unknown>): string | null {
   const renditions = assoc.renditions as Record<string, unknown> | undefined;
   if (!renditions || typeof renditions !== "object") return null;
-  const getHref = (r: unknown): string | null => {
-    if (typeof r === "string") return r;
-    if (r && typeof r === "object" && "href" in r) return (r as { href?: string }).href ?? null;
-    return null;
-  };
-  const orig = getHref(renditions.original) ?? getHref(renditions["16x9"]);
-  if (orig) return orig;
-  for (const r of Object.values(renditions)) {
-    const h = getHref(r);
-    if (h) return h;
+
+  const explicitOriginal = getRenditionHrefValue(renditions.original);
+  if (explicitOriginal) return explicitOriginal;
+
+  const candidates: RenditionCandidate[] = [];
+  for (const [key, rendition] of Object.entries(renditions)) {
+    const href = getRenditionHrefValue(rendition);
+    if (!href) continue;
+    candidates.push({
+      key,
+      href,
+      width: getRenditionDimensionValue(rendition, "width"),
+      height: getRenditionDimensionValue(rendition, "height"),
+    });
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const penaltyDiff = getRenditionPenalty(a.key) - getRenditionPenalty(b.key);
+    if (penaltyDiff !== 0) return penaltyDiff;
+    const aArea = a.width > 0 && a.height > 0 ? a.width * a.height : 0;
+    const bArea = b.width > 0 && b.height > 0 ? b.width * b.height : 0;
+    if (aArea !== bArea) return bArea - aArea;
+    return b.href.length - a.href.length;
+  });
+
+  return candidates[0]?.href ?? null;
 }
 
 /** Normalize protocol-relative URL to https. */
@@ -388,7 +436,7 @@ export async function runPaMediaIngest(): Promise<{
       let heroImageCredit: string | null = null;
       let content = item.content;
 
-      // --- Hero: associations.featureimage (with concurrency limit) ---
+      // --- Cover source: associations.featureimage (least-cropped rendition preferred) ---
       const heroHref = getHeroHref(item.associations);
       if (heroHref) {
         await semaphore.acquire();
@@ -400,7 +448,8 @@ export async function runPaMediaIngest(): Promise<{
             buffer: buf,
             source: "pa_media",
             articleId: item.id,
-            kind: "hero",
+            // Store cover images as uncropped derivatives; frontend handles layout framing.
+            kind: "inline",
             baseName,
           });
           coverImage = result.original;
