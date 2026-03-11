@@ -62,7 +62,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
               <img
                 src={article.coverImage}
                 alt={article.title}
-                className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
+                className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
               <div className="h-full w-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
@@ -120,7 +120,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
             <img
               src={article.coverImage}
               alt={article.title}
-              className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
+              className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
             <div className="h-full w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">

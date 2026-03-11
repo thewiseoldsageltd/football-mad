@@ -748,11 +748,11 @@ export default function ArticlePage() {
             </header>
 
             {article.coverImage ? (
-              <figure className="my-8">
+              <figure className="my-8 relative aspect-video w-full overflow-hidden rounded-lg bg-black/5">
                 <img
                   src={article.coverImage}
                   alt={article.title}
-                  className="mx-auto w-full h-auto max-h-[70vh] object-contain rounded-lg"
+                  className="h-full w-full object-cover object-[center_top]"
                 />
               </figure>
             ) : (
