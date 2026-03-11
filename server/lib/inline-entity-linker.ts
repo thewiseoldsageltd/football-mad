@@ -7,6 +7,7 @@ export interface InlineLinkEntity {
   type: InlineEntityType;
   name: string;
   href: string;
+  candidates?: string[];
 }
 
 const EXCLUDED_TAGS = new Set([
@@ -44,6 +45,14 @@ function buildFirstMentionRegex(entityName: string): RegExp {
     `(^|[^\\p{L}\\p{N}])(${escapeRegExp(entityName)})(?=$|[^\\p{L}\\p{N}])`,
     "iu",
   );
+}
+
+function normalizeCandidate(value: string | null | undefined): string {
+  if (!value) return "";
+  return value
+    .replace(/^tag:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function collectEligibleTextNodes($: cheerio.CheerioAPI, root: any): any[] {
@@ -89,21 +98,50 @@ export function linkArticleHtmlFirstMentions(
     const name = entity.name?.trim();
     const href = entity.href?.trim();
     if (!name || !href) continue;
+    const candidateSet = new Set<string>();
+    candidateSet.add(normalizeCandidate(name));
+    for (const candidate of entity.candidates ?? []) {
+      const normalized = normalizeCandidate(candidate);
+      if (normalized.length > 1) candidateSet.add(normalized);
+    }
+
     const key = `${entity.type}:${entity.id}`;
-    if (!unique.has(key)) unique.set(key, { ...entity, name, href });
+    if (!unique.has(key)) {
+      unique.set(key, {
+        ...entity,
+        name,
+        href,
+        candidates: Array.from(candidateSet).sort((a, b) => b.length - a.length),
+      });
+    }
   }
   const queue = Array.from(unique.values()).sort((a, b) => b.name.length - a.name.length);
   if (queue.length === 0) return html;
 
   const $ = cheerio.load(html);
   const linked = new Set<string>();
+  const docText = $.text();
 
   const paragraphs = $("p").toArray();
   for (const entity of queue) {
     const key = `${entity.type}:${entity.id}`;
     if (linked.has(key)) continue;
+    const candidates = (entity.candidates && entity.candidates.length > 0)
+      ? entity.candidates
+      : [entity.name];
 
-    const regex = buildFirstMentionRegex(entity.name);
+    let chosenCandidate: string | null = null;
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const candidateRegex = buildFirstMentionRegex(candidate);
+      if (candidateRegex.test(docText)) {
+        chosenCandidate = candidate;
+        break;
+      }
+    }
+    if (!chosenCandidate) continue;
+
+    const regex = buildFirstMentionRegex(chosenCandidate);
     let didLink = false;
 
     for (const paragraph of paragraphs) {

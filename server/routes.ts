@@ -7444,30 +7444,146 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         };
       });
 
+      const inlineSourceEntities = [
+        ...linkedCompetitions.map((c) => ({ id: c.id, type: "competition" as const, name: c.name })),
+        ...linkedTeams.map((t) => ({ id: t.id, type: "team" as const, name: t.name })),
+        ...linkedPlayers.map((p) => ({ id: p.id, type: "player" as const, name: p.name })),
+        ...linkedManagers.map((m) => ({ id: m.id, type: "manager" as const, name: m.name })),
+      ];
+      const byType = {
+        team: inlineSourceEntities.filter((e) => e.type === "team").map((e) => e.id),
+        competition: inlineSourceEntities.filter((e) => e.type === "competition").map((e) => e.id),
+        player: inlineSourceEntities.filter((e) => e.type === "player").map((e) => e.id),
+        manager: inlineSourceEntities.filter((e) => e.type === "manager").map((e) => e.id),
+      };
+
+      const aliasQueries: Promise<Array<{
+        entityId: string;
+        entityType: string;
+        paTagName: string;
+        displayName: string | null;
+        paTagNameNormalized: string;
+      }>>[] = [];
+      if (byType.team.length > 0) {
+        aliasQueries.push(
+          db.select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+            .from(paEntityAliasMap)
+            .where(and(
+              eq(paEntityAliasMap.source, "pa_media"),
+              inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+              inArray(paEntityAliasMap.entityId, byType.team),
+            )),
+        );
+      }
+      if (byType.competition.length > 0) {
+        aliasQueries.push(
+          db.select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+            .from(paEntityAliasMap)
+            .where(and(
+              eq(paEntityAliasMap.source, "pa_media"),
+              inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
+              inArray(paEntityAliasMap.entityId, byType.competition),
+            )),
+        );
+      }
+      if (byType.player.length > 0) {
+        aliasQueries.push(
+          db.select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+            .from(paEntityAliasMap)
+            .where(and(
+              eq(paEntityAliasMap.source, "pa_media"),
+              inArray(paEntityAliasMap.entityType, ["player", "players"]),
+              inArray(paEntityAliasMap.entityId, byType.player),
+            )),
+        );
+      }
+      if (byType.manager.length > 0) {
+        aliasQueries.push(
+          db.select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+            .from(paEntityAliasMap)
+            .where(and(
+              eq(paEntityAliasMap.source, "pa_media"),
+              inArray(paEntityAliasMap.entityType, ["manager", "managers"]),
+              inArray(paEntityAliasMap.entityId, byType.manager),
+            )),
+        );
+      }
+      const aliasRowsByType = await Promise.all(aliasQueries);
+      const aliasCandidates = new Map<string, string[]>();
+      for (const rows of aliasRowsByType) {
+        for (const row of rows) {
+          const normalizedType =
+            row.entityType === "teams" ? "team"
+            : row.entityType === "competitions" ? "competition"
+            : row.entityType === "players" ? "player"
+            : row.entityType === "managers" ? "manager"
+            : row.entityType;
+          const key = `${normalizedType}:${row.entityId}`;
+          if (!aliasCandidates.has(key)) aliasCandidates.set(key, []);
+          const bucket = aliasCandidates.get(key)!;
+          if (row.displayName) bucket.push(row.displayName);
+          if (row.paTagName) bucket.push(row.paTagName);
+          if (row.paTagNameNormalized) bucket.push(row.paTagNameNormalized);
+        }
+      }
+      for (const e of inlineSourceEntities) {
+        const key = `${e.type}:${e.id}`;
+        if (!aliasCandidates.has(key)) aliasCandidates.set(key, []);
+        aliasCandidates.get(key)!.push(e.name);
+      }
+
       const inlineEntities: InlineLinkEntity[] = [
         ...linkedCompetitions.map((c) => ({
           id: c.id,
           type: "competition" as const,
           name: c.name,
           href: `/competitions/${c.slug}`,
+          candidates: aliasCandidates.get(`competition:${c.id}`) ?? [c.name],
         })),
         ...linkedTeams.map((t) => ({
           id: t.id,
           type: "team" as const,
           name: t.name,
           href: `/teams/${t.slug}`,
+          candidates: aliasCandidates.get(`team:${t.id}`) ?? [t.name],
         })),
         ...linkedPlayers.map((p) => ({
           id: p.id,
           type: "player" as const,
           name: p.name,
           href: `/players/${p.slug}`,
+          candidates: aliasCandidates.get(`player:${p.id}`) ?? [p.name],
         })),
         ...linkedManagers.map((m) => ({
           id: m.id,
           type: "manager" as const,
           name: m.name,
           href: `/managers/${m.slug}`,
+          candidates: aliasCandidates.get(`manager:${m.id}`) ?? [m.name],
         })),
       ];
       const linkedContent = linkArticleHtmlFirstMentions(article.content, inlineEntities);

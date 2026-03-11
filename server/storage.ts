@@ -181,6 +181,128 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private async getInlineAliasCandidateMap(
+    entities: Array<{ id: string; type: "team" | "competition" | "player" | "manager"; name: string }>,
+  ): Promise<Map<string, string[]>> {
+    const map = new Map<string, Set<string>>();
+    const byType = {
+      team: entities.filter((e) => e.type === "team").map((e) => e.id),
+      competition: entities.filter((e) => e.type === "competition").map((e) => e.id),
+      player: entities.filter((e) => e.type === "player").map((e) => e.id),
+      manager: entities.filter((e) => e.type === "manager").map((e) => e.id),
+    };
+
+    const queries: Promise<Array<{ entityId: string; entityType: string; paTagName: string; displayName: string | null; paTagNameNormalized: string }>>[] = [];
+    if (byType.team.length > 0) {
+      queries.push(
+        db
+          .select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+              inArray(paEntityAliasMap.entityId, byType.team),
+            ),
+          ),
+      );
+    }
+    if (byType.competition.length > 0) {
+      queries.push(
+        db
+          .select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
+              inArray(paEntityAliasMap.entityId, byType.competition),
+            ),
+          ),
+      );
+    }
+    if (byType.player.length > 0) {
+      queries.push(
+        db
+          .select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["player", "players"]),
+              inArray(paEntityAliasMap.entityId, byType.player),
+            ),
+          ),
+      );
+    }
+    if (byType.manager.length > 0) {
+      queries.push(
+        db
+          .select({
+            entityId: paEntityAliasMap.entityId,
+            entityType: paEntityAliasMap.entityType,
+            paTagName: paEntityAliasMap.paTagName,
+            displayName: paEntityAliasMap.displayName,
+            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
+          })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["manager", "managers"]),
+              inArray(paEntityAliasMap.entityId, byType.manager),
+            ),
+          ),
+      );
+    }
+
+    const rowsByType = await Promise.all(queries);
+    for (const rows of rowsByType) {
+      for (const row of rows) {
+        const normalizedType =
+          row.entityType === "teams" ? "team"
+          : row.entityType === "competitions" ? "competition"
+          : row.entityType === "players" ? "player"
+          : row.entityType === "managers" ? "manager"
+          : row.entityType;
+        const key = `${normalizedType}:${row.entityId}`;
+        if (!map.has(key)) map.set(key, new Set<string>());
+        const bucket = map.get(key)!;
+        if (row.displayName) bucket.add(row.displayName);
+        if (row.paTagName) bucket.add(row.paTagName);
+        if (row.paTagNameNormalized) bucket.add(row.paTagNameNormalized);
+      }
+    }
+
+    for (const entity of entities) {
+      const key = `${entity.type}:${entity.id}`;
+      if (!map.has(key)) map.set(key, new Set<string>());
+      map.get(key)!.add(entity.name);
+    }
+
+    const out = new Map<string, string[]>();
+    for (const [key, set] of map.entries()) out.set(key, Array.from(set));
+    return out;
+  }
+
   private async getTeamPublicSlugMap(teamIds: string[]): Promise<Map<string, string>> {
     const uniqueIds = Array.from(new Set(teamIds.filter(Boolean)));
     if (uniqueIds.length === 0) return new Map();
@@ -703,30 +825,42 @@ export class DatabaseStorage implements IStorage {
       };
     });
 
+    const inlineSourceEntities = [
+      ...resolvedCompetitions.map((row) => ({ id: row.id, type: "competition" as const, name: row.name })),
+      ...resolvedTeams.map((row) => ({ id: row.id, type: "team" as const, name: row.name })),
+      ...playerRows.map((row) => ({ id: row.id, type: "player" as const, name: row.name })),
+      ...managerRows.map((row) => ({ id: row.id, type: "manager" as const, name: row.name })),
+    ];
+    const aliasCandidates = await this.getInlineAliasCandidateMap(inlineSourceEntities);
+
     const inlineEntities: InlineLinkEntity[] = [
       ...resolvedCompetitions.map((row) => ({
         id: row.id,
         type: "competition" as const,
         name: row.name,
         href: `/competitions/${row.slug}`,
+        candidates: aliasCandidates.get(`competition:${row.id}`) ?? [row.name],
       })),
       ...resolvedTeams.map((row) => ({
         id: row.id,
         type: "team" as const,
         name: row.name,
         href: `/teams/${row.slug}`,
+        candidates: aliasCandidates.get(`team:${row.id}`) ?? [row.name],
       })),
       ...playerRows.map((row) => ({
         id: row.id,
         type: "player" as const,
         name: row.name,
         href: `/players/${row.slug}`,
+        candidates: aliasCandidates.get(`player:${row.id}`) ?? [row.name],
       })),
       ...managerRows.map((row) => ({
         id: row.id,
         type: "manager" as const,
         name: row.name,
         href: `/managers/${row.slug}`,
+        candidates: aliasCandidates.get(`manager:${row.id}`) ?? [row.name],
       })),
     ];
     const linkedContent = linkArticleHtmlFirstMentions(article.content, inlineEntities);
