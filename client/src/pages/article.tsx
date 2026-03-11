@@ -752,7 +752,7 @@ export default function ArticlePage() {
                 <img
                   src={article.coverImage}
                   alt={article.title}
-                  className="w-full rounded-lg"
+                  className="w-full h-auto object-contain rounded-lg"
                 />
               </figure>
             ) : (
