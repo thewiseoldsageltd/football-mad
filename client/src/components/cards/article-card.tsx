@@ -57,15 +57,15 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
     return (
       <Link href={newsArticle(article.slug)}>
         <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-article-featured-${article.id}`}>
-          <div className="relative rounded-t-xl bg-black/5">
+          <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
             {article.coverImage ? (
               <img
                 src={article.coverImage}
                 alt={article.title}
-                className="w-full h-auto object-contain transition-transform duration-300 group-hover:scale-105 rounded-t-xl"
+                className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
-              <div className="aspect-video w-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center rounded-t-xl">
+              <div className="h-full w-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
                 <span className="text-6xl font-bold text-primary/30">F</span>
               </div>
             )}
@@ -115,15 +115,15 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
         style={teamCardStyle}
         data-testid={`card-article-${article.id}`}
       >
-        <div className="relative rounded-t-xl bg-black/5">
+        <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
           {article.coverImage ? (
             <img
               src={article.coverImage}
               alt={article.title}
-              className="w-full h-auto object-contain transition-transform duration-300 group-hover:scale-105 rounded-t-xl"
+              className="h-full w-full object-cover object-center transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="aspect-video w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center rounded-t-xl">
+            <div className="h-full w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
               <span className="text-4xl font-bold text-muted-foreground/30">F</span>
             </div>
           )}
