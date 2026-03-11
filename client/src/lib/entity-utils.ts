@@ -1,5 +1,6 @@
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 import type { EntityData } from "@/components/entity-pill";
+import { competitionHub, teamHub, playerProfile, managerProfile } from "@/lib/urls";
 import {
   COMP_PILL_DISPLAY_BY_NAME_NORM,
   normalizeKey,
@@ -506,12 +507,12 @@ function toEntityData(
   const slug = opts?.slug ?? slugify(name);
   const href =
     type === "competition"
-      ? `/matches/${slug}`
+      ? competitionHub(slug)
       : type === "team"
-        ? `/teams/${slug}`
+        ? teamHub(slug)
         : type === "player"
-          ? `/players/${slug}`
-          : `/managers/${slug}`;
+          ? playerProfile(slug)
+          : managerProfile(slug);
   return {
     type,
     name: displayName,

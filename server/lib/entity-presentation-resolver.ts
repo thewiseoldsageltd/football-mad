@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { competitions, paEntityAliasMap, teams } from "@shared/schema";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./sources";
@@ -88,6 +88,30 @@ export class EntityPresentationResolver {
         }
       }
 
+      // Team public slugs are canonical for routing wherever available.
+      if (overrideMap.size === 0) {
+        const overrideRows = await db
+          .select({
+            entityId: paEntityAliasMap.entityId,
+            publicSlug: paEntityAliasMap.publicSlug,
+          })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+              inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+              inArray(paEntityAliasMap.entityId, missingIds),
+              sql`trim(${paEntityAliasMap.publicSlug}) <> ''`,
+            ),
+          );
+        for (const row of overrideRows) {
+          if (!row.publicSlug) continue;
+          if (!overrideMap.has(row.entityId)) {
+            overrideMap.set(row.entityId, { slug: row.publicSlug });
+          }
+        }
+      }
+
       for (const id of missingIds) {
         const canonical = canonicalMap.get(id);
         if (!canonical) continue;
@@ -132,6 +156,7 @@ export class EntityPresentationResolver {
           id: competitions.id,
           name: competitions.name,
           slug: competitions.slug,
+          canonicalSlug: competitions.canonicalSlug,
         })
         .from(competitions)
         .where(inArray(competitions.id, missingIds));
@@ -174,7 +199,7 @@ export class EntityPresentationResolver {
         this.competitionCache.set(key, {
           id,
           name: override?.name || canonical.name,
-          slug: override?.slug || canonical.slug,
+          slug: canonical.canonicalSlug || override?.slug || canonical.slug,
         });
       }
     }

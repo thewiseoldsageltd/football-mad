@@ -2532,6 +2532,15 @@ export default function TeamHubPage() {
     },
   });
 
+  useEffect(() => {
+    if (!team?.slug || !slug) return;
+    if (team.slug === slug) return;
+    const canonicalPath = activeTab === "latest"
+      ? `/teams/${team.slug}`
+      : `/teams/${team.slug}/${activeTab}`;
+    navigate(canonicalPath, { replace: true });
+  }, [team?.slug, slug, activeTab, navigate]);
+
   const { data: teamArchiveData, isLoading: newsLoading } = useQuery<TeamArchiveResponse>({
     queryKey: ["/api/news/archive/team", slug],
     queryFn: async () => {

@@ -76,6 +76,12 @@ async function main(): Promise<void> {
     "correction",
     "briefing",
     "scotland",
+    "international",
+    "women's sport",
+    "scottish",
+    "corners",
+    "iran",
+    "ramadan",
   ];
   const exactVenueIgnoreTags = [
     "old trafford",
@@ -84,6 +90,11 @@ async function main(): Promise<void> {
     "st james park",
     "molineux",
     "pittodrie",
+    "vale park",
+    "cappielow park",
+    "east end park",
+    "civitas metropolitano",
+    "victoria park",
   ];
 
   const query = `

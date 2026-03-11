@@ -1,6 +1,5 @@
 import { useRoute, Redirect } from "wouter";
 import { isCompetitionSlug, isTeamSlug, parseMatchSlug, matchDetail } from "@/lib/urls";
-import NewsEntityPage from "./news-entity";
 import ArticlePage from "./article";
 import NotFound from "./not-found";
 
@@ -28,11 +27,11 @@ export default function NewsResolver() {
   // 1) competition archive slugs
   // 2) team archive slugs
   if (isCompetitionSlug(slug)) {
-    return <NewsEntityPage slug={slug} entityType="competition" />;
+    return <Redirect to={`/competitions/${slug}`} />;
   }
 
   if (isTeamSlug(slug)) {
-    return <NewsEntityPage slug={slug} entityType="team" />;
+    return <Redirect to={`/teams/${slug}`} />;
   }
 
   return <ArticlePage />;

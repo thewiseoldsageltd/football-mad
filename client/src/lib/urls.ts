@@ -114,6 +114,10 @@ export function newsArticle(slug: string): string {
   return `/news/${slug}`;
 }
 
+export function competitionHub(competitionSlug: string): string {
+  return `/competitions/${competitionSlug}`;
+}
+
 // TEAMS
 export function teamsIndex(): string {
   return "/teams";

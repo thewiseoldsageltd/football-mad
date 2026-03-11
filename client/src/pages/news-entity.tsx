@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -20,6 +21,7 @@ function formatEntityName(slug: string): string {
 }
 
 export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps) {
+  const [, navigate] = useLocation();
   const entityName = formatEntityName(slug);
   const isTeam = entityType === "team";
   const [articles, setArticles] = useState<Article[]>([]);
@@ -58,6 +60,16 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
     setNextCursor(data.nextCursor ?? null);
     setHasMore(Boolean(data.hasMore));
   }, [data]);
+
+  useEffect(() => {
+    const resolvedSlug = data?.appliedContext?.entitySlug;
+    if (!resolvedSlug || resolvedSlug === slug) return;
+    const canonicalPath =
+      entityType === "competition"
+        ? `/competitions/${resolvedSlug}`
+        : `/teams/${resolvedSlug}`;
+    navigate(canonicalPath, { replace: true });
+  }, [data?.appliedContext?.entitySlug, slug, entityType, navigate]);
 
   const loadMore = async () => {
     if (!endpoint || !nextCursor || !hasMore || isLoadingMore) return;

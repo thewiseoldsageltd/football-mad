@@ -27,12 +27,19 @@ function getCardExcerpt(article: Article): string | null {
     summary?: string | null;
     description?: string | null;
     snippet?: string | null;
+    openingText?: string | null;
+    content?: string | null;
   };
+  const stripHtml = (value: string) => value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const fromContent = anyArticle.content ? stripHtml(anyArticle.content) : "";
+  const fromOpening = anyArticle.openingText?.trim() || "";
+  const fallback = (fromOpening || fromContent).slice(0, 180).trim();
   return (
     anyArticle.excerpt?.trim() ||
     anyArticle.summary?.trim() ||
     anyArticle.description?.trim() ||
     anyArticle.snippet?.trim() ||
+    (fallback.length > 0 ? `${fallback}${fallback.length >= 180 ? "..." : ""}` : null) ||
     null
   );
 }
@@ -55,7 +62,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
               <img
                 src={article.coverImage}
                 alt={article.title}
-                className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-full object-contain bg-black/5 transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
@@ -113,7 +120,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
             <img
               src={article.coverImage}
               alt={article.title}
-              className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+              className="w-full h-full object-contain bg-black/5 transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">

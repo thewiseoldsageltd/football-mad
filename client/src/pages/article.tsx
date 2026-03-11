@@ -69,6 +69,74 @@ function slugifyCompetition(competition: string): string {
   return competition.toLowerCase().replace(/\s+/g, "-");
 }
 
+function prepareArticleHtmlForRender(rawHtml: string): string {
+  if (typeof window === "undefined" || !rawHtml) return rawHtml;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawHtml, "text/html");
+
+  // 1) Remove empty structural blocks that can create large vertical gaps.
+  const isMeaningfullyEmpty = (el: Element): boolean => {
+    const text = (el.textContent || "").replace(/\u00a0/g, " ").trim();
+    if (text.length > 0) return false;
+    return !el.querySelector("img,video,iframe,blockquote.twitter-tweet,blockquote.instagram-media,blockquote.tiktok-embed,embed,object");
+  };
+  const emptySelectors = "p,div,figure,section";
+  doc.querySelectorAll(emptySelectors).forEach((el) => {
+    if (isMeaningfullyEmpty(el)) el.remove();
+  });
+
+  // 2) Ensure inline images are always responsive.
+  doc.querySelectorAll("img").forEach((img) => {
+    img.removeAttribute("width");
+    img.removeAttribute("height");
+    const style = img.getAttribute("style") || "";
+    const append = "max-width:100%;height:auto;display:block;";
+    img.setAttribute("style", `${style}${style.endsWith(";") || style.length === 0 ? "" : ";"}${append}`);
+  });
+
+  // 3) Remove empty embeds/iframes containers that reserve space.
+  doc.querySelectorAll("iframe").forEach((iframe) => {
+    const src = (iframe.getAttribute("src") || "").trim();
+    if (!src) iframe.remove();
+  });
+  doc.querySelectorAll("figure").forEach((figure) => {
+    if (!figure.querySelector("img,video,iframe,blockquote")) {
+      figure.remove();
+    }
+  });
+
+  // 4) Convert plain X/Twitter status links into blockquote embeds.
+  const twitterStatusRe = /^https?:\/\/(?:www\.)?(?:twitter\.com|x\.com)\/[^/]+\/status\/\d+/i;
+  doc.querySelectorAll("p").forEach((p) => {
+    const text = (p.textContent || "").trim();
+    const links = Array.from(p.querySelectorAll("a"));
+    if (links.length === 0 && twitterStatusRe.test(text)) {
+      const blockquote = doc.createElement("blockquote");
+      blockquote.className = "twitter-tweet";
+      const a = doc.createElement("a");
+      a.href = text;
+      a.textContent = text;
+      blockquote.appendChild(a);
+      p.replaceWith(blockquote);
+      return;
+    }
+    if (links.length !== 1) return;
+    const href = links[0].getAttribute("href") || "";
+    if (!twitterStatusRe.test(href)) return;
+    if (text !== href && text !== links[0].textContent?.trim()) return;
+
+    const blockquote = doc.createElement("blockquote");
+    blockquote.className = "twitter-tweet";
+    const a = doc.createElement("a");
+    a.href = href;
+    a.textContent = href;
+    blockquote.appendChild(a);
+    p.replaceWith(blockquote);
+  });
+
+  return doc.body.innerHTML;
+}
+
 function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
   const [articleUrl, setArticleUrl] = useState("");
 
@@ -540,6 +608,32 @@ export default function ArticlePage() {
   });
 
   const articleUrl = useArticleSEO(article, slug || "");
+  const processedContent = useMemo(
+    () => (article?.content ? prepareArticleHtmlForRender(article.content) : ""),
+    [article?.content],
+  );
+
+  useEffect(() => {
+    if (!processedContent || typeof window === "undefined") return;
+    const hasTwitterEmbeds = processedContent.includes("twitter-tweet");
+    if (!hasTwitterEmbeds) return;
+
+    const w = window as Window & { twttr?: { widgets?: { load: (el?: Element | Document) => void } } };
+    const loadWidgets = () => w.twttr?.widgets?.load(document.body);
+
+    if (w.twttr?.widgets?.load) {
+      loadWidgets();
+      return;
+    }
+
+    const existing = document.querySelector('script[src="https://platform.twitter.com/widgets.js"]');
+    if (existing) return;
+    const script = document.createElement("script");
+    script.src = "https://platform.twitter.com/widgets.js";
+    script.async = true;
+    script.onload = loadWidgets;
+    document.body.appendChild(script);
+  }, [processedContent]);
 
   const relatedArticles = useMemo(() => {
     if (!article || allArticles.length === 0) return [];
@@ -669,7 +763,7 @@ export default function ArticlePage() {
 
             {showExcerpt && (
               <>
-                <p className="text-lg md:text-xl text-muted-foreground italic leading-relaxed mb-6">
+                <p className="text-lg md:text-xl text-muted-foreground/90 italic leading-relaxed mb-6 border-l-4 border-muted pl-4">
                   {article.excerpt}
                 </p>
                 <div className="border-t mb-8" />
@@ -677,8 +771,8 @@ export default function ArticlePage() {
             )}
 
             <div
-              className="prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3"
-              dangerouslySetInnerHTML={{ __html: article.content }}
+              className="prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:my-6 [&_.twitter-tweet]:my-6"
+              dangerouslySetInnerHTML={{ __html: processedContent }}
             />
 
             {SHOW_PILLS && footerPills.length > 0 && (

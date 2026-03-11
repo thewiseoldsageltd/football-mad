@@ -910,7 +910,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /** Harden list row for /api/news and /api/news/updates so null fields (e.g. PA Media tags) don't break the UI. */
-  normalizeArticleListRow<T extends Record<string, unknown>>(row: T): T & { excerpt: string; tags: unknown[]; competition: string | null; contentType: string; coverImage: string | null; authorName: string } {
+  normalizeArticleListRow<T extends Record<string, unknown>>(row: T): T & { excerpt: string; tags: unknown[]; competition: string | null; contentType: string; coverImage: string | null; authorName: string; openingText: string } {
     return {
       ...row,
       excerpt: row.excerpt ?? "",
@@ -919,6 +919,7 @@ export class DatabaseStorage implements IStorage {
       contentType: row.contentType ?? "story",
       coverImage: row.coverImage ?? null,
       authorName: row.authorName ?? "PA Media",
+      openingText: (row as { openingText?: string | null }).openingText ?? "",
     };
   }
 
@@ -1191,6 +1192,7 @@ export class DatabaseStorage implements IStorage {
       slug: articles.slug,
       title: articles.title,
       excerpt: articles.excerpt,
+      openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
@@ -1320,6 +1322,7 @@ export class DatabaseStorage implements IStorage {
       slug: articles.slug,
       title: articles.title,
       excerpt: articles.excerpt,
+      openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
@@ -1409,6 +1412,7 @@ export class DatabaseStorage implements IStorage {
       slug: articles.slug,
       title: articles.title,
       excerpt: articles.excerpt,
+      openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
