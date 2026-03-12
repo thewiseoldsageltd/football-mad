@@ -73,6 +73,19 @@ function prepareArticleHtmlForRender(rawHtml: string): string {
   if (typeof window === "undefined" || !rawHtml) return rawHtml;
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawHtml, "text/html");
+  const stripStyleDeclarations = (style: string, properties: string[]): string => {
+    if (!style) return "";
+    const propertySet = new Set(properties.map((p) => p.toLowerCase()));
+    return style
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .filter((decl) => {
+        const [prop] = decl.split(":");
+        return !propertySet.has((prop || "").trim().toLowerCase());
+      })
+      .join("; ");
+  };
 
   // 1) Remove empty structural blocks that can create large vertical gaps.
   const isMeaningfullyEmpty = (el: Element): boolean => {
@@ -89,9 +102,16 @@ function prepareArticleHtmlForRender(rawHtml: string): string {
   doc.querySelectorAll("img").forEach((img) => {
     img.removeAttribute("width");
     img.removeAttribute("height");
-    const style = img.getAttribute("style") || "";
-    const append = "max-width:100%;height:auto;display:block;";
-    img.setAttribute("style", `${style}${style.endsWith(";") || style.length === 0 ? "" : ";"}${append}`);
+    const existingStyle = img.getAttribute("style") || "";
+    const sanitized = stripStyleDeclarations(existingStyle, ["width", "max-width", "height", "float", "margin-left", "margin-right"]);
+    const append = "width:100%;max-width:100%;height:auto;display:block;";
+    img.setAttribute("style", `${sanitized}${sanitized.endsWith(";") || sanitized.length === 0 ? "" : ";"}${append}`);
+  });
+  doc.querySelectorAll("figure").forEach((figure) => {
+    const existingStyle = figure.getAttribute("style") || "";
+    const sanitized = stripStyleDeclarations(existingStyle, ["width", "max-width", "float", "margin-left", "margin-right"]);
+    const append = "width:100%;max-width:100%;margin:1.5rem 0;";
+    figure.setAttribute("style", `${sanitized}${sanitized.endsWith(";") || sanitized.length === 0 ? "" : ";"}${append}`);
   });
 
   // 3) Remove empty embeds/iframes containers that reserve space.
@@ -771,7 +791,7 @@ export default function ArticlePage() {
             )}
 
             <div
-              className="prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:my-6 [&_.twitter-tweet]:my-6"
+              className="article-body-content prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:block [&_img]:w-full [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:w-full [&_figure]:max-w-full [&_figure]:mx-0 [&_figure]:my-6 [&_figure_img]:w-full [&_figure_img]:max-w-full [&_.twitter-tweet]:my-6"
               dangerouslySetInnerHTML={{ __html: processedContent }}
             />
 
