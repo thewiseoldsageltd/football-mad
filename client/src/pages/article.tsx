@@ -791,7 +791,7 @@ export default function ArticlePage() {
             )}
 
             <div
-              className="article-body-content prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:block [&_img]:w-full [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:w-full [&_figure]:max-w-full [&_figure]:mx-0 [&_figure]:my-6 [&_figure_img]:w-full [&_figure_img]:max-w-full [&_.twitter-tweet]:my-6"
+              className="article-body-content prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:block [&_img]:w-full [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:w-full [&_figure]:max-w-full [&_figure]:mx-0 [&_figure]:my-6 [&_figure_img]:w-full [&_figure_img]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-sm [&_figcaption]:text-muted-foreground [&_figcaption]:mt-2 [&_figcaption]:mb-6 [&_iframe]:block [&_iframe]:mx-auto [&_iframe]:max-w-full [&_blockquote]:block [&_blockquote]:mx-auto [&_blockquote]:max-w-full [&_.twitter-tweet]:my-6 [&_.twitter-tweet]:mx-auto [&_.instagram-media]:mx-auto [&_.instagram-media]:max-w-full"
               dangerouslySetInnerHTML={{ __html: processedContent }}
             />
 
