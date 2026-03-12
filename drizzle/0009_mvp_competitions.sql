@@ -15,12 +15,23 @@
 --   ON CONFLICT (competition_id) DO NOTHING;
 --
 
-CREATE TABLE "mvp_competitions" (
+CREATE TABLE IF NOT EXISTS "mvp_competitions" (
 	"competition_id" varchar PRIMARY KEY NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "mvp_competitions" ADD CONSTRAINT "mvp_competitions_competition_id_competitions_id_fk" FOREIGN KEY ("competition_id") REFERENCES "public"."competitions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "mvp_competitions_enabled_sort_idx" ON "mvp_competitions" USING btree ("enabled","sort_order");
+DO $$
+BEGIN
+	ALTER TABLE "mvp_competitions"
+		ADD CONSTRAINT "mvp_competitions_competition_id_competitions_id_fk"
+		FOREIGN KEY ("competition_id")
+		REFERENCES "public"."competitions"("id")
+		ON DELETE cascade
+		ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END
+$$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "mvp_competitions_enabled_sort_idx" ON "mvp_competitions" USING btree ("enabled","sort_order");

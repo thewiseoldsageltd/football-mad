@@ -1,4 +1,4 @@
-CREATE TABLE "job_http_calls" (
+CREATE TABLE IF NOT EXISTS "job_http_calls" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"run_id" varchar NOT NULL,
 	"provider" text NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE "job_http_calls" (
 	"created_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "job_runs" (
+CREATE TABLE IF NOT EXISTS "job_runs" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"job_name" text NOT NULL,
 	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -23,17 +23,28 @@ CREATE TABLE "job_runs" (
 	"error" text
 );
 --> statement-breakpoint
-CREATE TABLE "pamedia_ingest_state" (
+CREATE TABLE IF NOT EXISTS "pamedia_ingest_state" (
 	"key" text PRIMARY KEY DEFAULT 'default' NOT NULL,
 	"last_issued" timestamp with time zone,
 	"last_uri" text,
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
-ALTER TABLE "articles" ADD COLUMN "entity_enrich_status" text DEFAULT 'pending' NOT NULL;--> statement-breakpoint
-ALTER TABLE "articles" ADD COLUMN "entity_enrich_attempted_at" timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "articles" ADD COLUMN "entity_enrich_error" text;--> statement-breakpoint
-ALTER TABLE "job_http_calls" ADD CONSTRAINT "job_http_calls_run_id_job_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."job_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "job_http_calls_run_created_idx" ON "job_http_calls" USING btree ("run_id","created_at");--> statement-breakpoint
-CREATE INDEX "job_runs_job_name_started_idx" ON "job_runs" USING btree ("job_name","started_at");--> statement-breakpoint
-CREATE INDEX "articles_entity_enrich_status_published_idx" ON "articles" USING btree ("entity_enrich_status","published_at");
+ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "entity_enrich_status" text DEFAULT 'pending' NOT NULL;--> statement-breakpoint
+ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "entity_enrich_attempted_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "articles" ADD COLUMN IF NOT EXISTS "entity_enrich_error" text;--> statement-breakpoint
+DO $$
+BEGIN
+	ALTER TABLE "job_http_calls"
+		ADD CONSTRAINT "job_http_calls_run_id_job_runs_id_fk"
+		FOREIGN KEY ("run_id")
+		REFERENCES "public"."job_runs"("id")
+		ON DELETE cascade
+		ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END
+$$;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "job_http_calls_run_created_idx" ON "job_http_calls" USING btree ("run_id","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "job_runs_job_name_started_idx" ON "job_runs" USING btree ("job_name","started_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "articles_entity_enrich_status_published_idx" ON "articles" USING btree ("entity_enrich_status","published_at");

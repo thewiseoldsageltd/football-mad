@@ -220,6 +220,67 @@ export const insertCompetitionSchema = createInsertSchema(competitions).omit({ i
 export type InsertCompetition = z.infer<typeof insertCompetitionSchema>;
 export type Competition = typeof competitions.$inferSelect;
 
+// ============ ENTITY MEDIA (MVP: teams + competitions) ============
+export const entityMedia = pgTable(
+  "entity_media",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    entityType: text("entity_type").notNull(), // competition | team
+    entityId: varchar("entity_id").notNull(),
+    mediaRole: text("media_role").notNull(), // logo | crest
+    sourceSystem: text("source_system").notNull(), // goalserve | manual
+    sourceRef: text("source_ref"),
+    sourceFormat: text("source_format"),
+    sourceMimeType: text("source_mime_type"),
+    originalWidth: integer("original_width"),
+    originalHeight: integer("original_height"),
+    originalStorageKey: text("original_storage_key").notNull(),
+    cdnOriginalUrl: text("cdn_original_url").notNull(),
+    isPrimary: boolean("is_primary").notNull().default(true),
+    status: text("status").notNull().default("pending"), // active | failed | pending | superseded
+    checksum: text("checksum"),
+    lastIngestedAt: timestamp("last_ingested_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("entity_media_entity_idx").on(table.entityType, table.entityId),
+    index("entity_media_role_idx").on(table.entityType, table.entityId, table.mediaRole),
+    index("entity_media_primary_status_idx").on(table.entityType, table.entityId, table.isPrimary, table.status),
+    uniqueIndex("entity_media_primary_active_unique")
+      .on(table.entityType, table.entityId, table.mediaRole)
+      .where(sql`${table.isPrimary} = true and ${table.status} = 'active'`),
+  ],
+);
+
+export const entityMediaVariants = pgTable(
+  "entity_media_variants",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    entityMediaId: varchar("entity_media_id")
+      .notNull()
+      .references(() => entityMedia.id, { onDelete: "cascade" }),
+    variantName: text("variant_name").notNull(), // pill_24 | pill_32 | hub_96 | hub_160
+    format: text("format").notNull(), // webp | png | svg
+    width: integer("width").notNull(),
+    height: integer("height").notNull(),
+    fitMode: text("fit_mode").notNull().default("contain"),
+    storageKey: text("storage_key").notNull(),
+    cdnUrl: text("cdn_url").notNull(),
+    fileSizeBytes: integer("file_size_bytes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("entity_media_variants_media_idx").on(table.entityMediaId),
+    uniqueIndex("entity_media_variants_name_unique").on(table.entityMediaId, table.variantName),
+  ],
+);
+
+export type EntityMedia = typeof entityMedia.$inferSelect;
+export type InsertEntityMedia = typeof entityMedia.$inferInsert;
+export type EntityMediaVariant = typeof entityMediaVariants.$inferSelect;
+export type InsertEntityMediaVariant = typeof entityMediaVariants.$inferInsert;
+
 // ============ MVP COMPETITIONS ============
 export const mvpCompetitions = pgTable(
   "mvp_competitions",

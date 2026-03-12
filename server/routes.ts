@@ -38,6 +38,7 @@ import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
 import { syncGoalserveManagers } from "./jobs/sync-goalserve-managers";
+import { syncGoalserveEntityMedia } from "./jobs/sync-goalserve-entity-media";
 import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
@@ -72,6 +73,7 @@ import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
+import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
@@ -468,6 +470,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching team:", error);
       res.status(500).json({ error: "Failed to fetch team" });
+    }
+  });
+
+  app.get("/api/entity-media/:entityType/:entityId", async (req, res) => {
+    const params = z
+      .object({
+        entityType: z.enum(["competition", "team"]),
+        entityId: z.string().min(1),
+      })
+      .safeParse(req.params);
+    if (!params.success) {
+      return res.status(400).json({ error: "Invalid entity media parameters" });
+    }
+
+    const query = z
+      .object({
+        surface: z.enum(["pill", "hub_header"]).optional(),
+        fallbackLabel: z.string().optional(),
+      })
+      .safeParse(req.query);
+    if (!query.success) {
+      return res.status(400).json({ error: "Invalid entity media query parameters" });
+    }
+
+    try {
+      const data = await getEntityDisplayMedia({
+        entityType: params.data.entityType,
+        entityId: params.data.entityId,
+        surface: query.data.surface ?? "pill",
+        fallbackLabel: query.data.fallbackLabel,
+      });
+      sendJsonNoEtag(res, data);
+    } catch (error) {
+      console.error("Error resolving entity media:", error);
+      res.status(500).json({ error: "Failed to resolve entity media" });
     }
   });
 
@@ -2600,6 +2637,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const result = await syncGoalserveCompetitions();
     res.json(result);
   });
+
+  app.post(
+    "/api/jobs/sync-goalserve-entity-media",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : undefined;
+      const includeTeams = req.query.includeTeams === "0" ? false : true;
+      const includeCompetitions = req.query.includeCompetitions === "0" ? false : true;
+      const result = await syncGoalserveEntityMedia({
+        leagueId,
+        includeTeams,
+        includeCompetitions,
+      });
+      res.json(result);
+    },
+  );
 
   // ========== GOALSERVE TEAMS SYNC ==========
   app.post(

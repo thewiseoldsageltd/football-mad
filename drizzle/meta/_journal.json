@@ -71,6 +71,13 @@
       "when": 1771790906522,
       "tag": "0009_mvp_competitions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773331866571,
+      "tag": "0010_rapid_mac_gargan",
+      "breakpoints": true
     }
   ]
 }
