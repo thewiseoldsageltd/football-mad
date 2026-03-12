@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueries } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight } from "lucide-react";
@@ -33,6 +33,13 @@ interface ArticleWithEntities extends Article {
   entityPlayers?: (Pick<Player, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
   entityManagers?: (Pick<Manager, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
   entityCompetitions?: (Pick<Competition, "id" | "name" | "slug"> & { source: string; salienceScore: number })[];
+}
+
+interface EntityMediaResponse {
+  entityType: "competition" | "team";
+  entityId: string;
+  url: string | null;
+  hasMedia: boolean;
 }
 
 const SHOW_PILLS = true;
@@ -716,6 +723,110 @@ export default function ArticlePage() {
     };
   }, [article]);
 
+  const headerPillEntityTargets = useMemo(() => {
+    if (!article || headerPills.length === 0) return [] as Array<{ key: string; entityType: "competition" | "team"; entityId: string }>;
+    const normalize = (value?: string | null) => (value || "").trim().toLowerCase();
+
+    const teamIdBySlug = new Map<string, string>();
+    const teamIdByName = new Map<string, string>();
+    for (const team of article.entityTeams ?? []) {
+      const slugKey = normalize(team.slug);
+      if (slugKey) teamIdBySlug.set(slugKey, team.id);
+      const nameKey = normalize(team.name);
+      if (nameKey) teamIdByName.set(nameKey, team.id);
+      const shortNameKey = normalize(team.shortName ?? "");
+      if (shortNameKey) teamIdByName.set(shortNameKey, team.id);
+    }
+
+    const compIdBySlug = new Map<string, string>();
+    const compIdByName = new Map<string, string>();
+    for (const comp of article.entityCompetitions ?? []) {
+      const slugKey = normalize(comp.slug);
+      if (slugKey) compIdBySlug.set(slugKey, comp.id);
+      const nameKey = normalize(comp.name);
+      if (nameKey) compIdByName.set(nameKey, comp.id);
+    }
+
+    const targets: Array<{ key: string; entityType: "competition" | "team"; entityId: string }> = [];
+    const seen = new Set<string>();
+    for (const pill of headerPills) {
+      if (pill.type !== "team" && pill.type !== "competition") continue;
+      const entityType = pill.type;
+      const id =
+        entityType === "team"
+          ? teamIdBySlug.get(normalize(pill.slug)) ?? teamIdByName.get(normalize(pill.name))
+          : compIdBySlug.get(normalize(pill.slug)) ?? compIdByName.get(normalize(pill.name));
+      if (!id) continue;
+      const key = `${entityType}:${id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ key, entityType, entityId: id });
+    }
+    return targets;
+  }, [article, headerPills]);
+
+  const headerPillMediaQueries = useQueries({
+    queries: headerPillEntityTargets.map((target) => ({
+      queryKey: ["/api/entity-media", target.entityType, target.entityId, "pill"],
+      queryFn: async (): Promise<EntityMediaResponse | null> => {
+        const response = await fetch(
+          `/api/entity-media/${target.entityType}/${target.entityId}?surface=pill`,
+          { credentials: "include" },
+        );
+        if (!response.ok) return null;
+        return (await response.json()) as EntityMediaResponse;
+      },
+      staleTime: 5 * 60 * 1000,
+      enabled: !!article,
+    })),
+  });
+
+  const headerPillsWithMedia = useMemo(() => {
+    if (!article || headerPills.length === 0) return headerPills;
+    const normalize = (value?: string | null) => (value || "").trim().toLowerCase();
+
+    const targetBySlugOrName = new Map<string, { entityType: "competition" | "team"; entityId: string }>();
+    for (const target of headerPillEntityTargets) {
+      if (target.entityType === "team") {
+        const team = (article.entityTeams ?? []).find((t) => t.id === target.entityId);
+        if (team) {
+          if (team.slug) targetBySlugOrName.set(`team:slug:${normalize(team.slug)}`, target);
+          targetBySlugOrName.set(`team:name:${normalize(team.name)}`, target);
+          if (team.shortName) targetBySlugOrName.set(`team:name:${normalize(team.shortName)}`, target);
+        }
+      } else {
+        const competition = (article.entityCompetitions ?? []).find((c) => c.id === target.entityId);
+        if (competition) {
+          if (competition.slug) targetBySlugOrName.set(`competition:slug:${normalize(competition.slug)}`, target);
+          targetBySlugOrName.set(`competition:name:${normalize(competition.name)}`, target);
+        }
+      }
+    }
+
+    const mediaByTargetKey = new Map<string, EntityMediaResponse | null>();
+    headerPillMediaQueries.forEach((query, idx) => {
+      const target = headerPillEntityTargets[idx];
+      if (!target) return;
+      mediaByTargetKey.set(target.key, (query.data as EntityMediaResponse | null | undefined) ?? null);
+    });
+
+    return headerPills.map((pill) => {
+      if (pill.type !== "team" && pill.type !== "competition") return pill;
+      const target =
+        targetBySlugOrName.get(`${pill.type}:slug:${normalize(pill.slug)}`) ??
+        targetBySlugOrName.get(`${pill.type}:name:${normalize(pill.name)}`);
+      if (!target) return pill;
+      const media = mediaByTargetKey.get(target.key);
+      if (!media) return pill;
+      if (media.hasMedia && media.url) {
+        return { ...pill, iconUrl: media.url, iconFit: "contain" as const };
+      }
+      // Explicitly remove iconUrl so initials fallback is used when resolver has no media.
+      const { iconUrl: _iconUrl, ...rest } = pill;
+      return rest;
+    });
+  }, [article, headerPills, headerPillEntityTargets, headerPillMediaQueries]);
+
   // Early returns AFTER all hooks
   if (isLoading) {
     return <ArticleSkeleton />;
@@ -745,7 +856,7 @@ export default function ArticlePage() {
 
             <header className="mb-8">
               {SHOW_PILLS && headerPills.length > 0 && (
-                <PillsRow pills={headerPills} max={4} className="mb-4" constrainHeight={false} />
+                <PillsRow pills={headerPillsWithMedia} max={4} className="mb-4" constrainHeight={false} />
               )}
 
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4">

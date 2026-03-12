@@ -11,6 +11,7 @@ export interface EntityData {
   slug: string;
   href?: string;
   iconUrl?: string;
+  iconFit?: "cover" | "contain";
   fallbackText?: string;
   color?: string | null;
   shortLabel?: string;
@@ -28,12 +29,14 @@ interface EntityPillProps {
 
 function IconWithFallback({
   src,
+  fit = "cover",
   alt,
   fallbackText,
   size,
   entityType,
 }: {
   src?: string;
+  fit?: "cover" | "contain";
   alt: string;
   fallbackText?: string;
   size: "default" | "small";
@@ -49,7 +52,7 @@ function IconWithFallback({
         <img
           src={src}
           alt={alt}
-          className={cn("object-cover", iconSize)}
+          className={cn(fit === "contain" ? "object-contain" : "object-cover", iconSize)}
           onError={() => setHasError(true)}
         />
       </div>
@@ -130,6 +133,7 @@ export function EntityPill({
     >
       <IconWithFallback
         src={entity.iconUrl}
+        fit={entity.iconFit}
         alt={entity.name}
         fallbackText={entity.fallbackText}
         size={size}
