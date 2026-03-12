@@ -470,7 +470,7 @@ export function buildTagFallbackPills(tags: string[], limit: number): EntityData
   }));
 }
 
-type EntityLike = { name: string; slug: string; salienceScore?: number | null };
+type EntityLike = { id?: string; name: string; slug: string; salienceScore?: number | null };
 type TeamLike = Pick<Team, "id" | "name" | "slug" | "shortName" | "primaryColor"> & {
   salienceScore?: number | null;
 };
@@ -501,7 +501,7 @@ export function isFixtureTag(name: string): boolean {
 function toEntityData(
   type: EntityData["type"],
   name: string,
-  opts?: { slug?: string; color?: string | null; iconUrl?: string }
+  opts?: { entityId?: string; slug?: string; color?: string | null; iconUrl?: string }
 ): EntityData {
   const displayName = type === "competition" ? formatCompetitionName(name) : name;
   const slug = opts?.slug ?? slugify(name);
@@ -515,6 +515,7 @@ function toEntityData(
           : managerProfile(slug);
   return {
     type,
+    entityId: opts?.entityId,
     name: displayName,
     slug,
     color: opts?.color,
@@ -661,11 +662,13 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
 
   const mapCompetition = (c: EntityLike): EntityData =>
     toEntityData("competition", c.name, {
+      entityId: c.id,
       slug: c.slug || slugify(c.name),
       iconUrl: `/crests/comps/${c.slug || slugify(c.name)}.svg`,
     });
   const mapTeam = (t: TeamLike): EntityData =>
     toEntityData("team", formatTeamPillLabel({ slug: t.slug, name: t.name }), {
+      entityId: t.id,
       slug: t.slug || slugify(t.name),
       color: t.primaryColor,
       iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,

@@ -4,9 +4,10 @@ import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
-import { Newspaper, Shield, Trophy } from "lucide-react";
+import { Newspaper } from "lucide-react";
 import type { Article } from "@shared/schema";
 import { Button } from "@/components/ui/button";
+import { EntityAvatar } from "@/components/entity-media";
 
 interface NewsEntityPageProps {
   slug: string;
@@ -90,11 +91,13 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center gap-3 mb-8">
-          {isTeam ? (
-            <Shield className="h-8 w-8 text-primary shrink-0" aria-hidden="true" />
-          ) : (
-            <Trophy className="h-8 w-8 text-primary shrink-0" aria-hidden="true" />
-          )}
+          <EntityAvatar
+            entityType={isTeam ? "team" : "competition"}
+            entityId={data?.appliedContext?.entityId ?? null}
+            surface="hub_header"
+            label={entityName}
+            sizeClassName="h-8 w-8"
+          />
           <div>
             <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">
               {entityName} News

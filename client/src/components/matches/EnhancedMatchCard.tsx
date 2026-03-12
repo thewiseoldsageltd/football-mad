@@ -4,6 +4,7 @@ import { Calendar, Globe } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
+import { EntityIcon } from "@/components/entity-media";
 
 interface EnhancedMatchCardProps {
   match: MockMatch;
@@ -57,20 +58,21 @@ function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: st
 
 function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
   const sizeClasses = size === "sm" ? "w-8 h-8" : "w-12 h-12";
-  const textSize = size === "sm" ? "text-sm" : "text-lg";
+  const iconSize = size === "sm" ? 32 : 48;
 
   return (
     <div
       className={`${sizeClasses} rounded-lg flex items-center justify-center flex-shrink-0`}
       style={{ backgroundColor: team.primaryColor }}
     >
-      {team.logoUrl ? (
-        <img src={team.logoUrl} alt={team.name} className="w-3/4 h-3/4 object-contain" />
-      ) : (
-        <span className={`${textSize} font-bold text-white`}>
-          {team.shortName[0]}
-        </span>
-      )}
+      <EntityIcon
+        entityType="team"
+        entityId={team.id}
+        size={iconSize}
+        label={team.name}
+        surface="fixture"
+        className="rounded-lg"
+      />
     </div>
   );
 }

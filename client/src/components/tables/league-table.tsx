@@ -128,7 +128,7 @@ const StandingsRow = memo(function StandingsRow({
         {/* Team - always visible */}
         <TableCell>
           <div className="flex items-center gap-2 min-w-0">
-            <TeamCrest teamName={row.teamName} size="sm" />
+            <TeamCrest teamId={row.teamId} teamName={row.teamName} size="sm" />
             <span className="font-medium text-sm truncate">{row.teamName}</span>
           </div>
         </TableCell>

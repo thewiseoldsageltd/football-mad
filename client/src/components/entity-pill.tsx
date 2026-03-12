@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Trophy, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EntityPillIcon } from "@/components/entity-media";
 
 export type EntityType = "competition" | "team" | "player" | "manager";
 
 export interface EntityData {
   type: EntityType;
+  entityId?: string;
   name: string;
   slug: string;
   href?: string;
@@ -131,14 +133,23 @@ export function EntityPill({
       title={entity.name}
       aria-label={entity.name}
     >
-      <IconWithFallback
-        src={entity.iconUrl}
-        fit={entity.iconFit}
-        alt={entity.name}
-        fallbackText={entity.fallbackText}
-        size={size}
-        entityType={entity.type}
-      />
+      {(entity.type === "team" || entity.type === "competition") && entity.entityId ? (
+        <EntityPillIcon
+          entityType={entity.type}
+          entityId={entity.entityId}
+          label={entity.name}
+          size={size}
+        />
+      ) : (
+        <IconWithFallback
+          src={entity.iconUrl}
+          fit={entity.iconFit}
+          alt={entity.name}
+          fallbackText={entity.fallbackText}
+          size={size}
+          entityType={entity.type}
+        />
+      )}
       {labelContent}
     </div>
   );

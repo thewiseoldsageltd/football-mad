@@ -91,6 +91,7 @@ interface StandingsApiResponse {
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
   return {
     pos: row.position,
+    teamId: row.team?.id ?? undefined,
     teamName: row.team?.name ?? "Unknown Team",
     teamSlug: row.team?.slug,
     teamCrestUrl: row.team?.crestUrl ?? null,

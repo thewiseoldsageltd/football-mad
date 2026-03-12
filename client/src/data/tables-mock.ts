@@ -1,5 +1,6 @@
 export interface TableRow {
   pos: number;
+  teamId?: string;
   teamName: string;
   teamSlug?: string;
   teamCrestUrl?: string | null;

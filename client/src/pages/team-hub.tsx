@@ -23,15 +23,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
+import { EntityAvatar } from "@/components/entity-media";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
 type RingColor = "green" | "amber" | "orange" | "red" | "gray";
-
-function getTeamInitial(team?: { shortName?: string | null; name?: string | null }): string {
-  const s = (team?.shortName || team?.name || "").trim();
-  return s.length > 0 ? s[0].toUpperCase() : "?";
-}
 
 interface FplAvailabilityWithRag extends FplPlayerAvailability {
   classification: Classification;
@@ -2795,13 +2791,13 @@ export default function TeamHubPage() {
               className="w-20 h-20 md:w-28 md:h-28 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
               style={{ backgroundColor: team.secondaryColor ?? "#ffffff" }}
             >
-              {team.logoUrl ? (
-                <img src={team.logoUrl} alt={team.name} className="w-16 h-16 md:w-20 md:h-20 object-contain" />
-              ) : (
-                <span className="text-3xl md:text-4xl font-bold" style={{ color: team.primaryColor ?? "#1a1a2e" }}>
-                  {getTeamInitial(team)}
-                </span>
-              )}
+              <EntityAvatar
+                entityType="team"
+                entityId={team.id}
+                surface="hub_header"
+                label={team.name}
+                sizeClassName="h-16 w-16 md:h-20 md:w-20"
+              />
             </div>
             <div className="text-center md:text-left flex-1">
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2">

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, MapPin } from "lucide-react";
 import type { Match, Team } from "@shared/schema";
 import { format, isToday, isTomorrow, isPast } from "date-fns";
+import { EntityIcon } from "@/components/entity-media";
 
 interface MatchCardProps {
   match: Match & { homeTeam?: Team; awayTeam?: Team };
@@ -48,13 +49,14 @@ export function MatchCard({ match }: MatchCardProps) {
                 className="w-12 h-12 mx-auto rounded-lg flex items-center justify-center mb-2"
                 style={{ backgroundColor: match.homeTeam?.primaryColor || "#1a1a2e" }}
               >
-                {match.homeTeam?.logoUrl ? (
-                  <img src={match.homeTeam.logoUrl} alt={match.homeTeam.name} className="w-8 h-8 object-contain" />
-                ) : (
-                  <span className="text-lg font-bold text-white">
-                    {match.homeTeam?.shortName?.[0] || "H"}
-                  </span>
-                )}
+                <EntityIcon
+                  entityType="team"
+                  entityId={match.homeTeam?.id}
+                  size={32}
+                  label={match.homeTeam?.name || "Home"}
+                  surface="fixture"
+                  className="rounded-lg"
+                />
               </div>
               <p className="font-medium text-sm truncate">{match.homeTeam?.name || "Home"}</p>
             </div>
@@ -76,13 +78,14 @@ export function MatchCard({ match }: MatchCardProps) {
                 className="w-12 h-12 mx-auto rounded-lg flex items-center justify-center mb-2"
                 style={{ backgroundColor: match.awayTeam?.primaryColor || "#1a1a2e" }}
               >
-                {match.awayTeam?.logoUrl ? (
-                  <img src={match.awayTeam.logoUrl} alt={match.awayTeam.name} className="w-8 h-8 object-contain" />
-                ) : (
-                  <span className="text-lg font-bold text-white">
-                    {match.awayTeam?.shortName?.[0] || "A"}
-                  </span>
-                )}
+                <EntityIcon
+                  entityType="team"
+                  entityId={match.awayTeam?.id}
+                  size={32}
+                  label={match.awayTeam?.name || "Away"}
+                  surface="fixture"
+                  className="rounded-lg"
+                />
               </div>
               <p className="font-medium text-sm truncate">{match.awayTeam?.name || "Away"}</p>
             </div>
