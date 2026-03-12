@@ -745,7 +745,7 @@ export default function ArticlePage() {
 
             <header className="mb-8">
               {SHOW_PILLS && headerPills.length > 0 && (
-                <PillsRow pills={headerPills} max={4} className="mb-4" />
+                <PillsRow pills={headerPills} max={4} className="mb-4" constrainHeight={false} />
               )}
 
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight mb-4">
