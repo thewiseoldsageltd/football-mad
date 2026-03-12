@@ -2,15 +2,24 @@ import { inArray, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { competitions, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
-import { ingestEntityMediaFromUrl } from "../lib/entity-media-service";
+import { ingestEntityMediaFromBuffer, ingestEntityMediaFromUrl } from "../lib/entity-media-service";
+import { jobFetch } from "../lib/job-observability";
+import { getJobRunId } from "../lib/job-context";
 
 const GOALSERVE_ASSET_HOST = "https://www.goalserve.com";
+const GOALSERVE_API_BASE = "https://www.goalserve.com/api/v1";
+const GOALSERVE_FEED_BASE = "https://www.goalserve.com/getfeed";
+const GOALSERVE_MIN_REQUEST_INTERVAL_MS = 1000;
+const LOGOTIPS_BATCH_SIZE = Math.max(1, parseInt(process.env.GOALSERVE_LOGOTIPS_BATCH_SIZE ?? "30", 10));
+let lastGoalserveRequestAtMs = 0;
 
 interface GoalserveTeamMediaSyncResult {
   ok: boolean;
   leagueId: string;
   scanned: number;
   ingested: number;
+  ingestedFromLogotips: number;
+  ingestedFromTeamProfile: number;
   unchanged: number;
   failed: number;
   skippedMissingTeam: number;
@@ -42,22 +51,57 @@ function normalizeSourceUrl(rawUrl: string): string | null {
   return null;
 }
 
-function tryExtractString(node: unknown): string | null {
-  if (typeof node === "string") return node;
-  if (!node || typeof node !== "object") return null;
-  const obj = node as Record<string, unknown>;
-  const directKeys = ["url", "href", "src", "path", "value", "@url", "@href", "@src"];
-  for (const key of directKeys) {
-    const candidate = obj[key];
-    if (typeof candidate === "string" && candidate.trim()) return candidate;
-  }
-  return null;
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
 }
 
-function extractImageCandidateFromObject(node: unknown): string | null {
+async function goalserveRateLimitedRequest(url: string): Promise<Response> {
+  const elapsed = Date.now() - lastGoalserveRequestAtMs;
+  if (elapsed < GOALSERVE_MIN_REQUEST_INTERVAL_MS) {
+    await new Promise((resolve) => setTimeout(resolve, GOALSERVE_MIN_REQUEST_INTERVAL_MS - elapsed));
+  }
+  lastGoalserveRequestAtMs = Date.now();
+  return jobFetch(getJobRunId() ?? undefined, {
+    provider: "goalserve",
+    url,
+    method: "GET",
+    timeoutMs: 30_000,
+  });
+}
+
+function buildGoalserveFeedUrl(path: string): string | null {
+  const key = process.env.GOALSERVE_FEED_KEY;
+  if (!key) return null;
+  const jsonParam = path.includes("?") ? "&json=1" : "?json=1";
+  return `${GOALSERVE_FEED_BASE}/${key}/${path}${jsonParam}`;
+}
+
+function extractCandidateImageUrls(node: unknown, out = new Set<string>(), visited = new WeakSet<object>()): Set<string> {
+  if (typeof node === "string") {
+    const normalized = normalizeSourceUrl(node);
+    if (normalized) out.add(normalized);
+    return out;
+  }
+  if (!node || typeof node !== "object") return out;
+  if (visited.has(node as object)) return out;
+  visited.add(node as object);
+  if (Array.isArray(node)) {
+    for (const item of node) extractCandidateImageUrls(item, out, visited);
+    return out;
+  }
+  const obj = node as Record<string, unknown>;
+  for (const value of Object.values(obj)) {
+    extractCandidateImageUrls(value, out, visited);
+  }
+  return out;
+}
+
+function tryReadImageFromObject(node: unknown): string | null {
   if (!node || typeof node !== "object") return null;
   const obj = node as Record<string, unknown>;
-  const preferredKeys = [
+  const keys = [
     "logo",
     "logo_url",
     "crest",
@@ -67,34 +111,133 @@ function extractImageCandidateFromObject(node: unknown): string | null {
     "image",
     "image_url",
     "img",
+    "url",
+    "href",
+    "src",
     "@logo",
-    "@crest",
-    "@badge",
-    "@image",
     "@logo_url",
+    "@crest",
     "@crest_url",
+    "@badge",
     "@badge_url",
+    "@image",
     "@image_url",
+    "@url",
+    "@href",
+    "@src",
   ];
-
-  for (const key of preferredKeys) {
-    const candidate = tryExtractString(obj[key]);
-    if (!candidate) continue;
-    const normalized = normalizeSourceUrl(candidate);
-    if (normalized) return normalized;
+  for (const key of keys) {
+    const value = obj[key];
+    if (typeof value === "string") {
+      const normalized = normalizeSourceUrl(value);
+      if (normalized) return normalized;
+    }
   }
-
-  // Fallback: shallow scan any likely media-ish key.
   for (const [key, value] of Object.entries(obj)) {
-    const k = key.toLowerCase();
-    if (!/(logo|crest|badge|image|img|emblem|icon)/.test(k)) continue;
-    const candidate = tryExtractString(value);
-    if (!candidate) continue;
-    const normalized = normalizeSourceUrl(candidate);
+    if (!/(logo|crest|badge|image|img|emblem|icon)/i.test(key)) continue;
+    if (typeof value !== "string") continue;
+    const normalized = normalizeSourceUrl(value);
     if (normalized) return normalized;
   }
-
   return null;
+}
+
+function readGoalserveId(node: Record<string, unknown>): string {
+  return String(node["@id"] ?? node.id ?? "").trim();
+}
+
+async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Map<string, string>> {
+  const key = process.env.GOALSERVE_FEED_KEY;
+  if (!key || goalserveTeamIds.length === 0) return new Map();
+
+  const byTeamId = new Map<string, string>();
+  const batches = chunk(goalserveTeamIds, LOGOTIPS_BATCH_SIZE);
+
+  for (const batchIds of batches) {
+    const url = `${GOALSERVE_API_BASE}/logotips/soccer/teams?k=${encodeURIComponent(key)}&ids=${encodeURIComponent(batchIds.join(","))}`;
+    try {
+      const res = await goalserveRateLimitedRequest(url);
+      if (!res.ok) continue;
+      const payload = await res.json().catch(() => null);
+      if (!payload) continue;
+
+      const records: Record<string, unknown>[] = Array.isArray((payload as any)?.data)
+        ? (payload as any).data
+        : Array.isArray((payload as any)?.results)
+          ? (payload as any).results
+          : [];
+
+      for (const record of records) {
+        const id = String(record.id ?? record.team_id ?? record["@id"] ?? record["@team_id"] ?? "").trim();
+        if (!id) continue;
+        const image = tryReadImageFromObject(record);
+        if (image) byTeamId.set(id, image);
+      }
+
+      if (batchIds.length === 1 && !byTeamId.has(batchIds[0])) {
+        const firstAnyImage = Array.from(extractCandidateImageUrls(payload))[0];
+        if (firstAnyImage) byTeamId.set(batchIds[0], firstAnyImage);
+      }
+    } catch {
+      // allow fallback path
+    }
+  }
+
+  return byTeamId;
+}
+
+async function fetchTeamProfileBase64Image(goalserveTeamId: string): Promise<string | null> {
+  try {
+    const url = buildGoalserveFeedUrl(`soccerstats/team/${goalserveTeamId}`);
+    if (!url) return null;
+    const res = await goalserveRateLimitedRequest(url);
+    if (!res.ok) return null;
+    const response = await res.json().catch(() => null);
+    if (!response) return null;
+    const queue: unknown[] = [response];
+    while (queue.length > 0) {
+      const node = queue.shift();
+      if (!node || typeof node !== "object") continue;
+      if (Array.isArray(node)) {
+        for (const item of node) queue.push(item);
+        continue;
+      }
+      const obj = node as Record<string, unknown>;
+      if (typeof obj.image === "string" && obj.image.trim()) return obj.image;
+      if (typeof obj["@image"] === "string" && obj["@image"].trim()) return obj["@image"] as string;
+      for (const value of Object.values(obj)) queue.push(value);
+    }
+  } catch {
+    // swallow and return null
+  }
+  return null;
+}
+
+function decodeBase64Image(raw: string): { buffer: Buffer; mimeType: string; formatHint: string } | null {
+  const value = raw.trim();
+  if (!value) return null;
+
+  const uriMatch = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (uriMatch) {
+    const mimeType = uriMatch[1].toLowerCase();
+    const payload = uriMatch[2];
+    try {
+      const buffer = Buffer.from(payload, "base64");
+      if (!buffer.length) return null;
+      const formatHint = mimeType.includes("png") ? "png" : mimeType.includes("webp") ? "webp" : mimeType.includes("svg") ? "svg" : "jpg";
+      return { buffer, mimeType, formatHint };
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    const buffer = Buffer.from(value, "base64");
+    if (!buffer.length) return null;
+    return { buffer, mimeType: "image/jpeg", formatHint: "jpg" };
+  } catch {
+    return null;
+  }
 }
 
 type NormalizedCompetitionNode = {
@@ -143,6 +286,8 @@ export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<
     leagueId,
     scanned: 0,
     ingested: 0,
+    ingestedFromLogotips: 0,
+    ingestedFromTeamProfile: 0,
     unchanged: 0,
     failed: 0,
     skippedMissingTeam: 0,
@@ -162,37 +307,74 @@ export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<
       .where(isNotNull(teams.goalserveTeamId));
     const dbByGoalserveId = new Map(dbTeams.map((t) => [String(t.goalserveTeamId), t.id]));
 
+    const scopedGoalserveIds = Array.from(
+      new Set(feedTeams.map((n) => readGoalserveId(n)).filter((id) => id && dbByGoalserveId.has(id))),
+    );
+    const logotipsMap = await fetchLogotipsTeamImageMap(scopedGoalserveIds);
+
     for (const teamNode of feedTeams) {
-      const gsId = String((teamNode["@id"] as string | undefined) ?? (teamNode.id as string | undefined) ?? "").trim();
+      const gsId = readGoalserveId(teamNode);
       if (!gsId || !dbByGoalserveId.has(gsId)) {
         result.skippedMissingTeam++;
         continue;
       }
+      const entityId = dbByGoalserveId.get(gsId)!;
 
-      const sourceUrl = extractImageCandidateFromObject(teamNode);
-      if (!sourceUrl) {
+      const logotipUrl = logotipsMap.get(gsId) ?? null;
+      if (logotipUrl) {
+        const ingest = await ingestEntityMediaFromUrl({
+          entityType: "team",
+          entityId,
+          mediaRole: "crest",
+          sourceSystem: "goalserve",
+          sourceUrl: logotipUrl,
+          sourceRef: `goalserve:logotips:team:${gsId}`,
+          makePrimary: true,
+        });
+
+        if (!ingest.ok) {
+          result.failed++;
+          if (ingest.error) result.errors.push(`team ${gsId} (logotips): ${ingest.error}`);
+        } else if (ingest.unchanged) {
+          result.unchanged++;
+          continue;
+        } else {
+          result.ingested++;
+          result.ingestedFromLogotips++;
+          continue;
+        }
+      }
+
+      const profileImageRaw = await fetchTeamProfileBase64Image(gsId);
+      const decoded = profileImageRaw ? decodeBase64Image(profileImageRaw) : null;
+      if (!decoded) {
         result.skippedMissingImage++;
         continue;
       }
 
-      const ingest = await ingestEntityMediaFromUrl({
+      const ingestFromProfile = await ingestEntityMediaFromBuffer({
         entityType: "team",
-        entityId: dbByGoalserveId.get(gsId)!,
+        entityId,
         mediaRole: "crest",
         sourceSystem: "goalserve",
-        sourceUrl,
-        sourceRef: `goalserve:team:${gsId}`,
+        sourceRef: `goalserve:soccerstats:team:${gsId}`,
+        sourceFormatHint: decoded.formatHint,
+        sourceMimeTypeHint: decoded.mimeType,
         makePrimary: true,
+        originalBuffer: decoded.buffer,
       });
 
-      if (!ingest.ok) {
+      if (!ingestFromProfile.ok) {
         result.failed++;
-        if (ingest.error) result.errors.push(`team ${gsId}: ${ingest.error}`);
+        if (ingestFromProfile.error) result.errors.push(`team ${gsId} (soccerstats): ${ingestFromProfile.error}`);
         continue;
       }
-
-      if (ingest.unchanged) result.unchanged++;
-      else result.ingested++;
+      if (ingestFromProfile.unchanged) {
+        result.unchanged++;
+      } else {
+        result.ingested++;
+        result.ingestedFromTeamProfile++;
+      }
     }
   } catch (err) {
     result.ok = false;
@@ -219,9 +401,7 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
     const nodes: NormalizedCompetitionNode[] = [];
     extractCompetitionNodes(response, nodes);
 
-    const deduped = Array.from(
-      new Map(nodes.map((n) => [n.goalserveCompetitionId, n])).values(),
-    );
+    const deduped = Array.from(new Map(nodes.map((n) => [n.goalserveCompetitionId, n])).values());
     result.scanned = deduped.length;
 
     const goalserveIds = deduped.map((d) => d.goalserveCompetitionId);
@@ -247,7 +427,7 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
         continue;
       }
 
-      const sourceUrl = extractImageCandidateFromObject(node.rawNode);
+      const sourceUrl = tryReadImageFromObject(node.rawNode);
       if (!sourceUrl) {
         result.skippedMissingImage++;
         continue;
@@ -310,6 +490,8 @@ export async function syncGoalserveEntityMedia(params: {
         leagueId: "",
         scanned: 0,
         ingested: 0,
+        ingestedFromLogotips: 0,
+        ingestedFromTeamProfile: 0,
         unchanged: 0,
         failed: 0,
         skippedMissingTeam: 0,

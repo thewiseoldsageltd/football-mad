@@ -21,6 +21,18 @@ export interface IngestEntityMediaFromUrlInput {
   makePrimary?: boolean;
 }
 
+export interface IngestEntityMediaFromBufferInput {
+  entityType: SupportedEntityType;
+  entityId: string;
+  mediaRole: SupportedMediaRole;
+  sourceSystem: MediaSourceSystem;
+  sourceRef?: string;
+  sourceFormatHint?: string;
+  sourceMimeTypeHint?: string;
+  makePrimary?: boolean;
+  originalBuffer: Buffer;
+}
+
 export interface IngestEntityMediaResult {
   ok: boolean;
   entityMediaId: string | null;
@@ -118,27 +130,38 @@ async function createVariantBuffer(originalBuffer: Buffer, width: number, height
     .toBuffer();
 }
 
-export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlInput): Promise<IngestEntityMediaResult> {
+async function ingestEntityMediaFromBufferCore(input: {
+  entityType: SupportedEntityType;
+  entityId: string;
+  mediaRole: SupportedMediaRole;
+  sourceSystem: MediaSourceSystem;
+  sourceRef: string;
+  sourceFormatHint?: string;
+  sourceMimeTypeHint?: string;
+  makePrimary: boolean;
+  originalBuffer: Buffer;
+}): Promise<IngestEntityMediaResult> {
   const {
     entityType,
     entityId,
     mediaRole,
     sourceSystem,
-    sourceUrl,
     sourceRef,
-    makePrimary = true,
+    sourceFormatHint,
+    sourceMimeTypeHint,
+    makePrimary,
+    originalBuffer,
   } = input;
   const now = new Date();
 
   try {
-    const { buffer: originalBuffer, mimeType } = await fetchImageBuffer(sourceSystem, sourceUrl);
     if (!originalBuffer.length) {
       return { ok: false, entityMediaId: null, created: false, unchanged: false, cdnOriginalUrl: null, variantsCreated: 0, error: "empty image response" };
     }
 
     const checksum = checksumOf(originalBuffer);
-    const ext = inferExtension(sourceUrl, mimeType);
-    const normalizedMimeType = normalizeMimeType(mimeType, ext);
+    const ext = sourceFormatHint ? sourceFormatHint.toLowerCase() : inferExtension(sourceRef, sourceMimeTypeHint ?? null);
+    const normalizedMimeType = normalizeMimeType(sourceMimeTypeHint ?? null, ext);
 
     const metadata = await sharp(originalBuffer).metadata().catch(() => null);
     const originalWidth = metadata?.width ?? null;
@@ -168,7 +191,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
       await db
         .update(entityMedia)
         .set({
-          sourceRef: sourceRef ?? sourceUrl,
+          sourceRef,
           sourceSystem,
           sourceFormat: ext,
           sourceMimeType: normalizedMimeType,
@@ -235,7 +258,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
           entityId,
           mediaRole,
           sourceSystem,
-          sourceRef: sourceRef ?? sourceUrl,
+          sourceRef,
           sourceFormat: ext,
           sourceMimeType: normalizedMimeType,
           originalWidth,
@@ -291,4 +314,53 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlInput): Promise<IngestEntityMediaResult> {
+  const {
+    entityType,
+    entityId,
+    mediaRole,
+    sourceSystem,
+    sourceUrl,
+    sourceRef,
+    makePrimary = true,
+  } = input;
+  const fetched = await fetchImageBuffer(sourceSystem, sourceUrl);
+  return ingestEntityMediaFromBufferCore({
+    entityType,
+    entityId,
+    mediaRole,
+    sourceSystem,
+    sourceRef: sourceRef ?? sourceUrl,
+    sourceFormatHint: undefined,
+    sourceMimeTypeHint: fetched.mimeType ?? undefined,
+    makePrimary,
+    originalBuffer: fetched.buffer,
+  });
+}
+
+export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBufferInput): Promise<IngestEntityMediaResult> {
+  const {
+    entityType,
+    entityId,
+    mediaRole,
+    sourceSystem,
+    sourceRef,
+    sourceFormatHint,
+    sourceMimeTypeHint,
+    makePrimary = true,
+    originalBuffer,
+  } = input;
+  return ingestEntityMediaFromBufferCore({
+    entityType,
+    entityId,
+    mediaRole,
+    sourceSystem,
+    sourceRef: sourceRef ?? `${sourceSystem}:buffer`,
+    sourceFormatHint,
+    sourceMimeTypeHint,
+    makePrimary,
+    originalBuffer,
+  });
 }
