@@ -1,4 +1,4 @@
-import { inArray, isNotNull } from "drizzle-orm";
+import { isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { competitions, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
@@ -31,6 +31,7 @@ interface GoalserveCompetitionMediaSyncResult {
   ok: boolean;
   scanned: number;
   ingested: number;
+  ingestedFromLogotips: number;
   unchanged: number;
   failed: number;
   skippedMissingCompetition: number;
@@ -186,6 +187,54 @@ async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Ma
   return byTeamId;
 }
 
+async function fetchLogotipsCompetitionImageMap(goalserveLeagueIds: string[]): Promise<Map<string, string>> {
+  const key = process.env.GOALSERVE_FEED_KEY;
+  if (!key || goalserveLeagueIds.length === 0) return new Map();
+
+  const byLeagueId = new Map<string, string>();
+  const batches = chunk(goalserveLeagueIds, LOGOTIPS_BATCH_SIZE);
+
+  for (const batchIds of batches) {
+    const url = `${GOALSERVE_API_BASE}/logotips/soccer/leagues?k=${encodeURIComponent(key)}&ids=${encodeURIComponent(batchIds.join(","))}`;
+    try {
+      const res = await goalserveRateLimitedRequest(url);
+      if (!res.ok) continue;
+      const payload = await res.json().catch(() => null);
+      if (!payload) continue;
+
+      const records: Record<string, unknown>[] = Array.isArray((payload as any)?.data)
+        ? (payload as any).data
+        : Array.isArray((payload as any)?.results)
+          ? (payload as any).results
+          : [];
+
+      for (const record of records) {
+        const id = String(
+          record.id ??
+          record.league_id ??
+          record.competition_id ??
+          record["@id"] ??
+          record["@league_id"] ??
+          record["@competition_id"] ??
+          "",
+        ).trim();
+        if (!id) continue;
+        const image = tryReadImageFromObject(record);
+        if (image) byLeagueId.set(id, image);
+      }
+
+      if (batchIds.length === 1 && !byLeagueId.has(batchIds[0])) {
+        const firstAnyImage = Array.from(extractCandidateImageUrls(payload))[0];
+        if (firstAnyImage) byLeagueId.set(batchIds[0], firstAnyImage);
+      }
+    } catch {
+      // continue with remaining batches
+    }
+  }
+
+  return byLeagueId;
+}
+
 async function fetchTeamProfileBase64Image(goalserveTeamId: string): Promise<string | null> {
   try {
     const url = buildGoalserveFeedUrl(`soccerstats/team/${goalserveTeamId}`);
@@ -237,46 +286,6 @@ function decodeBase64Image(raw: string): { buffer: Buffer; mimeType: string; for
     return { buffer, mimeType: "image/jpeg", formatHint: "jpg" };
   } catch {
     return null;
-  }
-}
-
-type NormalizedCompetitionNode = {
-  goalserveCompetitionId: string;
-  rawNode: Record<string, unknown>;
-};
-
-function extractCompetitionNodes(obj: unknown, out: NormalizedCompetitionNode[], visited = new WeakSet<object>()): void {
-  if (!obj || typeof obj !== "object") return;
-  if (visited.has(obj as object)) return;
-  visited.add(obj as object);
-
-  if (Array.isArray(obj)) {
-    for (const item of obj) extractCompetitionNodes(item, out, visited);
-    return;
-  }
-
-  const node = obj as Record<string, unknown>;
-  const attrs = (node.$ as Record<string, unknown> | undefined) ?? {};
-  const idRaw =
-    node.id ??
-    node.league_id ??
-    node.competition_id ??
-    node["@id"] ??
-    node["@league_id"] ??
-    node["@competition_id"] ??
-    attrs.id ??
-    attrs.league_id ??
-    attrs.competition_id;
-
-  if (idRaw != null) {
-    out.push({
-      goalserveCompetitionId: String(idRaw),
-      rawNode: node,
-    });
-  }
-
-  for (const value of Object.values(node)) {
-    extractCompetitionNodes(value, out, visited);
   }
 }
 
@@ -389,6 +398,7 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
     ok: true,
     scanned: 0,
     ingested: 0,
+    ingestedFromLogotips: 0,
     unchanged: 0,
     failed: 0,
     skippedMissingCompetition: 0,
@@ -397,37 +407,33 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
   };
 
   try {
-    const response = await goalserveFetch("soccerfixtures/data/mapping");
-    const nodes: NormalizedCompetitionNode[] = [];
-    extractCompetitionNodes(response, nodes);
+    const dbComps = await db
+      .select({
+        id: competitions.id,
+        goalserveCompetitionId: competitions.goalserveCompetitionId,
+      })
+      .from(competitions)
+      .where(isNotNull(competitions.goalserveCompetitionId));
 
-    const deduped = Array.from(new Map(nodes.map((n) => [n.goalserveCompetitionId, n])).values());
-    result.scanned = deduped.length;
+    const goalserveIds = Array.from(new Set(dbComps.map((c) => String(c.goalserveCompetitionId)).filter(Boolean)));
+    result.scanned = goalserveIds.length;
 
-    const goalserveIds = deduped.map((d) => d.goalserveCompetitionId);
-    const dbComps = goalserveIds.length
-      ? await db
-          .select({
-            id: competitions.id,
-            goalserveCompetitionId: competitions.goalserveCompetitionId,
-          })
-          .from(competitions)
-          .where(inArray(competitions.goalserveCompetitionId, goalserveIds))
-      : [];
     const dbByGoalserveId = new Map(
       dbComps
         .filter((c) => !!c.goalserveCompetitionId)
         .map((c) => [String(c.goalserveCompetitionId), c.id]),
     );
 
-    for (const node of deduped) {
-      const dbCompetitionId = dbByGoalserveId.get(node.goalserveCompetitionId);
+    const logotipsByLeagueId = await fetchLogotipsCompetitionImageMap(goalserveIds);
+
+    for (const goalserveLeagueId of goalserveIds) {
+      const dbCompetitionId = dbByGoalserveId.get(goalserveLeagueId);
       if (!dbCompetitionId) {
         result.skippedMissingCompetition++;
         continue;
       }
 
-      const sourceUrl = tryReadImageFromObject(node.rawNode);
+      const sourceUrl = logotipsByLeagueId.get(goalserveLeagueId) ?? null;
       if (!sourceUrl) {
         result.skippedMissingImage++;
         continue;
@@ -439,18 +445,21 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
         mediaRole: "logo",
         sourceSystem: "goalserve",
         sourceUrl,
-        sourceRef: `goalserve:competition:${node.goalserveCompetitionId}`,
+        sourceRef: `goalserve:logotips:league:${goalserveLeagueId}`,
         makePrimary: true,
       });
 
       if (!ingest.ok) {
         result.failed++;
-        if (ingest.error) result.errors.push(`competition ${node.goalserveCompetitionId}: ${ingest.error}`);
+        if (ingest.error) result.errors.push(`competition ${goalserveLeagueId}: ${ingest.error}`);
         continue;
       }
 
       if (ingest.unchanged) result.unchanged++;
-      else result.ingested++;
+      else {
+        result.ingested++;
+        result.ingestedFromLogotips++;
+      }
     }
   } catch (err) {
     result.ok = false;
