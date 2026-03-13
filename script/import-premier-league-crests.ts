@@ -24,6 +24,7 @@ function parseArgs(argv: string[]): { dir: string } {
 async function main(): Promise<void> {
   const { dir } = parseArgs(process.argv.slice(2));
   const crestDir = path.resolve(process.cwd(), dir);
+  const importVersion = `${Date.now()}`;
 
   const summary: Summary = {
     scanned: 0,
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
         sourceFormatHint: "svg",
         sourceMimeTypeHint: "image/svg+xml",
         makePrimary: true,
+        storageVersion: importVersion,
         originalBuffer: svgBuffer,
       });
 
@@ -96,6 +98,7 @@ async function main(): Promise<void> {
 
     console.log("");
     console.log("Premier League crest import summary");
+    console.log(`version: v${importVersion}`);
     console.log(`scanned: ${summary.scanned}`);
     console.log(`matched teams: ${summary.matchedTeams}`);
     console.log(`uploaded: ${summary.uploaded}`);

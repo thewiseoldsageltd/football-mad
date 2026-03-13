@@ -19,6 +19,7 @@ export interface IngestEntityMediaFromUrlInput {
   sourceUrl: string;
   sourceRef?: string;
   makePrimary?: boolean;
+  storageVersion?: string;
 }
 
 export interface IngestEntityMediaFromBufferInput {
@@ -30,6 +31,7 @@ export interface IngestEntityMediaFromBufferInput {
   sourceFormatHint?: string;
   sourceMimeTypeHint?: string;
   makePrimary?: boolean;
+  storageVersion?: string;
   originalBuffer: Buffer;
 }
 
@@ -94,13 +96,34 @@ function checksumOf(buffer: Buffer): string {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
-function buildOriginalStorageKey(entityType: SupportedEntityType, entityId: string, ext: string): string {
-  return `entity-media/${pluralizeEntityType(entityType)}/${entityId}/original.${ext}`;
+function normalizeStorageVersion(storageVersion?: string): string | null {
+  if (!storageVersion) return null;
+  const normalized = storageVersion.trim().replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!normalized) return null;
+  return normalized;
 }
 
-function buildVariantStorageKey(entityType: SupportedEntityType, entityId: string, variantName: VariantSpec["variantName"]): string {
+function buildOriginalStorageKeyWithVersion(
+  entityType: SupportedEntityType,
+  entityId: string,
+  ext: string,
+  storageVersion?: string,
+): string {
+  const version = normalizeStorageVersion(storageVersion);
+  const versionPath = version ? `/v${version}` : "";
+  return `entity-media/${pluralizeEntityType(entityType)}/${entityId}${versionPath}/original.${ext}`;
+}
+
+function buildVariantStorageKeyWithVersion(
+  entityType: SupportedEntityType,
+  entityId: string,
+  variantName: VariantSpec["variantName"],
+  storageVersion?: string,
+): string {
   const normalized = variantName.replace("_", "-");
-  return `entity-media/${pluralizeEntityType(entityType)}/${entityId}/${normalized}.webp`;
+  const version = normalizeStorageVersion(storageVersion);
+  const versionPath = version ? `/v${version}` : "";
+  return `entity-media/${pluralizeEntityType(entityType)}/${entityId}${versionPath}/${normalized}.webp`;
 }
 
 async function fetchImageBuffer(sourceSystem: MediaSourceSystem, sourceUrl: string): Promise<{ buffer: Buffer; mimeType: string | null }> {
@@ -139,6 +162,7 @@ async function ingestEntityMediaFromBufferCore(input: {
   sourceFormatHint?: string;
   sourceMimeTypeHint?: string;
   makePrimary: boolean;
+  storageVersion?: string;
   originalBuffer: Buffer;
 }): Promise<IngestEntityMediaResult> {
   const {
@@ -150,6 +174,7 @@ async function ingestEntityMediaFromBufferCore(input: {
     sourceFormatHint,
     sourceMimeTypeHint,
     makePrimary,
+    storageVersion,
     originalBuffer,
   } = input;
   const now = new Date();
@@ -167,13 +192,15 @@ async function ingestEntityMediaFromBufferCore(input: {
     const originalWidth = metadata?.width ?? null;
     const originalHeight = metadata?.height ?? null;
 
-    const originalStorageKey = buildOriginalStorageKey(entityType, entityId, ext);
+    const originalStorageKey = buildOriginalStorageKeyWithVersion(entityType, entityId, ext, storageVersion);
     const cdnOriginalUrl = `${getCdnBaseUrl()}/${originalStorageKey}`;
 
     const existingPrimary = await db
       .select({
         id: entityMedia.id,
         checksum: entityMedia.checksum,
+        originalStorageKey: entityMedia.originalStorageKey,
+        cdnOriginalUrl: entityMedia.cdnOriginalUrl,
       })
       .from(entityMedia)
       .where(
@@ -197,8 +224,6 @@ async function ingestEntityMediaFromBufferCore(input: {
           sourceMimeType: normalizedMimeType,
           originalWidth,
           originalHeight,
-          originalStorageKey,
-          cdnOriginalUrl,
           lastIngestedAt: now,
           updatedAt: now,
         })
@@ -209,7 +234,7 @@ async function ingestEntityMediaFromBufferCore(input: {
         entityMediaId: existingPrimary[0].id,
         created: false,
         unchanged: true,
-        cdnOriginalUrl,
+        cdnOriginalUrl: existingPrimary[0].cdnOriginalUrl,
         variantsCreated: 0,
       };
     }
@@ -219,7 +244,7 @@ async function ingestEntityMediaFromBufferCore(input: {
     const preparedVariants = await Promise.all(
       VARIANT_SPECS.map(async (spec) => {
         const variantBuffer = await createVariantBuffer(originalBuffer, spec.width, spec.height);
-        const storageKey = buildVariantStorageKey(entityType, entityId, spec.variantName);
+        const storageKey = buildVariantStorageKeyWithVersion(entityType, entityId, spec.variantName, storageVersion);
         const cdnUrl = `${getCdnBaseUrl()}/${storageKey}`;
         await uploadBufferToR2Key(storageKey, variantBuffer, "image/webp");
         return {
@@ -325,6 +350,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
     sourceUrl,
     sourceRef,
     makePrimary = true,
+    storageVersion,
   } = input;
   const fetched = await fetchImageBuffer(sourceSystem, sourceUrl);
   return ingestEntityMediaFromBufferCore({
@@ -336,6 +362,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
     sourceFormatHint: undefined,
     sourceMimeTypeHint: fetched.mimeType ?? undefined,
     makePrimary,
+    storageVersion,
     originalBuffer: fetched.buffer,
   });
 }
@@ -350,6 +377,7 @@ export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBu
     sourceFormatHint,
     sourceMimeTypeHint,
     makePrimary = true,
+    storageVersion,
     originalBuffer,
   } = input;
   return ingestEntityMediaFromBufferCore({
@@ -361,6 +389,7 @@ export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBu
     sourceFormatHint,
     sourceMimeTypeHint,
     makePrimary,
+    storageVersion,
     originalBuffer,
   });
 }
