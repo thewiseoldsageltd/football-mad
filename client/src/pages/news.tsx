@@ -81,12 +81,6 @@ export default function NewsPage() {
     buildApiQueryString
   } = useNewsFilters();
   
-  // DEV: mount/unmount logging
-  useEffect(() => {
-    if (import.meta.env.DEV) console.log("[news] mount");
-    return () => { if (import.meta.env.DEV) console.log("[news] unmount"); };
-  }, []);
-  
   const [teamSearch, setTeamSearch] = useState("");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
@@ -132,15 +126,9 @@ export default function NewsPage() {
     return [...baseArticles, ...uniqueExtra];
   }, [baseArticles, extraArticles]);
   
-  // DEV diagnostics on render
-  if (import.meta.env.DEV) {
-    console.log("[news] render", { location, isLoading, isFetching, status, count: articles.length });
-  }
-  
   // Force refetch when /news route becomes active (client-side navigation)
   useEffect(() => {
     if (!location.startsWith("/news")) return;
-    if (import.meta.env.DEV) console.log("[news] activated route -> invalidate /api/news", location);
     queryClient.invalidateQueries({ queryKey: ["/api/news"] });
   }, [location, queryClient]);
   

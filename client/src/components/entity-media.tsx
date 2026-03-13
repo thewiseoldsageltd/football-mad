@@ -2,8 +2,12 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useEntityMedia, type MediaEntityType, type MediaSurface } from "@/hooks/use-entity-media";
 
-function getInitials(label: string): string {
-  const safe = label.trim();
+function normalizeLabel(label: unknown): string {
+  return typeof label === "string" ? label.trim() : "";
+}
+
+function getInitials(label: unknown): string {
+  const safe = normalizeLabel(label);
   if (!safe) return "?";
   const words = safe.split(/\s+/).filter(Boolean);
   if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
@@ -11,7 +15,7 @@ function getInitials(label: string): string {
 }
 
 interface FallbackProps {
-  label: string;
+  label?: string | null;
   className?: string;
   textClassName?: string;
 }
@@ -28,7 +32,7 @@ interface EntityIconProps {
   entityType: MediaEntityType;
   entityId?: string | null;
   size?: number;
-  label: string;
+  label?: string | null;
   surface?: "pill";
   className?: string;
 }
@@ -69,7 +73,7 @@ interface EntityAvatarProps {
   entityType: MediaEntityType;
   entityId?: string | null;
   surface?: "hub_header";
-  label: string;
+  label?: string | null;
   sizeClassName?: string;
   shape?: "circle" | "square";
   className?: string;
@@ -110,7 +114,7 @@ export function EntityAvatar({
 interface EntityPillIconProps {
   entityType: MediaEntityType;
   entityId?: string | null;
-  label: string;
+  label?: string | null;
   size?: "small" | "default";
 }
 
