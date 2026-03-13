@@ -656,9 +656,19 @@ function dedupeByNameCaseInsensitive(pills: EntityData[]): EntityData[] {
   return out;
 }
 
+function isCanonicalTeamUuid(value: string | undefined): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []): PillGroups {
   const teamIdBySlug = new Map(teams.map((t) => [t.slug, t.id]));
   const teamIdByName = new Map(teams.map((t) => [normalizeTagValue(t.name), t.id]));
+  const teamIdByShortName = new Map(
+    teams
+      .filter((t) => Boolean(t.shortName))
+      .map((t) => [normalizeTagValue(t.shortName as string), t.id]),
+  );
 
   const mapCompetition = (c: EntityLike): EntityData =>
     toEntityData("competition", c.name, {
@@ -667,12 +677,21 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
       iconUrl: `/crests/comps/${c.slug || slugify(c.name)}.svg`,
     });
   const mapTeam = (t: TeamLike): EntityData =>
-    toEntityData("team", formatTeamPillLabel({ slug: t.slug, name: t.name }), {
-      entityId: t.id || (t.slug ? teamIdBySlug.get(t.slug) : undefined) || teamIdByName.get(normalizeTagValue(t.name)),
-      slug: t.slug || slugify(t.name),
-      color: t.primaryColor,
-      iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,
-    });
+    {
+      const displayName = formatTeamPillLabel({ slug: t.slug, name: t.name });
+      const recoveredId =
+        (isCanonicalTeamUuid(t.id) ? t.id : undefined) ||
+        (t.slug ? teamIdBySlug.get(t.slug) : undefined) ||
+        teamIdByName.get(normalizeTagValue(t.name)) ||
+        teamIdByName.get(normalizeTagValue(displayName)) ||
+        (t.shortName ? teamIdByShortName.get(normalizeTagValue(t.shortName)) : undefined);
+      return toEntityData("team", displayName, {
+        entityId: recoveredId,
+        slug: t.slug || slugify(t.name),
+        color: t.primaryColor,
+        iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,
+      });
+    };
   const mapPlayer = (p: EntityLike): EntityData =>
     toEntityData("player", p.name, { slug: p.slug || slugify(p.name) });
   const mapManager = (m: EntityLike): EntityData =>
