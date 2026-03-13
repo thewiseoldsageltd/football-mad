@@ -92,7 +92,7 @@ export function EntityAvatar({
 
   if (showImage) {
     return (
-      <div className={cn(shapeClass, "overflow-hidden shrink-0 bg-muted", sizeClassName, className)}>
+      <div className={cn(shapeClass, "overflow-hidden shrink-0", sizeClassName, className)}>
         <img src={url!} alt={label} className="h-full w-full object-contain" onError={() => setImgError(true)} />
       </div>
     );

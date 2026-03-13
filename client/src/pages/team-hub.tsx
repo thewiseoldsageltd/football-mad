@@ -2824,8 +2824,7 @@ export default function TeamHubPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex flex-col md:flex-row items-center gap-6">
             <div
-              className="w-20 h-20 md:w-28 md:h-28 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg"
-              style={{ backgroundColor: team.secondaryColor ?? "#ffffff" }}
+              className="w-20 h-20 md:w-28 md:h-28 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 shadow-lg bg-white/95 border border-white/60"
             >
               <EntityAvatar
                 entityType="team"
