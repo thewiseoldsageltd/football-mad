@@ -7,7 +7,8 @@ import { jobFetch } from "../lib/job-observability";
 import { getJobRunId } from "../lib/job-context";
 
 const GOALSERVE_ASSET_HOST = "https://www.goalserve.com";
-const GOALSERVE_API_BASE = "https://www.goalserve.com/api/v1";
+const GOALSERVE_LOGOTIPS_BASE =
+  (process.env.GOALSERVE_LOGOTIPS_BASE_URL ?? "http://data2.goalserve.com:8084/api/v1/logotips/soccer").replace(/\/$/, "");
 const GOALSERVE_FEED_BASE = "https://www.goalserve.com/getfeed";
 const GOALSERVE_MIN_REQUEST_INTERVAL_MS = 1000;
 const LOGOTIPS_BATCH_SIZE = Math.max(1, parseInt(process.env.GOALSERVE_LOGOTIPS_BATCH_SIZE ?? "30", 10));
@@ -155,7 +156,7 @@ async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Ma
   const batches = chunk(goalserveTeamIds, LOGOTIPS_BATCH_SIZE);
 
   for (const batchIds of batches) {
-    const url = `${GOALSERVE_API_BASE}/logotips/soccer/teams?k=${encodeURIComponent(key)}&ids=${encodeURIComponent(batchIds.join(","))}`;
+    const url = `${GOALSERVE_LOGOTIPS_BASE}/teams?k=${encodeURIComponent(key)}&ids=${encodeURIComponent(batchIds.join(","))}`;
     try {
       const res = await goalserveRateLimitedRequest(url);
       if (!res.ok) continue;
@@ -195,7 +196,7 @@ async function fetchLogotipsCompetitionImageMap(goalserveLeagueIds: string[]): P
   const batches = chunk(goalserveLeagueIds, LOGOTIPS_BATCH_SIZE);
 
   for (const batchIds of batches) {
-    const url = `${GOALSERVE_API_BASE}/logotips/soccer/leagues?k=${encodeURIComponent(key)}&ids=${encodeURIComponent(batchIds.join(","))}`;
+    const url = `${GOALSERVE_LOGOTIPS_BASE}/leagues?k=${encodeURIComponent(key)}&ids=${encodeURIComponent(batchIds.join(","))}`;
     try {
       const res = await goalserveRateLimitedRequest(url);
       if (!res.ok) continue;
