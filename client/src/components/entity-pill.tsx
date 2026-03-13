@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { Trophy, User, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EntityPillIcon } from "@/components/entity-media";
@@ -100,7 +100,6 @@ export function EntityPill({
   labelMode = "full",
   "data-testid": testId,
 }: EntityPillProps) {
-  const [, navigate] = useLocation();
   const effectiveShortLabel = shortLabel || entity.shortLabel;
 
   let labelContent: React.ReactNode;
@@ -162,19 +161,19 @@ export function EntityPill({
 
   if (entity.href) {
     return (
-      <button
-        type="button"
+      <Link
+        href={entity.href}
         title={entity.name}
         aria-label={entity.name}
-        className="p-0 m-0 bg-transparent border-0 text-left"
         onClick={(event) => {
-          event.preventDefault();
           event.stopPropagation();
-          navigate(entity.href!);
+        }}
+        onMouseDown={(event) => {
+          event.stopPropagation();
         }}
       >
         {content}
-      </button>
+      </Link>
     );
   }
 
