@@ -15,14 +15,15 @@ type Summary = {
   failed: number;
 };
 
-function parseArgs(argv: string[]): { dir: string } {
+function parseArgs(argv: string[]): { dir: string; force: boolean } {
   const dirFlag = argv.find((arg) => arg.startsWith("--dir="));
   const dir = dirFlag ? dirFlag.slice("--dir=".length) : "crest-pack/premier-league";
-  return { dir };
+  const force = argv.includes("--force");
+  return { dir, force };
 }
 
 async function main(): Promise<void> {
-  const { dir } = parseArgs(process.argv.slice(2));
+  const { dir, force } = parseArgs(process.argv.slice(2));
   const crestDir = path.resolve(process.cwd(), dir);
   const importVersion = `${Date.now()}`;
 
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
         sourceMimeTypeHint: "image/svg+xml",
         makePrimary: true,
         storageVersion: importVersion,
+        forceReingest: force,
         originalBuffer: svgBuffer,
       });
 
@@ -99,6 +101,7 @@ async function main(): Promise<void> {
     console.log("");
     console.log("Premier League crest import summary");
     console.log(`version: v${importVersion}`);
+    console.log(`force: ${force ? "yes" : "no"}`);
     console.log(`scanned: ${summary.scanned}`);
     console.log(`matched teams: ${summary.matchedTeams}`);
     console.log(`uploaded: ${summary.uploaded}`);

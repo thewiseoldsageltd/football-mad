@@ -20,6 +20,7 @@ export interface IngestEntityMediaFromUrlInput {
   sourceRef?: string;
   makePrimary?: boolean;
   storageVersion?: string;
+  forceReingest?: boolean;
 }
 
 export interface IngestEntityMediaFromBufferInput {
@@ -32,6 +33,7 @@ export interface IngestEntityMediaFromBufferInput {
   sourceMimeTypeHint?: string;
   makePrimary?: boolean;
   storageVersion?: string;
+  forceReingest?: boolean;
   originalBuffer: Buffer;
 }
 
@@ -163,6 +165,7 @@ async function ingestEntityMediaFromBufferCore(input: {
   sourceMimeTypeHint?: string;
   makePrimary: boolean;
   storageVersion?: string;
+  forceReingest?: boolean;
   originalBuffer: Buffer;
 }): Promise<IngestEntityMediaResult> {
   const {
@@ -175,6 +178,7 @@ async function ingestEntityMediaFromBufferCore(input: {
     sourceMimeTypeHint,
     makePrimary,
     storageVersion,
+    forceReingest = false,
     originalBuffer,
   } = input;
   const now = new Date();
@@ -214,7 +218,7 @@ async function ingestEntityMediaFromBufferCore(input: {
       )
       .limit(1);
 
-    if (existingPrimary[0]?.checksum && existingPrimary[0].checksum === checksum) {
+    if (!forceReingest && existingPrimary[0]?.checksum && existingPrimary[0].checksum === checksum) {
       await db
         .update(entityMedia)
         .set({
@@ -351,6 +355,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
     sourceRef,
     makePrimary = true,
     storageVersion,
+    forceReingest = false,
   } = input;
   const fetched = await fetchImageBuffer(sourceSystem, sourceUrl);
   return ingestEntityMediaFromBufferCore({
@@ -363,6 +368,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
     sourceMimeTypeHint: fetched.mimeType ?? undefined,
     makePrimary,
     storageVersion,
+    forceReingest,
     originalBuffer: fetched.buffer,
   });
 }
@@ -378,6 +384,7 @@ export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBu
     sourceMimeTypeHint,
     makePrimary = true,
     storageVersion,
+    forceReingest = false,
     originalBuffer,
   } = input;
   return ingestEntityMediaFromBufferCore({
@@ -390,6 +397,7 @@ export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBu
     sourceMimeTypeHint,
     makePrimary,
     storageVersion,
+    forceReingest,
     originalBuffer,
   });
 }
