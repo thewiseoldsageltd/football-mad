@@ -55,66 +55,13 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
   
   if (featured) {
     return (
-      <Link href={newsArticle(article.slug)}>
-        <Card className="group overflow-hidden hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-article-featured-${article.id}`}>
-          <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
-            {article.coverImage ? (
-              <img
-                src={article.coverImage}
-                alt={article.title}
-                className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
-              />
-            ) : (
-              <div className="h-full w-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-                <span className="text-6xl font-bold text-primary/30">F</span>
-              </div>
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-6">
-              <PillsRow
-                pills={displayPills}
-                max={3}
-                className="mb-2"
-                pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
-                constrainHeight={false}
-              />
-              <h3 className="text-2xl md:text-3xl font-bold text-white mt-2 mb-2 line-clamp-2">
-                {article.title}
-              </h3>
-              {cardExcerpt && (
-                <p className="text-white/80 text-sm md:text-base line-clamp-2 mb-3">
-                  {cardExcerpt}
-                </p>
-              )}
-              <div className="flex items-center gap-4 text-white/60 text-sm">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  {formatDistanceToNow(publishedAt, { addSuffix: true })}
-                </span>
-                {viewCount > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Eye className="h-4 w-4" />
-                    {viewCount.toLocaleString()}
-                  </span>
-                )}
-                {article.authorName && (
-                  <span>By {article.authorName}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </Card>
-      </Link>
-    );
-  }
-
-  return (
-    <Link href={newsArticle(article.slug)}>
-      <Card 
-        className={`group h-full overflow-hidden hover-elevate active-elevate-2 cursor-pointer border ${teamColor ? "team-card-hover" : ""}`}
-        style={teamCardStyle}
-        data-testid={`card-article-${article.id}`}
-      >
+      <Card className="group relative overflow-hidden hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-article-featured-${article.id}`}>
+        <Link
+          href={newsArticle(article.slug)}
+          className="absolute inset-0 z-10"
+          aria-label={article.title}
+          data-testid={`link-article-featured-${article.id}`}
+        />
         <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
           {article.coverImage ? (
             <img
@@ -123,40 +70,105 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
               className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="h-full w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-              <span className="text-4xl font-bold text-muted-foreground/30">F</span>
+            <div className="h-full w-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
+              <span className="text-6xl font-bold text-primary/30">F</span>
             </div>
           )}
-          {teamBadge && (
-            <div className="absolute top-3 right-3">
-              <img src={teamBadge} alt="Team" className="h-8 w-8 drop-shadow-lg" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-6">
+            <div className="relative z-20 mb-2">
+              <PillsRow
+                pills={displayPills}
+                max={3}
+                className="mb-2"
+                pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
+                constrainHeight={false}
+              />
             </div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mt-2 mb-2 line-clamp-2">
+              {article.title}
+            </h3>
+            {cardExcerpt && (
+              <p className="text-white/80 text-sm md:text-base line-clamp-2 mb-3">
+                {cardExcerpt}
+              </p>
+            )}
+            <div className="flex items-center gap-4 text-white/60 text-sm">
+              <span className="flex items-center gap-1">
+                <Clock className="h-4 w-4" />
+                {formatDistanceToNow(publishedAt, { addSuffix: true })}
+              </span>
+              {viewCount > 0 && (
+                <span className="flex items-center gap-1">
+                  <Eye className="h-4 w-4" />
+                  {viewCount.toLocaleString()}
+                </span>
+              )}
+              {article.authorName && (
+                <span>By {article.authorName}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card 
+      className={`group relative h-full overflow-hidden hover-elevate active-elevate-2 cursor-pointer border ${teamColor ? "team-card-hover" : ""}`}
+      style={teamCardStyle}
+      data-testid={`card-article-${article.id}`}
+    >
+      <Link
+        href={newsArticle(article.slug)}
+        className="absolute inset-0 z-10"
+        aria-label={article.title}
+        data-testid={`link-article-${article.id}`}
+      />
+      <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
+        {article.coverImage ? (
+          <img
+            src={article.coverImage}
+            alt={article.title}
+            className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="h-full w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+            <span className="text-4xl font-bold text-muted-foreground/30">F</span>
+          </div>
+        )}
+        {teamBadge && (
+          <div className="absolute top-3 right-3">
+            <img src={teamBadge} alt="Team" className="h-8 w-8 drop-shadow-lg" />
+          </div>
+        )}
+      </div>
+      <CardContent className="p-4">
+        <div className="relative z-20">
+          <PillsRow pills={displayPills} max={3} className="mb-2" constrainHeight={false} />
+        </div>
+        <h3 className="font-semibold text-lg line-clamp-2 mt-2 mb-2 group-hover:text-primary transition-colors">
+          {article.title}
+        </h3>
+        {cardExcerpt && (
+          <p className="text-muted-foreground text-sm line-clamp-2 mb-3">
+            {cardExcerpt}
+          </p>
+        )}
+        <div className="flex items-center gap-3 text-muted-foreground text-xs">
+          <span className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            {formatDistanceToNow(publishedAt, { addSuffix: true })}
+          </span>
+          {viewCount > 0 && (
+            <span className="flex items-center gap-1">
+              <Eye className="h-3 w-3" />
+              {viewCount.toLocaleString()}
+            </span>
           )}
         </div>
-        <CardContent className="p-4">
-          <PillsRow pills={displayPills} max={3} className="mb-2" constrainHeight={false} />
-          <h3 className="font-semibold text-lg line-clamp-2 mt-2 mb-2 group-hover:text-primary transition-colors">
-            {article.title}
-          </h3>
-          {cardExcerpt && (
-            <p className="text-muted-foreground text-sm line-clamp-2 mb-3">
-              {cardExcerpt}
-            </p>
-          )}
-          <div className="flex items-center gap-3 text-muted-foreground text-xs">
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {formatDistanceToNow(publishedAt, { addSuffix: true })}
-            </span>
-            {viewCount > 0 && (
-              <span className="flex items-center gap-1">
-                <Eye className="h-3 w-3" />
-                {viewCount.toLocaleString()}
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+      </CardContent>
+    </Card>
   );
 }
