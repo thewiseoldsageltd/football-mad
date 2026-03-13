@@ -657,8 +657,8 @@ function dedupeByNameCaseInsensitive(pills: EntityData[]): EntityData[] {
 }
 
 export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []): PillGroups {
-  const _unusedTeams = teams;
-  void _unusedTeams;
+  const teamIdBySlug = new Map(teams.map((t) => [t.slug, t.id]));
+  const teamIdByName = new Map(teams.map((t) => [normalizeTagValue(t.name), t.id]));
 
   const mapCompetition = (c: EntityLike): EntityData =>
     toEntityData("competition", c.name, {
@@ -668,7 +668,7 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
     });
   const mapTeam = (t: TeamLike): EntityData =>
     toEntityData("team", formatTeamPillLabel({ slug: t.slug, name: t.name }), {
-      entityId: t.id,
+      entityId: t.id || (t.slug ? teamIdBySlug.get(t.slug) : undefined) || teamIdByName.get(normalizeTagValue(t.name)),
       slug: t.slug || slugify(t.name),
       color: t.primaryColor,
       iconUrl: `/crests/teams/${t.slug || slugify(t.name)}.svg`,

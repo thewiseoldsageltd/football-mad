@@ -1108,7 +1108,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== MATCHES API (Fixtures, Results, Live) ==========
   // These must be defined BEFORE /api/matches/:slug to avoid slug matching "fixtures", "results", "live"
   
-  function formatMatchResponse(match: any, homeTeamData: any, awayTeamData: any) {
+  function formatMatchResponse(
+    match: any,
+    teamMaps: {
+      byCanonicalId: Map<string, { id: string; name: string; slug: string }>;
+      byGoalserveId: Map<string, { id: string; name: string; slug: string }>;
+    },
+  ) {
+    const homeTeamData =
+      (match.homeTeamId ? teamMaps.byCanonicalId.get(match.homeTeamId) : undefined) ??
+      (match.homeGoalserveTeamId ? teamMaps.byGoalserveId.get(match.homeGoalserveTeamId) : undefined) ??
+      null;
+    const awayTeamData =
+      (match.awayTeamId ? teamMaps.byCanonicalId.get(match.awayTeamId) : undefined) ??
+      (match.awayGoalserveTeamId ? teamMaps.byGoalserveId.get(match.awayGoalserveTeamId) : undefined) ??
+      null;
+
     return {
       id: match.id,
       slug: match.slug,
@@ -1121,21 +1136,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goalserveCompetitionId: match.goalserveCompetitionId,
       goalserveMatchId: match.goalserveMatchId,
       goalserveRound: match.goalserveRound || null,
-      homeTeam: match.homeTeamId && homeTeamData
+      homeTeam: homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
         : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: "Unknown" },
-      awayTeam: match.awayTeamId && awayTeamData
+      awayTeam: awayTeamData
         ? { id: awayTeamData.id, name: awayTeamData.name, slug: awayTeamData.slug }
         : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: "Unknown" },
     };
   }
 
-  async function fetchTeamMap(teamIds: Set<string>) {
-    if (teamIds.size === 0) return new Map();
-    const teamsData = await db.select({ id: teams.id, name: teams.name, slug: teams.slug })
-      .from(teams)
-      .where(drizzleSql`${teams.id} IN (${drizzleSql.join(Array.from(teamIds).map(id => drizzleSql`${id}`), drizzleSql`, `)})`);
-    return new Map(teamsData.map(t => [t.id, t]));
+  async function fetchTeamMaps(matchRows: any[]) {
+    const canonicalTeamIds = new Set<string>();
+    const goalserveTeamIds = new Set<string>();
+
+    for (const m of matchRows) {
+      if (m.homeTeamId) canonicalTeamIds.add(m.homeTeamId);
+      if (m.awayTeamId) canonicalTeamIds.add(m.awayTeamId);
+      if (m.homeGoalserveTeamId) goalserveTeamIds.add(m.homeGoalserveTeamId);
+      if (m.awayGoalserveTeamId) goalserveTeamIds.add(m.awayGoalserveTeamId);
+    }
+
+    const [canonicalTeams, goalserveTeams] = await Promise.all([
+      canonicalTeamIds.size > 0
+        ? db
+            .select({ id: teams.id, name: teams.name, slug: teams.slug })
+            .from(teams)
+            .where(
+              drizzleSql`${teams.id} IN (${drizzleSql.join(
+                Array.from(canonicalTeamIds).map((id) => drizzleSql`${id}`),
+                drizzleSql`, `,
+              )})`,
+            )
+        : Promise.resolve([]),
+      goalserveTeamIds.size > 0
+        ? db
+            .select({
+              id: teams.id,
+              name: teams.name,
+              slug: teams.slug,
+              goalserveTeamId: teams.goalserveTeamId,
+            })
+            .from(teams)
+            .where(
+              drizzleSql`${teams.goalserveTeamId} IN (${drizzleSql.join(
+                Array.from(goalserveTeamIds).map((id) => drizzleSql`${id}`),
+                drizzleSql`, `,
+              )})`,
+            )
+        : Promise.resolve([]),
+    ]);
+
+    return {
+      byCanonicalId: new Map(canonicalTeams.map((t) => [t.id, t])),
+      byGoalserveId: new Map(
+        goalserveTeams
+          .filter((t) => Boolean(t.goalserveTeamId))
+          .map((t) => [t.goalserveTeamId as string, { id: t.id, name: t.name, slug: t.slug }]),
+      ),
+    };
   }
 
   // Status sets for robust matching (case-insensitive)
@@ -1185,14 +1243,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
 
-      const teamIds = new Set<string>();
-      results.forEach(m => {
-        if (m.homeTeamId) teamIds.add(m.homeTeamId);
-        if (m.awayTeamId) teamIds.add(m.awayTeamId);
-      });
-
-      const teamMap = await fetchTeamMap(teamIds);
-      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+      const teamMaps = await fetchTeamMaps(results);
+      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
 
       res.json(formatted);
     } catch (error) {
@@ -1238,14 +1290,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(desc(matches.kickoffTime))
         .limit(limit);
 
-      const teamIds = new Set<string>();
-      results.forEach(m => {
-        if (m.homeTeamId) teamIds.add(m.homeTeamId);
-        if (m.awayTeamId) teamIds.add(m.awayTeamId);
-      });
-
-      const teamMap = await fetchTeamMap(teamIds);
-      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+      const teamMaps = await fetchTeamMaps(results);
+      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
 
       res.json(formatted);
     } catch (error) {
@@ -1288,14 +1334,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
 
-      const teamIds = new Set<string>();
-      results.forEach(m => {
-        if (m.homeTeamId) teamIds.add(m.homeTeamId);
-        if (m.awayTeamId) teamIds.add(m.awayTeamId);
-      });
-
-      const teamMap = await fetchTeamMap(teamIds);
-      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+      const teamMaps = await fetchTeamMaps(results);
+      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
 
       // Store in cache
       liveMatchesCache = formatted;
@@ -1652,14 +1692,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      const teamIds = new Set<string>();
-      results.forEach(m => {
-        if (m.homeTeamId) teamIds.add(m.homeTeamId);
-        if (m.awayTeamId) teamIds.add(m.awayTeamId);
-      });
-
-      const teamMap = await fetchTeamMap(teamIds);
-      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+      const teamMaps = await fetchTeamMaps(results);
+      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
 
       // Count UEFA matches for Euro nights override detection
       const uefaCounts = { ucl: 0, uel: 0, uecl: 0 };
@@ -3689,43 +3723,79 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(standingsRows.snapshotId, snapshot.id))
         .orderBy(asc(standingsRows.position));
 
-      // Use joined team name if available, otherwise fall back to row's stored teamName
-      const table = rows.map((r) => ({
-        position: r.position,
-        team: {
-          id: r.teamId,
-          name: r.joinedTeamName || r.rowTeamName || r.teamGoalserveId,
-          slug: r.teamSlug,
-          crestUrl: r.teamCrestUrl,
-        },
-        played: r.played,
-        won: r.won,
-        drawn: r.drawn,
-        lost: r.lost,
-        goalsFor: r.goalsFor,
-        goalsAgainst: r.goalsAgainst,
-        goalDifference: r.goalDifference,
-        points: r.points,
-        recentForm: r.recentForm,
-        movementStatus: r.movementStatus,
-        qualificationNote: r.qualificationNote,
-        home: {
-          played: r.homePlayed,
-          won: r.homeWon,
-          drawn: r.homeDrawn,
-          lost: r.homeLost,
-          goalsFor: r.homeGoalsFor,
-          goalsAgainst: r.homeGoalsAgainst,
-        },
-        away: {
-          played: r.awayPlayed,
-          won: r.awayWon,
-          drawn: r.awayDrawn,
-          lost: r.awayLost,
-          goalsFor: r.awayGoalsFor,
-          goalsAgainst: r.awayGoalsAgainst,
-        },
-      }));
+      // Backfill canonical team identity for rows where snapshot teamId is missing
+      // by using goalserve_team_id mapping from teams table.
+      const fallbackGoalserveIds = Array.from(
+        new Set(
+          rows
+            .filter((r) => !r.teamId && !!r.teamGoalserveId)
+            .map((r) => r.teamGoalserveId as string),
+        ),
+      );
+      const fallbackTeamMap = new Map<string, { id: string; name: string; slug: string; logoUrl: string | null }>();
+      if (fallbackGoalserveIds.length > 0) {
+        const fallbackTeams = await db
+          .select({
+            id: teams.id,
+            name: teams.name,
+            slug: teams.slug,
+            logoUrl: teams.logoUrl,
+            goalserveTeamId: teams.goalserveTeamId,
+          })
+          .from(teams)
+          .where(inArray(teams.goalserveTeamId, fallbackGoalserveIds));
+        for (const t of fallbackTeams) {
+          if (t.goalserveTeamId) {
+            fallbackTeamMap.set(t.goalserveTeamId, {
+              id: t.id,
+              name: t.name,
+              slug: t.slug,
+              logoUrl: t.logoUrl,
+            });
+          }
+        }
+      }
+
+      // Use joined canonical team identity first, then fallback by goalserve id.
+      const table = rows.map((r) => {
+        const fallbackTeam = r.teamGoalserveId ? fallbackTeamMap.get(r.teamGoalserveId) : undefined;
+        return {
+          position: r.position,
+          team: {
+            id: r.teamId || fallbackTeam?.id || null,
+            name: r.joinedTeamName || fallbackTeam?.name || r.rowTeamName || r.teamGoalserveId,
+            slug: r.teamSlug || fallbackTeam?.slug || null,
+            crestUrl: r.teamCrestUrl || fallbackTeam?.logoUrl || null,
+          },
+          played: r.played,
+          won: r.won,
+          drawn: r.drawn,
+          lost: r.lost,
+          goalsFor: r.goalsFor,
+          goalsAgainst: r.goalsAgainst,
+          goalDifference: r.goalDifference,
+          points: r.points,
+          recentForm: r.recentForm,
+          movementStatus: r.movementStatus,
+          qualificationNote: r.qualificationNote,
+          home: {
+            played: r.homePlayed,
+            won: r.homeWon,
+            drawn: r.homeDrawn,
+            lost: r.homeLost,
+            goalsFor: r.homeGoalsFor,
+            goalsAgainst: r.homeGoalsAgainst,
+          },
+          away: {
+            played: r.awayPlayed,
+            won: r.awayWon,
+            drawn: r.awayDrawn,
+            lost: r.awayLost,
+            goalsFor: r.awayGoalsFor,
+            goalsAgainst: r.awayGoalsAgainst,
+          },
+        };
+      });
 
       // Fetch fixtures from Goalserve XML to get proper <week number="X"> containers
       interface RoundInfo {

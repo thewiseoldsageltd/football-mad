@@ -380,7 +380,15 @@ export class DatabaseStorage implements IStorage {
 
   // Teams
   async getTeams(): Promise<Team[]> {
-    const rows = await db.select().from(teams).orderBy(teams.name);
+    const boundary = new MvpGraphBoundary();
+    const mvpTeamIds = Array.from(await boundary.getMvpTeamIds());
+    if (mvpTeamIds.length === 0) return [];
+
+    const rows = await db
+      .select()
+      .from(teams)
+      .where(inArray(teams.id, mvpTeamIds))
+      .orderBy(teams.name);
     const slugMap = await this.getTeamPublicSlugMap(rows.map((row) => row.id));
     return rows.map((row) => ({ ...row, slug: slugMap.get(row.id) ?? row.slug }));
   }

@@ -109,6 +109,8 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
 export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCardProps) {
   const kickoffTime = new Date(match.kickOffTime);
   const isLive = match.status === "live";
+  const homeDisplayName = match.homeTeam.name?.trim() || match.homeTeam.shortName || "Unknown";
+  const awayDisplayName = match.awayTeam.name?.trim() || match.awayTeam.shortName || "Unknown";
   // Use provided competitionLabel (may be disambiguated), fallback to match.competition
   // Strip any country suffix like "(England)" or "• England" - flag is enough
   const rawLabel = competitionLabel || match.competition;
@@ -140,7 +142,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
 
             {/* Home name - right aligned toward center */}
             <div className="min-w-0 overflow-hidden flex items-center justify-end">
-              <span className="font-medium text-sm truncate leading-none">{match.homeTeam.name}</span>
+              <span className="font-medium text-sm truncate leading-none">{homeDisplayName}</span>
             </div>
 
             {/* Center: kickoff time / score */}
@@ -174,7 +176,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
 
             {/* Away name - left aligned toward center */}
             <div className="min-w-0 overflow-hidden flex items-center justify-start">
-              <span className="font-medium text-sm truncate leading-none">{match.awayTeam.name}</span>
+              <span className="font-medium text-sm truncate leading-none">{awayDisplayName}</span>
             </div>
 
             {/* Away crest */}

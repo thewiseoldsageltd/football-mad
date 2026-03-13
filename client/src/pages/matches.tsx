@@ -36,6 +36,11 @@ interface ParsedCompetition {
   id?: string;
 }
 
+function isCanonicalTeamId(value: string | undefined | null): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function parseCompetitionLabel(competition: string | null | undefined): ParsedCompetition {
   if (!competition) return { name: "Unknown" };
   
@@ -101,9 +106,11 @@ function isScheduledStatus(s?: string | null) {
 
 
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
-  const homeName = match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown";
-  const awayName = match.awayTeam.name || match.awayTeam.nameFromRaw || "Unknown";
+  const homeName = (match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown").trim() || "Unknown";
+  const awayName = (match.awayTeam.name || match.awayTeam.nameFromRaw || "Unknown").trim() || "Unknown";
   const competitionDisplay = getDisplayCompetitionName(match.competition);
+  const homeCanonicalId = isCanonicalTeamId(match.homeTeam.id) ? match.homeTeam.id : undefined;
+  const awayCanonicalId = isCanonicalTeamId(match.awayTeam.id) ? match.awayTeam.id : undefined;
   
   let mockStatus: MockMatch["status"] = "scheduled";
   if (isLiveStatus(match.status)) {
@@ -122,14 +129,14 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
     kickOffTime: match.kickoffTime,
     status: mockStatus,
     homeTeam: {
-      id: match.homeTeam.id || match.homeTeam.goalserveTeamId || match.id,
+      id: homeCanonicalId ?? "",
       name: homeName,
       shortName: homeName.substring(0, 3).toUpperCase(),
       primaryColor: "#1a1a2e",
       logoUrl: match.homeTeam.logoUrl,
     },
     awayTeam: {
-      id: match.awayTeam.id || match.awayTeam.goalserveTeamId || match.id,
+      id: awayCanonicalId ?? "",
       name: awayName,
       shortName: awayName.substring(0, 3).toUpperCase(),
       primaryColor: "#1a1a2e",

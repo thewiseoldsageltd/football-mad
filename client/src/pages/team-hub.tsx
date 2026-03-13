@@ -1263,7 +1263,7 @@ const EURO_TEAMS = [
   { name: "Borussia Dortmund", shortName: "BVB", slug: "dortmund", primaryColor: "#FDE100" },
 ];
 
-function generateDummyMatches(teamSlug: string): DummyMatch[] {
+function generateDummyMatches(teamSlug: string, teamIdBySlug: Map<string, string>): DummyMatch[] {
   const team = PL_TEAMS.find(t => t.slug === teamSlug) || PL_TEAMS[0];
   const opponents = PL_TEAMS.filter(t => t.slug !== teamSlug);
   const matches: DummyMatch[] = [];
@@ -1449,7 +1449,19 @@ function generateDummyMatches(teamSlug: string): DummyMatch[] {
     });
   }
   
-  return matches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
+  return matches
+    .map((match) => ({
+      ...match,
+      homeTeam: {
+        ...match.homeTeam,
+        id: match.homeTeam.id ?? teamIdBySlug.get(match.homeTeam.slug),
+      },
+      awayTeam: {
+        ...match.awayTeam,
+        id: match.awayTeam.id ?? teamIdBySlug.get(match.awayTeam.slug),
+      },
+    }))
+    .sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
 }
 
 // Competition badge colors
@@ -1740,13 +1752,14 @@ function MonthSelector({
 
 function MatchesTabContent({ 
   teamName,
+  teamIdBySlug,
   teamSlug
 }: { 
   nextMatch?: Match & { homeTeam?: Team; awayTeam?: Team };
   recentResults?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
   upcomingFixtures?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
   teamName: string;
-  teamId: string;
+  teamIdBySlug: Map<string, string>;
   teamSlug: string;
 }) {
   const now = new Date();
@@ -1754,7 +1767,10 @@ function MatchesTabContent({
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [competitionFilter, setCompetitionFilter] = useState<string>("all");
   
-  const allMatches = useMemo(() => generateDummyMatches(teamSlug), [teamSlug]);
+  const allMatches = useMemo(
+    () => generateDummyMatches(teamSlug, teamIdBySlug),
+    [teamSlug, teamIdBySlug],
+  );
   
   // Get available months from all matches
   const availableMonths = useMemo(() => {
@@ -2595,6 +2611,13 @@ export default function TeamHubPage() {
     },
     enabled: !!team,
   });
+  const { data: mvpTeams = [] } = useQuery<Team[]>({
+    queryKey: ["/api/teams"],
+  });
+  const teamIdBySlug = useMemo(
+    () => new Map(mvpTeams.map((t) => [t.slug, t.id])),
+    [mvpTeams],
+  );
 
   const { data: transfers } = useQuery<Transfer[]>({
     queryKey: ["/api/transfers", "team", slug],
@@ -2809,7 +2832,8 @@ export default function TeamHubPage() {
                 entityId={team.id}
                 surface="hub_header"
                 label={team.name}
-                sizeClassName="h-16 w-16 md:h-20 md:w-20"
+                sizeClassName="h-full w-full"
+                shape="square"
               />
             </div>
             <div className="text-center md:text-left flex-1">
@@ -2944,7 +2968,7 @@ export default function TeamHubPage() {
                 recentResults={recentResults}
                 upcomingFixtures={upcomingFixtures?.slice(1)}
                 teamName={team.name}
-                teamId={team.id}
+                teamIdBySlug={teamIdBySlug}
                 teamSlug={team.slug}
               />
             )}

@@ -71,6 +71,7 @@ interface EntityAvatarProps {
   surface?: "hub_header";
   label: string;
   sizeClassName?: string;
+  shape?: "circle" | "square";
   className?: string;
 }
 
@@ -80,15 +81,18 @@ export function EntityAvatar({
   surface = "hub_header",
   label,
   sizeClassName = "h-16 w-16",
+  shape = "circle",
   className,
 }: EntityAvatarProps) {
   const { url, hasMedia } = useEntityMedia(entityType, entityId, surface);
   const [imgError, setImgError] = useState(false);
   const showImage = Boolean(hasMedia && url && !imgError);
 
+  const shapeClass = shape === "square" ? "rounded-none" : "rounded-full";
+
   if (showImage) {
     return (
-      <div className={cn("rounded-full overflow-hidden shrink-0 bg-muted", sizeClassName, className)}>
+      <div className={cn(shapeClass, "overflow-hidden shrink-0 bg-muted", sizeClassName, className)}>
         <img src={url!} alt={label} className="h-full w-full object-contain" onError={() => setImgError(true)} />
       </div>
     );
@@ -97,7 +101,7 @@ export function EntityAvatar({
   return (
     <InitialsFallback
       label={label}
-      className={cn("rounded-full shrink-0", sizeClassName, className)}
+      className={cn(shapeClass, "shrink-0", sizeClassName, className)}
       textClassName="text-sm"
     />
   );
