@@ -116,6 +116,10 @@ export function GroupedCompetitionNav({
     };
   }, [updateFades, selectedGroup, competitions]);
 
+  const resolvedCompetitionValue = competitions.some((comp) => comp.value === selectedCompetition)
+    ? selectedCompetition
+    : (competitions[0]?.value ?? "all");
+
   return (
     <>
       <div className="hidden md:block mb-6">
@@ -135,7 +139,7 @@ export function GroupedCompetitionNav({
               {showGroupTabs && <div className="h-6 w-px bg-border shrink-0" />}
 
               <div className="overflow-x-auto scrollbar-hide">
-                <Tabs value={selectedCompetition} onValueChange={onCompetitionChange}>
+                <Tabs value={resolvedCompetitionValue} onValueChange={onCompetitionChange}>
                   <TabsList className="inline-flex h-auto gap-1 w-max" data-testid={desktopCompetitionTabsTestId}>
                     {competitions.map((comp) => (
                       <TabsTrigger
@@ -196,7 +200,7 @@ export function GroupedCompetitionNav({
               msOverflowStyle: "none",
             }}
           >
-            <Tabs value={selectedCompetition} onValueChange={onCompetitionChange}>
+            <Tabs value={resolvedCompetitionValue} onValueChange={onCompetitionChange}>
               <TabsList className="inline-flex h-auto gap-1 w-max" data-testid={mobileCompetitionTabsTestId}>
                 {competitions.map((comp) => (
                   <TabsTrigger

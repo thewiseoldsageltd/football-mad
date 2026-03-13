@@ -4,13 +4,15 @@ import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Search, Shield } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { sortCompetitionItemsLikeTables } from "@/lib/competition-nav-order";
+import { useLocation, useSearch } from "wouter";
+import { NEWS_COMPETITION_SLUGS } from "@shared/schema";
 
 type NewsNavTeam = {
   id: string;
@@ -45,8 +47,24 @@ type NewsNavResponse = {
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
   const [competition, setCompetition] = useState("all");
+  const searchQuery = useSearch();
+  const [, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
+  const validCompetitionSet = useMemo(
+    () => new Set<string>(["all", ...NEWS_COMPETITION_SLUGS]),
+    [],
+  );
+
+  const competitionFromUrl = useMemo(() => {
+    const params = new URLSearchParams(searchQuery);
+    const comp = params.get("comp") ?? "all";
+    return validCompetitionSet.has(comp) ? comp : "all";
+  }, [searchQuery, validCompetitionSet]);
+
+  useEffect(() => {
+    setCompetition((prev) => (prev === competitionFromUrl ? prev : competitionFromUrl));
+  }, [competitionFromUrl]);
 
   const { data: teams, isLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
@@ -99,12 +117,14 @@ export default function TeamsPage() {
 
   const handleCompetitionChange = (value: string) => {
     setCompetition(value);
+    const nextUrl = value === "all" ? "/teams" : `/teams?comp=${encodeURIComponent(value)}`;
+    setLocation(nextUrl);
   };
 
   const selectedCompetitionTeamIds = useMemo(() => {
     if (competition === "all") return null;
     const groups = (newsNav?.refinement?.teamsByCompetition ?? []).length > 0
-      ? newsNav!.refinement!.teamsByCompetition
+      ? (newsNav?.refinement?.teamsByCompetition ?? [])
       : (newsNav?.competitions ?? []).map((c) => ({
         competitionId: c.id,
         competitionName: c.name,
@@ -134,6 +154,12 @@ export default function TeamsPage() {
       return matchesSearch && matchesCompetition;
     })
     .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+  const competitionTabs = useMemo(() => {
+    if (competition === "all") return allCompetitionTabs;
+    if (allCompetitionTabs.some((tab) => tab.value === competition)) return allCompetitionTabs;
+    return [...allCompetitionTabs, { value: competition, label: competition }];
+  }, [allCompetitionTabs, competition]);
 
   const handleFollowToggle = (team: Team) => {
     if (!isAuthenticated) {
@@ -166,7 +192,7 @@ export default function TeamsPage() {
           showGroupTabs={false}
           selectedCompetition={competition}
           onCompetitionChange={handleCompetitionChange}
-          competitions={allCompetitionTabs}
+          competitions={competitionTabs}
           rightDesktopSlot={(
             <div className="relative shrink-0">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

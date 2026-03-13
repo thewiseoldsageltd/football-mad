@@ -406,10 +406,28 @@ export default function NewsPage() {
   const visibleCompetitionTabs = useMemo(() => {
     const allTab = allCompetitionTabs.find((tab) => tab.value === "all");
     const groupTabs = groupedCompetitionTabs[navGroup] ?? [];
-    return allTab ? [allTab, ...groupTabs] : groupTabs;
-  }, [allCompetitionTabs, groupedCompetitionTabs, navGroup]);
+    const baseTabs = allTab ? [allTab, ...groupTabs] : groupTabs;
+    if (filters.comp === "all" || baseTabs.some((tab) => tab.value === filters.comp)) {
+      return baseTabs;
+    }
+    const selected = allCompetitionTabs.find((tab) => tab.value === filters.comp);
+    return selected ? [...baseTabs, selected] : baseTabs;
+  }, [allCompetitionTabs, groupedCompetitionTabs, navGroup, filters.comp]);
 
-  const currentCompetition = allCompetitionTabs.find((c) => c.value === filters.comp) ?? allCompetitionTabs[0];
+  const competitionTabsForRender = useMemo(() => {
+    if (filters.comp === "all") return allCompetitionTabs;
+    if (allCompetitionTabs.some((tab) => tab.value === filters.comp)) return allCompetitionTabs;
+    return [
+      ...allCompetitionTabs,
+      {
+        value: filters.comp,
+        label: filters.comp,
+        subheading: "The latest football news, analysis, and insights",
+      },
+    ];
+  }, [allCompetitionTabs, filters.comp]);
+
+  const currentCompetition = competitionTabsForRender.find((c) => c.value === filters.comp) ?? competitionTabsForRender[0];
 
   const handleCompetitionChange = (value: string) => {
     const nextValue = value as CompetitionValue;
@@ -462,7 +480,7 @@ export default function NewsPage() {
           </div>
         </div>
 
-        <Tabs value={filters.comp} onValueChange={handleCompetitionChange} className="w-full">
+        <Tabs value={currentCompetition?.value ?? "all"} onValueChange={handleCompetitionChange} className="w-full">
           <GroupedCompetitionNav
             selectedGroup={navGroup}
             onGroupChange={handleNavGroupChange}
@@ -666,7 +684,7 @@ export default function NewsPage() {
             </div>
           )}
 
-          {allCompetitionTabs.map((comp) => (
+          {competitionTabsForRender.map((comp) => (
             <TabsContent key={comp.value} value={comp.value}>
               {featuredArticle && !isLoading && comp.value === filters.comp && (
                 <section className="mb-8">
