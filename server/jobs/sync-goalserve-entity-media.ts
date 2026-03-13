@@ -20,6 +20,8 @@ interface GoalserveTeamMediaSyncResult {
   scanned: number;
   ingested: number;
   ingestedFromLogotips: number;
+  ingestedFromLogotipsBase64: number;
+  ingestedFromLogotipsUrl: number;
   ingestedFromTeamProfile: number;
   unchanged: number;
   failed: number;
@@ -33,11 +35,18 @@ interface GoalserveCompetitionMediaSyncResult {
   scanned: number;
   ingested: number;
   ingestedFromLogotips: number;
+  ingestedFromLogotipsBase64: number;
+  ingestedFromLogotipsUrl: number;
   unchanged: number;
   failed: number;
   skippedMissingCompetition: number;
   skippedMissingImage: number;
   errors: string[];
+}
+
+interface LogotipsAssetSource {
+  url: string | null;
+  base64: string | null;
 }
 
 function normalizeSourceUrl(rawUrl: string): string | null {
@@ -148,11 +157,11 @@ function readGoalserveId(node: Record<string, unknown>): string {
   return String(node["@id"] ?? node.id ?? "").trim();
 }
 
-async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Map<string, string>> {
+async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Map<string, LogotipsAssetSource>> {
   const key = process.env.GOALSERVE_FEED_KEY;
   if (!key || goalserveTeamIds.length === 0) return new Map();
 
-  const byTeamId = new Map<string, string>();
+  const byTeamId = new Map<string, LogotipsAssetSource>();
   const batches = chunk(goalserveTeamIds, LOGOTIPS_BATCH_SIZE);
 
   for (const batchIds of batches) {
@@ -172,13 +181,16 @@ async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Ma
       for (const record of records) {
         const id = String(record.id ?? record.team_id ?? record["@id"] ?? record["@team_id"] ?? "").trim();
         if (!id) continue;
-        const image = tryReadImageFromObject(record);
-        if (image) byTeamId.set(id, image);
+        const imageUrl = tryReadImageFromObject(record);
+        const base64 = typeof record.base64 === "string" && record.base64.trim() ? record.base64 : null;
+        if (imageUrl || base64) {
+          byTeamId.set(id, { url: imageUrl, base64 });
+        }
       }
 
       if (batchIds.length === 1 && !byTeamId.has(batchIds[0])) {
         const firstAnyImage = Array.from(extractCandidateImageUrls(payload))[0];
-        if (firstAnyImage) byTeamId.set(batchIds[0], firstAnyImage);
+        if (firstAnyImage) byTeamId.set(batchIds[0], { url: firstAnyImage, base64: null });
       }
     } catch {
       // allow fallback path
@@ -188,11 +200,11 @@ async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Ma
   return byTeamId;
 }
 
-async function fetchLogotipsCompetitionImageMap(goalserveLeagueIds: string[]): Promise<Map<string, string>> {
+async function fetchLogotipsCompetitionImageMap(goalserveLeagueIds: string[]): Promise<Map<string, LogotipsAssetSource>> {
   const key = process.env.GOALSERVE_FEED_KEY;
   if (!key || goalserveLeagueIds.length === 0) return new Map();
 
-  const byLeagueId = new Map<string, string>();
+  const byLeagueId = new Map<string, LogotipsAssetSource>();
   const batches = chunk(goalserveLeagueIds, LOGOTIPS_BATCH_SIZE);
 
   for (const batchIds of batches) {
@@ -220,13 +232,16 @@ async function fetchLogotipsCompetitionImageMap(goalserveLeagueIds: string[]): P
           "",
         ).trim();
         if (!id) continue;
-        const image = tryReadImageFromObject(record);
-        if (image) byLeagueId.set(id, image);
+        const imageUrl = tryReadImageFromObject(record);
+        const base64 = typeof record.base64 === "string" && record.base64.trim() ? record.base64 : null;
+        if (imageUrl || base64) {
+          byLeagueId.set(id, { url: imageUrl, base64 });
+        }
       }
 
       if (batchIds.length === 1 && !byLeagueId.has(batchIds[0])) {
         const firstAnyImage = Array.from(extractCandidateImageUrls(payload))[0];
-        if (firstAnyImage) byLeagueId.set(batchIds[0], firstAnyImage);
+        if (firstAnyImage) byLeagueId.set(batchIds[0], { url: firstAnyImage, base64: null });
       }
     } catch {
       // continue with remaining batches
@@ -284,6 +299,36 @@ function decodeBase64Image(raw: string): { buffer: Buffer; mimeType: string; for
   try {
     const buffer = Buffer.from(value, "base64");
     if (!buffer.length) return null;
+    // Infer image type from common signatures where possible.
+    if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+      return { buffer, mimeType: "image/png", formatHint: "png" };
+    }
+    if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+      return { buffer, mimeType: "image/jpeg", formatHint: "jpg" };
+    }
+    if (
+      buffer.length >= 12 &&
+      buffer[0] === 0x52 &&
+      buffer[1] === 0x49 &&
+      buffer[2] === 0x46 &&
+      buffer[3] === 0x46 &&
+      buffer[8] === 0x57 &&
+      buffer[9] === 0x45 &&
+      buffer[10] === 0x42 &&
+      buffer[11] === 0x50
+    ) {
+      return { buffer, mimeType: "image/webp", formatHint: "webp" };
+    }
+    if (buffer.length >= 6) {
+      const ascii = buffer.slice(0, 6).toString("ascii");
+      if (ascii === "GIF87a" || ascii === "GIF89a") {
+        return { buffer, mimeType: "image/gif", formatHint: "gif" };
+      }
+    }
+    const prefix = buffer.slice(0, 200).toString("utf8").trimStart();
+    if (prefix.startsWith("<svg") || prefix.startsWith("<?xml")) {
+      return { buffer, mimeType: "image/svg+xml", formatHint: "svg" };
+    }
     return { buffer, mimeType: "image/jpeg", formatHint: "jpg" };
   } catch {
     return null;
@@ -297,6 +342,8 @@ export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<
     scanned: 0,
     ingested: 0,
     ingestedFromLogotips: 0,
+    ingestedFromLogotipsBase64: 0,
+    ingestedFromLogotipsUrl: 0,
     ingestedFromTeamProfile: 0,
     unchanged: 0,
     failed: 0,
@@ -330,27 +377,57 @@ export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<
       }
       const entityId = dbByGoalserveId.get(gsId)!;
 
-      const logotipUrl = logotipsMap.get(gsId) ?? null;
-      if (logotipUrl) {
+      const logotipsAsset = logotipsMap.get(gsId) ?? null;
+      if (logotipsAsset?.base64) {
+        const decodedLogotips = decodeBase64Image(logotipsAsset.base64);
+        if (decodedLogotips) {
+          const ingestFromLogotipsBase64 = await ingestEntityMediaFromBuffer({
+            entityType: "team",
+            entityId,
+            mediaRole: "crest",
+            sourceSystem: "goalserve",
+            sourceRef: `goalserve:logotips:team:${gsId}`,
+            sourceFormatHint: decodedLogotips.formatHint,
+            sourceMimeTypeHint: decodedLogotips.mimeType,
+            makePrimary: true,
+            originalBuffer: decodedLogotips.buffer,
+          });
+          if (!ingestFromLogotipsBase64.ok) {
+            result.failed++;
+            if (ingestFromLogotipsBase64.error) result.errors.push(`team ${gsId} (logotips base64): ${ingestFromLogotipsBase64.error}`);
+          } else if (ingestFromLogotipsBase64.unchanged) {
+            result.unchanged++;
+            continue;
+          } else {
+            result.ingested++;
+            result.ingestedFromLogotips++;
+            result.ingestedFromLogotipsBase64++;
+            continue;
+          }
+        }
+      }
+
+      if (logotipsAsset?.url) {
         const ingest = await ingestEntityMediaFromUrl({
           entityType: "team",
           entityId,
           mediaRole: "crest",
           sourceSystem: "goalserve",
-          sourceUrl: logotipUrl,
+          sourceUrl: logotipsAsset.url,
           sourceRef: `goalserve:logotips:team:${gsId}`,
           makePrimary: true,
         });
 
         if (!ingest.ok) {
           result.failed++;
-          if (ingest.error) result.errors.push(`team ${gsId} (logotips): ${ingest.error}`);
+          if (ingest.error) result.errors.push(`team ${gsId} (logotips url): ${ingest.error}`);
         } else if (ingest.unchanged) {
           result.unchanged++;
           continue;
         } else {
           result.ingested++;
           result.ingestedFromLogotips++;
+          result.ingestedFromLogotipsUrl++;
           continue;
         }
       }
@@ -400,6 +477,8 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
     scanned: 0,
     ingested: 0,
     ingestedFromLogotips: 0,
+    ingestedFromLogotipsBase64: 0,
+    ingestedFromLogotipsUrl: 0,
     unchanged: 0,
     failed: 0,
     skippedMissingCompetition: 0,
@@ -434,32 +513,67 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
         continue;
       }
 
-      const sourceUrl = logotipsByLeagueId.get(goalserveLeagueId) ?? null;
-      if (!sourceUrl) {
+      const logotipsAsset = logotipsByLeagueId.get(goalserveLeagueId) ?? null;
+      if (!logotipsAsset?.base64 && !logotipsAsset?.url) {
         result.skippedMissingImage++;
         continue;
       }
 
-      const ingest = await ingestEntityMediaFromUrl({
-        entityType: "competition",
-        entityId: dbCompetitionId,
-        mediaRole: "logo",
-        sourceSystem: "goalserve",
-        sourceUrl,
-        sourceRef: `goalserve:logotips:league:${goalserveLeagueId}`,
-        makePrimary: true,
-      });
+      if (logotipsAsset?.base64) {
+        const decodedLogotips = decodeBase64Image(logotipsAsset.base64);
+        if (decodedLogotips) {
+          const ingestFromBase64 = await ingestEntityMediaFromBuffer({
+            entityType: "competition",
+            entityId: dbCompetitionId,
+            mediaRole: "logo",
+            sourceSystem: "goalserve",
+            sourceRef: `goalserve:logotips:league:${goalserveLeagueId}`,
+            sourceFormatHint: decodedLogotips.formatHint,
+            sourceMimeTypeHint: decodedLogotips.mimeType,
+            makePrimary: true,
+            originalBuffer: decodedLogotips.buffer,
+          });
 
-      if (!ingest.ok) {
-        result.failed++;
-        if (ingest.error) result.errors.push(`competition ${goalserveLeagueId}: ${ingest.error}`);
-        continue;
+          if (!ingestFromBase64.ok) {
+            result.failed++;
+            if (ingestFromBase64.error) result.errors.push(`competition ${goalserveLeagueId} (logotips base64): ${ingestFromBase64.error}`);
+          } else if (ingestFromBase64.unchanged) {
+            result.unchanged++;
+            continue;
+          } else {
+            result.ingested++;
+            result.ingestedFromLogotips++;
+            result.ingestedFromLogotipsBase64++;
+            continue;
+          }
+        }
       }
 
-      if (ingest.unchanged) result.unchanged++;
-      else {
-        result.ingested++;
-        result.ingestedFromLogotips++;
+      if (logotipsAsset?.url) {
+        const ingest = await ingestEntityMediaFromUrl({
+          entityType: "competition",
+          entityId: dbCompetitionId,
+          mediaRole: "logo",
+          sourceSystem: "goalserve",
+          sourceUrl: logotipsAsset.url,
+          sourceRef: `goalserve:logotips:league:${goalserveLeagueId}`,
+          makePrimary: true,
+        });
+
+        if (!ingest.ok) {
+          result.failed++;
+          if (ingest.error) result.errors.push(`competition ${goalserveLeagueId} (logotips url): ${ingest.error}`);
+          continue;
+        }
+
+        if (ingest.unchanged) result.unchanged++;
+        else {
+          result.ingested++;
+          result.ingestedFromLogotips++;
+          result.ingestedFromLogotipsUrl++;
+        }
+      } else if (!logotipsAsset?.base64) {
+        result.skippedMissingImage++;
       }
     }
   } catch (err) {
@@ -501,6 +615,8 @@ export async function syncGoalserveEntityMedia(params: {
         scanned: 0,
         ingested: 0,
         ingestedFromLogotips: 0,
+        ingestedFromLogotipsBase64: 0,
+        ingestedFromLogotipsUrl: 0,
         ingestedFromTeamProfile: 0,
         unchanged: 0,
         failed: 0,
