@@ -11,9 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
+import { EntityIcon } from "@/components/entity-media";
 import type { Match, Team } from "@shared/schema";
 
 interface MatchTeam {
+  id?: string;
   name: string;
   shortName: string;
   slug: string;
@@ -158,6 +160,7 @@ function parseDummyMatchId(matchId: string): MatchData | null {
 
 function apiMatchToMatchData(match: Match & { homeTeam?: Team; awayTeam?: Team }): MatchData {
   const homeTeam: MatchTeam = {
+    id: match.homeTeam?.id,
     name: match.homeTeam?.name || "Home Team",
     shortName: match.homeTeam?.shortName || "HOM",
     slug: match.homeTeam?.slug || "home",
@@ -165,6 +168,7 @@ function apiMatchToMatchData(match: Match & { homeTeam?: Team; awayTeam?: Team }
   };
   
   const awayTeam: MatchTeam = {
+    id: match.awayTeam?.id,
     name: match.awayTeam?.name || "Away Team",
     shortName: match.awayTeam?.shortName || "AWY",
     slug: match.awayTeam?.slug || "away",
@@ -695,6 +699,7 @@ function TeamCrest({ team, size = "lg" }: { team: MatchTeam; size?: "sm" | "md" 
     lg: "w-16 h-16 text-lg",
     xl: "w-20 h-20 text-xl",
   };
+  const iconSizes = { sm: 24, md: 32, lg: 44, xl: 56 } as const;
   
   return (
     <div 
@@ -702,7 +707,14 @@ function TeamCrest({ team, size = "lg" }: { team: MatchTeam; size?: "sm" | "md" 
       style={{ backgroundColor: team.primaryColor, color: "#fff" }}
       title={team.name}
     >
-      {team.shortName.slice(0, 3)}
+      <EntityIcon
+        entityType="team"
+        entityId={team.id}
+        size={iconSizes[size]}
+        label={team.name}
+        surface="pill"
+        className="rounded-xl"
+      />
     </div>
   );
 }

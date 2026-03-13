@@ -70,7 +70,7 @@ function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "
         entityId={team.id}
         size={iconSize}
         label={team.name}
-        surface="fixture"
+        surface="pill"
         className="rounded-lg"
       />
     </div>

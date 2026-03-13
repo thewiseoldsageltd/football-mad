@@ -29,7 +29,7 @@ interface EntityIconProps {
   entityId?: string | null;
   size?: number;
   label: string;
-  surface?: "table" | "fixture";
+  surface?: "pill";
   className?: string;
 }
 
@@ -38,7 +38,7 @@ export function EntityIcon({
   entityId,
   size = 20,
   label,
-  surface = "fixture",
+  surface = "pill",
   className,
 }: EntityIconProps) {
   const { url, hasMedia } = useEntityMedia(entityType, entityId, surface);

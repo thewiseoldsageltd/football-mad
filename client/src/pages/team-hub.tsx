@@ -23,7 +23,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
-import { EntityAvatar } from "@/components/entity-media";
+import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -1216,8 +1216,8 @@ function AvailabilitySummaryBadge({ teamSlug }: { teamSlug: string }) {
 // Dummy match data for full season simulation
 interface DummyMatch {
   id: string;
-  homeTeam: { name: string; shortName: string; slug: string; primaryColor: string };
-  awayTeam: { name: string; shortName: string; slug: string; primaryColor: string };
+  homeTeam: { id?: string; name: string; shortName: string; slug: string; primaryColor: string };
+  awayTeam: { id?: string; name: string; shortName: string; slug: string; primaryColor: string };
   kickoffTime: Date;
   competition: string;
   competitionShort: string;
@@ -1469,12 +1469,19 @@ function CompetitionBadge({ competition }: { competition: string }) {
   );
 }
 
-function TeamCrest({ team, size = "sm" }: { team: { name: string; shortName: string; primaryColor: string }; size?: "sm" | "md" | "lg" }) {
+function TeamCrest({
+  team,
+  size = "sm",
+}: {
+  team: { id?: string; name: string; shortName: string; primaryColor: string };
+  size?: "sm" | "md" | "lg";
+}) {
   const sizeClasses = {
     sm: "w-6 h-6 text-[10px]",
     md: "w-8 h-8 text-xs",
     lg: "w-10 h-10 text-sm",
   };
+  const iconSizes = { sm: 20, md: 24, lg: 28 } as const;
   
   return (
     <div 
@@ -1482,7 +1489,13 @@ function TeamCrest({ team, size = "sm" }: { team: { name: string; shortName: str
       style={{ backgroundColor: team.primaryColor, color: "#fff" }}
       title={team.name}
     >
-      {team.shortName.slice(0, 2)}
+      <EntityIcon
+        entityType="team"
+        entityId={team.id}
+        label={team.name}
+        size={iconSizes[size]}
+        surface="pill"
+      />
     </div>
   );
 }

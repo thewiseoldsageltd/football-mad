@@ -54,7 +54,7 @@ export function MatchCard({ match }: MatchCardProps) {
                   entityId={match.homeTeam?.id}
                   size={32}
                   label={match.homeTeam?.name || "Home"}
-                  surface="fixture"
+                  surface="pill"
                   className="rounded-lg"
                 />
               </div>
@@ -83,7 +83,7 @@ export function MatchCard({ match }: MatchCardProps) {
                   entityId={match.awayTeam?.id}
                   size={32}
                   label={match.awayTeam?.name || "Away"}
-                  surface="fixture"
+                  surface="pill"
                   className="rounded-lg"
                 />
               </div>

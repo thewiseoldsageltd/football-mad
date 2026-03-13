@@ -16,7 +16,7 @@ export function TeamCrest({ teamId, teamName, size = "md", className = "" }: Tea
       entityId={teamId}
       size={sizePx[size]}
       label={teamName}
-      surface="table"
+      surface="pill"
       className={className}
     />
   );

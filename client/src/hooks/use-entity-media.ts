@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 export type MediaEntityType = "team" | "competition";
-export type MediaSurface = "pill" | "hub_header" | "table" | "fixture";
+export type MediaSurface = "pill" | "hub_header";
 
 interface EntityMediaApiResponse {
   url: string | null;
@@ -11,17 +11,12 @@ interface EntityMediaApiResponse {
   hasMedia: boolean;
 }
 
-function toApiSurface(surface: MediaSurface): "pill" | "hub_header" {
-  if (surface === "hub_header") return "hub_header";
-  return "pill";
-}
-
 export function useEntityMedia(
   entityType: MediaEntityType,
   entityId: string | null | undefined,
   surface: MediaSurface,
 ): EntityMediaApiResponse {
-  const apiSurface = toApiSurface(surface);
+  const apiSurface = surface;
   const enabled = Boolean(entityId);
 
   const { data } = useQuery<EntityMediaApiResponse | null>({
