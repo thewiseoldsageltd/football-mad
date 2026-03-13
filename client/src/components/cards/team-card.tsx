@@ -17,7 +17,11 @@ export function TeamCard({ team, isFollowing = false, onFollowToggle, showFollow
   return (
     <Card className="group hover-elevate active-elevate-2" data-testid={`card-team-${team.slug}`}>
       <CardContent className="p-4">
-        <Link href={teamHub(team.slug)} className="flex items-center gap-4">
+        <Link
+          href={teamHub(team.slug)}
+          className="flex items-center gap-4"
+          data-testid={`link-team-${team.slug}`}
+        >
           <div 
             className="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: team.primaryColor || "#1a1a2e" }}
@@ -45,11 +49,13 @@ export function TeamCard({ team, isFollowing = false, onFollowToggle, showFollow
         </Link>
         {showFollowButton && onFollowToggle && (
           <Button
+            type="button"
             variant={isFollowing ? "secondary" : "default"}
             size="sm"
             className="mt-3 w-full"
             onClick={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               onFollowToggle();
             }}
             data-testid={`button-follow-${team.slug}`}
