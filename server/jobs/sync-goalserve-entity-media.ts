@@ -1,10 +1,11 @@
-import { isNotNull } from "drizzle-orm";
+import { inArray, isNotNull } from "drizzle-orm";
 import { db } from "../db";
 import { competitions, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ingestEntityMediaFromBuffer, ingestEntityMediaFromUrl } from "../lib/entity-media-service";
 import { jobFetch } from "../lib/job-observability";
 import { getJobRunId } from "../lib/job-context";
+import { MvpGraphBoundary } from "../lib/mvp-graph-boundary";
 
 const GOALSERVE_ASSET_HOST = "https://www.goalserve.com";
 const GOALSERVE_LOGOTIPS_BASE =
@@ -335,6 +336,106 @@ function decodeBase64Image(raw: string): { buffer: Buffer; mimeType: string; for
   }
 }
 
+async function ingestTeamMediaForScope(
+  scopedTeams: Array<{ entityId: string; goalserveTeamId: string }>,
+  result: GoalserveTeamMediaSyncResult,
+): Promise<void> {
+  if (scopedTeams.length === 0) return;
+
+  const logotipsMap = await fetchLogotipsTeamImageMap(scopedTeams.map((t) => t.goalserveTeamId));
+
+  for (const scopedTeam of scopedTeams) {
+    const gsId = scopedTeam.goalserveTeamId;
+    const entityId = scopedTeam.entityId;
+
+    const logotipsAsset = logotipsMap.get(gsId) ?? null;
+    if (logotipsAsset?.base64) {
+      const decodedLogotips = decodeBase64Image(logotipsAsset.base64);
+      if (decodedLogotips) {
+        const ingestFromLogotipsBase64 = await ingestEntityMediaFromBuffer({
+          entityType: "team",
+          entityId,
+          mediaRole: "crest",
+          sourceSystem: "goalserve",
+          sourceRef: `goalserve:logotips:team:${gsId}`,
+          sourceFormatHint: decodedLogotips.formatHint,
+          sourceMimeTypeHint: decodedLogotips.mimeType,
+          makePrimary: true,
+          originalBuffer: decodedLogotips.buffer,
+        });
+        if (!ingestFromLogotipsBase64.ok) {
+          result.failed++;
+          if (ingestFromLogotipsBase64.error) result.errors.push(`team ${gsId} (logotips base64): ${ingestFromLogotipsBase64.error}`);
+        } else if (ingestFromLogotipsBase64.unchanged) {
+          result.unchanged++;
+          continue;
+        } else {
+          result.ingested++;
+          result.ingestedFromLogotips++;
+          result.ingestedFromLogotipsBase64++;
+          continue;
+        }
+      }
+    }
+
+    if (logotipsAsset?.url) {
+      const ingest = await ingestEntityMediaFromUrl({
+        entityType: "team",
+        entityId,
+        mediaRole: "crest",
+        sourceSystem: "goalserve",
+        sourceUrl: logotipsAsset.url,
+        sourceRef: `goalserve:logotips:team:${gsId}`,
+        makePrimary: true,
+      });
+
+      if (!ingest.ok) {
+        result.failed++;
+        if (ingest.error) result.errors.push(`team ${gsId} (logotips url): ${ingest.error}`);
+      } else if (ingest.unchanged) {
+        result.unchanged++;
+        continue;
+      } else {
+        result.ingested++;
+        result.ingestedFromLogotips++;
+        result.ingestedFromLogotipsUrl++;
+        continue;
+      }
+    }
+
+    const profileImageRaw = await fetchTeamProfileBase64Image(gsId);
+    const decoded = profileImageRaw ? decodeBase64Image(profileImageRaw) : null;
+    if (!decoded) {
+      result.skippedMissingImage++;
+      continue;
+    }
+
+    const ingestFromProfile = await ingestEntityMediaFromBuffer({
+      entityType: "team",
+      entityId,
+      mediaRole: "crest",
+      sourceSystem: "goalserve",
+      sourceRef: `goalserve:soccerstats:team:${gsId}`,
+      sourceFormatHint: decoded.formatHint,
+      sourceMimeTypeHint: decoded.mimeType,
+      makePrimary: true,
+      originalBuffer: decoded.buffer,
+    });
+
+    if (!ingestFromProfile.ok) {
+      result.failed++;
+      if (ingestFromProfile.error) result.errors.push(`team ${gsId} (soccerstats): ${ingestFromProfile.error}`);
+      continue;
+    }
+    if (ingestFromProfile.unchanged) {
+      result.unchanged++;
+    } else {
+      result.ingested++;
+      result.ingestedFromTeamProfile++;
+    }
+  }
+}
+
 export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<GoalserveTeamMediaSyncResult> {
   const result: GoalserveTeamMediaSyncResult = {
     ok: true,
@@ -364,10 +465,7 @@ export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<
       .where(isNotNull(teams.goalserveTeamId));
     const dbByGoalserveId = new Map(dbTeams.map((t) => [String(t.goalserveTeamId), t.id]));
 
-    const scopedGoalserveIds = Array.from(
-      new Set(feedTeams.map((n) => readGoalserveId(n)).filter((id) => id && dbByGoalserveId.has(id))),
-    );
-    const logotipsMap = await fetchLogotipsTeamImageMap(scopedGoalserveIds);
+    const scopedTeams: Array<{ entityId: string; goalserveTeamId: string }> = [];
 
     for (const teamNode of feedTeams) {
       const gsId = readGoalserveId(teamNode);
@@ -375,94 +473,60 @@ export async function syncGoalserveTeamMediaByLeague(leagueId: string): Promise<
         result.skippedMissingTeam++;
         continue;
       }
-      const entityId = dbByGoalserveId.get(gsId)!;
-
-      const logotipsAsset = logotipsMap.get(gsId) ?? null;
-      if (logotipsAsset?.base64) {
-        const decodedLogotips = decodeBase64Image(logotipsAsset.base64);
-        if (decodedLogotips) {
-          const ingestFromLogotipsBase64 = await ingestEntityMediaFromBuffer({
-            entityType: "team",
-            entityId,
-            mediaRole: "crest",
-            sourceSystem: "goalserve",
-            sourceRef: `goalserve:logotips:team:${gsId}`,
-            sourceFormatHint: decodedLogotips.formatHint,
-            sourceMimeTypeHint: decodedLogotips.mimeType,
-            makePrimary: true,
-            originalBuffer: decodedLogotips.buffer,
-          });
-          if (!ingestFromLogotipsBase64.ok) {
-            result.failed++;
-            if (ingestFromLogotipsBase64.error) result.errors.push(`team ${gsId} (logotips base64): ${ingestFromLogotipsBase64.error}`);
-          } else if (ingestFromLogotipsBase64.unchanged) {
-            result.unchanged++;
-            continue;
-          } else {
-            result.ingested++;
-            result.ingestedFromLogotips++;
-            result.ingestedFromLogotipsBase64++;
-            continue;
-          }
-        }
-      }
-
-      if (logotipsAsset?.url) {
-        const ingest = await ingestEntityMediaFromUrl({
-          entityType: "team",
-          entityId,
-          mediaRole: "crest",
-          sourceSystem: "goalserve",
-          sourceUrl: logotipsAsset.url,
-          sourceRef: `goalserve:logotips:team:${gsId}`,
-          makePrimary: true,
-        });
-
-        if (!ingest.ok) {
-          result.failed++;
-          if (ingest.error) result.errors.push(`team ${gsId} (logotips url): ${ingest.error}`);
-        } else if (ingest.unchanged) {
-          result.unchanged++;
-          continue;
-        } else {
-          result.ingested++;
-          result.ingestedFromLogotips++;
-          result.ingestedFromLogotipsUrl++;
-          continue;
-        }
-      }
-
-      const profileImageRaw = await fetchTeamProfileBase64Image(gsId);
-      const decoded = profileImageRaw ? decodeBase64Image(profileImageRaw) : null;
-      if (!decoded) {
-        result.skippedMissingImage++;
-        continue;
-      }
-
-      const ingestFromProfile = await ingestEntityMediaFromBuffer({
-        entityType: "team",
-        entityId,
-        mediaRole: "crest",
-        sourceSystem: "goalserve",
-        sourceRef: `goalserve:soccerstats:team:${gsId}`,
-        sourceFormatHint: decoded.formatHint,
-        sourceMimeTypeHint: decoded.mimeType,
-        makePrimary: true,
-        originalBuffer: decoded.buffer,
-      });
-
-      if (!ingestFromProfile.ok) {
-        result.failed++;
-        if (ingestFromProfile.error) result.errors.push(`team ${gsId} (soccerstats): ${ingestFromProfile.error}`);
-        continue;
-      }
-      if (ingestFromProfile.unchanged) {
-        result.unchanged++;
-      } else {
-        result.ingested++;
-        result.ingestedFromTeamProfile++;
-      }
+      scopedTeams.push({ entityId: dbByGoalserveId.get(gsId)!, goalserveTeamId: gsId });
     }
+
+    await ingestTeamMediaForScope(scopedTeams, result);
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  return result;
+}
+
+export async function syncGoalserveTeamMediaForMvpSet(): Promise<GoalserveTeamMediaSyncResult> {
+  const result: GoalserveTeamMediaSyncResult = {
+    ok: true,
+    leagueId: "mvp",
+    scanned: 0,
+    ingested: 0,
+    ingestedFromLogotips: 0,
+    ingestedFromLogotipsBase64: 0,
+    ingestedFromLogotipsUrl: 0,
+    ingestedFromTeamProfile: 0,
+    unchanged: 0,
+    failed: 0,
+    skippedMissingTeam: 0,
+    skippedMissingImage: 0,
+    errors: [],
+  };
+
+  try {
+    const boundary = new MvpGraphBoundary();
+    const mvpTeamIds = Array.from(await boundary.getMvpTeamIds());
+    if (mvpTeamIds.length === 0) return result;
+
+    const mvpTeams = await db
+      .select({
+        id: teams.id,
+        goalserveTeamId: teams.goalserveTeamId,
+      })
+      .from(teams)
+      .where(inArray(teams.id, mvpTeamIds));
+
+    result.scanned = mvpTeams.length;
+
+    const scopedTeams: Array<{ entityId: string; goalserveTeamId: string }> = [];
+    for (const t of mvpTeams) {
+      if (!t.goalserveTeamId) {
+        result.skippedMissingTeam++;
+        continue;
+      }
+      scopedTeams.push({ entityId: t.id, goalserveTeamId: String(t.goalserveTeamId) });
+    }
+
+    await ingestTeamMediaForScope(scopedTeams, result);
   } catch (err) {
     result.ok = false;
     result.errors.push(err instanceof Error ? err.message : String(err));
@@ -588,6 +652,7 @@ export async function syncGoalserveEntityMedia(params: {
   leagueId?: string;
   includeTeams?: boolean;
   includeCompetitions?: boolean;
+  mvpTeamsOnly?: boolean;
 }): Promise<{
   ok: boolean;
   teams?: GoalserveTeamMediaSyncResult;
@@ -595,6 +660,7 @@ export async function syncGoalserveEntityMedia(params: {
 }> {
   const includeTeams = params.includeTeams ?? true;
   const includeCompetitions = params.includeCompetitions ?? true;
+  const mvpTeamsOnly = params.mvpTeamsOnly ?? false;
   const output: {
     ok: boolean;
     teams?: GoalserveTeamMediaSyncResult;
@@ -607,7 +673,10 @@ export async function syncGoalserveEntityMedia(params: {
   }
 
   if (includeTeams) {
-    if (!params.leagueId) {
+    if (mvpTeamsOnly) {
+      output.teams = await syncGoalserveTeamMediaForMvpSet();
+      if (!output.teams.ok) output.ok = false;
+    } else if (!params.leagueId) {
       output.ok = false;
       output.teams = {
         ok: false,
@@ -622,7 +691,7 @@ export async function syncGoalserveEntityMedia(params: {
         failed: 0,
         skippedMissingTeam: 0,
         skippedMissingImage: 0,
-        errors: ["leagueId is required for team media sync"],
+        errors: ["leagueId is required for team media sync unless mvpTeamsOnly=1"],
       };
     } else {
       output.teams = await syncGoalserveTeamMediaByLeague(params.leagueId);

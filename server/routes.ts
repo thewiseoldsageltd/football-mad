@@ -2679,10 +2679,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : undefined;
       const includeTeams = req.query.includeTeams === "0" ? false : true;
       const includeCompetitions = req.query.includeCompetitions === "0" ? false : true;
+      const mvpTeamsOnly = req.query.mvpTeamsOnly === "1";
       const result = await syncGoalserveEntityMedia({
         leagueId,
         includeTeams,
         includeCompetitions,
+        mvpTeamsOnly,
       });
       res.json(result);
     },
