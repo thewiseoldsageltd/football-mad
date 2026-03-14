@@ -69,7 +69,7 @@ import {
   setPamediaRunnerConfig,
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
-import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
+import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib/entity-presentation-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
@@ -608,6 +608,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .select({
           compId: competitions.id,
           compName: competitions.name,
+          compCanonicalName: drizzleSql<string | null>`nullif(trim(canonical_name), '')`,
           compSlug: competitions.slug,
           compCanonicalSlug: competitions.canonicalSlug,
           teamId: teams.id,
@@ -648,7 +649,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let comp = compMap.get(r.compId);
         if (!comp) {
           const presented = competitionPresentation.get(r.compId);
-          const compName = presented?.name ?? r.compName;
+          const compName = resolveCompetitionDisplayName(r.compCanonicalName, presented?.name, r.compName);
           const compSlug = presented?.slug ?? r.compSlug;
           const filterSlug =
             normalizeAllowedSlug(filterSlugOverridesByName.get(compName.toLowerCase())) ??

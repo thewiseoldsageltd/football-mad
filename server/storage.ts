@@ -24,7 +24,7 @@ import {
   NEWS_TIME_RANGES,
   type NewsFiltersResponse,
 } from "@shared/schema";
-import { EntityPresentationResolver } from "./lib/entity-presentation-resolver";
+import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib/entity-presentation-resolver";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
@@ -800,6 +800,7 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: competitions.id,
         name: competitions.name,
+        canonicalName: sql<string | null>`nullif(trim(canonical_name), '')`,
         slug: competitions.slug,
         source: articleCompetitions.source,
         salienceScore: articleCompetitions.salienceScore,
@@ -829,7 +830,7 @@ export class DatabaseStorage implements IStorage {
       const override = competitionPresentationMap.get(row.id);
       return {
         ...row,
-        name: override?.name || row.name,
+        name: resolveCompetitionDisplayName(row.canonicalName, override?.name, row.name),
         slug: override?.slug || row.slug,
       };
     });
@@ -945,6 +946,7 @@ export class DatabaseStorage implements IStorage {
           articleId: articleCompetitions.articleId,
           id: competitions.id,
           name: competitions.name,
+          canonicalName: sql<string | null>`nullif(trim(canonical_name), '')`,
           slug: competitions.slug,
         })
         .from(articleCompetitions)
@@ -1051,7 +1053,7 @@ export class DatabaseStorage implements IStorage {
         : nonPaCompetitionPresentationMap.get(row.id);
       compMap.get(row.articleId)!.push({
         id: row.id,
-        name: presentation?.name || row.name,
+        name: resolveCompetitionDisplayName(row.canonicalName, presentation?.name, row.name),
         slug: presentation?.slug || row.slug,
       });
     }

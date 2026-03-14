@@ -16,6 +16,18 @@ export type CompetitionPresentation = {
   slug: string;
 };
 
+export function resolveCompetitionDisplayName(
+  canonicalName: string | null | undefined,
+  presentationName: string | null | undefined,
+  fallbackName: string,
+): string {
+  const canonical = canonicalName?.trim();
+  if (canonical) return canonical;
+  const presented = presentationName?.trim();
+  if (presented) return presented;
+  return fallbackName;
+}
+
 type PresentationSourceContext = {
   source?: string | null;
 };
@@ -199,8 +211,7 @@ export class EntityPresentationResolver {
         const key = this.cacheKey(id, context.source);
         this.competitionCache.set(key, {
           id,
-          // Consistent public presentation fallback order across nav + pills/cards.
-          name: override?.name || canonical.canonicalName || canonical.name,
+          name: resolveCompetitionDisplayName(canonical.canonicalName, override?.name, canonical.name),
           slug: override?.slug || canonical.canonicalSlug || canonical.slug,
         });
       }
