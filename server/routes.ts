@@ -698,7 +698,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
       
-      const { comp, type, teams: teamsParam, sort, range, breaking } = parsed.data;
+      const { group, comp, type, teams: teamsParam, sort, range, breaking } = parsed.data;
       
       if (sort === "for-you" && !req.user) {
         return res.status(401).json({ error: "Authentication required for 'For You' sort" });
@@ -726,6 +726,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const cursor = req.query.cursor as string | undefined;
       
       const result = await storage.getNewsArticles({
+        group,
         comp,
         type,
         teamSlugs,

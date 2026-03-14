@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-export type CompetitionNavGroup = "leagues" | "cups" | "europe";
+import type { CompetitionNavGroup } from "@/lib/competition-nav-groups";
 
 export interface GroupedCompetitionNavItem {
   value: string;
@@ -13,6 +12,7 @@ interface GroupedCompetitionNavProps {
   selectedGroup?: CompetitionNavGroup;
   onGroupChange?: (group: CompetitionNavGroup) => void;
   showGroupTabs?: boolean;
+  includeAllGroupTab?: boolean;
   selectedCompetition: string;
   onCompetitionChange: (competitionValue: string) => void;
   competitions: GroupedCompetitionNavItem[];
@@ -32,6 +32,7 @@ export function GroupedCompetitionNav({
   selectedGroup = "leagues",
   onGroupChange,
   showGroupTabs = true,
+  includeAllGroupTab = false,
   selectedCompetition,
   onCompetitionChange,
   competitions,
@@ -129,6 +130,9 @@ export function GroupedCompetitionNav({
               {showGroupTabs && (
                 <Tabs value={selectedGroup} onValueChange={(v) => onGroupChange?.(v as CompetitionNavGroup)}>
                   <TabsList className="h-auto gap-1" data-testid={desktopGroupTabsTestId}>
+                    {includeAllGroupTab && (
+                      <TabsTrigger value="all" data-testid={`${desktopGroupTabTestIdPrefix}-all`}>All</TabsTrigger>
+                    )}
                     <TabsTrigger value="leagues" data-testid={`${desktopGroupTabTestIdPrefix}-leagues`}>Leagues</TabsTrigger>
                     <TabsTrigger value="cups" data-testid={`${desktopGroupTabTestIdPrefix}-cups`}>Cups</TabsTrigger>
                     <TabsTrigger value="europe" data-testid={`${desktopGroupTabTestIdPrefix}-europe`}>Europe</TabsTrigger>
@@ -175,6 +179,9 @@ export function GroupedCompetitionNav({
             >
               <Tabs value={selectedGroup} onValueChange={(v) => onGroupChange?.(v as CompetitionNavGroup)}>
                 <TabsList className="inline-flex h-auto gap-1 w-max" data-testid={mobileGroupTabsTestId}>
+                  {includeAllGroupTab && (
+                    <TabsTrigger value="all" className="whitespace-nowrap" data-testid={`${mobileGroupTabTestIdPrefix}-all-mobile`}>All</TabsTrigger>
+                  )}
                   <TabsTrigger value="leagues" className="whitespace-nowrap" data-testid={`${mobileGroupTabTestIdPrefix}-leagues-mobile`}>Leagues</TabsTrigger>
                   <TabsTrigger value="cups" className="whitespace-nowrap" data-testid={`${mobileGroupTabTestIdPrefix}-cups-mobile`}>Cups</TabsTrigger>
                   <TabsTrigger value="europe" className="whitespace-nowrap" data-testid={`${mobileGroupTabTestIdPrefix}-europe-mobile`}>Europe</TabsTrigger>

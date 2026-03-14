@@ -56,6 +56,7 @@ export interface ArticleWithEntities extends Article {
 }
 
 export interface NewsFilterParams {
+  group: "all" | "leagues" | "cups" | "europe";
   comp: string;
   type: string[];
   teamSlugs: string[];
@@ -1084,12 +1085,94 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse> {
-    const { comp, type, teamSlugs, sort, range, breaking, limit: limitParam, cursor } = params;
+    const { group, comp, type, teamSlugs, sort, range, breaking, limit: limitParam, cursor } = params;
     const limit = limitParam ?? 15; // Default to 15 (5 rows of 3)
     
     const conditions: any[] = [];
     
-    if (comp !== "all") {
+    const cupSlugs = new Set<string>([
+      "fa-cup",
+      "efl-cup",
+      "scottish-cup",
+      "scottish-league-cup",
+      "copa-del-rey",
+      "coppa-italia",
+      "dfb-pokal",
+      "coupe-de-france",
+    ]);
+    const europeSlugs = new Set<string>([
+      "champions-league",
+      "europa-league",
+      "conference-league",
+      "uefa-champions-league",
+      "uefa-europa-league",
+      "uefa-conference-league",
+    ]);
+
+    if (comp === "all" && group !== "all") {
+      const competitionRows = await db
+        .select({
+          id: competitions.id,
+          slug: competitions.slug,
+          canonicalSlug: competitions.canonicalSlug,
+        })
+        .from(competitions);
+
+      const scopedCompetitionIds = competitionRows
+        .filter((row) => {
+          const value = row.canonicalSlug || row.slug;
+          if (group === "cups") return cupSlugs.has(value);
+          if (group === "europe") return europeSlugs.has(value);
+          return !cupSlugs.has(value) && !europeSlugs.has(value);
+        })
+        .map((row) => row.id);
+
+      if (scopedCompetitionIds.length === 0) {
+        return {
+          articles: [],
+          appliedFilters: {
+            group,
+            comp,
+            type,
+            teams: teamSlugs,
+            myTeams: false,
+            sort,
+            range,
+            breaking,
+            total: 0,
+          },
+          nextCursor: null,
+          hasMore: false,
+        };
+      }
+
+      const articleIdsByCompetition = await db
+        .selectDistinct({ articleId: articleCompetitions.articleId })
+        .from(articleCompetitions)
+        .where(inArray(articleCompetitions.competitionId, scopedCompetitionIds));
+
+      const articleIdList = articleIdsByCompetition.map((a) => a.articleId);
+      if (articleIdList.length === 0) {
+        return {
+          articles: [],
+          appliedFilters: {
+            group,
+            comp,
+            type,
+            teams: teamSlugs,
+            myTeams: false,
+            sort,
+            range,
+            breaking,
+            total: 0,
+          },
+          nextCursor: null,
+          hasMore: false,
+        };
+      }
+
+      conditions.push(inArray(articles.id, articleIdList));
+    } else if (comp !== "all") {
       const [competitionBySlug] = await db
         .select({ id: competitions.id })
         .from(competitions)
@@ -1116,6 +1199,7 @@ export class DatabaseStorage implements IStorage {
         return {
           articles: [],
           appliedFilters: {
+            group,
             comp,
             type,
             teams: teamSlugs,
@@ -1140,6 +1224,7 @@ export class DatabaseStorage implements IStorage {
         return {
           articles: [],
           appliedFilters: {
+            group,
             comp,
             type,
             teams: teamSlugs,
@@ -1233,6 +1318,7 @@ export class DatabaseStorage implements IStorage {
         return {
           articles: [],
           appliedFilters: {
+            group,
             comp,
             type,
             teams: teamSlugs,
@@ -1306,6 +1392,7 @@ export class DatabaseStorage implements IStorage {
     return {
       articles: articlesToReturn as any,
       appliedFilters: {
+          group,
         comp,
         type,
         teams: teamSlugs,

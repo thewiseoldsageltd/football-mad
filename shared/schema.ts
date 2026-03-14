@@ -844,6 +844,7 @@ export const NEWS_TIME_RANGES = {
 } as const;
 
 export const newsFiltersSchema = z.object({
+  group: z.enum(["all", "leagues", "cups", "europe"]).default("all"),
   comp: z.enum(NEWS_COMPETITION_SLUGS).default("all"),
   type: z.string().optional().transform(val => val ? val.split(",").filter(Boolean) : []),
   teams: z.string().optional(),
@@ -857,6 +858,7 @@ export type NewsFilters = z.infer<typeof newsFiltersSchema>;
 export type NewsFiltersResponse = {
   articles: Article[];
   appliedFilters: {
+    group: string;
     comp: string;
     type: string[];
     teams: string[];

@@ -278,7 +278,13 @@ export default function TablesPage() {
 
         <GroupedCompetitionNav
           selectedGroup={topTab}
-          onGroupChange={setTopTab}
+          onGroupChange={(group) => {
+            if (group === "all") {
+              setTopTab("leagues");
+              return;
+            }
+            setTopTab(group);
+          }}
           selectedCompetition={selectedCompetition}
           onCompetitionChange={handleCompetitionChange}
           competitions={visibleCompetitions}

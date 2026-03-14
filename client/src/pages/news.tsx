@@ -83,7 +83,7 @@ export default function NewsPage() {
   
   const [teamSearch, setTeamSearch] = useState("");
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("leagues");
+  const [navGroup, setNavGroup] = useState<CompetitionNavGroup>("all");
 
   const apiQueryString = buildApiQueryString();
   
@@ -245,9 +245,12 @@ export default function NewsPage() {
   });
 
   useEffect(() => {
-    if (filters.comp === "all") return;
-    setNavGroup(getCompetitionNavGroup(filters.comp));
-  }, [filters.comp]);
+    if (filters.comp !== "all") {
+      setNavGroup(getCompetitionNavGroup(filters.comp));
+      return;
+    }
+    setNavGroup(filters.group);
+  }, [filters.comp, filters.group]);
 
   const teams: Team[] | undefined = useMemo(() => {
     if (!newsNav) return undefined;
@@ -380,6 +383,7 @@ export default function NewsPage() {
 
   const groupedCompetitionTabs = useMemo(() => {
     const groups: Record<CompetitionNavGroup, Array<{ value: CompetitionValue; label: string; subheading: string }>> = {
+      all: [],
       leagues: [],
       cups: [],
       europe: [],
@@ -393,7 +397,9 @@ export default function NewsPage() {
 
   const visibleCompetitionTabs = useMemo(() => {
     const allTab = allCompetitionTabs.find((tab) => tab.value === "all");
-    const groupTabs = groupedCompetitionTabs[navGroup] ?? [];
+    const groupTabs = navGroup === "all"
+      ? allCompetitionTabs.filter((tab) => tab.value !== "all")
+      : (groupedCompetitionTabs[navGroup] ?? []);
     const baseTabs = allTab ? [allTab, ...groupTabs] : groupTabs;
     if (filters.comp === "all" || baseTabs.some((tab) => tab.value === filters.comp)) {
       return baseTabs;
@@ -419,7 +425,7 @@ export default function NewsPage() {
 
   const handleCompetitionChange = (value: string) => {
     const nextValue = value as CompetitionValue;
-    setFilter("comp", nextValue);
+    setFilters({ comp: nextValue, group: navGroup });
     if (nextValue !== "all") {
       setNavGroup(getCompetitionNavGroup(nextValue));
     }
@@ -428,11 +434,10 @@ export default function NewsPage() {
   const handleNavGroupChange = (value: string) => {
     const nextGroup = value as CompetitionNavGroup;
     setNavGroup(nextGroup);
-    if (filters.comp === "all") return;
-    const currentGroup = getCompetitionNavGroup(filters.comp);
-    if (currentGroup !== nextGroup) {
-      setFilter("comp", "all");
-    }
+    setFilters({
+      group: nextGroup,
+      comp: "all",
+    });
   };
 
   const handleMyTeamsToggle = () => {
@@ -472,6 +477,7 @@ export default function NewsPage() {
           <GroupedCompetitionNav
             selectedGroup={navGroup}
             onGroupChange={handleNavGroupChange}
+            includeAllGroupTab
             selectedCompetition={filters.comp}
             onCompetitionChange={handleCompetitionChange}
             competitions={visibleCompetitionTabs}

@@ -48,6 +48,7 @@ export function EntityIcon({
   const { url, hasMedia } = useEntityMedia(entityType, entityId, surface);
   const [imgError, setImgError] = useState(false);
   const showImage = Boolean(hasMedia && url && !imgError);
+  const safeLabel = normalizeLabel(label);
 
   const boxStyle = { width: size, height: size };
   const baseClass = cn("rounded-full overflow-hidden shrink-0", className);
@@ -55,7 +56,7 @@ export function EntityIcon({
   if (showImage) {
     return (
       <div className={baseClass} style={boxStyle}>
-        <img src={url!} alt={label} className="h-full w-full object-contain" onError={() => setImgError(true)} />
+        <img src={url!} alt={safeLabel} className="h-full w-full object-contain" onError={() => setImgError(true)} />
       </div>
     );
   }
@@ -91,13 +92,14 @@ export function EntityAvatar({
   const { url, hasMedia } = useEntityMedia(entityType, entityId, surface);
   const [imgError, setImgError] = useState(false);
   const showImage = Boolean(hasMedia && url && !imgError);
+  const safeLabel = normalizeLabel(label);
 
   const shapeClass = shape === "square" ? "rounded-none" : "rounded-full";
 
   if (showImage) {
     return (
       <div className={cn(shapeClass, "overflow-hidden shrink-0", sizeClassName, className)}>
-        <img src={url!} alt={label} className="h-full w-full object-contain" onError={() => setImgError(true)} />
+        <img src={url!} alt={safeLabel} className="h-full w-full object-contain" onError={() => setImgError(true)} />
       </div>
     );
   }
@@ -127,6 +129,7 @@ export function EntityPillIcon({
   const { url, hasMedia } = useEntityMedia(entityType, entityId, "pill");
   const [imgError, setImgError] = useState(false);
   const showImage = Boolean(hasMedia && url && !imgError);
+  const safeLabel = normalizeLabel(label);
 
   const iconSizeClass = size === "small" ? "w-[16px] h-[16px]" : "w-[18px] h-[18px]";
   const containerSizeClass = size === "small" ? "w-4 h-4" : "w-[18px] h-[18px]";
@@ -136,7 +139,7 @@ export function EntityPillIcon({
       <div className={cn("rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center bg-muted", containerSizeClass)}>
         <img
           src={url!}
-          alt={label}
+          alt={safeLabel}
           className={cn("object-contain", iconSizeClass)}
           onError={() => setImgError(true)}
         />

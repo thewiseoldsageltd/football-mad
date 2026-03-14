@@ -1,4 +1,4 @@
-export type CompetitionNavGroup = "leagues" | "cups" | "europe";
+export type CompetitionNavGroup = "all" | "leagues" | "cups" | "europe";
 
 const CUP_COMPETITION_SLUGS = new Set<string>([
   "fa-cup",

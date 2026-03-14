@@ -11,11 +11,13 @@ import {
 const NEWS_COMPETITION_SLUG_SET = new Set<string>(NEWS_COMPETITION_SLUGS);
 
 export type CompetitionValue = NewsCompetitionSlug;
+export type CompetitionGroupValue = "all" | "leagues" | "cups" | "europe";
 export type ContentTypeSlug = keyof typeof NEWS_CONTENT_TYPES;
 export type SortOption = keyof typeof NEWS_SORT_OPTIONS;
 export type TimeRange = keyof typeof NEWS_TIME_RANGES;
 
 export interface NewsFiltersState {
+  group: CompetitionGroupValue;
   comp: CompetitionValue;
   type: ContentTypeSlug[];
   teams: string[];
@@ -44,12 +46,16 @@ function parseSearchParams(search: string): NewsFiltersState {
   const params = new URLSearchParams(search);
   
   const compRaw = params.get("comp") || "all";
+  const groupRaw = params.get("group") || "all";
   const typeParam = params.get("type");
   const teamsParam = params.get("teams");
   const sort = (params.get("sort") || "latest") as SortOption;
   const range = (params.get("range") || "all") as TimeRange;
   const breaking = params.get("breaking") === "true";
   
+  const validGroup: CompetitionGroupValue = ["all", "leagues", "cups", "europe"].includes(groupRaw)
+    ? (groupRaw as CompetitionGroupValue)
+    : "all";
   const validComp: CompetitionValue = NEWS_COMPETITION_SLUG_SET.has(compRaw)
     ? (compRaw as CompetitionValue)
     : "all";
@@ -66,6 +72,7 @@ function parseSearchParams(search: string): NewsFiltersState {
     : [];
 
   return {
+    group: validGroup,
     comp: validComp,
     type,
     teams,
@@ -80,10 +87,14 @@ function buildSearchString(filters: NewsFiltersState, forUrl: boolean = true): s
   const params = new URLSearchParams();
   
   if (forUrl) {
+    if (filters.group !== "all") {
+      params.set("group", filters.group);
+    }
     if (filters.comp !== "all") {
       params.set("comp", filters.comp);
     }
   } else {
+    params.set("group", filters.group);
     params.set("comp", filters.comp);
   }
   
@@ -178,6 +189,10 @@ export function useNewsFilters(): UseNewsFiltersReturn {
       case "comp":
         newFilters.comp = "all";
         break;
+      case "group":
+        newFilters.group = "all";
+        newFilters.comp = "all";
+        break;
       case "type":
         if (value) {
           newFilters.type = filters.type.filter(t => t !== value);
@@ -213,6 +228,7 @@ export function useNewsFilters(): UseNewsFiltersReturn {
   const clearFilters = useCallback(() => {
     const currentComp = filters.comp;
     updateUrl({
+      group: filters.group,
       comp: currentComp,
       type: [],
       teams: [],
@@ -221,7 +237,7 @@ export function useNewsFilters(): UseNewsFiltersReturn {
       range: "all",
       breaking: false,
     });
-  }, [filters.comp, updateUrl]);
+  }, [filters.comp, filters.group, updateUrl]);
   
   const hasActiveFilters = useMemo(() => {
     return (
@@ -229,7 +245,8 @@ export function useNewsFilters(): UseNewsFiltersReturn {
       filters.teams.length > 0 ||
       filters.myTeams ||
       filters.sort !== "latest" ||
-      filters.range !== "all"
+      filters.range !== "all" ||
+      filters.group !== "all"
     );
   }, [filters]);
   
@@ -239,12 +256,19 @@ export function useNewsFilters(): UseNewsFiltersReturn {
       filters.teams.length > 0 ||
       filters.myTeams ||
       filters.sort !== "latest" ||
-      filters.range !== "all"
+      filters.range !== "all" ||
+      filters.group !== "all"
     );
   }, [filters]);
   
   const canonicalUrl = useMemo(() => {
     const base = "/news";
+    if (filters.group !== "all" && filters.comp === "all") {
+      return `${base}?group=${filters.group}`;
+    }
+    if (filters.group !== "all" && filters.comp !== "all") {
+      return `${base}?group=${filters.group}&comp=${filters.comp}`;
+    }
     if (filters.comp !== "all") {
       return `${base}?comp=${filters.comp}`;
     }
