@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
+import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -594,13 +594,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ["coppa italia", "coppa-italia"],
         ["dfb-pokal", "dfb-pokal"],
         ["coupe de france", "coupe-de-france"],
+        ["fifa world cup", "fifa-world-cup"],
+        ["world cup", "fifa-world-cup"],
       ]);
+      const allowedCompetitionFilterSlugs = new Set<string>(NEWS_COMPETITION_SLUGS);
+      const normalizeAllowedSlug = (value?: string | null): string | null => {
+        if (!value) return null;
+        const normalized = value.trim().toLowerCase();
+        return allowedCompetitionFilterSlugs.has(normalized) ? normalized : null;
+      };
 
       const rows = await db
         .select({
           compId: competitions.id,
           compName: competitions.name,
           compSlug: competitions.slug,
+          compCanonicalSlug: competitions.canonicalSlug,
           teamId: teams.id,
           teamName: teams.name,
           teamSlug: teams.slug,
@@ -641,7 +650,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const presented = competitionPresentation.get(r.compId);
           const compName = presented?.name ?? r.compName;
           const compSlug = presented?.slug ?? r.compSlug;
-          const filterSlug = filterSlugOverridesByName.get(compName.toLowerCase()) ?? compSlug;
+          const filterSlug =
+            normalizeAllowedSlug(filterSlugOverridesByName.get(compName.toLowerCase())) ??
+            normalizeAllowedSlug(presented?.slug) ??
+            normalizeAllowedSlug(r.compCanonicalSlug) ??
+            normalizeAllowedSlug(r.compSlug) ??
+            compSlug;
           const fallbackSortOrder = compMap.size;
           comp = {
             id: r.compId,

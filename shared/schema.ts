@@ -783,7 +783,9 @@ export const NEWS_COMPETITION_SLUGS = [
   "uefa-champions-league",
   "uefa-europa-league",
   "uefa-conference-league",
+  "fifa-world-cup",
   // Legacy aliases still accepted to avoid breaking existing deep links.
+  "world-cup",
   "champions-league",
   "europa-league",
   "conference-league",
@@ -817,6 +819,8 @@ export const NEWS_COMPETITIONS = {
   "uefa-champions-league": { value: "uefa-champions-league", label: "Champions League", slug: "uefa-champions-league" },
   "uefa-europa-league": { value: "uefa-europa-league", label: "Europa League", slug: "uefa-europa-league" },
   "uefa-conference-league": { value: "uefa-conference-league", label: "Conference League", slug: "uefa-conference-league" },
+  "fifa-world-cup": { value: "fifa-world-cup", label: "FIFA World Cup", slug: "fifa-world-cup" },
+  "world-cup": { value: "world-cup", label: "World Cup", slug: "world-cup" },
 } as const;
 
 export const NEWS_CONTENT_TYPES = {

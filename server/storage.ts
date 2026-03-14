@@ -1176,7 +1176,12 @@ export class DatabaseStorage implements IStorage {
       const [competitionBySlug] = await db
         .select({ id: competitions.id })
         .from(competitions)
-        .where(eq(competitions.slug, comp))
+        .where(
+          or(
+            eq(competitions.slug, comp),
+            eq(competitions.canonicalSlug, comp),
+          ),
+        )
         .limit(1);
 
       const competitionId = competitionBySlug
