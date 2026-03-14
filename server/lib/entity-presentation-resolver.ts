@@ -155,6 +155,7 @@ export class EntityPresentationResolver {
         .select({
           id: competitions.id,
           name: competitions.name,
+          canonicalName: sql<string | null>`nullif(trim(canonical_name), '')`,
           slug: competitions.slug,
           canonicalSlug: competitions.canonicalSlug,
         })
@@ -198,8 +199,9 @@ export class EntityPresentationResolver {
         const key = this.cacheKey(id, context.source);
         this.competitionCache.set(key, {
           id,
-          name: override?.name || canonical.name,
-          slug: canonical.canonicalSlug || override?.slug || canonical.slug,
+          // Consistent public presentation fallback order across nav + pills/cards.
+          name: override?.name || canonical.canonicalName || canonical.name,
+          slug: override?.slug || canonical.canonicalSlug || canonical.slug,
         });
       }
     }
