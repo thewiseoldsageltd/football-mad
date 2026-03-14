@@ -830,7 +830,7 @@ export class DatabaseStorage implements IStorage {
       const override = competitionPresentationMap.get(row.id);
       return {
         ...row,
-        name: resolveCompetitionDisplayName(row.canonicalName, override?.name, row.name),
+        name: resolveCompetitionDisplayName(row.canonicalName, override?.name ?? row.name),
         slug: override?.slug || row.slug,
       };
     });
@@ -1053,7 +1053,7 @@ export class DatabaseStorage implements IStorage {
         : nonPaCompetitionPresentationMap.get(row.id);
       compMap.get(row.articleId)!.push({
         id: row.id,
-        name: resolveCompetitionDisplayName(row.canonicalName, presentation?.name, row.name),
+        name: resolveCompetitionDisplayName(row.canonicalName, presentation?.name ?? row.name),
         slug: presentation?.slug || row.slug,
       });
     }

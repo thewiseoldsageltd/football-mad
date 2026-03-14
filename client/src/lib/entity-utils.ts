@@ -2,7 +2,6 @@ import type { Article, Team, Player, Manager, Competition } from "@shared/schema
 import type { EntityData } from "@/components/entity-pill";
 import { competitionHub, teamHub, playerProfile, managerProfile } from "@/lib/urls";
 import {
-  COMP_PILL_DISPLAY_BY_NAME_NORM,
   normalizeKey,
   TEAM_PILL_DISPLAY_BY_NAME_NORM,
   TEAM_PILL_DISPLAY_BY_SLUG,
@@ -41,19 +40,8 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-/**
- * Formats Goalserve-enriched competition labels for UI display only.
- * Examples:
- * - "Premier League (England) [1204]" -> "Premier League"
- * - "UEFA Champions League (Eurocups) [1005]" -> "UEFA Champions League"
- */
 export function formatCompetitionName(name: string): string {
-  if (!name) return "";
-  const withoutId = name.replace(/\s*\[[^\]]*\]\s*$/, "");
-  const withoutTrailingParen = withoutId.replace(/\s*\([^)]*\)\s*$/, "");
-  const cleaned = withoutTrailingParen.trim().replace(/^French\s+(Ligue\s+[12])$/i, "$1");
-  const norm = normalizeKey(cleaned);
-  return COMP_PILL_DISPLAY_BY_NAME_NORM[norm] ?? cleaned;
+  return name?.trim() || "";
 }
 
 function formatTeamPillLabel(team: { slug?: string; name: string }): string {

@@ -649,7 +649,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let comp = compMap.get(r.compId);
         if (!comp) {
           const presented = competitionPresentation.get(r.compId);
-          const compName = resolveCompetitionDisplayName(r.compCanonicalName, presented?.name, r.compName);
+          const compName = resolveCompetitionDisplayName(r.compCanonicalName, presented?.name ?? r.compName);
           const compSlug = presented?.slug ?? r.compSlug;
           const filterSlug =
             normalizeAllowedSlug(filterSlugOverridesByName.get(compName.toLowerCase())) ??

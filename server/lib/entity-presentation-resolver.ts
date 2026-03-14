@@ -18,13 +18,10 @@ export type CompetitionPresentation = {
 
 export function resolveCompetitionDisplayName(
   canonicalName: string | null | undefined,
-  presentationName: string | null | undefined,
   fallbackName: string,
 ): string {
   const canonical = canonicalName?.trim();
   if (canonical) return canonical;
-  const presented = presentationName?.trim();
-  if (presented) return presented;
   return fallbackName;
 }
 
@@ -175,44 +172,14 @@ export class EntityPresentationResolver {
         .where(inArray(competitions.id, missingIds));
 
       const canonicalMap = new Map(canonicalRows.map((row) => [row.id, row]));
-      let overrideMap = new Map<string, { name?: string; slug?: string }>();
-
-      if (context.source === ARTICLE_SOURCE_PA_MEDIA) {
-        const overrideRows = await db
-          .select({
-            entityId: paEntityAliasMap.entityId,
-            displayName: paEntityAliasMap.displayName,
-            publicSlug: paEntityAliasMap.publicSlug,
-          })
-          .from(paEntityAliasMap)
-          .where(
-            and(
-              eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-              inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
-              inArray(paEntityAliasMap.entityId, missingIds),
-            ),
-          );
-
-        overrideMap = new Map();
-        for (const row of overrideRows) {
-          if (!overrideMap.has(row.entityId)) {
-            overrideMap.set(row.entityId, {
-              name: row.displayName ?? undefined,
-              slug: row.publicSlug ?? undefined,
-            });
-          }
-        }
-      }
-
       for (const id of missingIds) {
         const canonical = canonicalMap.get(id);
         if (!canonical) continue;
-        const override = overrideMap.get(id);
         const key = this.cacheKey(id, context.source);
         this.competitionCache.set(key, {
           id,
-          name: resolveCompetitionDisplayName(canonical.canonicalName, override?.name, canonical.name),
-          slug: override?.slug || canonical.canonicalSlug || canonical.slug,
+          name: resolveCompetitionDisplayName(canonical.canonicalName, canonical.name),
+          slug: canonical.canonicalSlug || canonical.slug,
         });
       }
     }
