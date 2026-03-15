@@ -376,6 +376,36 @@ const HEADSHOT_FIELD_KEYWORDS = [
   "base64",
 ];
 
+function extractGoalservePersonImageFastPath(payload: unknown): HeadshotCandidate | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  const playersNode = (payload as Record<string, unknown>).players;
+  if (!playersNode || typeof playersNode !== "object") return null;
+
+  const playerNode = (playersNode as Record<string, unknown>).player;
+  if (!playerNode) return null;
+
+  if (Array.isArray(playerNode)) {
+    for (const row of playerNode) {
+      if (!row || typeof row !== "object") continue;
+      const image = (row as Record<string, unknown>).image;
+      if (typeof image === "string" && image.trim()) {
+        return { url: null, base64: image, fieldPath: "$.players.player.image" };
+      }
+    }
+    return null;
+  }
+
+  if (typeof playerNode === "object") {
+    const image = (playerNode as Record<string, unknown>).image;
+    if (typeof image === "string" && image.trim()) {
+      return { url: null, base64: image, fieldPath: "$.players.player.image" };
+    }
+  }
+
+  return null;
+}
+
 function collectHeadshotCandidate(node: unknown): HeadshotCandidate {
   const queue: Array<{ value: unknown; path: string }> = [{ value: node, path: "$" }];
   const seen = new WeakSet<object>();
@@ -416,8 +446,6 @@ function collectHeadshotCandidate(node: unknown): HeadshotCandidate {
       if (typeof child === "string" && child.trim()) {
         const url = normalizeSourceUrl(child);
         if (url) return { url, base64: null, fieldPath: childPath };
-        const decoded = decodeBase64Image(child);
-        if (decoded) return { url: null, base64: child, fieldPath: childPath };
       } else if (child && typeof child === "object") {
         queue.push({ value: child, path: childPath });
       }
@@ -840,7 +868,7 @@ export async function syncGoalservePlayerMediaPilotByLeague(params?: {
         continue;
       }
 
-      const candidate = collectHeadshotCandidate(payload);
+      const candidate = extractGoalservePersonImageFastPath(payload) ?? collectHeadshotCandidate(payload);
       if (candidate.fieldPath) discoveredImageFields.add(candidate.fieldPath);
       if (!candidate.url && !candidate.base64) {
         result.skippedMissingImage++;
@@ -971,7 +999,7 @@ export async function syncGoalserveManagerMediaPilotByLeague(params?: {
         continue;
       }
 
-      const candidate = collectHeadshotCandidate(payload);
+      const candidate = extractGoalservePersonImageFastPath(payload) ?? collectHeadshotCandidate(payload);
       if (candidate.fieldPath) discoveredImageFields.add(candidate.fieldPath);
       if (!candidate.url && !candidate.base64) {
         result.skippedMissingImage++;
