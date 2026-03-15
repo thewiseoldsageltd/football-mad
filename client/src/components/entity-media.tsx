@@ -133,10 +133,11 @@ export function EntityPillIcon({
 
   const iconSizeClass = size === "small" ? "w-[16px] h-[16px]" : "w-[18px] h-[18px]";
   const containerSizeClass = size === "small" ? "w-4 h-4" : "w-[18px] h-[18px]";
+  const tileClass = "rounded-[6px] border border-border/50 bg-muted/20 p-[1px]";
 
   if (showImage) {
     return (
-      <div className={cn("rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center bg-muted", containerSizeClass)}>
+      <div className={cn("overflow-hidden flex-shrink-0 flex items-center justify-center", tileClass, containerSizeClass)}>
         <img
           src={url!}
           alt={safeLabel}
@@ -150,7 +151,7 @@ export function EntityPillIcon({
   return (
     <InitialsFallback
       label={label}
-      className={cn("rounded-full flex-shrink-0", containerSizeClass)}
+      className={cn("flex-shrink-0", tileClass, containerSizeClass)}
       textClassName={size === "small" ? "text-[9px]" : "text-[10px]"}
     />
   );
