@@ -133,7 +133,7 @@ export function EntityPillIcon({
 
   const iconSizeClass = size === "small" ? "w-[16px] h-[16px]" : "w-[18px] h-[18px]";
   const containerSizeClass = size === "small" ? "w-4 h-4" : "w-[18px] h-[18px]";
-  const tileClass = "rounded-[6px] border border-border/50 bg-muted/20 p-[1px]";
+  const tileClass = "rounded-[6px] border border-border/70 bg-white/95 dark:bg-background/95 p-[1.5px]";
 
   if (showImage) {
     return (
