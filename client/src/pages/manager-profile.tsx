@@ -4,11 +4,11 @@ import { ArrowLeft, Briefcase } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MainLayout } from "@/components/layout/main-layout";
 import { teamHub } from "@/lib/urls";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
+import { EntityAvatar } from "@/components/entity-media";
 import type { Article } from "@shared/schema";
 import { useEffect, useState } from "react";
 
@@ -117,7 +117,6 @@ export default function ManagerProfilePage() {
   }
 
   const managerName = manager.name;
-  const initials = managerName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <MainLayout>
@@ -132,11 +131,14 @@ export default function ManagerProfilePage() {
         <Card>
           <CardHeader>
             <div className="flex items-start gap-6">
-              <Avatar className="h-24 w-24">
-                <AvatarFallback className="text-2xl bg-primary/10 text-primary">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <EntityAvatar
+                entityType="manager"
+                entityId={manager.id}
+                label={managerName}
+                surface="hub_header"
+                sizeClassName="h-24 w-24"
+                className="bg-primary/5"
+              />
               <div className="flex-1">
                 <CardTitle className="text-2xl">{managerName}</CardTitle>
                 <div className="flex items-center gap-2 mt-2">

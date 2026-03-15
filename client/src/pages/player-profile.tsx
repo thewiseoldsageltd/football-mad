@@ -5,11 +5,11 @@ import { ArrowLeft, Trophy, Activity, ArrowRightLeft, Calendar, Shirt, MapPin, C
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
+import { EntityAvatar } from "@/components/entity-media";
 import { teamHub } from "@/lib/urls";
 import type { Team, Article } from "@shared/schema";
 
@@ -66,14 +66,6 @@ type PlayerArchiveResponse = {
     entityId: string | null;
   };
 };
-
-function getInitials(name: string): string {
-  const parts = name.split(" ");
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
-}
 
 function formatStat(value: string | number | undefined | null): string {
   if (value === undefined || value === null || value === "") return "–";
@@ -321,7 +313,6 @@ export default function PlayerProfilePage() {
 
   const currentClubName = player.team?.name ?? null;
   const currentClubSlug = player.team?.slug ?? null;
-  const initials = getInitials(player.name);
   const careerStatsTabs = {
     domesticLeague: [] as CareerSeasonRow[],
     domesticCups: [] as CareerSeasonRow[],
@@ -348,14 +339,14 @@ export default function PlayerProfilePage() {
         <Card>
           <CardHeader className="pb-4">
             <div className="flex flex-col sm:flex-row items-start gap-6">
-              <Avatar className="h-24 w-24 sm:h-32 sm:w-32">
-                {player.imageUrl ? (
-                  <AvatarImage src={player.imageUrl} alt={player.name} />
-                ) : null}
-                <AvatarFallback className="text-2xl sm:text-3xl bg-primary/10 text-primary">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <EntityAvatar
+                entityType="player"
+                entityId={player.id}
+                label={player.name}
+                surface="hub_header"
+                sizeClassName="h-24 w-24 sm:h-32 sm:w-32"
+                className="bg-primary/5"
+              />
               <div className="flex-1">
                 <CardTitle className="text-2xl sm:text-3xl">{player.name}</CardTitle>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
