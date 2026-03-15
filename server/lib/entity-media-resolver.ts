@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { entityMedia, entityMediaVariants } from "@shared/schema";
 
-export type EntityMediaResolverEntityType = "competition" | "team";
+export type EntityMediaResolverEntityType = "competition" | "team" | "player" | "manager";
 export type EntityMediaSurface = "pill" | "hub_header";
 
 export interface EntityDisplayMedia {
   entityType: EntityMediaResolverEntityType;
   entityId: string;
-  mediaRole: "logo" | "crest";
+  mediaRole: "logo" | "crest" | "headshot";
   url: string | null;
   width: number | null;
   height: number | null;
@@ -22,8 +22,10 @@ const SURFACE_VARIANT_PRIORITY: Record<EntityMediaSurface, string[]> = {
   hub_header: ["hub_160", "hub_96", "pill_32", "pill_24"],
 };
 
-function mediaRoleForEntityType(entityType: EntityMediaResolverEntityType): "logo" | "crest" {
-  return entityType === "competition" ? "logo" : "crest";
+function mediaRoleForEntityType(entityType: EntityMediaResolverEntityType): "logo" | "crest" | "headshot" {
+  if (entityType === "competition") return "logo";
+  if (entityType === "team") return "crest";
+  return "headshot";
 }
 
 export async function getEntityDisplayMedia(input: {

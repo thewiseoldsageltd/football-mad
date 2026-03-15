@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
 import sharp from "sharp";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { entityMedia, entityMediaVariants } from "@shared/schema";
 import { uploadBufferToR2Key } from "./r2";
 import { jobFetch } from "./job-observability";
 import { getJobRunId } from "./job-context";
 
-export type SupportedEntityType = "competition" | "team";
-export type SupportedMediaRole = "logo" | "crest";
+export type SupportedEntityType = "competition" | "team" | "player" | "manager";
+export type SupportedMediaRole = "logo" | "crest" | "headshot";
 export type MediaSourceSystem = "goalserve" | "manual";
 
 export interface IngestEntityMediaFromUrlInput {
@@ -64,8 +64,11 @@ function getCdnBaseUrl(): string {
   return (process.env.R2_PUBLIC_BASE_URL ?? "https://img.footballmad.co.uk").replace(/\/$/, "");
 }
 
-function pluralizeEntityType(entityType: SupportedEntityType): "competitions" | "teams" {
-  return entityType === "competition" ? "competitions" : "teams";
+function pluralizeEntityType(entityType: SupportedEntityType): "competitions" | "teams" | "players" | "managers" {
+  if (entityType === "competition") return "competitions";
+  if (entityType === "team") return "teams";
+  if (entityType === "player") return "players";
+  return "managers";
 }
 
 function inferExtension(url: string, mimeType: string | null): string {
@@ -205,6 +208,7 @@ async function ingestEntityMediaFromBufferCore(input: {
         checksum: entityMedia.checksum,
         originalStorageKey: entityMedia.originalStorageKey,
         cdnOriginalUrl: entityMedia.cdnOriginalUrl,
+        sourceSystem: entityMedia.sourceSystem,
       })
       .from(entityMedia)
       .where(
@@ -218,7 +222,38 @@ async function ingestEntityMediaFromBufferCore(input: {
       )
       .limit(1);
 
-    if (!forceReingest && existingPrimary[0]?.checksum && existingPrimary[0].checksum === checksum) {
+    // Keep manual assets as canonical when ingesting provider images.
+    const keepManualPrimary =
+      sourceSystem === "goalserve" && existingPrimary[0]?.sourceSystem === "manual";
+    const makePrimaryEffective = makePrimary && !keepManualPrimary;
+
+    let dedupeRow = existingPrimary[0];
+    if (keepManualPrimary) {
+      const [existingGoalserveActive] = await db
+        .select({
+          id: entityMedia.id,
+          checksum: entityMedia.checksum,
+          originalStorageKey: entityMedia.originalStorageKey,
+          cdnOriginalUrl: entityMedia.cdnOriginalUrl,
+          sourceSystem: entityMedia.sourceSystem,
+        })
+        .from(entityMedia)
+        .where(
+          and(
+            eq(entityMedia.entityType, entityType),
+            eq(entityMedia.entityId, entityId),
+            eq(entityMedia.mediaRole, mediaRole),
+            eq(entityMedia.sourceSystem, sourceSystem),
+            eq(entityMedia.status, "active"),
+          ),
+        )
+        .orderBy(desc(entityMedia.updatedAt), desc(entityMedia.createdAt))
+        .limit(1);
+      if (existingGoalserveActive) {
+        dedupeRow = existingGoalserveActive;
+      }
+    }
+    if (!forceReingest && dedupeRow?.checksum && dedupeRow.checksum === checksum) {
       await db
         .update(entityMedia)
         .set({
@@ -231,14 +266,14 @@ async function ingestEntityMediaFromBufferCore(input: {
           lastIngestedAt: now,
           updatedAt: now,
         })
-        .where(eq(entityMedia.id, existingPrimary[0].id));
+        .where(eq(entityMedia.id, dedupeRow.id));
 
       return {
         ok: true,
-        entityMediaId: existingPrimary[0].id,
+        entityMediaId: dedupeRow.id,
         created: false,
         unchanged: true,
-        cdnOriginalUrl: existingPrimary[0].cdnOriginalUrl,
+        cdnOriginalUrl: dedupeRow.cdnOriginalUrl,
         variantsCreated: 0,
       };
     }
@@ -261,7 +296,7 @@ async function ingestEntityMediaFromBufferCore(input: {
     );
 
     const insertedId = await db.transaction(async (tx) => {
-      if (makePrimary) {
+      if (makePrimaryEffective) {
         await tx
           .update(entityMedia)
           .set({
@@ -275,6 +310,23 @@ async function ingestEntityMediaFromBufferCore(input: {
               eq(entityMedia.entityId, entityId),
               eq(entityMedia.mediaRole, mediaRole),
               eq(entityMedia.isPrimary, true),
+              eq(entityMedia.status, "active"),
+            ),
+          );
+      } else {
+        await tx
+          .update(entityMedia)
+          .set({
+            status: "superseded",
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(entityMedia.entityType, entityType),
+              eq(entityMedia.entityId, entityId),
+              eq(entityMedia.mediaRole, mediaRole),
+              eq(entityMedia.sourceSystem, sourceSystem),
+              eq(entityMedia.isPrimary, false),
               eq(entityMedia.status, "active"),
             ),
           );
@@ -294,7 +346,7 @@ async function ingestEntityMediaFromBufferCore(input: {
           originalHeight,
           originalStorageKey,
           cdnOriginalUrl,
-          isPrimary: makePrimary,
+          isPrimary: makePrimaryEffective,
           status: "active",
           checksum,
           lastIngestedAt: now,

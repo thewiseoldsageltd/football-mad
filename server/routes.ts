@@ -38,7 +38,7 @@ import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
 import { syncGoalserveManagers } from "./jobs/sync-goalserve-managers";
-import { syncGoalserveEntityMedia } from "./jobs/sync-goalserve-entity-media";
+import { syncGoalserveEntityMedia, syncGoalservePersonMediaPilot } from "./jobs/sync-goalserve-entity-media";
 import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
@@ -476,7 +476,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/entity-media/:entityType/:entityId", async (req, res) => {
     const params = z
       .object({
-        entityType: z.enum(["competition", "team"]),
+        entityType: z.enum(["competition", "team", "player", "manager"]),
         entityId: z.string().min(1),
       })
       .safeParse(req.params);
@@ -2695,12 +2695,57 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : undefined;
       const includeTeams = req.query.includeTeams === "0" ? false : true;
       const includeCompetitions = req.query.includeCompetitions === "0" ? false : true;
+      const includePlayers = req.query.includePlayers === "1";
+      const includeManagers = req.query.includeManagers === "1";
       const mvpTeamsOnly = req.query.mvpTeamsOnly === "1";
+      const dryRun = req.query.dryRun === "1";
+      const maxPlayers =
+        typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
+          ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
+          : undefined;
+      const maxManagers =
+        typeof req.query.maxManagers === "string" && Number.isFinite(Number(req.query.maxManagers))
+          ? Math.max(1, Math.floor(Number(req.query.maxManagers)))
+          : undefined;
       const result = await syncGoalserveEntityMedia({
         leagueId,
         includeTeams,
         includeCompetitions,
+        includePlayers,
+        includeManagers,
         mvpTeamsOnly,
+        maxPlayers,
+        maxManagers,
+        dryRun,
+      });
+      res.json(result);
+    },
+  );
+
+  app.post(
+    "/api/jobs/sync-goalserve-person-media-pilot",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : "1204";
+      const includePlayers = req.query.includePlayers === "0" ? false : true;
+      const includeManagers = req.query.includeManagers === "0" ? false : true;
+      const dryRun = req.query.dryRun === "1";
+      const maxPlayers =
+        typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
+          ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
+          : undefined;
+      const maxManagers =
+        typeof req.query.maxManagers === "string" && Number.isFinite(Number(req.query.maxManagers))
+          ? Math.max(1, Math.floor(Number(req.query.maxManagers)))
+          : undefined;
+
+      const result = await syncGoalservePersonMediaPilot({
+        leagueId,
+        includePlayers,
+        includeManagers,
+        dryRun,
+        maxPlayers,
+        maxManagers,
       });
       res.json(result);
     },

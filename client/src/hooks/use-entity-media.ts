@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-export type MediaEntityType = "team" | "competition";
+export type MediaEntityType = "team" | "competition" | "player" | "manager";
 export type MediaSurface = "pill" | "hub_header";
 
 interface EntityMediaApiResponse {

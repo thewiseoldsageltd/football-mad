@@ -1,6 +1,6 @@
 import { inArray, isNotNull } from "drizzle-orm";
 import { db } from "../db";
-import { competitions, teams } from "@shared/schema";
+import { competitions, managers, players, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ingestEntityMediaFromBuffer, ingestEntityMediaFromUrl } from "../lib/entity-media-service";
 import { jobFetch } from "../lib/job-observability";
@@ -42,6 +42,27 @@ interface GoalserveCompetitionMediaSyncResult {
   failed: number;
   skippedMissingCompetition: number;
   skippedMissingImage: number;
+  errors: string[];
+}
+
+interface GoalservePersonMediaSyncResult {
+  ok: boolean;
+  scope: "premier_league";
+  leagueId: string;
+  entityType: "player" | "manager";
+  dryRun: boolean;
+  scanned: number;
+  withGoalserveId: number;
+  attempted: number;
+  ingested: number;
+  unchanged: number;
+  failed: number;
+  skippedMissingImage: number;
+  skippedMissingGoalserveId: number;
+  skippedUnsupportedGoalserveId: number;
+  ingestedFromUrl: number;
+  ingestedFromBase64: number;
+  discoveredImageFields: string[];
   errors: string[];
 }
 
@@ -334,6 +355,98 @@ function decodeBase64Image(raw: string): { buffer: Buffer; mimeType: string; for
   } catch {
     return null;
   }
+}
+
+type HeadshotCandidate = {
+  url: string | null;
+  base64: string | null;
+  fieldPath: string | null;
+};
+
+const HEADSHOT_FIELD_KEYWORDS = [
+  "headshot",
+  "photo",
+  "portrait",
+  "avatar",
+  "image",
+  "img",
+  "thumb",
+  "picture",
+  "pic",
+  "base64",
+];
+
+function collectHeadshotCandidate(node: unknown): HeadshotCandidate {
+  const queue: Array<{ value: unknown; path: string }> = [{ value: node, path: "$" }];
+  const seen = new WeakSet<object>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const value = current.value;
+    if (!value || typeof value !== "object") continue;
+    if (seen.has(value as object)) continue;
+    seen.add(value as object);
+
+    if (Array.isArray(value)) {
+      value.forEach((item, idx) => queue.push({ value: item, path: `${current.path}[${idx}]` }));
+      continue;
+    }
+
+    const obj = value as Record<string, unknown>;
+    for (const [rawKey, child] of Object.entries(obj)) {
+      const key = String(rawKey);
+      const normalizedKey = key.replace(/^@/, "").toLowerCase();
+      const childPath = `${current.path}.${key}`;
+
+      if (typeof child === "string" && child.trim()) {
+        const url = normalizeSourceUrl(child);
+        if (url && HEADSHOT_FIELD_KEYWORDS.some((term) => normalizedKey.includes(term))) {
+          return { url, base64: null, fieldPath: childPath };
+        }
+        const decoded = decodeBase64Image(child);
+        if (decoded && HEADSHOT_FIELD_KEYWORDS.some((term) => normalizedKey.includes(term))) {
+          return { url: null, base64: child, fieldPath: childPath };
+        }
+      }
+    }
+
+    for (const [rawKey, child] of Object.entries(obj)) {
+      const key = String(rawKey);
+      const childPath = `${current.path}.${key}`;
+      if (typeof child === "string" && child.trim()) {
+        const url = normalizeSourceUrl(child);
+        if (url) return { url, base64: null, fieldPath: childPath };
+        const decoded = decodeBase64Image(child);
+        if (decoded) return { url: null, base64: child, fieldPath: childPath };
+      } else if (child && typeof child === "object") {
+        queue.push({ value: child, path: childPath });
+      }
+    }
+  }
+
+  return { url: null, base64: null, fieldPath: null };
+}
+
+async function fetchGoalserveJson(path: string): Promise<unknown | null> {
+  try {
+    const url = buildGoalserveFeedUrl(path);
+    if (!url) return null;
+    const res = await goalserveRateLimitedRequest(url);
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGoalserveManagerProfile(goalserveManagerId: string): Promise<unknown | null> {
+  // Goalserve manager IDs typically resolve via soccerstats/coach/:id.
+  const paths = [`soccerstats/coach/${goalserveManagerId}`, `soccerstats/manager/${goalserveManagerId}`];
+  for (const path of paths) {
+    const payload = await fetchGoalserveJson(path);
+    if (payload) return payload;
+  }
+  return null;
 }
 
 async function ingestTeamMediaForScope(
@@ -648,23 +761,351 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
   return result;
 }
 
+async function resolveLeagueScopedTeamIds(leagueId: string): Promise<Set<string>> {
+  const response = await goalserveFetch(`soccerleague/${leagueId}`);
+  const rawTeams = response?.league?.team;
+  const feedTeams: Record<string, unknown>[] = Array.isArray(rawTeams) ? rawTeams : rawTeams ? [rawTeams] : [];
+  const goalserveTeamIds = feedTeams.map(readGoalserveId).filter(Boolean);
+  if (goalserveTeamIds.length === 0) return new Set<string>();
+
+  const rows = await db
+    .select({ id: teams.id, goalserveTeamId: teams.goalserveTeamId })
+    .from(teams)
+    .where(inArray(teams.goalserveTeamId, goalserveTeamIds));
+  return new Set(rows.map((row) => row.id));
+}
+
+export async function syncGoalservePlayerMediaPilotByLeague(params?: {
+  leagueId?: string;
+  maxPlayers?: number;
+  dryRun?: boolean;
+}): Promise<GoalservePersonMediaSyncResult> {
+  const leagueId = params?.leagueId ?? "1204";
+  const maxPlayers = Math.max(1, params?.maxPlayers ?? 120);
+  const dryRun = params?.dryRun ?? false;
+  const discoveredImageFields = new Set<string>();
+
+  const result: GoalservePersonMediaSyncResult = {
+    ok: true,
+    scope: "premier_league",
+    leagueId,
+    entityType: "player",
+    dryRun,
+    scanned: 0,
+    withGoalserveId: 0,
+    attempted: 0,
+    ingested: 0,
+    unchanged: 0,
+    failed: 0,
+    skippedMissingImage: 0,
+    skippedMissingGoalserveId: 0,
+    skippedUnsupportedGoalserveId: 0,
+    ingestedFromUrl: 0,
+    ingestedFromBase64: 0,
+    discoveredImageFields: [],
+    errors: [],
+  };
+
+  try {
+    const scopedTeamIds = await resolveLeagueScopedTeamIds(leagueId);
+    if (scopedTeamIds.size === 0) {
+      result.errors.push(`No canonical teams mapped for leagueId=${leagueId}`);
+      result.ok = false;
+      return result;
+    }
+
+    const rows = await db
+      .select({ id: players.id, goalservePlayerId: players.goalservePlayerId })
+      .from(players)
+      .where(inArray(players.teamId, Array.from(scopedTeamIds)));
+    result.scanned = rows.length;
+
+    const scoped = rows.slice(0, maxPlayers);
+    for (const row of scoped) {
+      const goalserveId = (row.goalservePlayerId ?? "").trim();
+      if (!goalserveId) {
+        result.skippedMissingGoalserveId++;
+        continue;
+      }
+      result.withGoalserveId++;
+      if (!/^\d+$/.test(goalserveId)) {
+        result.skippedUnsupportedGoalserveId++;
+        continue;
+      }
+      result.attempted++;
+
+      const payload = await fetchGoalserveJson(`soccerstats/player/${goalserveId}`);
+      if (!payload) {
+        result.skippedMissingImage++;
+        continue;
+      }
+
+      const candidate = collectHeadshotCandidate(payload);
+      if (candidate.fieldPath) discoveredImageFields.add(candidate.fieldPath);
+      if (!candidate.url && !candidate.base64) {
+        result.skippedMissingImage++;
+        continue;
+      }
+
+      if (dryRun) continue;
+
+      if (candidate.base64) {
+        const decoded = decodeBase64Image(candidate.base64);
+        if (!decoded) {
+          result.skippedMissingImage++;
+          continue;
+        }
+        const ingest = await ingestEntityMediaFromBuffer({
+          entityType: "player",
+          entityId: row.id,
+          mediaRole: "headshot",
+          sourceSystem: "goalserve",
+          sourceRef: `goalserve:soccerstats:player:${goalserveId}`,
+          sourceFormatHint: decoded.formatHint,
+          sourceMimeTypeHint: decoded.mimeType,
+          makePrimary: true,
+          originalBuffer: decoded.buffer,
+        });
+        if (!ingest.ok) {
+          result.failed++;
+          if (ingest.error) result.errors.push(`player ${goalserveId}: ${ingest.error}`);
+        } else if (ingest.unchanged) {
+          result.unchanged++;
+        } else {
+          result.ingested++;
+          result.ingestedFromBase64++;
+        }
+        continue;
+      }
+
+      const ingest = await ingestEntityMediaFromUrl({
+        entityType: "player",
+        entityId: row.id,
+        mediaRole: "headshot",
+        sourceSystem: "goalserve",
+        sourceUrl: candidate.url!,
+        sourceRef: `goalserve:soccerstats:player:${goalserveId}`,
+        makePrimary: true,
+      });
+      if (!ingest.ok) {
+        result.failed++;
+        if (ingest.error) result.errors.push(`player ${goalserveId}: ${ingest.error}`);
+      } else if (ingest.unchanged) {
+        result.unchanged++;
+      } else {
+        result.ingested++;
+        result.ingestedFromUrl++;
+      }
+    }
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  result.discoveredImageFields = Array.from(discoveredImageFields).sort();
+  return result;
+}
+
+export async function syncGoalserveManagerMediaPilotByLeague(params?: {
+  leagueId?: string;
+  maxManagers?: number;
+  dryRun?: boolean;
+}): Promise<GoalservePersonMediaSyncResult> {
+  const leagueId = params?.leagueId ?? "1204";
+  const maxManagers = Math.max(1, params?.maxManagers ?? 40);
+  const dryRun = params?.dryRun ?? false;
+  const discoveredImageFields = new Set<string>();
+
+  const result: GoalservePersonMediaSyncResult = {
+    ok: true,
+    scope: "premier_league",
+    leagueId,
+    entityType: "manager",
+    dryRun,
+    scanned: 0,
+    withGoalserveId: 0,
+    attempted: 0,
+    ingested: 0,
+    unchanged: 0,
+    failed: 0,
+    skippedMissingImage: 0,
+    skippedMissingGoalserveId: 0,
+    skippedUnsupportedGoalserveId: 0,
+    ingestedFromUrl: 0,
+    ingestedFromBase64: 0,
+    discoveredImageFields: [],
+    errors: [],
+  };
+
+  try {
+    const scopedTeamIds = await resolveLeagueScopedTeamIds(leagueId);
+    if (scopedTeamIds.size === 0) {
+      result.errors.push(`No canonical teams mapped for leagueId=${leagueId}`);
+      result.ok = false;
+      return result;
+    }
+
+    const rows = await db
+      .select({ id: managers.id, goalserveManagerId: managers.goalserveManagerId })
+      .from(managers)
+      .where(inArray(managers.currentTeamId, Array.from(scopedTeamIds)));
+    result.scanned = rows.length;
+
+    const scoped = rows.slice(0, maxManagers);
+    for (const row of scoped) {
+      const goalserveId = (row.goalserveManagerId ?? "").trim();
+      if (!goalserveId) {
+        result.skippedMissingGoalserveId++;
+        continue;
+      }
+      result.withGoalserveId++;
+      if (!/^\d+$/.test(goalserveId)) {
+        result.skippedUnsupportedGoalserveId++;
+        continue;
+      }
+      result.attempted++;
+
+      const payload = await fetchGoalserveManagerProfile(goalserveId);
+      if (!payload) {
+        result.skippedMissingImage++;
+        continue;
+      }
+
+      const candidate = collectHeadshotCandidate(payload);
+      if (candidate.fieldPath) discoveredImageFields.add(candidate.fieldPath);
+      if (!candidate.url && !candidate.base64) {
+        result.skippedMissingImage++;
+        continue;
+      }
+
+      if (dryRun) continue;
+
+      if (candidate.base64) {
+        const decoded = decodeBase64Image(candidate.base64);
+        if (!decoded) {
+          result.skippedMissingImage++;
+          continue;
+        }
+        const ingest = await ingestEntityMediaFromBuffer({
+          entityType: "manager",
+          entityId: row.id,
+          mediaRole: "headshot",
+          sourceSystem: "goalserve",
+          sourceRef: `goalserve:soccerstats:coach:${goalserveId}`,
+          sourceFormatHint: decoded.formatHint,
+          sourceMimeTypeHint: decoded.mimeType,
+          makePrimary: true,
+          originalBuffer: decoded.buffer,
+        });
+        if (!ingest.ok) {
+          result.failed++;
+          if (ingest.error) result.errors.push(`manager ${goalserveId}: ${ingest.error}`);
+        } else if (ingest.unchanged) {
+          result.unchanged++;
+        } else {
+          result.ingested++;
+          result.ingestedFromBase64++;
+        }
+        continue;
+      }
+
+      const ingest = await ingestEntityMediaFromUrl({
+        entityType: "manager",
+        entityId: row.id,
+        mediaRole: "headshot",
+        sourceSystem: "goalserve",
+        sourceUrl: candidate.url!,
+        sourceRef: `goalserve:soccerstats:coach:${goalserveId}`,
+        makePrimary: true,
+      });
+      if (!ingest.ok) {
+        result.failed++;
+        if (ingest.error) result.errors.push(`manager ${goalserveId}: ${ingest.error}`);
+      } else if (ingest.unchanged) {
+        result.unchanged++;
+      } else {
+        result.ingested++;
+        result.ingestedFromUrl++;
+      }
+    }
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  result.discoveredImageFields = Array.from(discoveredImageFields).sort();
+  return result;
+}
+
+export async function syncGoalservePersonMediaPilot(params?: {
+  leagueId?: string;
+  includePlayers?: boolean;
+  includeManagers?: boolean;
+  maxPlayers?: number;
+  maxManagers?: number;
+  dryRun?: boolean;
+}): Promise<{
+  ok: boolean;
+  players?: GoalservePersonMediaSyncResult;
+  managers?: GoalservePersonMediaSyncResult;
+}> {
+  const includePlayers = params?.includePlayers ?? true;
+  const includeManagers = params?.includeManagers ?? true;
+  const output: {
+    ok: boolean;
+    players?: GoalservePersonMediaSyncResult;
+    managers?: GoalservePersonMediaSyncResult;
+  } = { ok: true };
+
+  if (includePlayers) {
+    output.players = await syncGoalservePlayerMediaPilotByLeague({
+      leagueId: params?.leagueId,
+      maxPlayers: params?.maxPlayers,
+      dryRun: params?.dryRun,
+    });
+    if (!output.players.ok) output.ok = false;
+  }
+
+  if (includeManagers) {
+    output.managers = await syncGoalserveManagerMediaPilotByLeague({
+      leagueId: params?.leagueId,
+      maxManagers: params?.maxManagers,
+      dryRun: params?.dryRun,
+    });
+    if (!output.managers.ok) output.ok = false;
+  }
+
+  return output;
+}
+
 export async function syncGoalserveEntityMedia(params: {
   leagueId?: string;
   includeTeams?: boolean;
   includeCompetitions?: boolean;
   mvpTeamsOnly?: boolean;
+  includePlayers?: boolean;
+  includeManagers?: boolean;
+  maxPlayers?: number;
+  maxManagers?: number;
+  dryRun?: boolean;
 }): Promise<{
   ok: boolean;
   teams?: GoalserveTeamMediaSyncResult;
   competitions?: GoalserveCompetitionMediaSyncResult;
+  players?: GoalservePersonMediaSyncResult;
+  managers?: GoalservePersonMediaSyncResult;
 }> {
   const includeTeams = params.includeTeams ?? true;
   const includeCompetitions = params.includeCompetitions ?? true;
+  const includePlayers = params.includePlayers ?? false;
+  const includeManagers = params.includeManagers ?? false;
   const mvpTeamsOnly = params.mvpTeamsOnly ?? false;
   const output: {
     ok: boolean;
     teams?: GoalserveTeamMediaSyncResult;
     competitions?: GoalserveCompetitionMediaSyncResult;
+    players?: GoalservePersonMediaSyncResult;
+    managers?: GoalservePersonMediaSyncResult;
   } = { ok: true };
 
   if (includeCompetitions) {
@@ -697,6 +1138,24 @@ export async function syncGoalserveEntityMedia(params: {
       output.teams = await syncGoalserveTeamMediaByLeague(params.leagueId);
       if (!output.teams.ok) output.ok = false;
     }
+  }
+
+  if (includePlayers) {
+    output.players = await syncGoalservePlayerMediaPilotByLeague({
+      leagueId: params.leagueId,
+      maxPlayers: params.maxPlayers,
+      dryRun: params.dryRun,
+    });
+    if (!output.players.ok) output.ok = false;
+  }
+
+  if (includeManagers) {
+    output.managers = await syncGoalserveManagerMediaPilotByLeague({
+      leagueId: params.leagueId,
+      maxManagers: params.maxManagers,
+      dryRun: params.dryRun,
+    });
+    if (!output.managers.ok) output.ok = false;
   }
 
   return output;
