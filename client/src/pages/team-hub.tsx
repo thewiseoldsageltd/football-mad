@@ -25,7 +25,7 @@ import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
-import { getClubPrimaryColor } from "@/lib/club-colors";
+import { getClubBranding } from "@/lib/club-branding";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -2815,6 +2815,9 @@ export default function TeamHubPage() {
     );
   }
 
+  const branding = getClubBranding(team.slug);
+  const resolvedPrimary = branding.primary || team.primaryColor || "#1a1a2e";
+
   return (
     <MainLayout>
       <TeamHubHeader
@@ -2822,7 +2825,8 @@ export default function TeamHubPage() {
         teamSlug={team.slug}
         teamCrestUrl={team.imageUrl ?? null}
         managerName={currentManager?.name ?? null}
-        clubPrimaryColor={getClubPrimaryColor(team.slug, team.primaryColor ?? "#1a1a2e")}
+        clubPrimaryColor={resolvedPrimary}
+        clubSecondaryColor={branding.secondary}
         teamEntityId={team.id}
         isFollowing={Boolean(isFollowing)}
         isFollowPending={followMutation.isPending || unfollowMutation.isPending}

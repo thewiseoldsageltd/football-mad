@@ -2,29 +2,6 @@ import { Heart, HeartOff, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EntityAvatar } from "@/components/entity-media";
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const clean = hex.trim().replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return null;
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return { r, g, b };
-}
-
-function darkenHex(hex: string, amount = 0.22): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return hex;
-  const factor = 1 - clamp(amount, 0, 0.8);
-  const r = Math.round(clamp(rgb.r * factor, 0, 255));
-  const g = Math.round(clamp(rgb.g * factor, 0, 255));
-  const b = Math.round(clamp(rgb.b * factor, 0, 255));
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-}
-
 function getInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
@@ -37,6 +14,7 @@ export interface TeamHubHeaderProps {
   teamCrestUrl?: string | null;
   managerName?: string | null;
   clubPrimaryColor: string;
+  clubSecondaryColor?: string;
   teamEntityId?: string | null;
   isFollowing: boolean;
   isFollowPending?: boolean;
@@ -49,14 +27,16 @@ export function TeamHubHeader({
   teamCrestUrl,
   managerName,
   clubPrimaryColor,
+  clubSecondaryColor,
   teamEntityId,
   isFollowing,
   isFollowPending = false,
   onFollowToggle,
 }: TeamHubHeaderProps) {
   const safeTeamName = typeof teamName === "string" && teamName.trim() ? teamName.trim() : "Team";
+  const safeTeamSlug = typeof teamSlug === "string" ? teamSlug.trim().toLowerCase() : "";
   const safePrimary = typeof clubPrimaryColor === "string" && clubPrimaryColor.trim() ? clubPrimaryColor : "#1a1a2e";
-  const darker = darkenHex(safePrimary, 0.28);
+  const safeSecondary = typeof clubSecondaryColor === "string" && clubSecondaryColor.trim() ? clubSecondaryColor : "#FFFFFF";
   const baseStyle = {
     backgroundColor: safePrimary,
   };
@@ -64,11 +44,30 @@ export function TeamHubHeader({
     background:
       "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 26%, transparent 56%)",
   };
+  const watermarkMaskStyle = {
+    backgroundColor: safeSecondary,
+    maskImage: `url(/assets/crests/mono/${safeTeamSlug}.svg)`,
+    WebkitMaskImage: `url(/assets/crests/mono/${safeTeamSlug}.svg)`,
+    maskRepeat: "no-repeat",
+    WebkitMaskRepeat: "no-repeat",
+    maskPosition: "center",
+    WebkitMaskPosition: "center",
+    maskSize: "contain",
+    WebkitMaskSize: "contain",
+    opacity: 0.12,
+  };
 
   return (
     <div className="relative overflow-hidden py-12 md:py-16">
       <div className="absolute inset-0" style={baseStyle} aria-hidden="true" />
       <div className="absolute inset-0" style={glowStyle} aria-hidden="true" />
+      {safeTeamSlug ? (
+        <div
+          className="absolute right-[-3%] top-1/2 -translate-y-1/2 h-[145%] w-[45%] pointer-events-none"
+          style={watermarkMaskStyle}
+          aria-hidden="true"
+        />
+      ) : null}
 
       <div className="relative max-w-7xl mx-auto px-4">
         <div className="flex flex-col md:flex-row items-center gap-6">
