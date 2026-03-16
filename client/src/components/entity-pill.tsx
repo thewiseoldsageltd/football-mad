@@ -145,6 +145,13 @@ export function EntityPill({
           label={entity.name}
           size={size}
         />
+      ) : ((entity.type === "player" || entity.type === "manager") && entity.entityId) ? (
+        <EntityPillIcon
+          entityType={entity.type}
+          entityId={entity.entityId}
+          label={entity.name}
+          size={size}
+        />
       ) : (
         <IconWithFallback
           src={entity.iconUrl}

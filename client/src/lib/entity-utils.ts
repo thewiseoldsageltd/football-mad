@@ -681,9 +681,9 @@ export function buildPillGroups(article: PillSourceArticle, teams: Team[] = []):
       });
     };
   const mapPlayer = (p: EntityLike): EntityData =>
-    toEntityData("player", p.name, { slug: p.slug || slugify(p.name) });
+    toEntityData("player", p.name, { entityId: p.id, slug: p.slug || slugify(p.name) });
   const mapManager = (m: EntityLike): EntityData =>
-    toEntityData("manager", m.name, { slug: m.slug || slugify(m.name) });
+    toEntityData("manager", m.name, { entityId: m.id, slug: m.slug || slugify(m.name) });
 
   return {
     competitionPills: dedupeByNameCaseInsensitive(sortWithTitleBoost(article.entityCompetitions ?? [], article.title).map(mapCompetition)),

@@ -131,11 +131,26 @@ export function EntityPillIcon({
   const showImage = Boolean(hasMedia && url && !imgError);
   const safeLabel = normalizeLabel(label);
 
-  const iconSizeClass = size === "small" ? "w-[16px] h-[16px]" : "w-[18px] h-[18px]";
-  const containerSizeClass = size === "small" ? "w-4 h-4" : "w-[18px] h-[18px]";
+  const isHeadshotType = entityType === "player" || entityType === "manager";
+  const iconSizeClass = size === "small" ? (isHeadshotType ? "w-[18px] h-[18px]" : "w-[16px] h-[16px]") : "w-[18px] h-[18px]";
+  const containerSizeClass = size === "small" ? (isHeadshotType ? "w-[18px] h-[18px]" : "w-4 h-4") : "w-[18px] h-[18px]";
   const tileClass = "rounded-[6px] border border-border/70 bg-white/95 dark:bg-background/95 p-[1.5px]";
+  const avatarClass = "rounded-full border border-border/50 bg-background";
 
   if (showImage) {
+    if (isHeadshotType) {
+      return (
+        <div className={cn("overflow-hidden flex-shrink-0", avatarClass, containerSizeClass)}>
+          <img
+            src={url!}
+            alt={safeLabel}
+            className="h-full w-full object-cover"
+            onError={() => setImgError(true)}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className={cn("overflow-hidden flex-shrink-0 flex items-center justify-center", tileClass, containerSizeClass)}>
         <img
@@ -145,6 +160,16 @@ export function EntityPillIcon({
           onError={() => setImgError(true)}
         />
       </div>
+    );
+  }
+
+  if (isHeadshotType) {
+    return (
+      <InitialsFallback
+        label={label}
+        className={cn("flex-shrink-0", avatarClass, containerSizeClass)}
+        textClassName={size === "small" ? "text-[9px]" : "text-[10px]"}
+      />
     );
   }
 
