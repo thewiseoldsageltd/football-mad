@@ -54,9 +54,11 @@ export function TeamHubHeader({
   isFollowPending = false,
   onFollowToggle,
 }: TeamHubHeaderProps) {
-  const darker = darkenHex(clubPrimaryColor, 0.22);
+  const safeTeamName = typeof teamName === "string" && teamName.trim() ? teamName.trim() : "Team";
+  const safePrimary = typeof clubPrimaryColor === "string" && clubPrimaryColor.trim() ? clubPrimaryColor : "#1a1a2e";
+  const darker = darkenHex(safePrimary, 0.22);
   const gradientStyle = {
-    background: `linear-gradient(135deg, ${clubPrimaryColor} 0%, ${darker} 100%)`,
+    background: `linear-gradient(135deg, ${safePrimary} 0%, ${darker} 100%)`,
   };
   const patternStyle = {
     background:
@@ -76,25 +78,25 @@ export function TeamHubHeader({
         <div className="flex flex-col md:flex-row items-center gap-6">
           <div className="w-20 h-20 md:w-28 md:h-28 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 shadow-lg bg-white/95 border border-white/60">
             {teamCrestUrl ? (
-              <img src={teamCrestUrl} alt={teamName} className="h-full w-full object-contain" />
+              <img src={teamCrestUrl} alt={safeTeamName} className="h-full w-full object-contain" />
             ) : teamEntityId ? (
               <EntityAvatar
                 entityType="team"
                 entityId={teamEntityId}
                 surface="hub_header"
-                label={teamName}
+                label={safeTeamName}
                 sizeClassName="h-full w-full"
                 shape="square"
               />
             ) : (
               <div className="h-full w-full flex items-center justify-center text-2xl font-semibold text-muted-foreground">
-                {getInitials(teamName)}
+                {getInitials(safeTeamName)}
               </div>
             )}
           </div>
 
           <div className="text-center md:text-left flex-1">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2">{teamName}</h1>
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2">{safeTeamName}</h1>
             {managerName ? (
               <div className="text-white/85 text-sm md:text-base">
                 <span className="font-medium">Manager:</span> {managerName}

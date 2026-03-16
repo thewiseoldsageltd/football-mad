@@ -12,8 +12,8 @@ function normalizeSlugKey(slug: string): string {
   return slug.trim().toLowerCase().replace(/-/g, "_");
 }
 
-export function getClubPrimaryColor(teamSlug: string, fallback = "#1a1a2e"): string {
-  if (!teamSlug) return fallback;
+export function getClubPrimaryColor(teamSlug: string | null | undefined, fallback = "#1a1a2e"): string {
+  if (typeof teamSlug !== "string" || !teamSlug.trim()) return fallback;
   const normalized = normalizeSlugKey(teamSlug);
   return clubColors[normalized] ?? fallback;
 }
