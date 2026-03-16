@@ -1,6 +1,6 @@
-import { and, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, eq, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { db } from "../db";
-import { competitions, managers, playerTeamMemberships, players, teamManagers, teams } from "@shared/schema";
+import { competitionTeamMemberships, competitions, managers, playerTeamMemberships, players, teamManagers, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ingestEntityMediaFromBuffer, ingestEntityMediaFromUrl } from "../lib/entity-media-service";
 import { jobFetch } from "../lib/job-observability";
@@ -804,8 +804,21 @@ async function resolveLeagueScopedTeamIds(leagueId: string): Promise<Set<string>
 }
 
 async function resolveMvpScopedTeamIds(): Promise<Set<string>> {
-  const boundary = new MvpGraphBoundary();
-  return boundary.getMvpTeamIds();
+  const rows = await db
+    .select({ teamId: competitionTeamMemberships.teamId })
+    .from(competitionTeamMemberships)
+    .innerJoin(
+      competitions,
+      eq(competitionTeamMemberships.competitionId, competitions.id),
+    )
+    .where(
+      and(
+        eq(competitions.isPriority, true),
+        eq(competitions.isCup, false),
+        eq(competitionTeamMemberships.isCurrent, true),
+      ),
+    );
+  return new Set(rows.map((row) => row.teamId));
 }
 
 async function resolvePersonScope(params: {
