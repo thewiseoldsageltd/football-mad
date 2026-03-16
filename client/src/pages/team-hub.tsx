@@ -2052,17 +2052,22 @@ function PlayerCard({ player }: { player: Player }) {
   );
 }
 
-function ManagerCard({ manager, teamName }: { manager: Pick<Manager, "name" | "slug">; teamName: string }) {
+function ManagerCard({ manager, teamName }: { manager: Pick<Manager, "id" | "name" | "slug">; teamName: string }) {
   return (
     <Link href={managerProfile(manager.slug)}>
       <Card className="hover-elevate cursor-pointer">
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
-              <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
-                {manager.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+            <EntityAvatar
+              entityType="manager"
+              entityId={manager.id}
+              label={manager.name}
+              surface="hub_header"
+              sizeClassName="h-16 w-16"
+              shape="circle"
+              objectFit="cover"
+              className="border border-border/50 bg-primary/5"
+            />
             <div className="flex-1">
               <h4 className="font-semibold text-lg">{manager.name}</h4>
               <p className="text-sm text-muted-foreground">Manager / Head Coach</p>
@@ -2125,9 +2130,16 @@ function DbPlayerCard({
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
-                {getPlayerInitials(player.name)}
-              </div>
+              <EntityAvatar
+                entityType="player"
+                entityId={player.id}
+                label={player.name}
+                surface="hub_header"
+                sizeClassName="h-12 w-12"
+                shape="circle"
+                objectFit="cover"
+                className="border border-border/50 bg-muted"
+              />
             </div>
             
             <div className="flex-1 min-w-0">
@@ -2190,7 +2202,7 @@ function SquadTabContent({
   teamSlug: string;
   players: Player[];
   isLoading: boolean;
-  manager: Pick<Manager, "name" | "slug"> | null | undefined;
+  manager: Pick<Manager, "id" | "name" | "slug"> | null | undefined;
   teamName: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");

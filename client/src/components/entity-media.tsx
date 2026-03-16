@@ -77,6 +77,7 @@ interface EntityAvatarProps {
   label?: string | null;
   sizeClassName?: string;
   shape?: "circle" | "square";
+  objectFit?: "contain" | "cover";
   className?: string;
 }
 
@@ -87,6 +88,7 @@ export function EntityAvatar({
   label,
   sizeClassName = "h-16 w-16",
   shape = "circle",
+  objectFit = "contain",
   className,
 }: EntityAvatarProps) {
   const { url, hasMedia } = useEntityMedia(entityType, entityId, surface);
@@ -99,7 +101,12 @@ export function EntityAvatar({
   if (showImage) {
     return (
       <div className={cn(shapeClass, "overflow-hidden shrink-0", sizeClassName, className)}>
-        <img src={url!} alt={safeLabel} className="h-full w-full object-contain" onError={() => setImgError(true)} />
+        <img
+          src={url!}
+          alt={safeLabel}
+          className={cn("h-full w-full", objectFit === "cover" ? "object-cover" : "object-contain")}
+          onError={() => setImgError(true)}
+        />
       </div>
     );
   }
