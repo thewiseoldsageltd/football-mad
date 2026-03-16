@@ -60,19 +60,14 @@ export function TeamHubHeader({
   const baseStyle = {
     backgroundColor: safePrimary,
   };
-  const tonalDepthStyle = {
-    background:
-      `linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 34%, ${darker}55 100%)`,
-  };
   const glowStyle = {
     background:
-      "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.10) 28%, transparent 56%)",
+      "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 26%, transparent 56%)",
   };
 
   return (
     <div className="relative overflow-hidden py-12 md:py-16">
       <div className="absolute inset-0" style={baseStyle} aria-hidden="true" />
-      <div className="absolute inset-0" style={tonalDepthStyle} aria-hidden="true" />
       <div className="absolute inset-0" style={glowStyle} aria-hidden="true" />
 
       <div className="relative max-w-7xl mx-auto px-4">
