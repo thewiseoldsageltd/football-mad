@@ -2698,6 +2698,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const includePlayers = req.query.includePlayers === "1";
       const includeManagers = req.query.includeManagers === "1";
       const mvpTeamsOnly = req.query.mvpTeamsOnly === "1";
+      const mvpPeopleOnly = req.query.mvpPeopleOnly === "1";
       const dryRun = req.query.dryRun === "1";
       const maxPlayers =
         typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
@@ -2714,6 +2715,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         includePlayers,
         includeManagers,
         mvpTeamsOnly,
+        personScope: mvpPeopleOnly ? "mvp" : "league",
         maxPlayers,
         maxManagers,
         dryRun,
@@ -2729,6 +2731,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : "1204";
       const includePlayers = req.query.includePlayers === "0" ? false : true;
       const includeManagers = req.query.includeManagers === "0" ? false : true;
+      const mvpScope = req.query.mvpScope === "1";
       const dryRun = req.query.dryRun === "1";
       const maxPlayers =
         typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
@@ -2741,6 +2744,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const result = await syncGoalservePersonMediaPilot({
         leagueId,
+        scope: mvpScope ? "mvp" : "league",
         includePlayers,
         includeManagers,
         dryRun,

@@ -1,6 +1,6 @@
-import { inArray, isNotNull } from "drizzle-orm";
+import { and, gt, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { db } from "../db";
-import { competitions, managers, players, teams } from "@shared/schema";
+import { competitions, managers, playerTeamMemberships, players, teamManagers, teams } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ingestEntityMediaFromBuffer, ingestEntityMediaFromUrl } from "../lib/entity-media-service";
 import { jobFetch } from "../lib/job-observability";
@@ -47,7 +47,7 @@ interface GoalserveCompetitionMediaSyncResult {
 
 interface GoalservePersonMediaSyncResult {
   ok: boolean;
-  scope: "premier_league";
+  scope: "premier_league" | "mvp";
   leagueId: string;
   entityType: "player" | "manager";
   dryRun: boolean;
@@ -803,19 +803,99 @@ async function resolveLeagueScopedTeamIds(leagueId: string): Promise<Set<string>
   return new Set(rows.map((row) => row.id));
 }
 
+async function resolveMvpScopedTeamIds(): Promise<Set<string>> {
+  const boundary = new MvpGraphBoundary();
+  return boundary.getMvpTeamIds();
+}
+
+async function resolvePersonScope(params: {
+  scope?: "league" | "mvp";
+  leagueId?: string;
+}): Promise<{ scopeLabel: "premier_league" | "mvp"; leagueId: string; teamIds: Set<string> }> {
+  if (params.scope === "mvp") {
+    const teamIds = await resolveMvpScopedTeamIds();
+    return { scopeLabel: "mvp", leagueId: "mvp", teamIds };
+  }
+  const leagueId = params.leagueId ?? "1204";
+  const teamIds = await resolveLeagueScopedTeamIds(leagueId);
+  return { scopeLabel: "premier_league", leagueId, teamIds };
+}
+
+async function getScopedPlayerRows(teamIds: Set<string>): Promise<Array<{ id: string; goalservePlayerId: string | null }>> {
+  const teamIdList = Array.from(teamIds);
+  if (teamIdList.length === 0) return [];
+
+  const now = new Date();
+  const activeMembershipPlayerIds = await db
+    .select({ playerId: playerTeamMemberships.playerId })
+    .from(playerTeamMemberships)
+    .where(
+      and(
+        inArray(playerTeamMemberships.teamId, teamIdList),
+        or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)),
+      ),
+    );
+
+  const idsFromMembership = new Set(activeMembershipPlayerIds.map((row) => row.playerId));
+
+  const playersByCurrentTeam = await db
+    .select({ id: players.id, goalservePlayerId: players.goalservePlayerId })
+    .from(players)
+    .where(inArray(players.teamId, teamIdList));
+  for (const row of playersByCurrentTeam) idsFromMembership.add(row.id);
+
+  const allIds = Array.from(idsFromMembership);
+  if (allIds.length === 0) return [];
+
+  return db
+    .select({ id: players.id, goalservePlayerId: players.goalservePlayerId })
+    .from(players)
+    .where(inArray(players.id, allIds));
+}
+
+async function getScopedManagerRows(teamIds: Set<string>): Promise<Array<{ id: string; goalserveManagerId: string | null }>> {
+  const teamIdList = Array.from(teamIds);
+  if (teamIdList.length === 0) return [];
+
+  const managerIdsFromTeamManagers = await db
+    .select({ managerId: teamManagers.managerId })
+    .from(teamManagers)
+    .where(inArray(teamManagers.teamId, teamIdList));
+
+  const managerIds = new Set(managerIdsFromTeamManagers.map((row) => row.managerId));
+
+  const managersByCurrentTeam = await db
+    .select({ id: managers.id })
+    .from(managers)
+    .where(inArray(managers.currentTeamId, teamIdList));
+  for (const row of managersByCurrentTeam) managerIds.add(row.id);
+
+  const allIds = Array.from(managerIds);
+  if (allIds.length === 0) return [];
+
+  return db
+    .select({ id: managers.id, goalserveManagerId: managers.goalserveManagerId })
+    .from(managers)
+    .where(inArray(managers.id, allIds));
+}
+
 export async function syncGoalservePlayerMediaPilotByLeague(params?: {
   leagueId?: string;
+  scope?: "league" | "mvp";
   maxPlayers?: number;
   dryRun?: boolean;
 }): Promise<GoalservePersonMediaSyncResult> {
-  const leagueId = params?.leagueId ?? "1204";
-  const maxPlayers = Math.max(1, params?.maxPlayers ?? 120);
+  const maxPlayers = Math.max(1, params?.maxPlayers ?? (params?.scope === "mvp" ? 20000 : 120));
   const dryRun = params?.dryRun ?? false;
   const discoveredImageFields = new Set<string>();
+  const { scopeLabel, leagueId, teamIds } = await resolvePersonScope({
+    scope: params?.scope,
+    leagueId: params?.leagueId,
+  });
 
   const result: GoalservePersonMediaSyncResult = {
     ok: true,
-    scope: "premier_league",
+    scope: scopeLabel,
     leagueId,
     entityType: "player",
     dryRun,
@@ -835,17 +915,13 @@ export async function syncGoalservePlayerMediaPilotByLeague(params?: {
   };
 
   try {
-    const scopedTeamIds = await resolveLeagueScopedTeamIds(leagueId);
-    if (scopedTeamIds.size === 0) {
-      result.errors.push(`No canonical teams mapped for leagueId=${leagueId}`);
+    if (teamIds.size === 0) {
+      result.errors.push(scopeLabel === "mvp" ? "No MVP-scoped teams found from priority competitions" : `No canonical teams mapped for leagueId=${leagueId}`);
       result.ok = false;
       return result;
     }
 
-    const rows = await db
-      .select({ id: players.id, goalservePlayerId: players.goalservePlayerId })
-      .from(players)
-      .where(inArray(players.teamId, Array.from(scopedTeamIds)));
+    const rows = await getScopedPlayerRows(teamIds);
     result.scanned = rows.length;
 
     const scoped = rows.slice(0, maxPlayers);
@@ -936,17 +1012,21 @@ export async function syncGoalservePlayerMediaPilotByLeague(params?: {
 
 export async function syncGoalserveManagerMediaPilotByLeague(params?: {
   leagueId?: string;
+  scope?: "league" | "mvp";
   maxManagers?: number;
   dryRun?: boolean;
 }): Promise<GoalservePersonMediaSyncResult> {
-  const leagueId = params?.leagueId ?? "1204";
-  const maxManagers = Math.max(1, params?.maxManagers ?? 40);
+  const maxManagers = Math.max(1, params?.maxManagers ?? (params?.scope === "mvp" ? 4000 : 40));
   const dryRun = params?.dryRun ?? false;
   const discoveredImageFields = new Set<string>();
+  const { scopeLabel, leagueId, teamIds } = await resolvePersonScope({
+    scope: params?.scope,
+    leagueId: params?.leagueId,
+  });
 
   const result: GoalservePersonMediaSyncResult = {
     ok: true,
-    scope: "premier_league",
+    scope: scopeLabel,
     leagueId,
     entityType: "manager",
     dryRun,
@@ -966,17 +1046,13 @@ export async function syncGoalserveManagerMediaPilotByLeague(params?: {
   };
 
   try {
-    const scopedTeamIds = await resolveLeagueScopedTeamIds(leagueId);
-    if (scopedTeamIds.size === 0) {
-      result.errors.push(`No canonical teams mapped for leagueId=${leagueId}`);
+    if (teamIds.size === 0) {
+      result.errors.push(scopeLabel === "mvp" ? "No MVP-scoped teams found from priority competitions" : `No canonical teams mapped for leagueId=${leagueId}`);
       result.ok = false;
       return result;
     }
 
-    const rows = await db
-      .select({ id: managers.id, goalserveManagerId: managers.goalserveManagerId })
-      .from(managers)
-      .where(inArray(managers.currentTeamId, Array.from(scopedTeamIds)));
+    const rows = await getScopedManagerRows(teamIds);
     result.scanned = rows.length;
 
     const scoped = rows.slice(0, maxManagers);
@@ -1067,6 +1143,7 @@ export async function syncGoalserveManagerMediaPilotByLeague(params?: {
 
 export async function syncGoalservePersonMediaPilot(params?: {
   leagueId?: string;
+  scope?: "league" | "mvp";
   includePlayers?: boolean;
   includeManagers?: boolean;
   maxPlayers?: number;
@@ -1088,6 +1165,7 @@ export async function syncGoalservePersonMediaPilot(params?: {
   if (includePlayers) {
     output.players = await syncGoalservePlayerMediaPilotByLeague({
       leagueId: params?.leagueId,
+      scope: params?.scope,
       maxPlayers: params?.maxPlayers,
       dryRun: params?.dryRun,
     });
@@ -1097,6 +1175,7 @@ export async function syncGoalservePersonMediaPilot(params?: {
   if (includeManagers) {
     output.managers = await syncGoalserveManagerMediaPilotByLeague({
       leagueId: params?.leagueId,
+      scope: params?.scope,
       maxManagers: params?.maxManagers,
       dryRun: params?.dryRun,
     });
@@ -1111,6 +1190,7 @@ export async function syncGoalserveEntityMedia(params: {
   includeTeams?: boolean;
   includeCompetitions?: boolean;
   mvpTeamsOnly?: boolean;
+  personScope?: "league" | "mvp";
   includePlayers?: boolean;
   includeManagers?: boolean;
   maxPlayers?: number;
@@ -1171,6 +1251,7 @@ export async function syncGoalserveEntityMedia(params: {
   if (includePlayers) {
     output.players = await syncGoalservePlayerMediaPilotByLeague({
       leagueId: params.leagueId,
+      scope: params.personScope,
       maxPlayers: params.maxPlayers,
       dryRun: params.dryRun,
     });
@@ -1180,6 +1261,7 @@ export async function syncGoalserveEntityMedia(params: {
   if (includeManagers) {
     output.managers = await syncGoalserveManagerMediaPilotByLeague({
       leagueId: params.leagueId,
+      scope: params.personScope,
       maxManagers: params.maxManagers,
       dryRun: params.dryRun,
     });
