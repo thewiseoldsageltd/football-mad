@@ -1,7 +1,7 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Mail, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Clock } from "lucide-react";
+import { Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
+import { TeamHubHeader } from "@/components/team/team-hub-header";
+import { getClubPrimaryColor } from "@/lib/club-colors";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -2815,70 +2817,17 @@ export default function TeamHubPage() {
 
   return (
     <MainLayout>
-      <div
-        className="relative py-12 md:py-16"
-        style={{
-          background: `linear-gradient(135deg, ${team.primaryColor ?? "#1a1a2e"}ee, ${team.primaryColor ?? "#1a1a2e"}99)`,
-        }}
-      >
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            <div
-              className="w-20 h-20 md:w-28 md:h-28 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 shadow-lg bg-white/95 border border-white/60"
-            >
-              <EntityAvatar
-                entityType="team"
-                entityId={team.id}
-                surface="hub_header"
-                label={team.name}
-                sizeClassName="h-full w-full"
-                shape="square"
-              />
-            </div>
-            <div className="text-center md:text-left flex-1">
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2">
-                {team.name}
-              </h1>
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 text-white/80 text-sm">
-                {team.stadiumName && <span>{team.stadiumName}</span>}
-                {currentManager && <span>Manager: {currentManager.name}</span>}
-                {team.founded && <span>Est. {team.founded}</span>}
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                size="lg"
-                variant={isFollowing ? "secondary" : "default"}
-                onClick={handleFollowToggle}
-                disabled={followMutation.isPending || unfollowMutation.isPending}
-                className="bg-white text-black shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-200"
-                data-testid="button-follow-team"
-              >
-                {isFollowing ? (
-                  <>
-                    <HeartOff className="h-5 w-5 mr-2" />
-                    Unfollow
-                  </>
-                ) : (
-                  <>
-                    <Heart className="h-5 w-5 mr-2" />
-                    Follow
-                  </>
-                )}
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="bg-white/10 border-white/30 text-white shadow-md hover:shadow-lg hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 active:shadow-md transition-all duration-200"
-                data-testid="button-subscribe-newsletter"
-              >
-                <Mail className="h-5 w-5 mr-2" />
-                Subscribe
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <TeamHubHeader
+        teamName={team.name}
+        teamSlug={team.slug}
+        teamCrestUrl={team.imageUrl ?? null}
+        managerName={currentManager?.name ?? null}
+        clubPrimaryColor={getClubPrimaryColor(team.slug, team.primaryColor ?? "#1a1a2e")}
+        teamEntityId={team.id}
+        isFollowing={Boolean(isFollowing)}
+        isFollowPending={followMutation.isPending || unfollowMutation.isPending}
+        onFollowToggle={handleFollowToggle}
+      />
 
       <div className="h-4 bg-gradient-to-b from-muted/50 to-background" aria-hidden="true" />
 
