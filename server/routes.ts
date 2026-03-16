@@ -2699,6 +2699,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const includeManagers = req.query.includeManagers === "1";
       const mvpTeamsOnly = req.query.mvpTeamsOnly === "1";
       const mvpPeopleOnly = req.query.mvpPeopleOnly === "1";
+      const personTeamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
+      const personTeamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
       const dryRun = req.query.dryRun === "1";
       const maxPlayers =
         typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
@@ -2715,7 +2717,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         includePlayers,
         includeManagers,
         mvpTeamsOnly,
-        personScope: mvpPeopleOnly ? "mvp" : "league",
+        personScope: personTeamId || personTeamSlug ? "team" : mvpPeopleOnly ? "mvp" : "league",
+        personTeamId,
+        personTeamSlug,
         maxPlayers,
         maxManagers,
         dryRun,
@@ -2732,6 +2736,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const includePlayers = req.query.includePlayers === "0" ? false : true;
       const includeManagers = req.query.includeManagers === "0" ? false : true;
       const mvpScope = req.query.mvpScope === "1";
+      const teamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
+      const teamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
       const dryRun = req.query.dryRun === "1";
       const maxPlayers =
         typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
@@ -2744,7 +2750,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const result = await syncGoalservePersonMediaPilot({
         leagueId,
-        scope: mvpScope ? "mvp" : "league",
+        scope: teamId || teamSlug ? "team" : mvpScope ? "mvp" : "league",
+        teamId,
+        teamSlug,
         includePlayers,
         includeManagers,
         dryRun,
