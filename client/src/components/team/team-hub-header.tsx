@@ -25,16 +25,6 @@ function darkenHex(hex: string, amount = 0.22): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-function lightenHex(hex: string, amount = 0.12): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return hex;
-  const factor = clamp(amount, 0, 0.8);
-  const r = Math.round(clamp(rgb.r + (255 - rgb.r) * factor, 0, 255));
-  const g = Math.round(clamp(rgb.g + (255 - rgb.g) * factor, 0, 255));
-  const b = Math.round(clamp(rgb.b + (255 - rgb.b) * factor, 0, 255));
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-}
-
 function getInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
@@ -66,35 +56,24 @@ export function TeamHubHeader({
 }: TeamHubHeaderProps) {
   const safeTeamName = typeof teamName === "string" && teamName.trim() ? teamName.trim() : "Team";
   const safePrimary = typeof clubPrimaryColor === "string" && clubPrimaryColor.trim() ? clubPrimaryColor : "#1a1a2e";
-  const brighter = lightenHex(safePrimary, 0.12);
-  const darker = darkenHex(safePrimary, 0.18);
-  const deepest = darkenHex(safePrimary, 0.4);
-  const gradientStyle = {
-    background: `linear-gradient(140deg, ${brighter} 0%, ${safePrimary} 42%, ${darker} 72%, ${deepest} 100%)`,
+  const darker = darkenHex(safePrimary, 0.28);
+  const baseStyle = {
+    backgroundColor: safePrimary,
   };
   const tonalDepthStyle = {
     background:
-      "linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 34%, rgba(0,0,0,0.24) 78%, rgba(0,0,0,0.36) 100%)",
-  };
-  const patternStyle = {
-    background:
-      "repeating-linear-gradient(45deg, rgba(255,255,255,0.045) 0px, rgba(255,255,255,0.045) 5px, transparent 5px, transparent 24px)",
+      `linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 34%, ${darker}55 100%)`,
   };
   const glowStyle = {
     background:
-      "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.18) 24%, rgba(255,255,255,0.08) 38%, transparent 54%)",
-  };
-  const ambientDepthStyle = {
-    background: "radial-gradient(circle at 88% 14%, rgba(0,0,0,0.22), transparent 46%)",
+      "radial-gradient(circle at 20% 30%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.10) 28%, transparent 56%)",
   };
 
   return (
     <div className="relative overflow-hidden py-12 md:py-16">
-      <div className="absolute inset-0" style={gradientStyle} aria-hidden="true" />
+      <div className="absolute inset-0" style={baseStyle} aria-hidden="true" />
       <div className="absolute inset-0" style={tonalDepthStyle} aria-hidden="true" />
-      <div className="absolute inset-0" style={patternStyle} aria-hidden="true" />
       <div className="absolute inset-0" style={glowStyle} aria-hidden="true" />
-      <div className="absolute inset-0" style={ambientDepthStyle} aria-hidden="true" />
 
       <div className="relative max-w-7xl mx-auto px-4">
         <div className="flex flex-col md:flex-row items-center gap-6">
