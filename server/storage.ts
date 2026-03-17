@@ -445,8 +445,14 @@ export class DatabaseStorage implements IStorage {
         createdAt: playerTeamMemberships.createdAt,
       })
       .from(playerTeamMemberships)
-      .where(or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)))
+      .where(
+        and(
+          eq(playerTeamMemberships.teamId, teamId),
+          or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)),
+        ),
+      )
       .orderBy(
+        desc(playerTeamMemberships.playerId),
         desc(playerTeamMemberships.startDate),
         desc(playerTeamMemberships.createdAt),
         desc(playerTeamMemberships.id),
@@ -462,9 +468,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const currentPlayerIds = Array.from(latestActiveMembershipByPlayer.entries())
-      .filter(([, current]) => current.teamId === teamId)
-      .map(([playerId]) => playerId);
+    const currentPlayerIds = Array.from(latestActiveMembershipByPlayer.keys());
 
     // Safety fallback for teams where memberships have not been ingested yet.
     if (currentPlayerIds.length === 0) {

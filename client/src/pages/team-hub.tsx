@@ -2147,9 +2147,6 @@ function DbPlayerCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-medium text-sm truncate">{player.name}</h4>
-                {typeof player.number === "number" ? (
-                  <span className="text-xs text-muted-foreground">#{player.number}</span>
-                ) : null}
               </div>
               
               <div className="flex items-center gap-2 mt-1 flex-wrap">
