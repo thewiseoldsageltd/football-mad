@@ -2145,7 +2145,9 @@ function DbPlayerCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="font-medium text-sm truncate">{player.name}</h4>
-                <span className="text-xs text-muted-foreground">#{player.number ?? "N/A"}</span>
+                {typeof player.number === "number" ? (
+                  <span className="text-xs text-muted-foreground">#{player.number}</span>
+                ) : null}
               </div>
               
               <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -2178,11 +2180,11 @@ function DbPlayerCard({
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Nation</div>
-                <div className="text-sm font-medium">{player.nationality || "Not listed"}</div>
+                <div className="text-sm font-medium">{player.nationality || "—"}</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">No.</div>
-                <div className="text-sm font-medium">{player.number ?? "N/A"}</div>
+                <div className="text-sm font-medium">{player.number ?? "—"}</div>
               </div>
             </div>
           </div>
@@ -2684,7 +2686,7 @@ export default function TeamHubPage() {
   });
 
   const currentManager = teamManagers?.[0]
-    ? { name: teamManagers[0].name, slug: teamManagers[0].slug }
+    ? { id: teamManagers[0].id, name: teamManagers[0].name, slug: teamManagers[0].slug }
     : null;
 
   const { data: followedTeamIds } = useQuery<string[]>({
