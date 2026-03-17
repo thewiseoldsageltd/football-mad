@@ -26,6 +26,7 @@ import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailabilit
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
 import { getClubBranding } from "@/lib/club-branding";
+import { getCountryFlagUrl } from "@/lib/flags";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -2123,6 +2124,7 @@ function DbPlayerCard({
   const squadPosition = toSquadPosition(player.position);
   const isMissing = availability?.bucket === "OUT" || availability?.bucket === "SUSPENDED" || availability?.bucket === "LEFT_CLUB";
   const isQuestionable = availability?.bucket === "COIN_FLIP" || availability?.bucket === "DOUBTFUL";
+  const nationalityFlagUrl = getCountryFlagUrl(player.nationality ?? undefined);
 
   return (
     <Link href={playerProfile(player.slug)}>
@@ -2180,7 +2182,23 @@ function DbPlayerCard({
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Nation</div>
-                <div className="text-sm font-medium">{player.nationality || "—"}</div>
+                <div className="text-sm font-medium flex items-center justify-center gap-1">
+                  {player.nationality ? (
+                    <>
+                      {nationalityFlagUrl ? (
+                        <img
+                          src={nationalityFlagUrl}
+                          alt={player.nationality}
+                          className="h-3 w-4 rounded-[1px] object-cover"
+                          loading="lazy"
+                        />
+                      ) : null}
+                      <span className="truncate max-w-[72px]">{player.nationality}</span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">No.</div>

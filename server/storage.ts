@@ -440,6 +440,7 @@ export class DatabaseStorage implements IStorage {
         id: playerTeamMemberships.id,
         playerId: playerTeamMemberships.playerId,
         teamId: playerTeamMemberships.teamId,
+        shirtNumber: playerTeamMemberships.shirtNumber,
         startDate: playerTeamMemberships.startDate,
         createdAt: playerTeamMemberships.createdAt,
       })
@@ -451,15 +452,18 @@ export class DatabaseStorage implements IStorage {
         desc(playerTeamMemberships.id),
       );
 
-    const latestActiveMembershipByPlayer = new Map<string, string>();
+    const latestActiveMembershipByPlayer = new Map<string, { teamId: string; shirtNumber: string | null }>();
     for (const row of activeMemberships) {
       if (!latestActiveMembershipByPlayer.has(row.playerId)) {
-        latestActiveMembershipByPlayer.set(row.playerId, row.teamId);
+        latestActiveMembershipByPlayer.set(row.playerId, {
+          teamId: row.teamId,
+          shirtNumber: row.shirtNumber ?? null,
+        });
       }
     }
 
     const currentPlayerIds = Array.from(latestActiveMembershipByPlayer.entries())
-      .filter(([, currentTeamId]) => currentTeamId === teamId)
+      .filter(([, current]) => current.teamId === teamId)
       .map(([playerId]) => playerId);
 
     // Safety fallback for teams where memberships have not been ingested yet.
@@ -471,11 +475,27 @@ export class DatabaseStorage implements IStorage {
         .orderBy(players.name);
     }
 
-    return db
+    const currentPlayers = await db
       .select()
       .from(players)
       .where(inArray(players.id, currentPlayerIds))
       .orderBy(players.name);
+
+    return currentPlayers.map((player) => {
+      const currentMembership = latestActiveMembershipByPlayer.get(player.id);
+      const membershipShirtNumber =
+        currentMembership?.shirtNumber != null && String(currentMembership.shirtNumber).trim().length > 0
+          ? Number.parseInt(String(currentMembership.shirtNumber), 10)
+          : null;
+      const resolvedNumber =
+        membershipShirtNumber != null && Number.isFinite(membershipShirtNumber)
+          ? membershipShirtNumber
+          : player.number;
+      return {
+        ...player,
+        number: resolvedNumber,
+      };
+    });
   }
 
   async getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined> {
