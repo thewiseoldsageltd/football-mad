@@ -2174,37 +2174,32 @@ function DbPlayerCard({
           </div>
           
           <div className="mt-3 pt-3 border-t">
-            <div className="grid grid-cols-3 gap-1 text-center">
-              <div>
-                <div className="text-xs text-muted-foreground">Age</div>
-                <div className="text-sm font-medium">{displayAge}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Nationality</div>
-                <div className="text-sm font-medium flex items-center justify-center gap-1">
-                  {nationality ? (
-                    <>
-                      {nationalityFlagUrl ? (
-                        <img
-                          src={nationalityFlagUrl}
-                          alt={nationality}
-                          title={nationality}
-                          className="h-3 w-4 rounded-[1px] object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <span className="truncate max-w-[72px]" title={nationality}>{nationality}</span>
-                      )}
-                    </>
+            <div className="grid grid-cols-3 gap-x-1 gap-y-1 text-center">
+              <div className="text-xs text-muted-foreground">Age</div>
+              <div className="text-xs text-muted-foreground">Nationality</div>
+              <div className="text-xs text-muted-foreground">No.</div>
+
+              <div className="text-sm font-medium">{displayAge}</div>
+              <div className="text-sm font-medium flex items-center justify-center">
+                {nationality ? (
+                  nationalityFlagUrl ? (
+                    <img
+                      src={nationalityFlagUrl}
+                      alt={nationality}
+                      title={nationality}
+                      width={16}
+                      height={12}
+                      className="w-4 h-3 rounded-[1px] object-contain image-rendering-auto"
+                      loading="lazy"
+                    />
                   ) : (
-                    "—"
-                  )}
-                </div>
+                    <span className="truncate max-w-[72px]" title={nationality}>{nationality}</span>
+                  )
+                ) : (
+                  "—"
+                )}
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground">No.</div>
-                <div className="text-sm font-medium">{player.number ?? "—"}</div>
-              </div>
+              <div className="text-sm font-medium">{player.number ?? "—"}</div>
             </div>
           </div>
         </CardContent>
