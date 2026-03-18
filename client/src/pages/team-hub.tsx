@@ -2180,6 +2180,7 @@ function DbPlayerCard({
                 <div className="text-sm font-medium">{displayAge}</div>
               </div>
               <div>
+                <div className="text-xs text-muted-foreground">Nationality</div>
                 <div className="text-sm font-medium flex items-center justify-center gap-1">
                   {nationality ? (
                     <>
