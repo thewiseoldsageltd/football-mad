@@ -2124,7 +2124,9 @@ function DbPlayerCard({
   const squadPosition = toSquadPosition(player.position);
   const isMissing = availability?.bucket === "OUT" || availability?.bucket === "SUSPENDED" || availability?.bucket === "LEFT_CLUB";
   const isQuestionable = availability?.bucket === "COIN_FLIP" || availability?.bucket === "DOUBTFUL";
-  const nationalityFlagUrl = getCountryFlagUrl(player.nationality ?? undefined);
+  const nationality = (player.nationality ?? "").trim() || null;
+  const nationalityFlagUrl = getCountryFlagUrl(nationality ?? undefined);
+  const displayAge = typeof player.age === "number" && Number.isFinite(player.age) && player.age > 0 ? player.age : "—";
 
   return (
     <Link href={playerProfile(player.slug)}>
@@ -2175,22 +2177,22 @@ function DbPlayerCard({
             <div className="grid grid-cols-3 gap-1 text-center">
               <div>
                 <div className="text-xs text-muted-foreground">Age</div>
-                <div className="text-sm font-medium">{player.age ?? "–"}</div>
+                <div className="text-sm font-medium">{displayAge}</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground">Nation</div>
                 <div className="text-sm font-medium flex items-center justify-center gap-1">
-                  {player.nationality ? (
+                  {nationality ? (
                     <>
                       {nationalityFlagUrl ? (
                         <img
                           src={nationalityFlagUrl}
-                          alt={player.nationality}
+                          alt={nationality}
                           className="h-3 w-4 rounded-[1px] object-cover"
                           loading="lazy"
                         />
                       ) : null}
-                      <span className="truncate max-w-[72px]">{player.nationality}</span>
+                      <span className="truncate max-w-[72px]">{nationality}</span>
                     </>
                   ) : (
                     "—"
