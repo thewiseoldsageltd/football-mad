@@ -48,6 +48,7 @@ import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
+import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
@@ -3440,6 +3441,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
       }
     }
+  );
+
+  // ========== GOALSERVE PLAYER NATIONALITY ENRICHMENT ==========
+  app.post(
+    "/api/jobs/enrich-goalserve-player-nationality",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : "1204";
+      const mvpScope = req.query.mvpScope === "1" || req.query.mvpScope === "true";
+      const teamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
+      const teamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
+      const dryRun = req.query.dryRun === "1";
+      const force = req.query.force === "1";
+      const maxPlayers =
+        typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
+          ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
+          : undefined;
+
+      const scope = teamId || teamSlug ? "team" : mvpScope || !req.query.leagueId ? "mvp" : "league";
+
+      const result = await enrichGoalservePlayerNationality({
+        scope,
+        leagueId,
+        teamId,
+        teamSlug,
+        dryRun,
+        force,
+        maxPlayers,
+      });
+
+      res.json(result);
+    },
   );
 
   // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========

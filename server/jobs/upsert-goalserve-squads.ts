@@ -18,6 +18,14 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function parseIntegerOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export interface UpsertGoalserveSquadsResult {
   ok: boolean;
   skipped?: boolean;
@@ -242,6 +250,7 @@ export async function upsertGoalserveSquads(
       const playerName = String(fp?.name || fp?.["@name"] || "").trim();
       const playerPosition = String(fp?.position || fp?.["@position"] || "").trim() || null;
       const shirtNumber = String(fp?.number || fp?.["@number"] || "").trim() || null;
+      const playerAge = parseIntegerOrNull(fp?.age ?? fp?.["@age"]);
 
       if (!gsPlayerId || !playerName) continue;
 
@@ -258,7 +267,7 @@ export async function upsertGoalserveSquads(
       if (existingPlayer) {
         playerId = existingPlayer.id;
         await db.update(players)
-          .set({ name: playerName, position: playerPosition, teamId: teamId })
+          .set({ name: playerName, position: playerPosition, age: playerAge, teamId: teamId })
           .where(eq(players.id, playerId));
       } else {
         try {
@@ -268,6 +277,7 @@ export async function upsertGoalserveSquads(
               slug: playerSlug,
               goalservePlayerId: gsPlayerId,
               position: playerPosition,
+              age: playerAge,
               teamId: teamId,
             })
             .onConflictDoNothing()

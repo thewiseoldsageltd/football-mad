@@ -10,10 +10,19 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+function parseIntegerOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 interface GoalservePlayer {
   goalservePlayerId: string;
   name: string;
   goalserveTeamId: string;
+  age: number | null;
 }
 
 interface DbTeam {
@@ -67,6 +76,7 @@ export async function upsertGoalservePlayers(leagueId: string): Promise<{
             goalservePlayerId: playerId,
             name: playerName,
             goalserveTeamId,
+            age: parseIntegerOrNull(player["@age"] ?? player.age),
           });
         }
       }
@@ -114,6 +124,7 @@ export async function upsertGoalservePlayers(leagueId: string): Promise<{
             slug,
             teamId: dbTeam.id,
             goalservePlayerId: gsPlayer.goalservePlayerId,
+            age: gsPlayer.age,
           })
           .where(eq(players.goalservePlayerId, gsPlayer.goalservePlayerId));
         updated++;
@@ -123,6 +134,7 @@ export async function upsertGoalservePlayers(leagueId: string): Promise<{
           slug,
           teamId: dbTeam.id,
           goalservePlayerId: gsPlayer.goalservePlayerId,
+          age: gsPlayer.age,
         });
         inserted++;
       }
