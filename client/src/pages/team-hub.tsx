@@ -2180,7 +2180,6 @@ function DbPlayerCard({
                 <div className="text-sm font-medium">{displayAge}</div>
               </div>
               <div>
-                <div className="text-xs text-muted-foreground">Nation</div>
                 <div className="text-sm font-medium flex items-center justify-center gap-1">
                   {nationality ? (
                     <>
@@ -2188,11 +2187,13 @@ function DbPlayerCard({
                         <img
                           src={nationalityFlagUrl}
                           alt={nationality}
+                          title={nationality}
                           className="h-3 w-4 rounded-[1px] object-cover"
                           loading="lazy"
                         />
-                      ) : null}
-                      <span className="truncate max-w-[72px]">{nationality}</span>
+                      ) : (
+                        <span className="truncate max-w-[72px]" title={nationality}>{nationality}</span>
+                      )}
                     </>
                   ) : (
                     "—"
