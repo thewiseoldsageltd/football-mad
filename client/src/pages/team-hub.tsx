@@ -2130,7 +2130,10 @@ function DbPlayerCard({
 
   return (
     <Link href={playerProfile(player.slug)}>
-      <Card className="hover-elevate cursor-pointer transition-all h-full" data-testid={`card-player-${player.id}`}>
+      <Card
+        className="hover-elevate cursor-pointer transition-all duration-200 h-full transform-gpu hover:-translate-y-0.5 hover:shadow-md"
+        data-testid={`card-player-${player.id}`}
+      >
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="relative">
@@ -2179,8 +2182,8 @@ function DbPlayerCard({
               <div className="text-xs text-muted-foreground">Nationality</div>
               <div className="text-xs text-muted-foreground">No.</div>
 
-              <div className="text-sm font-medium">{displayAge}</div>
-              <div className="text-sm font-medium flex items-center justify-center">
+              <div className="text-sm font-semibold text-foreground/95">{displayAge}</div>
+              <div className="text-sm font-semibold text-foreground/95 flex items-center justify-center leading-none min-h-[20px]">
                 {nationality ? (
                   nationalityFlagUrl ? (
                     <img
@@ -2189,7 +2192,7 @@ function DbPlayerCard({
                       title={nationality}
                       width={16}
                       height={12}
-                      className="w-4 h-3 rounded-[1px] object-contain image-rendering-auto"
+                      className="block w-4 h-3 rounded-[1px] object-contain image-rendering-auto"
                       loading="lazy"
                     />
                   ) : (
@@ -2199,7 +2202,7 @@ function DbPlayerCard({
                   "—"
                 )}
               </div>
-              <div className="text-sm font-medium">{player.number ?? "—"}</div>
+              <div className="text-sm font-semibold text-foreground/95">{player.number ?? "—"}</div>
             </div>
           </div>
         </CardContent>
