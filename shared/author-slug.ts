@@ -68,4 +68,6 @@ export interface AuthorPageApiResponse {
   showPaDeskAvatar?: boolean;
   /** Coverage focus: curated in author enrichment when set, else top tag from recent articles (null if neither). */
   primaryBeat?: string | null;
+  /** Curated bio from author enrichment when set; client may fall back to generic copy. */
+  bio?: string | null;
 }

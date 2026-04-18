@@ -1154,6 +1154,7 @@ export class DatabaseStorage implements IStorage {
       websiteUrl: enrich.websiteUrl ?? null,
       showPaDeskAvatar: enrich.showPaDeskAvatar ?? false,
       primaryBeat,
+      bio: enrich.bio?.trim() || null,
     };
   }
 

@@ -292,7 +292,7 @@ export default function AuthorPage() {
                   )}
 
                   <p className="mt-4 text-sm leading-relaxed text-muted-foreground max-w-2xl mx-auto text-pretty sm:mx-0 sm:text-[0.9375rem]">
-                    {authorBio(authorHeading)}
+                    {data.bio?.trim() ? data.bio.trim() : authorBio(authorHeading)}
                   </p>
                 </div>
               </div>
