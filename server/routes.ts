@@ -25,7 +25,7 @@ function logWebhookAudit(line: string): void {
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
 import { db, pool } from "./db";
-import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
+import { eq, and, or, gte, lte, lt, ne, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
@@ -1005,30 +1005,149 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/articles/related/:slug", async (req, res) => {
+  app.get("/api/articles/popular", async (req, res) => {
     try {
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "6"), 10) || 6, 1), 12);
+      const openingText = drizzleSql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`;
       const rows = await db
         .select({
           id: articles.id,
           slug: articles.slug,
           title: articles.title,
           excerpt: articles.excerpt,
+          openingText,
           coverImage: articles.coverImage,
           publishedAt: articles.publishedAt,
+          updatedAt: articles.updatedAt,
+          createdAt: articles.createdAt,
           authorName: articles.authorName,
+          category: articles.category,
           competition: articles.competition,
           contentType: articles.contentType,
           tags: articles.tags,
           isBreaking: articles.isBreaking,
           isTrending: articles.isTrending,
           isFeatured: articles.isFeatured,
+          isEditorPick: articles.isEditorPick,
           viewCount: articles.viewCount,
+          commentsCount: articles.commentsCount,
         })
         .from(articles)
-        .where(drizzleSql`${articles.slug} != ${req.params.slug}`)
+        .orderBy(desc(articles.viewCount), desc(articles.publishedAt))
+        .limit(limit);
+      res.json(
+        rows.map((row) => ({
+          ...row,
+          content: "",
+          excerpt: row.excerpt ?? "",
+          tags: row.tags ?? [],
+          competition: row.competition ?? null,
+          contentType: row.contentType ?? "story",
+          category: row.category ?? "news",
+          commentsCount: row.commentsCount ?? 0,
+          viewCount: row.viewCount ?? 0,
+        })),
+      );
+    } catch (error) {
+      console.error("Error fetching popular articles:", error);
+      res.status(500).json({ error: "Failed to fetch popular articles" });
+    }
+  });
+
+  app.get("/api/articles/related/:slug", async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const [src] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
+      if (!src) {
+        return res.json([]);
+      }
+
+      const openingText = drizzleSql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`;
+      const listFields = {
+        id: articles.id,
+        slug: articles.slug,
+        title: articles.title,
+        excerpt: articles.excerpt,
+        openingText,
+        coverImage: articles.coverImage,
+        publishedAt: articles.publishedAt,
+        updatedAt: articles.updatedAt,
+        createdAt: articles.createdAt,
+        authorName: articles.authorName,
+        category: articles.category,
+        competition: articles.competition,
+        contentType: articles.contentType,
+        tags: articles.tags,
+        isBreaking: articles.isBreaking,
+        isTrending: articles.isTrending,
+        isFeatured: articles.isFeatured,
+        isEditorPick: articles.isEditorPick,
+        viewCount: articles.viewCount,
+        commentsCount: articles.commentsCount,
+      };
+
+      const candidates = await db
+        .select(listFields)
+        .from(articles)
+        .where(ne(articles.id, src.id))
         .orderBy(desc(articles.publishedAt))
-        .limit(6);
-      res.json(rows);
+        .limit(60);
+
+      const articleTags = src.tags ?? [];
+      const srcCategory = src.category ?? "news";
+
+      const scored = candidates.map((a) => {
+        let score = 0;
+        if ((a.category ?? "news") === srcCategory) score += 5;
+        const atags = a.tags ?? [];
+        const tagOverlap = articleTags.filter((t: string) => atags.includes(t)).length;
+        score += tagOverlap * 3;
+        if (a.isTrending) score += 3;
+        if (a.isEditorPick) score += 2;
+        return { row: a, score };
+      });
+
+      scored.sort((x, y) => {
+        if (y.score !== x.score) return y.score - x.score;
+        const dx = new Date(x.row.publishedAt ?? 0).getTime();
+        const dy = new Date(y.row.publishedAt ?? 0).getTime();
+        return dy - dx;
+      });
+
+      const picked: typeof candidates = [];
+      const seen = new Set<string>();
+      for (const { row } of scored) {
+        if (picked.length >= 3) break;
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        picked.push(row);
+      }
+
+      if (picked.length < 3) {
+        const byViews = [...candidates].sort(
+          (a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0) || new Date(b.publishedAt ?? 0).getTime() - new Date(a.publishedAt ?? 0).getTime(),
+        );
+        for (const row of byViews) {
+          if (picked.length >= 3) break;
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          picked.push(row);
+        }
+      }
+
+      res.json(
+        picked.map((row) => ({
+          ...row,
+          content: "",
+          excerpt: row.excerpt ?? "",
+          tags: row.tags ?? [],
+          competition: row.competition ?? null,
+          contentType: row.contentType ?? "story",
+          category: row.category ?? "news",
+          commentsCount: row.commentsCount ?? 0,
+          viewCount: row.viewCount ?? 0,
+        })),
+      );
     } catch (error) {
       console.error("Error fetching related articles:", error);
       res.status(500).json({ error: "Failed to fetch related articles" });

@@ -2229,7 +2229,7 @@ function SquadTabContent({
   const [sortBy, setSortBy] = useState<"name" | "number" | "age" | "position">("name");
 
   const { data: availability } = useQuery<FplAvailabilityWithRag[]>({
-    queryKey: ["/api/teams", teamSlug, "availability", "squad-tab"],
+    queryKey: ["/api/teams", teamSlug, "availability"],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${teamSlug}/availability?sort=recent`);
       if (!res.ok) throw new Error("Failed to fetch availability");
@@ -2642,10 +2642,11 @@ export default function TeamHubPage() {
       if (!res.ok) throw new Error("Failed to fetch matches");
       return res.json();
     },
-    enabled: !!team,
+    enabled: !!team && activeTab === "matches",
   });
   const { data: mvpTeams = [] } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
+    enabled: !!team && activeTab === "matches",
   });
   const teamIdBySlug = useMemo(
     () => new Map(mvpTeams.map((t) => [t.slug, t.id])),
@@ -2659,7 +2660,7 @@ export default function TeamHubPage() {
       if (!res.ok) throw new Error("Failed to fetch transfers");
       return res.json();
     },
-    enabled: !!team,
+    enabled: !!team && activeTab === "transfers",
   });
 
   const { data: injuries, isLoading: injuriesLoading } = useQuery<Injury[]>({
@@ -2669,7 +2670,7 @@ export default function TeamHubPage() {
       if (!res.ok) throw new Error("Failed to fetch injuries");
       return res.json();
     },
-    enabled: !!team,
+    enabled: !!team && activeTab === "injuries",
   });
 
   const { data: posts } = useQuery<(Post & { team?: Team })[]>({
@@ -2679,7 +2680,7 @@ export default function TeamHubPage() {
       if (!res.ok) throw new Error("Failed to fetch posts");
       return res.json();
     },
-    enabled: !!team,
+    enabled: !!team && activeTab === "fans",
   });
 
   const { data: squadPlayers, isLoading: squadLoading } = useQuery<Player[]>({
@@ -2689,7 +2690,7 @@ export default function TeamHubPage() {
       if (!res.ok) throw new Error("Failed to fetch squad");
       return res.json();
     },
-    enabled: !!team,
+    enabled: !!team && activeTab === "squad",
   });
 
   const { data: teamManagers } = useQuery<Manager[]>({
@@ -2699,7 +2700,7 @@ export default function TeamHubPage() {
       if (!res.ok) throw new Error("Failed to fetch team managers");
       return res.json();
     },
-    enabled: !!team?.id,
+    enabled: !!team?.id && activeTab === "squad",
   });
 
   const currentManager = teamManagers?.[0]

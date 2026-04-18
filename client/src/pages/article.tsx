@@ -604,12 +604,29 @@ export default function ArticlePage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const { data: article, isLoading } = useQuery<ArticleWithEntities>({
+  const { data: article, isLoading, isPending: articlePending } = useQuery<ArticleWithEntities>({
     queryKey: ["/api/articles", slug],
   });
 
-  const { data: allArticles = [] } = useQuery<Article[]>({
-    queryKey: ["/api/articles"],
+  const { data: relatedArticles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles/related", slug],
+    queryFn: async () => {
+      if (!slug) return [];
+      const res = await fetch(`/api/articles/related/${encodeURIComponent(slug)}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: Boolean(slug && article?.id),
+  });
+
+  const { data: popularArticles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles/popular", "6"],
+    queryFn: async () => {
+      const res = await fetch("/api/articles/popular?limit=6");
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: Boolean(slug) && !articlePending && !article,
   });
 
   const { data: followedTeamIdsRaw } = useQuery<string[] | null>({
@@ -667,46 +684,6 @@ export default function ArticlePage() {
     script.onload = loadWidgets;
     document.body.appendChild(script);
   }, [processedContent]);
-
-  const relatedArticles = useMemo(() => {
-    if (!article || allArticles.length === 0) return [];
-    
-    const otherArticles = allArticles.filter(a => a.id !== article.id);
-    const articleTags = article.tags || [];
-    
-    const scored = otherArticles.map(a => {
-      let score = 0;
-      if (a.category === article.category) score += 5;
-      const tagOverlap = articleTags.filter(t => (a.tags || []).includes(t)).length;
-      score += tagOverlap * 3;
-      if (a.isTrending) score += 3;
-      if (a.isEditorPick) score += 2;
-      return { article: a, score };
-    });
-
-    const sorted = scored.sort((a, b) => b.score - a.score);
-    
-    if (sorted.length >= 3) {
-      return sorted.slice(0, 3).map(s => s.article);
-    }
-    
-    const result = sorted.map(s => s.article);
-    const trendingFallback = otherArticles
-      .filter(a => !result.some(r => r.id === a.id))
-      .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
-    
-    while (result.length < 3 && trendingFallback.length > 0) {
-      result.push(trendingFallback.shift()!);
-    }
-    
-    return result.slice(0, 3);
-  }, [article, allArticles]);
-
-  const popularArticles = useMemo(() => {
-    return [...allArticles]
-      .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
-      .slice(0, 6);
-  }, [allArticles]);
 
   // Display-only pills in hierarchy order: competition -> teams -> players -> managers
   const { headerPills, footerPills, articleTeams } = useMemo(() => {
