@@ -185,6 +185,22 @@ function readGoalserveId(node: Record<string, unknown>): string {
   return String(node["@id"] ?? node.id ?? "").trim();
 }
 
+/** Goalserve logotips may return a bare array, or `{ data: [] }` / `{ results: [] }`. */
+function normalizeLogotipsResponseRecords(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(
+      (item): item is Record<string, unknown> =>
+        item != null && typeof item === "object" && !Array.isArray(item),
+    ) as Record<string, unknown>[];
+  }
+  if (payload != null && typeof payload === "object") {
+    const obj = payload as Record<string, unknown>;
+    if (Array.isArray(obj.data)) return obj.data as Record<string, unknown>[];
+    if (Array.isArray(obj.results)) return obj.results as Record<string, unknown>[];
+  }
+  return [];
+}
+
 async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Map<string, LogotipsAssetSource>> {
   const key = process.env.GOALSERVE_FEED_KEY;
   if (!key || goalserveTeamIds.length === 0) return new Map();
@@ -200,11 +216,7 @@ async function fetchLogotipsTeamImageMap(goalserveTeamIds: string[]): Promise<Ma
       const payload = await res.json().catch(() => null);
       if (!payload) continue;
 
-      const records: Record<string, unknown>[] = Array.isArray((payload as any)?.data)
-        ? (payload as any).data
-        : Array.isArray((payload as any)?.results)
-          ? (payload as any).results
-          : [];
+      const records = normalizeLogotipsResponseRecords(payload);
 
       for (const record of records) {
         const id = String(record.id ?? record.team_id ?? record["@id"] ?? record["@team_id"] ?? "").trim();
@@ -243,11 +255,7 @@ async function fetchLogotipsCompetitionImageMap(goalserveLeagueIds: string[]): P
       const payload = await res.json().catch(() => null);
       if (!payload) continue;
 
-      const records: Record<string, unknown>[] = Array.isArray((payload as any)?.data)
-        ? (payload as any).data
-        : Array.isArray((payload as any)?.results)
-          ? (payload as any).results
-          : [];
+      const records = normalizeLogotipsResponseRecords(payload);
 
       for (const record of records) {
         const id = String(
