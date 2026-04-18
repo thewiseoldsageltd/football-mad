@@ -9,6 +9,8 @@ export type CuratedAuthorFields = {
   linkedInUrl?: string;
   xUrl?: string;
   websiteUrl?: string;
+  /** Editorial primary beat / coverage focus; overrides tag inference when set. */
+  primaryBeat?: string;
 };
 
 const CURATED_AUTHOR_ENRICHMENT: Record<string, CuratedAuthorFields> = {
@@ -18,6 +20,7 @@ const CURATED_AUTHOR_ENRICHMENT: Record<string, CuratedAuthorFields> = {
   //   linkedInUrl: "https://www.linkedin.com/in/...",
   //   xUrl: "https://x.com/...",
   //   websiteUrl: "https://...",
+  //   primaryBeat: "Premier League · Transfers",
   // },
 };
 

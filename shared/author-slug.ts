@@ -49,6 +49,6 @@ export interface AuthorPageApiResponse {
   websiteUrl?: string | null;
   /** When true, UI shows PA desk branding instead of generic pen / personal headshot. */
   showPaDeskAvatar?: boolean;
-  /** Most frequent PA tag on recent articles by this author (null if none). */
+  /** Coverage focus: curated in author enrichment when set, else top tag from recent articles (null if neither). */
   primaryBeat?: string | null;
 }

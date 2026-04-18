@@ -1073,9 +1073,11 @@ export class DatabaseStorage implements IStorage {
     const sortedTags = [...tagCounts.entries()].sort(
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
     );
-    const primaryBeat = sortedTags[0]?.[0] ?? null;
+    const inferredPrimaryBeat = sortedTags[0]?.[0] ?? null;
 
     const enrich = buildAuthorPageEnrichment(slug, agg.displayName);
+    const curatedPrimaryBeat = enrich.primaryBeat?.trim() || null;
+    const primaryBeat = curatedPrimaryBeat || inferredPrimaryBeat;
 
     return {
       found: true,

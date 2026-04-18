@@ -65,7 +65,7 @@ function authorRoleLine(data: AuthorPageApiResponse): string {
 }
 
 const socialLinkClass =
-  "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-input bg-background px-3.5 text-xs font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-3 text-xs font-medium text-foreground/90 transition-colors hover:bg-muted/55 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 export default function AuthorPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>();
@@ -186,6 +186,7 @@ export default function AuthorPage() {
   const linkedInUrl = data.linkedInUrl?.trim();
   const xUrl = data.xUrl?.trim();
   const websiteUrl = data.websiteUrl?.trim();
+  const hasSocialLinks = Boolean(linkedInUrl || xUrl || websiteUrl);
   const primaryBeat = data.primaryBeat?.trim() || null;
 
   return (
@@ -227,7 +228,7 @@ export default function AuthorPage() {
                   )}
                 </div>
 
-                <div className="min-w-0 flex-1 space-y-2 sm:space-y-2.5">
+                <div className="min-w-0 flex-1 flex flex-col">
                   <div>
                     <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl md:text-4xl">
                       {authorHeading}
@@ -235,8 +236,11 @@ export default function AuthorPage() {
                     <p className="text-muted-foreground mt-1 text-sm sm:text-[0.9375rem]">{authorRoleLine(data)}</p>
                   </div>
 
-                  {(linkedInUrl || xUrl || websiteUrl) && (
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5 sm:justify-start">
+                  {hasSocialLinks && (
+                    <nav
+                      className="mt-2.5 flex flex-wrap items-center justify-center gap-2 sm:justify-start"
+                      aria-label="Author social profiles"
+                    >
                       {linkedInUrl && (
                         <a
                           href={linkedInUrl}
@@ -273,10 +277,10 @@ export default function AuthorPage() {
                           <span>Website</span>
                         </a>
                       )}
-                    </div>
+                    </nav>
                   )}
 
-                  <p className="text-sm leading-relaxed text-muted-foreground max-w-2xl mx-auto text-pretty sm:mx-0 sm:text-[0.9375rem]">
+                  <p className="mt-4 text-sm leading-relaxed text-muted-foreground max-w-2xl mx-auto text-pretty sm:mx-0 sm:text-[0.9375rem]">
                     {authorBio(authorHeading)}
                   </p>
                 </div>
