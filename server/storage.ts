@@ -1096,31 +1096,41 @@ export class DatabaseStorage implements IStorage {
       };
     });
 
-    const normalizedWithAuthorSlugs = await attachAuthorProfileSlugsToArticleRows(normalized);
-
-    const tagRows = await db
-      .select({ tags: articles.tags })
-      .from(articles)
-      .where(slugMatchClause)
-      .orderBy(desc(articles.sortAt))
-      .limit(150);
-
-    const tagCounts = new Map<string, number>();
-    for (const row of tagRows) {
-      for (const raw of row.tags ?? []) {
-        const t = typeof raw === "string" ? raw.trim() : "";
-        if (t.length < 2) continue;
-        tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
-      }
-    }
-    const sortedTags = [...tagCounts.entries()].sort(
-      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
-    );
-    const inferredPrimaryBeat =
-      sortedTags.find(([t]) => !isExcludedGenericPrimaryBeatTag(t))?.[0] ?? null;
+    // All list rows share this page's author filter; when identity resolved, profile slug is always canonical.
+    const normalizedWithAuthorSlugs = resolved
+      ? normalized.map((row) => ({
+          ...row,
+          authorProfileSlug: resolved.canonicalSlug.trim().toLowerCase(),
+        }))
+      : await attachAuthorProfileSlugsToArticleRows(normalized);
 
     const enrich = buildAuthorPageEnrichment(resolved?.canonicalSlug ?? slug, displayNameForPage);
     const curatedPrimaryBeat = enrich.primaryBeat?.trim() || null;
+
+    let inferredPrimaryBeat: string | null = null;
+    if (!curatedPrimaryBeat) {
+      const tagRows = await db
+        .select({ tags: articles.tags })
+        .from(articles)
+        .where(slugMatchClause)
+        .orderBy(desc(articles.sortAt))
+        .limit(50);
+
+      const tagCounts = new Map<string, number>();
+      for (const row of tagRows) {
+        for (const raw of row.tags ?? []) {
+          const t = typeof raw === "string" ? raw.trim() : "";
+          if (t.length < 2) continue;
+          tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+        }
+      }
+      const sortedTags = [...tagCounts.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+      );
+      inferredPrimaryBeat =
+        sortedTags.find(([t]) => !isExcludedGenericPrimaryBeatTag(t))?.[0] ?? null;
+    }
+
     const primaryBeat = curatedPrimaryBeat || inferredPrimaryBeat;
 
     return {
