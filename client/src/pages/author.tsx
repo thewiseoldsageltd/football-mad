@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearch } from "wouter";
-import { ArrowLeft, ChevronRight, Globe, PenLine } from "lucide-react";
+import { ArrowLeft, Globe, PenLine } from "lucide-react";
 import { FaLinkedin } from "react-icons/fa6";
 import { SiX } from "react-icons/si";
 import { format } from "date-fns";
@@ -11,14 +11,12 @@ import { NewsletterForm } from "@/components/newsletter-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PaDeskAuthorBadge } from "@/components/authors/pa-desk-author-badge";
 import type { AuthorPageApiResponse } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
 import { isPaSportDeskAuthor } from "@shared/author-enrichment";
 import type { Article } from "@shared/schema";
-import { newsArticle } from "@/lib/urls";
 
 function authorBio(displayName: string): string {
   const name = displayName.trim() || "This journalist";
@@ -65,6 +63,9 @@ function authorRoleLine(data: AuthorPageApiResponse): string {
   if (data.showPaDeskAvatar) return "Syndicated desk · PA Media";
   return "Journalist · Football correspondent";
 }
+
+const socialLinkClass =
+  "inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full border border-input bg-background px-3.5 text-xs font-medium shadow-xs transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export default function AuthorPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>();
@@ -140,17 +141,17 @@ export default function AuthorPage() {
   if (isLoading) {
     return (
       <MainLayout>
-        <div className="max-w-6xl mx-auto px-4 py-10">
-          <Skeleton className="h-8 w-48 mb-6" />
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
-            <Skeleton className="h-28 w-28 shrink-0 rounded-2xl mx-auto sm:mx-0" />
-            <div className="flex-1 space-y-3">
-              <Skeleton className="h-10 w-3/4 max-w-md" />
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-20 w-full max-w-2xl" />
+        <div className="max-w-6xl mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-40 mb-5" />
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <Skeleton className="h-24 w-24 shrink-0 rounded-full mx-auto sm:mx-0" />
+            <div className="flex-1 space-y-2.5">
+              <Skeleton className="h-9 w-2/3 max-w-sm" />
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-16 w-full max-w-xl" />
             </div>
           </div>
-          <div className="grid sm:grid-cols-2 gap-4 mt-10">
+          <div className="grid sm:grid-cols-2 gap-3 mt-8">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-48 rounded-xl" />
             ))}
@@ -185,150 +186,143 @@ export default function AuthorPage() {
   const linkedInUrl = data.linkedInUrl?.trim();
   const xUrl = data.xUrl?.trim();
   const websiteUrl = data.websiteUrl?.trim();
-  const expertiseTags = data.expertiseTags ?? [];
-  const latest = data.latestArticle;
+  const primaryBeat = data.primaryBeat?.trim() || null;
 
   return (
     <MainLayout>
-      <div className="max-w-6xl mx-auto px-4 py-8 sm:py-10">
+      <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
         <Link href="/news">
-          <Button variant="ghost" size="sm" className="mb-6 -ml-2">
+          <Button variant="ghost" size="sm" className="mb-4 -ml-2 h-8 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4 mr-2" />
             News
           </Button>
         </Link>
 
-        <div className="flex flex-col lg:flex-row gap-10 lg:gap-12">
+        <div className="flex flex-col gap-8 lg:flex-row lg:gap-10">
           <div className="flex-1 min-w-0">
-            <header className="mb-10 border-b border-border/60 pb-8 sm:pb-10">
-              <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start text-center sm:text-left">
+            <header className="mb-8 border-b border-border/50 pb-6 sm:mb-9 sm:pb-7">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-5 text-center sm:text-left">
                 <div className="relative shrink-0">
                   {showPa ? (
                     <div
-                      className="h-28 w-28 sm:h-32 sm:w-32 overflow-hidden rounded-2xl ring-2 ring-border/60 shadow-md"
+                      className="h-24 w-24 sm:h-[7.25rem] sm:w-[7.25rem] overflow-hidden rounded-full ring-2 ring-border/50 shadow-sm"
                       data-testid="author-avatar-pa-desk"
                     >
-                      <PaDeskAuthorBadge className="h-full w-full rounded-2xl border-0 shadow-none" />
+                      <PaDeskAuthorBadge className="h-full w-full border-0 shadow-none" />
                     </div>
                   ) : showHeadshot ? (
-                    <Avatar className="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl ring-2 ring-border/60 shadow-md">
+                    <Avatar className="h-24 w-24 sm:h-[7.25rem] sm:w-[7.25rem] rounded-full ring-2 ring-border/50 shadow-sm">
                       <AvatarImage src={headshotUrl!} alt="" className="object-cover" />
-                      <AvatarFallback className="rounded-2xl text-lg font-semibold">
+                      <AvatarFallback className="rounded-full text-base font-semibold">
                         {authorHeading[0] ?? "A"}
                       </AvatarFallback>
                     </Avatar>
                   ) : (
                     <div
-                      className="flex h-28 w-28 sm:h-32 sm:w-32 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/12 to-primary/5 ring-2 ring-border/60 shadow-md"
+                      className="flex h-24 w-24 sm:h-[7.25rem] sm:w-[7.25rem] items-center justify-center rounded-full bg-gradient-to-br from-primary/14 to-primary/5 ring-2 ring-border/50 shadow-sm"
                       data-testid="author-avatar-fallback"
                     >
-                      <PenLine className="h-12 w-12 sm:h-14 sm:w-14 text-primary/80" aria-hidden />
+                      <PenLine className="h-10 w-10 sm:h-11 sm:w-11 text-primary/75" aria-hidden />
                     </div>
                   )}
                 </div>
 
-                <div className="min-w-0 flex-1 space-y-3">
+                <div className="min-w-0 flex-1 space-y-2 sm:space-y-2.5">
                   <div>
-                    <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance">{authorHeading}</h1>
-                    <p className="text-muted-foreground mt-1.5 text-sm sm:text-base">{authorRoleLine(data)}</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-3xl md:text-4xl">
+                      {authorHeading}
+                    </h1>
+                    <p className="text-muted-foreground mt-1 text-sm sm:text-[0.9375rem]">{authorRoleLine(data)}</p>
                   </div>
 
                   {(linkedInUrl || xUrl || websiteUrl) && (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-0.5 sm:justify-start">
                       {linkedInUrl && (
-                        <Button variant="outline" size="sm" className="h-9 gap-2 rounded-full" asChild>
-                          <a href={linkedInUrl} target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
-                            <FaLinkedin className="h-4 w-4 shrink-0 opacity-90" />
-                            <span className="text-xs font-medium">LinkedIn</span>
-                          </a>
-                        </Button>
+                        <a
+                          href={linkedInUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="LinkedIn"
+                          className={socialLinkClass}
+                        >
+                          <FaLinkedin className="h-[18px] w-[18px] min-h-[18px] min-w-[18px] shrink-0 text-[#0A66C2]" aria-hidden />
+                          <span>LinkedIn</span>
+                        </a>
                       )}
                       {xUrl && (
-                        <Button variant="outline" size="sm" className="h-9 gap-2 rounded-full" asChild>
-                          <a href={xUrl} target="_blank" rel="noopener noreferrer" aria-label="X">
-                            <SiX className="h-4 w-4 shrink-0 opacity-90" />
-                            <span className="text-xs font-medium">X</span>
-                          </a>
-                        </Button>
+                        <a
+                          href={xUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="X"
+                          className={socialLinkClass}
+                        >
+                          <SiX className="h-[17px] w-[17px] min-h-[17px] min-w-[17px] shrink-0 text-foreground" aria-hidden />
+                          <span>X</span>
+                        </a>
                       )}
                       {websiteUrl && (
-                        <Button variant="outline" size="sm" className="h-9 gap-2 rounded-full" asChild>
-                          <a href={websiteUrl} target="_blank" rel="noopener noreferrer" aria-label="Website">
-                            <Globe className="h-4 w-4 shrink-0 opacity-90" />
-                            <span className="text-xs font-medium">Website</span>
-                          </a>
-                        </Button>
+                        <a
+                          href={websiteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Website"
+                          className={socialLinkClass}
+                        >
+                          <Globe className="h-[17px] w-[17px] min-h-[17px] min-w-[17px] shrink-0 text-muted-foreground" aria-hidden />
+                          <span>Website</span>
+                        </a>
                       )}
                     </div>
                   )}
 
-                  <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-2xl mx-auto sm:mx-0 text-pretty">
+                  <p className="text-sm leading-relaxed text-muted-foreground max-w-2xl mx-auto text-pretty sm:mx-0 sm:text-[0.9375rem]">
                     {authorBio(authorHeading)}
                   </p>
-
-                  {expertiseTags.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-2 pt-2">
-                      <span className="text-xs font-medium text-muted-foreground mr-1">Topics</span>
-                      {expertiseTags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="font-normal text-xs">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
 
-              <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                <Card className="border-border/70 bg-card/50 shadow-sm">
-                  <CardContent className="p-4 sm:p-5">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Articles written</p>
-                    <p className="mt-2 text-2xl sm:text-3xl font-bold tabular-nums tracking-tight">
+              <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
+                <Card className="border-border/60 bg-card/40 shadow-sm">
+                  <CardContent className="p-3.5 sm:p-4">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Articles written
+                    </p>
+                    <p className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]">
                       {data.articleCount.toLocaleString()}
                     </p>
                   </CardContent>
                 </Card>
-                <Card className="border-border/70 bg-card/50 shadow-sm">
-                  <CardContent className="p-4 sm:p-5">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">First published</p>
-                    <p className="mt-2 text-lg sm:text-xl font-semibold tabular-nums">{first}</p>
+                <Card className="border-border/60 bg-card/40 shadow-sm">
+                  <CardContent className="p-3.5 sm:p-4">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                      First published
+                    </p>
+                    <p className="mt-1.5 text-base font-semibold tabular-nums sm:text-lg">{first}</p>
                   </CardContent>
                 </Card>
-                <Card className="border-border/70 bg-card/50 shadow-sm sm:col-span-2 lg:col-span-1">
-                  <CardContent className="p-4 sm:p-5">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Latest article</p>
-                    {latest ? (
-                      <Link
-                        href={newsArticle(latest.slug)}
-                        className="mt-2 group flex items-start gap-2 text-left rounded-md -m-1 p-1 hover:bg-muted/60 transition-colors"
-                      >
-                        <span className="text-base sm:text-lg font-semibold leading-snug group-hover:text-primary group-hover:underline line-clamp-2">
-                          {latest.title}
-                        </span>
-                        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary mt-0.5" />
-                      </Link>
-                    ) : (
-                      <p className="mt-2 text-lg font-semibold text-muted-foreground">—</p>
-                    )}
-                    {latest?.publishedAt && (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {format(new Date(latest.publishedAt), "d MMM yyyy")}
-                      </p>
-                    )}
+                <Card className="border-border/60 bg-card/40 shadow-sm">
+                  <CardContent className="p-3.5 sm:p-4">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Primary beat
+                    </p>
+                    <p className="mt-1.5 text-base font-semibold leading-snug text-foreground sm:text-lg line-clamp-2">
+                      {primaryBeat ?? "—"}
+                    </p>
                   </CardContent>
                 </Card>
               </div>
             </header>
 
             <section>
-              <h2 className="text-xl font-semibold mb-4">Latest articles</h2>
-              <div className="grid sm:grid-cols-2 gap-6">
+              <h2 className="text-lg font-semibold tracking-tight sm:text-xl mb-3 sm:mb-4">Latest articles</h2>
+              <div className="grid sm:grid-cols-2 gap-5 sm:gap-6">
                 {data.articles.map((row) => (
                   <ArticleCard key={row.id} article={toArticleCardModel(row)} showPills />
                 ))}
               </div>
               {data.hasMore && data.nextCursor && (
-                <div className="mt-8 flex justify-center">
+                <div className="mt-7 flex justify-center">
                   <Button variant="outline" asChild>
                     <Link href={`/authors/${encodeURIComponent(slug)}?cursor=${encodeURIComponent(data.nextCursor)}`}>
                       Older articles
@@ -340,8 +334,8 @@ export default function AuthorPage() {
           </div>
 
           <aside className="w-full lg:w-72 shrink-0">
-            <Card className="lg:sticky lg:top-24 border-border/70 shadow-sm">
-              <CardHeader>
+            <Card className="border-border/60 shadow-sm lg:sticky lg:top-24">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-base">Never miss a story</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">

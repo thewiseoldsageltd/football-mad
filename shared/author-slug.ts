@@ -32,13 +32,6 @@ export interface AuthorArticleSummary {
   contentType: string | null;
 }
 
-/** Optional row for “latest article” hero in author header (first in feed order). */
-export interface AuthorLatestArticleSummary {
-  slug: string;
-  title: string;
-  publishedAt: string | null;
-}
-
 export interface AuthorPageApiResponse {
   found: boolean;
   slug: string;
@@ -56,7 +49,6 @@ export interface AuthorPageApiResponse {
   websiteUrl?: string | null;
   /** When true, UI shows PA desk branding instead of generic pen / personal headshot. */
   showPaDeskAvatar?: boolean;
-  /** Topic tags aggregated from recent articles (max ~12). */
-  expertiseTags?: string[];
-  latestArticle?: AuthorLatestArticleSummary | null;
+  /** Most frequent PA tag on recent articles by this author (null if none). */
+  primaryBeat?: string | null;
 }

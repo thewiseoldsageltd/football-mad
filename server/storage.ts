@@ -1070,20 +1070,12 @@ export class DatabaseStorage implements IStorage {
         tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
       }
     }
-    const expertiseTags = [...tagCounts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .slice(0, 12)
-      .map(([tag]) => tag);
+    const sortedTags = [...tagCounts.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
+    const primaryBeat = sortedTags[0]?.[0] ?? null;
 
     const enrich = buildAuthorPageEnrichment(slug, agg.displayName);
-    const latestArticle =
-      normalized[0] != null
-        ? {
-            slug: normalized[0].slug,
-            title: normalized[0].title,
-            publishedAt: normalized[0].publishedAt,
-          }
-        : null;
 
     return {
       found: true,
@@ -1104,8 +1096,7 @@ export class DatabaseStorage implements IStorage {
       xUrl: enrich.xUrl ?? null,
       websiteUrl: enrich.websiteUrl ?? null,
       showPaDeskAvatar: enrich.showPaDeskAvatar ?? false,
-      expertiseTags,
-      latestArticle,
+      primaryBeat,
     };
   }
 
