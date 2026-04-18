@@ -10,6 +10,16 @@ export function slugifyAuthorName(name: string | null | undefined): string {
     .replace(/^-+|-+$/g, "");
 }
 
+/** Slug for `/authors/:slug` links: server-enriched canonical when present, else slugify(byline). */
+export function effectiveAuthorProfileSlug(article: {
+  authorProfileSlug?: string | null;
+  authorName?: string | null;
+}): string {
+  const fromApi = article.authorProfileSlug?.trim();
+  if (fromApi) return fromApi;
+  return slugifyAuthorName(article.authorName);
+}
+
 export function authorPathFromSlug(slug: string): string {
   return `/authors/${encodeURIComponent(slug)}`;
 }
@@ -23,6 +33,8 @@ export interface AuthorArticleSummary {
   openingText: string;
   coverImage: string | null;
   authorName: string;
+  /** Canonical author slug when identity engine matches slugify(authorName); omit for legacy clients. */
+  authorProfileSlug?: string;
   publishedAt: string | null;
   updatedAt: string | null;
   sortAt: string | null;

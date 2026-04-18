@@ -32,6 +32,7 @@ function toArticleCardModel(row: AuthorPageApiResponse["articles"][number]): Art
     content: row.openingText ?? "",
     coverImage: row.coverImage,
     authorName: row.authorName,
+    authorProfileSlug: row.authorProfileSlug,
     publishedAt: row.publishedAt ? new Date(row.publishedAt) : new Date(),
     updatedAt: row.updatedAt ? new Date(row.updatedAt) : new Date(),
     sortAt: row.sortAt ? new Date(row.sortAt) : new Date(),

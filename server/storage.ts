@@ -30,7 +30,11 @@ import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import type { AuthorArticleSummary, AuthorPageApiResponse } from "@shared/author-slug";
 import { buildAuthorPageEnrichment } from "./lib/author-enrichment";
-import { buildAuthorSlugSqlMatch, resolveAuthorIdentityForRequestSlug } from "./lib/author-identity-resolver";
+import {
+  attachAuthorProfileSlugsToArticleRows,
+  buildAuthorSlugSqlMatch,
+  resolveAuthorIdentityForRequestSlug,
+} from "./lib/author-identity-resolver";
 
 /** Tags too generic to use as inferred author primary beat (exact match, case-insensitive). */
 const GENERIC_INFERRED_PRIMARY_BEAT_TAGS = new Set([
@@ -771,14 +775,20 @@ export class DatabaseStorage implements IStorage {
       commentsCount: articles.commentsCount, category: articles.category,
     };
     if (category && category !== "all") {
-      return db.select(lightweight).from(articles)
+      const rows = await db
+        .select(lightweight)
+        .from(articles)
         .where(eq(articles.category, category))
         .orderBy(desc(articles.publishedAt))
-        .limit(50) as any;
+        .limit(50);
+      return attachAuthorProfileSlugsToArticleRows(rows) as any;
     }
-    return db.select(lightweight).from(articles)
+    const rows = await db
+      .select(lightweight)
+      .from(articles)
       .orderBy(desc(articles.publishedAt))
-      .limit(50) as any;
+      .limit(50);
+    return attachAuthorProfileSlugsToArticleRows(rows) as any;
   }
 
   async getArticleBySlug(slug: string): Promise<Article | undefined> {
@@ -920,8 +930,10 @@ export class DatabaseStorage implements IStorage {
     ];
     const linkedContent = linkArticleHtmlFirstMentions(article.content, inlineEntities);
 
+    const [withAuthorSlug] = await attachAuthorProfileSlugsToArticleRows([article]);
+
     return {
-      ...article,
+      ...withAuthorSlug,
       content: linkedContent,
       entityTeams: resolvedTeams,
       entityPlayers: playerRows,
@@ -950,7 +962,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(articles.publishedAt))
       .limit(50);
 
-    return result as any;
+    return attachAuthorProfileSlugsToArticleRows(result) as any;
   }
 
   async createArticle(data: InsertArticle): Promise<Article> {
@@ -1078,6 +1090,8 @@ export class DatabaseStorage implements IStorage {
       };
     });
 
+    const normalizedWithAuthorSlugs = await attachAuthorProfileSlugsToArticleRows(normalized);
+
     const tagRows = await db
       .select({ tags: articles.tags })
       .from(articles)
@@ -1114,7 +1128,7 @@ export class DatabaseStorage implements IStorage {
       lastPublishedAt: agg.lastPublishedAt
         ? (agg.lastPublishedAt instanceof Date ? agg.lastPublishedAt : new Date(agg.lastPublishedAt)).toISOString()
         : null,
-      articles: normalized,
+      articles: normalizedWithAuthorSlugs,
       nextCursor,
       hasMore,
       headshotUrl: enrich.headshotUrl ?? null,
@@ -1591,7 +1605,8 @@ export class DatabaseStorage implements IStorage {
     const hasMore = result.length > limit;
     const rawSlice = hasMore ? result.slice(0, limit) : result;
     const normalizedRows = rawSlice.map((row) => this.normalizeArticleListRow(row));
-    const articlesToReturn = await this.attachEntityArraysToArticles(normalizedRows);
+    const withEntities = await this.attachEntityArraysToArticles(normalizedRows);
+    const articlesToReturn = await attachAuthorProfileSlugsToArticleRows(withEntities);
     
     // Build nextCursor from last article's sortAt and id (stable cursor)
     let nextCursor: string | null = null;
@@ -1704,8 +1719,9 @@ export class DatabaseStorage implements IStorage {
     
     const normalizedRows = rows.map((row) => this.normalizeArticleListRow(row));
     const withEntities = await this.attachEntityArraysToArticles(normalizedRows);
+    const articlesOut = await attachAuthorProfileSlugsToArticleRows(withEntities);
     return {
-      articles: withEntities,
+      articles: articlesOut,
       nextCursor,
       serverTime,
     };
@@ -1943,7 +1959,8 @@ export class DatabaseStorage implements IStorage {
     const hasMore = rows.length > limit;
     const rawSlice = hasMore ? rows.slice(0, limit) : rows;
     const normalizedRows = rawSlice.map((row) => this.normalizeArticleListRow(row));
-    const articlesToReturn = await this.attachEntityArraysToArticles(normalizedRows);
+    const withEntities = await this.attachEntityArraysToArticles(normalizedRows);
+    const articlesToReturn = await attachAuthorProfileSlugsToArticleRows(withEntities);
 
     let nextCursor: string | null = null;
     if (hasMore && articlesToReturn.length > 0) {

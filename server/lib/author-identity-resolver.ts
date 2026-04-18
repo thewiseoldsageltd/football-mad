@@ -1,4 +1,5 @@
-import { eq, or, sql } from "drizzle-orm";
+import { eq, inArray, or, sql } from "drizzle-orm";
+import { slugifyAuthorName } from "@shared/author-slug";
 import { db } from "../db";
 import { articles, authorAliases, authors } from "@shared/schema";
 
@@ -63,4 +64,53 @@ export function buildAuthorSlugSqlMatch(matchSlugs: string[]) {
   if (matchSlugs.length === 0) return sql`false`;
   if (matchSlugs.length === 1) return sql`${authorSlugSql} = ${matchSlugs[0]}`;
   return or(...matchSlugs.map((s) => sql`${authorSlugSql} = ${s}`))!;
+}
+
+/**
+ * Batch map slugify(author_name) values to canonical `authors.slug` when the raw slug matches
+ * `authors.slug` or `author_aliases.match_slug`. Keys and values are lowercase.
+ */
+export async function batchResolveAuthorProfileSlugLookup(rawSlugs: string[]): Promise<Map<string, string>> {
+  const keys = Array.from(new Set(rawSlugs.map((s) => s.trim().toLowerCase()).filter(Boolean)));
+  const out = new Map<string, string>();
+  if (keys.length === 0) return out;
+
+  const authorHits = await db
+    .select({ slug: authors.slug })
+    .from(authors)
+    .where(inArray(authors.slug, keys));
+  for (const r of authorHits) {
+    const k = r.slug.trim().toLowerCase();
+    out.set(k, k);
+  }
+
+  const aliasHits = await db
+    .select({ canonical: authors.slug, matchSlug: authorAliases.matchSlug })
+    .from(authorAliases)
+    .innerJoin(authors, eq(authorAliases.authorId, authors.id))
+    .where(inArray(authorAliases.matchSlug, keys));
+  for (const r of aliasHits) {
+    const m = r.matchSlug.trim().toLowerCase();
+    const c = r.canonical.trim().toLowerCase();
+    out.set(m, c);
+  }
+
+  return out;
+}
+
+/** Adds `authorProfileSlug` for outbound `/authors/:slug` links (canonical when known, else raw slugify). */
+export async function attachAuthorProfileSlugsToArticleRows<T extends { authorName?: string | null }>(
+  rows: T[],
+): Promise<Array<T & { authorProfileSlug: string }>> {
+  const rawSet = new Set<string>();
+  for (const r of rows) {
+    const s = slugifyAuthorName(r.authorName);
+    if (s) rawSet.add(s);
+  }
+  const lookup = await batchResolveAuthorProfileSlugLookup(Array.from(rawSet));
+  return rows.map((r) => {
+    const raw = slugifyAuthorName(r.authorName);
+    const authorProfileSlug = raw ? (lookup.get(raw) ?? raw) : "";
+    return { ...r, authorProfileSlug };
+  });
 }

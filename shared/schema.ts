@@ -174,7 +174,8 @@ export type JobHttpCall = typeof jobHttpCalls.$inferSelect;
 
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
-export type Article = typeof articles.$inferSelect;
+/** API responses may set `authorProfileSlug` (canonical when identity match exists; not a DB column). */
+export type Article = typeof articles.$inferSelect & { authorProfileSlug?: string };
 
 // ============ CANONICAL AUTHORS (identity engine; articles.author_name unchanged) ============
 export const authors = pgTable(

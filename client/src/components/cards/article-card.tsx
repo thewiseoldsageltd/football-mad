@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Clock, Eye } from "lucide-react";
-import { slugifyAuthorName } from "@shared/author-slug";
+import { effectiveAuthorProfileSlug } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
 import { authorProfile } from "@/lib/urls";
 import { Card, CardContent } from "@/components/ui/card";
@@ -51,7 +51,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
   const cardExcerpt = getCardExcerpt(article);
-  const authorSlug = slugifyAuthorName(article.authorName);
+  const authorSlug = effectiveAuthorProfileSlug(article);
   const authorLine = article.authorName ? formatAuthorForUi(article.authorName) : "";
 
   const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;

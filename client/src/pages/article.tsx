@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
-import { slugifyAuthorName } from "@shared/author-slug";
+import { effectiveAuthorProfileSlug } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
 import { buildPillsForFooter, buildPillsForHeader, type PillSourceArticle } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
@@ -659,9 +659,9 @@ export default function ArticlePage() {
   });
 
   const authorSlug = useMemo(() => {
-    const s = slugifyAuthorName(article?.authorName);
+    const s = effectiveAuthorProfileSlug(article ?? {});
     return s || null;
-  }, [article?.authorName]);
+  }, [article?.authorName, article?.authorProfileSlug]);
 
   const authorDisplay = useMemo(
     () => formatAuthorForUi(article?.authorName || "Football Mad") || "Football Mad",

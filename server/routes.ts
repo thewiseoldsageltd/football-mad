@@ -71,6 +71,7 @@ import {
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib/entity-presentation-resolver";
+import { attachAuthorProfileSlugsToArticleRows } from "./lib/author-identity-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
@@ -931,7 +932,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(articles.publishedAt))
         .limit(50);
-      res.json(rows);
+      res.json(await attachAuthorProfileSlugsToArticleRows(rows));
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -965,7 +966,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ? page[page.length - 1].publishedAt!.toISOString()
         : null;
 
-      res.json({ articles: page, nextCursor, hasMore });
+      res.json({ articles: await attachAuthorProfileSlugsToArticleRows(page), nextCursor, hasMore });
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -988,7 +989,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(articles.category, req.params.category))
         .orderBy(desc(articles.publishedAt))
         .limit(50);
-      res.json(rows);
+      res.json(await attachAuthorProfileSlugsToArticleRows(rows));
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -1035,19 +1036,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .from(articles)
         .orderBy(desc(articles.viewCount), desc(articles.publishedAt))
         .limit(limit);
-      res.json(
-        rows.map((row) => ({
-          ...row,
-          content: "",
-          excerpt: row.excerpt ?? "",
-          tags: row.tags ?? [],
-          competition: row.competition ?? null,
-          contentType: row.contentType ?? "story",
-          category: row.category ?? "news",
-          commentsCount: row.commentsCount ?? 0,
-          viewCount: row.viewCount ?? 0,
-        })),
-      );
+      const mapped = rows.map((row) => ({
+        ...row,
+        content: "",
+        excerpt: row.excerpt ?? "",
+        tags: row.tags ?? [],
+        competition: row.competition ?? null,
+        contentType: row.contentType ?? "story",
+        category: row.category ?? "news",
+        commentsCount: row.commentsCount ?? 0,
+        viewCount: row.viewCount ?? 0,
+      }));
+      res.json(await attachAuthorProfileSlugsToArticleRows(mapped));
     } catch (error) {
       console.error("Error fetching popular articles:", error);
       res.status(500).json({ error: "Failed to fetch popular articles" });
@@ -1135,19 +1135,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      res.json(
-        picked.map((row) => ({
-          ...row,
-          content: "",
-          excerpt: row.excerpt ?? "",
-          tags: row.tags ?? [],
-          competition: row.competition ?? null,
-          contentType: row.contentType ?? "story",
-          category: row.category ?? "news",
-          commentsCount: row.commentsCount ?? 0,
-          viewCount: row.viewCount ?? 0,
-        })),
-      );
+      const relatedMapped = picked.map((row) => ({
+        ...row,
+        content: "",
+        excerpt: row.excerpt ?? "",
+        tags: row.tags ?? [],
+        competition: row.competition ?? null,
+        contentType: row.contentType ?? "story",
+        category: row.category ?? "news",
+        commentsCount: row.commentsCount ?? 0,
+        viewCount: row.viewCount ?? 0,
+      }));
+      res.json(await attachAuthorProfileSlugsToArticleRows(relatedMapped));
     } catch (error) {
       console.error("Error fetching related articles:", error);
       res.status(500).json({ error: "Failed to fetch related articles" });
