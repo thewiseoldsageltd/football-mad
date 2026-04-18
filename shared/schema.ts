@@ -76,6 +76,11 @@ export const articles = pgTable("articles", {
   heroImageCredit: text("hero_image_credit"),
   authorId: varchar("author_id"),
   authorName: text("author_name").default("Football Mad"),
+  /**
+   * GENERATED STORED in DB — slug of author_name; matches @shared/author-slug slugifyAuthorName.
+   * Do not set on insert; see migration 0013_article_author_name_slug.
+   */
+  authorNameSlug: text("author_name_slug"),
   category: text("category").default("news"),
   competition: text("competition").default("Premier League"),
   contentType: text("content_type").default("team-news"),
@@ -107,6 +112,7 @@ export const articles = pgTable("articles", {
   index("articles_source_source_id_idx").on(table.source, table.sourceId),
   index("articles_sort_at_id_idx").on(table.sortAt, table.id), // Composite index for cursor pagination
   index("articles_entity_enrich_status_published_idx").on(table.entityEnrichStatus, table.publishedAt),
+  index("articles_author_name_slug_sort_at_id_idx").on(table.authorNameSlug, table.sortAt, table.id),
 ]);
 
 export const articlesRelations = relations(articles, ({ many }) => ({
@@ -172,7 +178,13 @@ export const jobHttpCalls = pgTable(
 );
 export type JobHttpCall = typeof jobHttpCalls.$inferSelect;
 
-export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true, updatedAt: true, viewCount: true });
+export const insertArticleSchema = createInsertSchema(articles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  viewCount: true,
+  authorNameSlug: true,
+});
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
 /** API responses may set `authorProfileSlug` (canonical when identity match exists; not a DB column). */
 export type Article = typeof articles.$inferSelect & { authorProfileSlug?: string };
@@ -199,7 +211,7 @@ export const authorAliases = pgTable(
     authorId: varchar("author_id")
       .references(() => authors.id, { onDelete: "cascade" })
       .notNull(),
-    /** Matches SQL slug of articles.author_name (same as slugifyAuthorName output). */
+    /** Matches articles.author_name_slug / slugifyAuthorName(byline). */
     matchSlug: text("match_slug").notNull().unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },

@@ -1,4 +1,4 @@
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { slugifyAuthorName } from "@shared/author-slug";
 import { db } from "../db";
 import { articles, authorAliases, authors } from "@shared/schema";
@@ -8,7 +8,7 @@ export type ResolvedAuthorIdentity = {
   canonicalSlug: string;
   displayName: string;
   kind: "person" | "desk";
-  /** Slug values that equal SQL slugify(articles.author_name) for rows belonging to this author. */
+  /** Slug values that equal articles.author_name_slug / slugifyAuthorName for this author. */
   matchSlugs: string[];
 };
 
@@ -54,16 +54,12 @@ export async function resolveAuthorIdentityForRequestSlug(requestSlug: string): 
   };
 }
 
-/** SQL fragment: slug derived from articles.author_name (must match storage getAuthorPage). */
-export function authorNameSlugSql() {
-  return sql`trim(both '-' from regexp_replace(lower(trim(coalesce(${articles.authorName}, ''))), '[^a-z0-9]+', '-', 'g'))`;
-}
-
+/** Indexed column; expression in DB matches slugifyAuthorName (see migration 0013). */
 export function buildAuthorSlugSqlMatch(matchSlugs: string[]) {
-  const authorSlugSql = authorNameSlugSql();
-  if (matchSlugs.length === 0) return sql`false`;
-  if (matchSlugs.length === 1) return sql`${authorSlugSql} = ${matchSlugs[0]}`;
-  return or(...matchSlugs.map((s) => sql`${authorSlugSql} = ${s}`))!;
+  const cleaned = Array.from(new Set(matchSlugs.map((s) => s.trim().toLowerCase()).filter(Boolean)));
+  if (cleaned.length === 0) return sql`false`;
+  if (cleaned.length === 1) return eq(articles.authorNameSlug, cleaned[0]!);
+  return inArray(articles.authorNameSlug, cleaned);
 }
 
 /**

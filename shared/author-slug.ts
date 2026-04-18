@@ -1,6 +1,6 @@
 /**
- * Canonical author slug for URLs (computed from display name, no DB column).
- * Keep in sync with SQL in server/storage.ts (authorSlugWhereSql).
+ * Canonical author slug for URLs (computed from display name).
+ * Must match articles.author_name_slug in PostgreSQL (generated column; see migration 0013).
  */
 export function slugifyAuthorName(name: string | null | undefined): string {
   const raw = (name ?? "").trim().toLowerCase();
