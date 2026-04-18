@@ -68,6 +68,10 @@ function authorRoleLine(data: AuthorPageApiResponse): string {
 const socialLinkClass =
   "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-3 text-xs font-medium text-foreground/90 transition-colors hover:bg-muted/55 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
+/** Stat card value: one shared style for count, date, and primary beat. */
+const authorStatValueClass =
+  "mt-1.5 text-base font-semibold leading-snug tracking-tight text-foreground tabular-nums sm:text-lg";
+
 export default function AuthorPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>();
   const search = useSearch();
@@ -303,9 +307,7 @@ export default function AuthorPage() {
                     <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
                       Articles written
                     </p>
-                    <p className="mt-1.5 text-2xl font-bold tabular-nums tracking-tight sm:text-[1.65rem]">
-                      {data.articleCount.toLocaleString()}
-                    </p>
+                    <p className={authorStatValueClass}>{data.articleCount.toLocaleString()}</p>
                   </CardContent>
                 </Card>
                 <Card className="border-border/60 bg-card/40 shadow-sm">
@@ -313,7 +315,7 @@ export default function AuthorPage() {
                     <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
                       First published
                     </p>
-                    <p className="mt-1.5 text-base font-semibold tabular-nums sm:text-lg">{first}</p>
+                    <p className={authorStatValueClass}>{first}</p>
                   </CardContent>
                 </Card>
                 <Card className="border-border/60 bg-card/40 shadow-sm">
@@ -321,9 +323,7 @@ export default function AuthorPage() {
                     <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
                       Primary beat
                     </p>
-                    <p className="mt-1.5 text-base font-semibold leading-snug text-foreground sm:text-lg line-clamp-2">
-                      {primaryBeat ?? "—"}
-                    </p>
+                    <p className={`${authorStatValueClass} line-clamp-2`}>{primaryBeat ?? "—"}</p>
                   </CardContent>
                 </Card>
               </div>
