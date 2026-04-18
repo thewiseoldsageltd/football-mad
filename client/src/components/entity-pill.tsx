@@ -86,7 +86,7 @@ function IconWithFallback({
   );
 }
 
-function isCanonicalTeamUuid(value: string | undefined): value is string {
+function isCanonicalEntityUuid(value: string | undefined): value is string {
   if (!value) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -126,7 +126,7 @@ export function EntityPill({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full transition-all",
         "border",
-        size === "default" ? "h-7 px-2.5 py-1 text-sm" : "h-6 px-2 py-0.5 text-xs",
+        size === "default" ? "h-7 min-h-[28px] px-2.5 py-1 text-sm" : "h-6 min-h-[24px] px-2 py-0.5 text-xs",
         "bg-background",
         "border-border",
         entity.href && "cursor-pointer hover:bg-muted hover:border-muted-foreground/30",
@@ -138,14 +138,14 @@ export function EntityPill({
       title={entity.name}
       aria-label={entity.name}
     >
-      {entity.type === "team" && isCanonicalTeamUuid(entity.entityId) ? (
+      {(entity.type === "team" || entity.type === "competition") && isCanonicalEntityUuid(entity.entityId) ? (
         <EntityPillIcon
-          entityType="team"
+          entityType={entity.type === "team" ? "team" : "competition"}
           entityId={entity.entityId}
           label={entity.name}
           size={size}
         />
-      ) : ((entity.type === "player" || entity.type === "manager") && entity.entityId) ? (
+      ) : (entity.type === "player" || entity.type === "manager") && isCanonicalEntityUuid(entity.entityId) ? (
         <EntityPillIcon
           entityType={entity.type}
           entityId={entity.entityId}

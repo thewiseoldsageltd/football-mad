@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "wouter";
 import { Clock, Eye, Bookmark, Copy, Check } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ interface ArticleMetaBarProps {
   articleId: string;
   articleSlug: string;
   authorName: string;
+  /** When set, author name links to `/authors/:slug` for SEO and trust. */
+  authorProfileHref?: string;
   authorInitial?: string;
   publishedLabel: string;
   readTimeLabel: string;
@@ -37,6 +40,7 @@ export function ArticleMetaBar({
   articleId,
   articleSlug,
   authorName,
+  authorProfileHref,
   authorInitial,
   publishedLabel,
   readTimeLabel,
@@ -89,7 +93,13 @@ export function ArticleMetaBar({
           </AvatarFallback>
         </Avatar>
         <div>
-          <p className="font-medium text-sm">{authorName || "Football Mad"}</p>
+          {authorProfileHref ? (
+            <Link href={authorProfileHref}>
+              <span className="font-medium text-sm hover:underline text-foreground">{authorName || "Football Mad"}</span>
+            </Link>
+          ) : (
+            <p className="font-medium text-sm">{authorName || "Football Mad"}</p>
+          )}
           <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
             <span>{publishedLabel}</span>
             <span className="flex items-center gap-1">

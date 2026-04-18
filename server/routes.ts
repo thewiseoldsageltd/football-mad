@@ -474,6 +474,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/authors/:slug", async (req, res) => {
+    try {
+      const slug = String(req.params.slug ?? "").trim();
+      if (!slug) {
+        return res.status(400).json({ error: "Author slug is required" });
+      }
+      const query = z
+        .object({
+          limit: z.coerce.number().min(1).max(50).optional(),
+          cursor: z.string().optional(),
+        })
+        .safeParse(req.query);
+      const limit = query.success ? query.data.limit : undefined;
+      const cursor = query.success ? query.data.cursor : undefined;
+      const data = await storage.getAuthorPage({ slug, limit, cursor: cursor ?? null });
+      sendJsonNoEtag(res, data);
+    } catch (error) {
+      console.error("Error fetching author page:", error);
+      res.status(500).json({ error: "Failed to fetch author" });
+    }
+  });
+
   app.get("/api/entity-media/:entityType/:entityId", async (req, res) => {
     const params = z
       .object({

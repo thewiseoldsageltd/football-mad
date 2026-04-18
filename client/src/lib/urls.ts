@@ -114,6 +114,11 @@ export function newsArticle(slug: string): string {
   return `/news/${slug}`;
 }
 
+/** Author profile; slug should match `slugifyAuthorName` from `@shared/author-slug`. */
+export function authorProfile(authorSlug: string): string {
+  return `/authors/${encodeURIComponent(authorSlug)}`;
+}
+
 export function competitionHub(competitionSlug: string): string {
   return `/competitions/${competitionSlug}`;
 }

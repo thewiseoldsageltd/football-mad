@@ -1,5 +1,7 @@
 import { Link } from "wouter";
 import { Clock, Eye } from "lucide-react";
+import { slugifyAuthorName } from "@shared/author-slug";
+import { authorProfile } from "@/lib/urls";
 import { Card, CardContent } from "@/components/ui/card";
 import { type EntityData } from "@/components/entity-pill";
 import { PillsRow } from "@/components/pills-row";
@@ -48,6 +50,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
   const cardExcerpt = getCardExcerpt(article);
+  const authorSlug = slugifyAuthorName(article.authorName);
   
   const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;
   
@@ -104,9 +107,21 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                   {viewCount.toLocaleString()}
                 </span>
               )}
-              {article.authorName && (
+              {article.authorName && authorSlug ? (
+                <span className="relative z-20">
+                  By{" "}
+                  <Link
+                    href={authorProfile(authorSlug)}
+                    className="hover:underline font-medium"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid="link-card-author"
+                  >
+                    {article.authorName}
+                  </Link>
+                </span>
+              ) : article.authorName ? (
                 <span>By {article.authorName}</span>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -156,7 +171,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
             {cardExcerpt}
           </p>
         )}
-        <div className="flex items-center gap-3 text-muted-foreground text-xs">
+        <div className="flex items-center gap-3 text-muted-foreground text-xs flex-wrap">
           <span className="flex items-center gap-1">
             <Clock className="h-3 w-3" />
             {formatDistanceToNow(publishedAt, { addSuffix: true })}
@@ -167,6 +182,19 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
               {viewCount.toLocaleString()}
             </span>
           )}
+          {article.authorName && authorSlug ? (
+            <span className="relative z-20">
+              By{" "}
+              <Link
+                href={authorProfile(authorSlug)}
+                className="hover:text-foreground hover:underline font-medium"
+                onClick={(e) => e.stopPropagation()}
+                data-testid="link-card-author-inline"
+              >
+                {article.authorName}
+              </Link>
+            </span>
+          ) : null}
         </div>
       </CardContent>
     </Card>

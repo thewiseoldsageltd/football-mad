@@ -16,7 +16,8 @@ import { ArticleMetaBar } from "@/components/article-meta-bar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
-import { newsArticle } from "@/lib/urls";
+import { newsArticle, authorProfile } from "@/lib/urls";
+import { slugifyAuthorName } from "@shared/author-slug";
 import { buildPillsForFooter, buildPillsForHeader, type PillSourceArticle } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
@@ -158,7 +159,7 @@ function prepareArticleHtmlForRender(rawHtml: string): string {
   return doc.body.innerHTML;
 }
 
-function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
+function useArticleSEO(article: Article | undefined, canonicalSlug: string, authorSlug: string | null) {
   const [articleUrl, setArticleUrl] = useState("");
 
   useEffect(() => {
@@ -228,6 +229,15 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
     }
     
     const baseUrl = articleUrl.replace(newsArticle(canonicalSlug), "");
+    const authorPageUrl =
+      authorSlug && baseUrl ? `${baseUrl.replace(/\/$/, "")}${authorProfile(authorSlug)}` : undefined;
+    const authorBlock: Record<string, unknown> = {
+      "@type": "Person",
+      name: article.authorName || "Football Mad",
+    };
+    if (authorPageUrl) {
+      authorBlock.url = authorPageUrl;
+    }
     jsonLd.textContent = JSON.stringify({
       "@context": "https://schema.org",
       "@type": "NewsArticle",
@@ -236,10 +246,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
       image: article.coverImage || undefined,
       datePublished: article.publishedAt,
       dateModified: article.updatedAt || article.publishedAt,
-      author: {
-        "@type": "Person",
-        name: article.authorName || "Football Mad",
-      },
+      author: authorBlock,
       publisher: {
         "@type": "Organization",
         name: "Football Mad",
@@ -258,7 +265,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string) {
       createdElements.forEach(el => el.remove());
       document.title = previousTitle;
     };
-  }, [article, articleUrl, canonicalSlug]);
+  }, [article, articleUrl, canonicalSlug, authorSlug]);
 
   return articleUrl;
 }
@@ -628,7 +635,12 @@ export default function ArticlePage() {
     },
   });
 
-  const articleUrl = useArticleSEO(article, slug || "");
+  const authorSlug = useMemo(() => {
+    const s = slugifyAuthorName(article?.authorName);
+    return s || null;
+  }, [article?.authorName]);
+
+  const articleUrl = useArticleSEO(article, slug || "", authorSlug);
   const processedContent = useMemo(
     () => (article?.content ? prepareArticleHtmlForRender(article.content) : ""),
     [article?.content],
@@ -759,6 +771,7 @@ export default function ArticlePage() {
                 articleId={article.id}
                 articleSlug={article.slug}
                 authorName={article.authorName || "Football Mad"}
+                authorProfileHref={authorSlug ? authorProfile(authorSlug) : undefined}
                 authorInitial={article.authorName?.[0]}
                 publishedLabel={formatDistanceToNow(publishedAt, { addSuffix: true })}
                 readTimeLabel={`${readingTime} min read`}
@@ -766,6 +779,13 @@ export default function ArticlePage() {
                 shareUrl={articleUrl}
                 shareTitle={article.title}
               />
+              {authorSlug && (
+                <p className="text-sm text-muted-foreground -mt-2 mb-2">
+                  <Link href={authorProfile(authorSlug)} className="hover:text-foreground hover:underline font-medium">
+                    More from {article.authorName || "this author"}
+                  </Link>
+                </p>
+              )}
             </header>
 
             {article.coverImage ? (

@@ -28,6 +28,7 @@ import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib
 import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
+import type { AuthorArticleSummary, AuthorPageApiResponse } from "@shared/author-slug";
 
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
@@ -127,6 +128,7 @@ export interface IStorage {
   getNewsArticles(params: NewsFilterParams): Promise<NewsFiltersResponse>;
   getNewsUpdates(params: NewsUpdatesParams): Promise<NewsUpdatesResponse>;
   getNewsArchiveByEntity(params: NewsArchiveParams): Promise<NewsArchiveResponse>;
+  getAuthorPage(params: { slug: string; limit?: number; cursor?: string | null }): Promise<AuthorPageApiResponse>;
   
   // Matches
   getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
@@ -941,6 +943,132 @@ export class DatabaseStorage implements IStorage {
     await db.update(articles)
       .set({ viewCount: sql`${articles.viewCount} + 1` })
       .where(eq(articles.id, id));
+  }
+
+  async getAuthorPage(params: { slug: string; limit?: number; cursor?: string | null }): Promise<AuthorPageApiResponse> {
+    const slug = params.slug.trim().toLowerCase();
+    const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
+    const empty: AuthorPageApiResponse = {
+      found: false,
+      slug,
+      displayName: "",
+      articleCount: 0,
+      firstPublishedAt: null,
+      lastPublishedAt: null,
+      articles: [],
+      nextCursor: null,
+      hasMore: false,
+    };
+    if (!slug) return empty;
+
+    const authorSlugSql = sql`trim(both '-' from regexp_replace(lower(trim(coalesce(${articles.authorName}, ''))), '[^a-z0-9]+', '-', 'g'))`;
+
+    const [agg] = await db
+      .select({
+        articleCount: sql<number>`count(*)::int`,
+        displayName: sql<string>`max(${articles.authorName})`,
+        firstPublishedAt: sql<Date | null>`min(${articles.publishedAt})`,
+        lastPublishedAt: sql<Date | null>`max(${articles.publishedAt})`,
+      })
+      .from(articles)
+      .where(sql`${authorSlugSql} = ${slug}`);
+
+    if (!agg || agg.articleCount === 0 || !agg.displayName) {
+      return empty;
+    }
+
+    const listFields = {
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
+      coverImage: articles.coverImage,
+      authorName: articles.authorName,
+      publishedAt: articles.publishedAt,
+      updatedAt: articles.updatedAt,
+      sortAt: articles.sortAt,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      viewCount: articles.viewCount,
+    };
+
+    const conditions = [sql`${authorSlugSql} = ${slug}`];
+    const cursor = params.cursor?.trim();
+    if (cursor) {
+      const parts = cursor.split("|");
+      if (parts.length === 2 && parts[0] && parts[1]) {
+        const cursorSortAt = parts[0];
+        const cursorId = parts[1];
+        const cursorDate = new Date(cursorSortAt);
+        if (!Number.isNaN(cursorDate.getTime())) {
+          conditions.push(
+            or(
+              lt(articles.sortAt, cursorDate),
+              and(eq(articles.sortAt, cursorDate), lt(articles.id, cursorId)),
+            )!,
+          );
+        }
+      }
+    }
+
+    const rows = await db
+      .select(listFields)
+      .from(articles)
+      .where(and(...conditions))
+      .orderBy(desc(articles.sortAt), desc(articles.id))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const last = pageRows[pageRows.length - 1];
+    const nextCursor =
+      hasMore && last?.sortAt && last.id
+        ? `${(last.sortAt instanceof Date ? last.sortAt : new Date(last.sortAt as string)).toISOString()}|${last.id}`
+        : null;
+
+    const normalized: AuthorArticleSummary[] = pageRows.map((row) => {
+      const published =
+        row.publishedAt instanceof Date ? row.publishedAt : row.publishedAt ? new Date(row.publishedAt) : null;
+      const updated =
+        row.updatedAt instanceof Date ? row.updatedAt : row.updatedAt ? new Date(row.updatedAt) : null;
+      const sortAt =
+        row.sortAt instanceof Date ? row.sortAt : row.sortAt ? new Date(row.sortAt) : null;
+      const tags = Array.isArray(row.tags) ? (row.tags as string[]) : [];
+      return {
+        id: row.id,
+        slug: row.slug,
+        title: row.title,
+        excerpt: row.excerpt ?? null,
+        openingText: row.openingText ?? "",
+        coverImage: row.coverImage ?? null,
+        authorName: row.authorName ?? "PA Media",
+        publishedAt: published ? published.toISOString() : null,
+        updatedAt: updated ? updated.toISOString() : null,
+        sortAt: sortAt ? sortAt.toISOString() : null,
+        viewCount: row.viewCount ?? 0,
+        tags,
+        competition: row.competition ?? null,
+        contentType: row.contentType ?? null,
+      };
+    });
+
+    return {
+      found: true,
+      slug,
+      displayName: agg.displayName,
+      articleCount: agg.articleCount,
+      firstPublishedAt: agg.firstPublishedAt
+        ? (agg.firstPublishedAt instanceof Date ? agg.firstPublishedAt : new Date(agg.firstPublishedAt)).toISOString()
+        : null,
+      lastPublishedAt: agg.lastPublishedAt
+        ? (agg.lastPublishedAt instanceof Date ? agg.lastPublishedAt : new Date(agg.lastPublishedAt)).toISOString()
+        : null,
+      articles: normalized,
+      nextCursor,
+      hasMore,
+    };
   }
 
   /** Harden list row for /api/news and /api/news/updates so null fields (e.g. PA Media tags) don't break the UI. */

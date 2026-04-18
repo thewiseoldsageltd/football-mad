@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
-import { entityMedia, entityMediaVariants } from "@shared/schema";
+import { entityMedia, entityMediaVariants, teams, players, managers } from "@shared/schema";
 
 export type EntityMediaResolverEntityType = "competition" | "team" | "player" | "manager";
 export type EntityMediaSurface = "pill" | "hub_header";
@@ -26,6 +26,42 @@ function mediaRoleForEntityType(entityType: EntityMediaResolverEntityType): "log
   if (entityType === "competition") return "logo";
   if (entityType === "team") return "crest";
   return "headshot";
+}
+
+async function getDirectStoredImageUrl(
+  entityType: EntityMediaResolverEntityType,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === "team") {
+    const [row] = await db.select({ logoUrl: teams.logoUrl }).from(teams).where(eq(teams.id, entityId)).limit(1);
+    const u = row?.logoUrl?.trim();
+    return u || null;
+  }
+  if (entityType === "player") {
+    const [row] = await db.select({ imageUrl: players.imageUrl }).from(players).where(eq(players.id, entityId)).limit(1);
+    const u = row?.imageUrl?.trim();
+    return u || null;
+  }
+  if (entityType === "manager") {
+    const [row] = await db.select({ imageUrl: managers.imageUrl }).from(managers).where(eq(managers.id, entityId)).limit(1);
+    const u = row?.imageUrl?.trim();
+    return u || null;
+  }
+  // Competitions: no dedicated logo_url column; Goalserve ingest lands in entity_media.
+  return null;
+}
+
+/**
+ * Unified async resolver: entity_media variants → direct row URLs (logo_url / image_url).
+ * Goalserve-sourced imagery is expected to already live in entity_media (or occasionally in logo_url).
+ */
+export async function getEntityImage(
+  entityType: EntityMediaResolverEntityType,
+  entityId: string,
+  surface: EntityMediaSurface = "pill",
+): Promise<string | null> {
+  const resolved = await getEntityDisplayMedia({ entityType, entityId, surface });
+  return resolved.hasMedia && resolved.url ? resolved.url : null;
 }
 
 export async function getEntityDisplayMedia(input: {
@@ -58,6 +94,20 @@ export async function getEntityDisplayMedia(input: {
     .limit(1);
 
   if (!primary[0]) {
+    const directUrl = await getDirectStoredImageUrl(entityType, entityId);
+    if (directUrl) {
+      return {
+        entityType,
+        entityId,
+        mediaRole,
+        url: directUrl,
+        width: null,
+        height: null,
+        format: null,
+        hasMedia: true,
+        fallbackLabel: fallbackLabel ?? "FM",
+      };
+    }
     return {
       entityType,
       entityId,

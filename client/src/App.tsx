@@ -24,6 +24,7 @@ import PlayerProfilePage from "@/pages/player-profile";
 import ManagerProfilePage from "@/pages/manager-profile";
 import TablesPage from "@/pages/tables";
 import CompetitionProfilePage from "@/pages/competition-profile";
+import AuthorPage from "@/pages/author";
 
 function seasonApiToSlug(apiSeason: string): string {
   const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
@@ -50,6 +51,7 @@ function Router() {
     <Switch>
       <Route path="/" component={HomePage} />
       <Route path="/news" component={NewsPage} />
+      <Route path="/authors/:slug" component={AuthorPage} />
       <Route path="/news/:slug" component={NewsResolver} />
       <Route path="/teams" component={TeamsPage} />
       <Route path="/teams/:slug" component={TeamHubPage} />
