@@ -29,6 +29,7 @@ import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import type { AuthorArticleSummary, AuthorPageApiResponse } from "@shared/author-slug";
+import { buildAuthorPageEnrichment } from "./lib/author-enrichment";
 
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
@@ -1054,6 +1055,36 @@ export class DatabaseStorage implements IStorage {
       };
     });
 
+    const tagRows = await db
+      .select({ tags: articles.tags })
+      .from(articles)
+      .where(sql`${authorSlugSql} = ${slug}`)
+      .orderBy(desc(articles.sortAt))
+      .limit(150);
+
+    const tagCounts = new Map<string, number>();
+    for (const row of tagRows) {
+      for (const raw of row.tags ?? []) {
+        const t = typeof raw === "string" ? raw.trim() : "";
+        if (t.length < 2) continue;
+        tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
+      }
+    }
+    const expertiseTags = [...tagCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 12)
+      .map(([tag]) => tag);
+
+    const enrich = buildAuthorPageEnrichment(slug, agg.displayName);
+    const latestArticle =
+      normalized[0] != null
+        ? {
+            slug: normalized[0].slug,
+            title: normalized[0].title,
+            publishedAt: normalized[0].publishedAt,
+          }
+        : null;
+
     return {
       found: true,
       slug,
@@ -1068,6 +1099,13 @@ export class DatabaseStorage implements IStorage {
       articles: normalized,
       nextCursor,
       hasMore,
+      headshotUrl: enrich.headshotUrl ?? null,
+      linkedInUrl: enrich.linkedInUrl ?? null,
+      xUrl: enrich.xUrl ?? null,
+      websiteUrl: enrich.websiteUrl ?? null,
+      showPaDeskAvatar: enrich.showPaDeskAvatar ?? false,
+      expertiseTags,
+      latestArticle,
     };
   }
 
