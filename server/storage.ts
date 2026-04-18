@@ -32,6 +32,23 @@ import type { AuthorArticleSummary, AuthorPageApiResponse } from "@shared/author
 import { buildAuthorPageEnrichment } from "./lib/author-enrichment";
 import { buildAuthorSlugSqlMatch, resolveAuthorIdentityForRequestSlug } from "./lib/author-identity-resolver";
 
+/** Tags too generic to use as inferred author primary beat (exact match, case-insensitive). */
+const GENERIC_INFERRED_PRIMARY_BEAT_TAGS = new Set([
+  "football",
+  "sport",
+  "soccer",
+  "pa",
+  "report",
+  "update",
+  "club news",
+  "match reports",
+  "competition discipline",
+]);
+
+function isExcludedGenericPrimaryBeatTag(tag: string): boolean {
+  return GENERIC_INFERRED_PRIMARY_BEAT_TAGS.has(tag.trim().toLowerCase());
+}
+
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
   type: "competition" | "team" | "player" | "manager";
@@ -1079,7 +1096,8 @@ export class DatabaseStorage implements IStorage {
     const sortedTags = [...tagCounts.entries()].sort(
       (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
     );
-    const inferredPrimaryBeat = sortedTags[0]?.[0] ?? null;
+    const inferredPrimaryBeat =
+      sortedTags.find(([t]) => !isExcludedGenericPrimaryBeatTag(t))?.[0] ?? null;
 
     const enrich = buildAuthorPageEnrichment(resolved?.canonicalSlug ?? slug, displayNameForPage);
     const curatedPrimaryBeat = enrich.primaryBeat?.trim() || null;
