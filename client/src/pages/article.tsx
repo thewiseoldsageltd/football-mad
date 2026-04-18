@@ -767,13 +767,6 @@ export default function ArticlePage() {
                 shareUrl={articleUrl}
                 shareTitle={article.title}
               />
-              {authorSlug && (
-                <p className="text-sm text-muted-foreground -mt-2 mb-2">
-                  <Link href={authorProfile(authorSlug)} className="hover:text-foreground hover:underline font-medium">
-                    More from {authorDisplay}
-                  </Link>
-                </p>
-              )}
             </header>
 
             {article.coverImage ? (
