@@ -176,6 +176,38 @@ export const insertArticleSchema = createInsertSchema(articles).omit({ id: true,
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type Article = typeof articles.$inferSelect;
 
+// ============ CANONICAL AUTHORS (identity engine; articles.author_name unchanged) ============
+export const authors = pgTable(
+  "authors",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    slug: text("slug").notNull().unique(),
+    displayName: text("display_name").notNull(),
+    /** person | desk */
+    kind: text("kind").notNull().default("person"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("authors_kind_idx").on(table.kind)],
+);
+
+export const authorAliases = pgTable(
+  "author_aliases",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    authorId: varchar("author_id")
+      .references(() => authors.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Matches SQL slug of articles.author_name (same as slugifyAuthorName output). */
+    matchSlug: text("match_slug").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [index("author_aliases_author_id_idx").on(table.authorId)],
+);
+
+export type Author = typeof authors.$inferSelect;
+export type AuthorAlias = typeof authorAliases.$inferSelect;
+
 // ============ ARTICLE-TEAMS JUNCTION ============
 export const articleTeams = pgTable("article_teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

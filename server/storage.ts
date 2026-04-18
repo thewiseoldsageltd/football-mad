@@ -30,6 +30,7 @@ import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import type { AuthorArticleSummary, AuthorPageApiResponse } from "@shared/author-slug";
 import { buildAuthorPageEnrichment } from "./lib/author-enrichment";
+import { buildAuthorSlugSqlMatch, resolveAuthorIdentityForRequestSlug } from "./lib/author-identity-resolver";
 
 // Minimal entity data for article pills
 export interface ArticleEntityPill {
@@ -962,7 +963,9 @@ export class DatabaseStorage implements IStorage {
     };
     if (!slug) return empty;
 
-    const authorSlugSql = sql`trim(both '-' from regexp_replace(lower(trim(coalesce(${articles.authorName}, ''))), '[^a-z0-9]+', '-', 'g'))`;
+    const resolved = await resolveAuthorIdentityForRequestSlug(slug);
+    const matchSlugs = resolved?.matchSlugs?.length ? resolved.matchSlugs : [slug];
+    const slugMatchClause = buildAuthorSlugSqlMatch(matchSlugs);
 
     const [agg] = await db
       .select({
@@ -972,9 +975,12 @@ export class DatabaseStorage implements IStorage {
         lastPublishedAt: sql<Date | null>`max(${articles.publishedAt})`,
       })
       .from(articles)
-      .where(sql`${authorSlugSql} = ${slug}`);
+      .where(slugMatchClause);
 
-    if (!agg || agg.articleCount === 0 || !agg.displayName) {
+    const displayNameForPage =
+      resolved?.displayName?.trim() || (agg?.displayName != null ? String(agg.displayName).trim() : "");
+
+    if (!agg || agg.articleCount === 0 || !displayNameForPage) {
       return empty;
     }
 
@@ -995,7 +1001,7 @@ export class DatabaseStorage implements IStorage {
       viewCount: articles.viewCount,
     };
 
-    const conditions = [sql`${authorSlugSql} = ${slug}`];
+    const conditions = [slugMatchClause];
     const cursor = params.cursor?.trim();
     if (cursor) {
       const parts = cursor.split("|");
@@ -1058,7 +1064,7 @@ export class DatabaseStorage implements IStorage {
     const tagRows = await db
       .select({ tags: articles.tags })
       .from(articles)
-      .where(sql`${authorSlugSql} = ${slug}`)
+      .where(slugMatchClause)
       .orderBy(desc(articles.sortAt))
       .limit(150);
 
@@ -1075,14 +1081,14 @@ export class DatabaseStorage implements IStorage {
     );
     const inferredPrimaryBeat = sortedTags[0]?.[0] ?? null;
 
-    const enrich = buildAuthorPageEnrichment(slug, agg.displayName);
+    const enrich = buildAuthorPageEnrichment(resolved?.canonicalSlug ?? slug, displayNameForPage);
     const curatedPrimaryBeat = enrich.primaryBeat?.trim() || null;
     const primaryBeat = curatedPrimaryBeat || inferredPrimaryBeat;
 
     return {
       found: true,
       slug,
-      displayName: agg.displayName,
+      displayName: displayNameForPage,
       articleCount: agg.articleCount,
       firstPublishedAt: agg.firstPublishedAt
         ? (agg.firstPublishedAt instanceof Date ? agg.firstPublishedAt : new Date(agg.firstPublishedAt)).toISOString()
