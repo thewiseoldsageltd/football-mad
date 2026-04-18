@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { slugifyAuthorName } from "@shared/author-slug";
+import { formatAuthorForUi } from "@shared/author-display";
 import { buildPillsForFooter, buildPillsForHeader, type PillSourceArticle } from "@/lib/entity-utils";
 import type { Article, Team, Player, Manager, Competition } from "@shared/schema";
 
@@ -231,10 +232,15 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string, auth
     const baseUrl = articleUrl.replace(newsArticle(canonicalSlug), "");
     const authorPageUrl =
       authorSlug && baseUrl ? `${baseUrl.replace(/\/$/, "")}${authorProfile(authorSlug)}` : undefined;
+    const rawAuthor = (article.authorName ?? "").trim();
+    const isSiteAuthor = !rawAuthor || /^football\s*mad$/i.test(rawAuthor);
     const authorBlock: Record<string, unknown> = {
       "@type": "Person",
-      name: article.authorName || "Football Mad",
+      name: rawAuthor || "Football Mad",
     };
+    if (!isSiteAuthor) {
+      authorBlock.worksFor = { "@type": "Organization", name: "Press Association" };
+    }
     if (authorPageUrl) {
       authorBlock.url = authorPageUrl;
     }
@@ -657,6 +663,11 @@ export default function ArticlePage() {
     return s || null;
   }, [article?.authorName]);
 
+  const authorDisplay = useMemo(
+    () => formatAuthorForUi(article?.authorName || "Football Mad") || "Football Mad",
+    [article?.authorName],
+  );
+
   const articleUrl = useArticleSEO(article, slug || "", authorSlug);
   const processedContent = useMemo(
     () => (article?.content ? prepareArticleHtmlForRender(article.content) : ""),
@@ -747,9 +758,9 @@ export default function ArticlePage() {
               <ArticleMetaBar
                 articleId={article.id}
                 articleSlug={article.slug}
-                authorName={article.authorName || "Football Mad"}
+                authorName={authorDisplay}
                 authorProfileHref={authorSlug ? authorProfile(authorSlug) : undefined}
-                authorInitial={article.authorName?.[0]}
+                authorInitial={authorDisplay[0]}
                 publishedLabel={formatDistanceToNow(publishedAt, { addSuffix: true })}
                 readTimeLabel={`${readingTime} min read`}
                 viewCount={article.viewCount ?? undefined}
@@ -759,7 +770,7 @@ export default function ArticlePage() {
               {authorSlug && (
                 <p className="text-sm text-muted-foreground -mt-2 mb-2">
                   <Link href={authorProfile(authorSlug)} className="hover:text-foreground hover:underline font-medium">
-                    More from {article.authorName || "this author"}
+                    More from {authorDisplay}
                   </Link>
                 </p>
               )}

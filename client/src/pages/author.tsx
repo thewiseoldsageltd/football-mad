@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AuthorPageApiResponse } from "@shared/author-slug";
+import { formatAuthorForUi } from "@shared/author-display";
 import type { Article } from "@shared/schema";
 
 function authorBio(displayName: string): string {
@@ -73,7 +74,8 @@ export default function AuthorPage() {
 
   useEffect(() => {
     if (!data?.found || !data.displayName) return;
-    document.title = `${data.displayName} | Authors | Football Mad`;
+    const titleName = formatAuthorForUi(data.displayName);
+    document.title = `${titleName} | Authors | Football Mad`;
     const desc = `${data.displayName} — ${data.articleCount} articles on Football Mad.`;
     let m = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     if (!m) {
@@ -103,7 +105,7 @@ export default function AuthorPage() {
       name: data.displayName,
       url,
       jobTitle: "Journalist",
-      worksFor: { "@type": "Organization", name: "Football Mad" },
+      worksFor: { "@type": "Organization", name: "Press Association" },
     });
     return () => {
       document.getElementById("author-jsonld")?.remove();
@@ -153,6 +155,7 @@ export default function AuthorPage() {
 
   const first = data.firstPublishedAt ? format(new Date(data.firstPublishedAt), "d MMM yyyy") : "—";
   const last = data.lastPublishedAt ? format(new Date(data.lastPublishedAt), "d MMM yyyy") : "—";
+  const authorHeading = formatAuthorForUi(data.displayName);
 
   return (
     <MainLayout>
@@ -172,11 +175,11 @@ export default function AuthorPage() {
                   <PenLine className="h-7 w-7 text-primary" />
                 </div>
                 <div>
-                  <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{data.displayName}</h1>
+                  <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{authorHeading}</h1>
                   <p className="text-muted-foreground mt-1">Journalist · Football correspondent</p>
                 </div>
               </div>
-              <p className="text-base text-muted-foreground leading-relaxed max-w-2xl">{authorBio(data.displayName)}</p>
+              <p className="text-base text-muted-foreground leading-relaxed max-w-2xl">{authorBio(authorHeading)}</p>
               <dl className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                 <div>
                   <dt className="text-muted-foreground">Articles</dt>

@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { Clock, Eye } from "lucide-react";
 import { slugifyAuthorName } from "@shared/author-slug";
+import { formatAuthorForUi } from "@shared/author-display";
 import { authorProfile } from "@/lib/urls";
 import { Card, CardContent } from "@/components/ui/card";
 import { type EntityData } from "@/components/entity-pill";
@@ -51,7 +52,8 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
   const viewCount = article.viewCount ?? 0;
   const cardExcerpt = getCardExcerpt(article);
   const authorSlug = slugifyAuthorName(article.authorName);
-  
+  const authorLine = article.authorName ? formatAuthorForUi(article.authorName) : "";
+
   const teamCardStyle = teamColor ? { "--team-color": teamColor } as React.CSSProperties : undefined;
   
   const displayPills = showPills ? extractEntityPills(article, teams) : [];
@@ -107,7 +109,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                   {viewCount.toLocaleString()}
                 </span>
               )}
-              {article.authorName && authorSlug ? (
+              {authorLine && authorSlug ? (
                 <span className="relative z-20">
                   By{" "}
                   <Link
@@ -116,11 +118,11 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                     onClick={(e) => e.stopPropagation()}
                     data-testid="link-card-author"
                   >
-                    {article.authorName}
+                    {authorLine}
                   </Link>
                 </span>
-              ) : article.authorName ? (
-                <span>By {article.authorName}</span>
+              ) : authorLine ? (
+                <span>By {authorLine}</span>
               ) : null}
             </div>
           </div>
@@ -182,7 +184,7 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
               {viewCount.toLocaleString()}
             </span>
           )}
-          {article.authorName && authorSlug ? (
+          {authorLine && authorSlug ? (
             <span className="relative z-20">
               By{" "}
               <Link
@@ -191,9 +193,11 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
                 onClick={(e) => e.stopPropagation()}
                 data-testid="link-card-author-inline"
               >
-                {article.authorName}
+                {authorLine}
               </Link>
             </span>
+          ) : authorLine ? (
+            <span className="relative z-20">By {authorLine}</span>
           ) : null}
         </div>
       </CardContent>
