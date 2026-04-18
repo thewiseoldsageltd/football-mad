@@ -15,6 +15,12 @@ const GOALSERVE_MIN_REQUEST_INTERVAL_MS = 1000;
 const LOGOTIPS_BATCH_SIZE = Math.max(1, parseInt(process.env.GOALSERVE_LOGOTIPS_BATCH_SIZE ?? "30", 10));
 let lastGoalserveRequestAtMs = 0;
 
+/** Goalserve league/competition IDs for MVP cohort — competition logo sync only when `mvpCohortOnly` is set. */
+const MVP_GOALSERVE_COMPETITION_IDS: string[] = [
+  "1005", "1007", "202", "221", "231", "1203", "1204", "1205", "1206", "1197", "1198", "1199", "1221", "1229",
+  "1264", "1269", "1370", "1371", "1372", "1373", "1375", "1376", "1399", "1515", "18853",
+];
+
 interface GoalserveTeamMediaSyncResult {
   ok: boolean;
   leagueId: string;
@@ -676,7 +682,11 @@ export async function syncGoalserveTeamMediaForMvpSet(): Promise<GoalserveTeamMe
   return result;
 }
 
-export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetitionMediaSyncResult> {
+export async function syncGoalserveCompetitionMedia(params?: {
+  /** When true, only priority competitions whose Goalserve id is in the MVP allowlist. */
+  mvpCohortOnly?: boolean;
+}): Promise<GoalserveCompetitionMediaSyncResult> {
+  const mvpCohortOnly = params?.mvpCohortOnly ?? false;
   const result: GoalserveCompetitionMediaSyncResult = {
     ok: true,
     scanned: 0,
@@ -692,13 +702,21 @@ export async function syncGoalserveCompetitionMedia(): Promise<GoalserveCompetit
   };
 
   try {
+    const competitionWhere = mvpCohortOnly
+      ? and(
+          isNotNull(competitions.goalserveCompetitionId),
+          eq(competitions.isPriority, true),
+          inArray(competitions.goalserveCompetitionId, MVP_GOALSERVE_COMPETITION_IDS),
+        )
+      : isNotNull(competitions.goalserveCompetitionId);
+
     const dbComps = await db
       .select({
         id: competitions.id,
         goalserveCompetitionId: competitions.goalserveCompetitionId,
       })
       .from(competitions)
-      .where(isNotNull(competitions.goalserveCompetitionId));
+      .where(competitionWhere);
 
     const goalserveIds = Array.from(new Set(dbComps.map((c) => String(c.goalserveCompetitionId)).filter(Boolean)));
     result.scanned = goalserveIds.length;
@@ -1259,6 +1277,8 @@ export async function syncGoalserveEntityMedia(params: {
   leagueId?: string;
   includeTeams?: boolean;
   includeCompetitions?: boolean;
+  /** When true with competition sync, only `is_priority` competitions in the MVP Goalserve id allowlist. */
+  mvpCompetitionsOnly?: boolean;
   mvpTeamsOnly?: boolean;
   personScope?: "league" | "mvp" | "team";
   personTeamId?: string;
@@ -1280,6 +1300,7 @@ export async function syncGoalserveEntityMedia(params: {
   const includePlayers = params.includePlayers ?? false;
   const includeManagers = params.includeManagers ?? false;
   const mvpTeamsOnly = params.mvpTeamsOnly ?? false;
+  const mvpCompetitionsOnly = params.mvpCompetitionsOnly ?? false;
   const output: {
     ok: boolean;
     teams?: GoalserveTeamMediaSyncResult;
@@ -1289,7 +1310,7 @@ export async function syncGoalserveEntityMedia(params: {
   } = { ok: true };
 
   if (includeCompetitions) {
-    output.competitions = await syncGoalserveCompetitionMedia();
+    output.competitions = await syncGoalserveCompetitionMedia({ mvpCohortOnly: mvpCompetitionsOnly });
     if (!output.competitions.ok) output.ok = false;
   }
 

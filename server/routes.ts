@@ -2839,6 +2839,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const includeCompetitions = req.query.includeCompetitions === "0" ? false : true;
       const includePlayers = req.query.includePlayers === "1";
       const includeManagers = req.query.includeManagers === "1";
+      const mvpCompetitionsOnly = req.query.mvpCompetitionsOnly === "1";
       const mvpTeamsOnly = req.query.mvpTeamsOnly === "1";
       const mvpPeopleOnly = req.query.mvpPeopleOnly === "1";
       const personTeamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
@@ -2856,6 +2857,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         leagueId,
         includeTeams,
         includeCompetitions,
+        mvpCompetitionsOnly,
         includePlayers,
         includeManagers,
         mvpTeamsOnly,
