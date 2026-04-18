@@ -979,9 +979,10 @@ export class DatabaseStorage implements IStorage {
   async getAuthorPage(params: { slug: string; limit?: number; cursor?: string | null }): Promise<AuthorPageApiResponse> {
     const slug = params.slug.trim().toLowerCase();
     const limit = Math.min(Math.max(params.limit ?? 20, 1), 50);
-    const empty: AuthorPageApiResponse = {
+    const empty = (extra?: Partial<AuthorPageApiResponse>): AuthorPageApiResponse => ({
       found: false,
       slug,
+      canonicalAuthorSlug: null,
       displayName: "",
       articleCount: 0,
       firstPublishedAt: null,
@@ -989,10 +990,15 @@ export class DatabaseStorage implements IStorage {
       articles: [],
       nextCursor: null,
       hasMore: false,
-    };
-    if (!slug) return empty;
+      ...extra,
+    });
+    if (!slug) return empty();
 
     const resolved = await resolveAuthorIdentityForRequestSlug(slug);
+    const canonicalAuthorSlug =
+      resolved && resolved.canonicalSlug.trim().toLowerCase() !== slug
+        ? resolved.canonicalSlug.trim().toLowerCase()
+        : null;
     const matchSlugs = resolved?.matchSlugs?.length ? resolved.matchSlugs : [slug];
     const slugMatchClause = buildAuthorSlugSqlMatch(matchSlugs);
 
@@ -1010,7 +1016,7 @@ export class DatabaseStorage implements IStorage {
       resolved?.displayName?.trim() || (agg?.displayName != null ? String(agg.displayName).trim() : "");
 
     if (!agg || agg.articleCount === 0 || !displayNameForPage) {
-      return empty;
+      return empty({ canonicalAuthorSlug });
     }
 
     const listFields = {
@@ -1120,6 +1126,7 @@ export class DatabaseStorage implements IStorage {
     return {
       found: true,
       slug,
+      canonicalAuthorSlug,
       displayName: displayNameForPage,
       articleCount: agg.articleCount,
       firstPublishedAt: agg.firstPublishedAt

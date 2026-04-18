@@ -47,6 +47,11 @@ export interface AuthorArticleSummary {
 export interface AuthorPageApiResponse {
   found: boolean;
   slug: string;
+  /**
+   * When the request slug matched an alias (not the canonical `authors.slug`), clients and
+   * crawlers should use `/authors/:canonicalAuthorSlug` instead.
+   */
+  canonicalAuthorSlug?: string | null;
   displayName: string;
   articleCount: number;
   firstPublishedAt: string | null;

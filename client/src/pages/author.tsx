@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams, useSearch } from "wouter";
+import { Link, useLocation, useParams, useSearch } from "wouter";
 import { ArrowLeft, Globe, PenLine } from "lucide-react";
 import { FaLinkedin } from "react-icons/fa6";
 import { SiX } from "react-icons/si";
@@ -71,6 +71,7 @@ const socialLinkClass =
 export default function AuthorPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>();
   const search = useSearch();
+  const [, setLocation] = useLocation();
   const slug = useMemo(() => decodeURIComponent(rawSlug ?? "").trim().toLowerCase(), [rawSlug]);
   const cursor = useMemo(() => new URLSearchParams(search).get("cursor") ?? undefined, [search]);
 
@@ -85,6 +86,14 @@ export default function AuthorPage() {
     },
     enabled: Boolean(slug),
   });
+
+  useEffect(() => {
+    const canon = data?.canonicalAuthorSlug?.trim().toLowerCase();
+    if (!canon || !slug || canon === slug) return;
+    const tail =
+      search && search.length > 0 ? (search.startsWith("?") ? search : `?${search}`) : "";
+    setLocation(`/authors/${encodeURIComponent(canon)}${tail}`, { replace: true });
+  }, [data?.canonicalAuthorSlug, slug, search, setLocation]);
 
   useEffect(() => {
     if (!data?.found || !data.displayName) return;
@@ -105,7 +114,8 @@ export default function AuthorPage() {
 
   useEffect(() => {
     if (!data?.found || typeof window === "undefined") return;
-    const url = `${window.location.origin}/authors/${encodeURIComponent(slug)}`;
+    const slugForUrl = (data.canonicalAuthorSlug?.trim() || slug).toLowerCase();
+    const url = `${window.location.origin}/authors/${encodeURIComponent(slugForUrl)}`;
     const sameAs = [data.linkedInUrl, data.xUrl, data.websiteUrl].filter(
       (u): u is string => typeof u === "string" && u.trim().length > 0,
     );

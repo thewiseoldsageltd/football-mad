@@ -71,7 +71,10 @@ import {
 } from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
 import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib/entity-presentation-resolver";
-import { attachAuthorProfileSlugsToArticleRows } from "./lib/author-identity-resolver";
+import {
+  attachAuthorProfileSlugsToArticleRows,
+  resolveAuthorIdentityForRequestSlug,
+} from "./lib/author-identity-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
@@ -473,6 +476,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       console.error("Error fetching team:", error);
       res.status(500).json({ error: "Failed to fetch team" });
     }
+  });
+
+  /** HTML author pages: 301 to canonical slug when URL matched an alias (not authors.slug). */
+  app.get("/authors/:slug", async (req, res, next) => {
+    try {
+      const raw = String(req.params.slug ?? "");
+      const slug = decodeURIComponent(raw).trim().toLowerCase();
+      if (!slug) return next();
+      const resolved = await resolveAuthorIdentityForRequestSlug(slug);
+      const canon = resolved?.canonicalSlug?.trim().toLowerCase() ?? "";
+      if (resolved && canon && canon !== slug) {
+        const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+        return res.redirect(301, `/authors/${encodeURIComponent(canon)}${q}`);
+      }
+    } catch (e) {
+      console.error("[authors] canonical redirect", e);
+    }
+    next();
   });
 
   app.get("/api/authors/:slug", async (req, res) => {

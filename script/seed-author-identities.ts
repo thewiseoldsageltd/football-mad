@@ -1,6 +1,7 @@
 /**
- * Idempotent pilot seed for Author Identity Engine (authors + author_aliases).
- * Run: DATABASE_URL=... tsx script/seed-author-identities.ts
+ * Idempotent seed for Author Identity Engine (authors + author_aliases).
+ * display_name is a clean human label only (no ", PA" suffixes).
+ * Run: npm run seed:author-identities  (or DATABASE_URL=... tsx script/seed-author-identities.ts)
  */
 import { db } from "../server/db";
 import { authorAliases, authors } from "../shared/schema";
@@ -22,6 +23,25 @@ type PilotAuthor = {
   /** Raw byline variants whose slugify(author_name) should map to this author. */
   bylineVariants: string[];
 };
+
+/** Standard PA-style bylines → one clean display name (no agency suffix in display_name). */
+function paJournalist(displayName: string, extraBylines: string[] = []): PilotAuthor {
+  const name = displayName.trim();
+  const base = new Set<string>([
+    name,
+    `${name}, Press Association`,
+    `${name}, PA`,
+    `By ${name}, Press Association`,
+    `By ${name}, PA`,
+    ...extraBylines,
+  ]);
+  return {
+    slug: slugifyAuthorName(name),
+    displayName: name,
+    kind: "person",
+    bylineVariants: [...base],
+  };
+}
 
 const PILOT: PilotAuthor[] = [
   {
@@ -46,102 +66,43 @@ const PILOT: PilotAuthor[] = [
       "By Press Association Sport Reporters",
     ],
   },
-  {
-    slug: "rory-dollard",
-    displayName: "Rory Dollard",
-    kind: "person",
-    bylineVariants: [
-      "Rory Dollard",
-      "Rory Dollard, Press Association",
-      "Rory Dollard, PA",
-      "Rory Dollard, Press Association Sport",
-      "By Rory Dollard, Press Association",
-    ],
-  },
-  {
-    slug: "simon-peach",
-    displayName: "Simon Peach",
-    kind: "person",
-    bylineVariants: [
-      "Simon Peach",
-      "Simon Peach, Press Association",
-      "Simon Peach, PA",
-      "Simon Peach, Press Association Chief Football Writer, Paris",
-      "By Simon Peach, Press Association",
-    ],
-  },
-  {
-    slug: "damian-spellman",
-    displayName: "Damian Spellman",
-    kind: "person",
-    bylineVariants: ["Damian Spellman", "Damian Spellman, Press Association", "Damian Spellman, PA"],
-  },
-  {
-    slug: "jonathan-veal",
-    displayName: "Jonathan Veal",
-    kind: "person",
-    bylineVariants: ["Jonathan Veal", "Jonathan Veal, Press Association", "Jonathan Veal, PA"],
-  },
-  {
-    slug: "george-sessions",
-    displayName: "George Sessions",
-    kind: "person",
-    bylineVariants: ["George Sessions", "George Sessions, Press Association", "George Sessions, PA"],
-  },
-  {
-    slug: "jamie-gardner",
-    displayName: "Jamie Gardner",
-    kind: "person",
-    bylineVariants: ["Jamie Gardner", "Jamie Gardner, Press Association", "Jamie Gardner, PA"],
-  },
-  {
-    slug: "andy-hampson",
-    displayName: "Andy Hampson",
-    kind: "person",
-    bylineVariants: ["Andy Hampson", "Andy Hampson, Press Association", "Andy Hampson, PA"],
-  },
-  {
-    slug: "ian-parker",
-    displayName: "Ian Parker",
-    kind: "person",
-    bylineVariants: ["Ian Parker", "Ian Parker, Press Association", "Ian Parker, PA"],
-  },
-  {
-    slug: "ronnie-esplin",
-    displayName: "Ronnie Esplin",
-    kind: "person",
-    bylineVariants: ["Ronnie Esplin", "Ronnie Esplin, Press Association", "Ronnie Esplin, PA"],
-  },
-  {
-    slug: "phil-blanche",
-    displayName: "Phil Blanche",
-    kind: "person",
-    bylineVariants: ["Phil Blanche", "Phil Blanche, Press Association", "Phil Blanche, PA"],
-  },
-  {
-    slug: "gavin-mccafferty",
-    displayName: "Gavin McCafferty",
-    kind: "person",
-    bylineVariants: ["Gavin McCafferty", "Gavin McCafferty, Press Association", "Gavin McCafferty, PA"],
-  },
-  {
-    slug: "carl-markham",
-    displayName: "Carl Markham",
-    kind: "person",
-    bylineVariants: ["Carl Markham", "Carl Markham, Press Association", "Carl Markham, PA"],
-  },
-  {
-    slug: "eleanor-crooks",
-    displayName: "Eleanor Crooks",
-    kind: "person",
-    bylineVariants: ["Eleanor Crooks", "Eleanor Crooks, Press Association", "Eleanor Crooks, PA"],
-  },
-  {
-    slug: "david-charlesworth",
-    displayName: "David Charlesworth",
-    kind: "person",
-    bylineVariants: ["David Charlesworth", "David Charlesworth, Press Association", "David Charlesworth, PA"],
-  },
+  paJournalist("Rory Dollard", [
+    "Rory Dollard, Press Association Sport",
+    "By Rory Dollard, Press Association",
+  ]),
+  paJournalist("Simon Peach", [
+    "Simon Peach, Press Association Chief Football Writer, Paris",
+    "By Simon Peach, Press Association",
+  ]),
+  paJournalist("Damian Spellman"),
+  paJournalist("Jonathan Veal"),
+  paJournalist("George Sessions"),
+  paJournalist("Jamie Gardner"),
+  paJournalist("Andy Hampson"),
+  paJournalist("Ian Parker"),
+  paJournalist("Ronnie Esplin"),
+  paJournalist("Phil Blanche"),
+  paJournalist("Gavin McCafferty"),
+  paJournalist("Carl Markham"),
+  paJournalist("Eleanor Crooks"),
+  paJournalist("David Charlesworth"),
+  paJournalist("Mark Walker"),
+  paJournalist("Rebecca Johnson"),
+  paJournalist("Edward Elliot"),
+  paJournalist("James Olley"),
+  paJournalist("Charlotte Duncker"),
+  paJournalist("Mike McGrath"),
+  paJournalist("Rob Harris"),
+  paJournalist("Dan Kilpatrick"),
+  paJournalist("Nick Ames"),
+  paJournalist("Simon Stone"),
+  paJournalist("Dominic Booth"),
+  paJournalist("Tom Williams"),
+  paJournalist("Lucy Thackeray"),
+  paJournalist("Matt McGeehan"),
+  paJournalist("Dafydd Pritchard"),
+  paJournalist("Andy Newport"),
+  paJournalist("Kieran Doody"),
 ];
 
 async function main() {
