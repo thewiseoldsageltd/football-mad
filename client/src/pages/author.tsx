@@ -80,6 +80,9 @@ const authorStatCardContentClass = "min-w-0 px-2.5 py-2.5 pt-3 sm:p-4";
 const authorStatLabelClass =
   "text-[0.6rem] font-semibold uppercase tracking-wider text-muted-foreground leading-tight sm:text-[0.65rem]";
 
+/** Reserve two label lines on mobile so stat values align across the row; relaxed from sm+. */
+const authorStatLabelWrapClass = "min-h-[2.75rem] sm:min-h-0";
+
 export default function AuthorPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>();
   const search = useSearch();
@@ -313,19 +316,25 @@ export default function AuthorPage() {
               <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
                 <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
                   <CardContent className={authorStatCardContentClass}>
-                    <p className={authorStatLabelClass}>Articles written</p>
+                    <div className={authorStatLabelWrapClass}>
+                      <p className={authorStatLabelClass}>Articles written</p>
+                    </div>
                     <p className={authorStatValueClass}>{data.articleCount.toLocaleString()}</p>
                   </CardContent>
                 </Card>
                 <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
                   <CardContent className={authorStatCardContentClass}>
-                    <p className={authorStatLabelClass}>First published</p>
+                    <div className={authorStatLabelWrapClass}>
+                      <p className={authorStatLabelClass}>First published</p>
+                    </div>
                     <p className={`${authorStatValueClass} break-words hyphens-auto`}>{first}</p>
                   </CardContent>
                 </Card>
                 <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
                   <CardContent className={authorStatCardContentClass}>
-                    <p className={authorStatLabelClass}>Primary beat</p>
+                    <div className={authorStatLabelWrapClass}>
+                      <p className={authorStatLabelClass}>Primary beat</p>
+                    </div>
                     <p
                       className={`${authorStatValueClass} break-words hyphens-auto text-balance line-clamp-3 sm:line-clamp-2`}
                       title={primaryBeat || undefined}
