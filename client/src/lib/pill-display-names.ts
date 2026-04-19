@@ -348,3 +348,48 @@ export const COMP_PILL_DISPLAY_BY_NAME_NORM: Record<string, string> = COMP_VARIA
   },
   {} as Record<string, string>,
 );
+
+/** Slug-shaped key aligned with TEAM_PILL_DISPLAY_BY_SLUG (hyphenated ASCII). */
+function beatSegmentToSlug(token: string): string {
+  return token
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function mapPrimaryBeatSegment(segment: string): string {
+  const s = segment.trim();
+  if (!s) return s;
+
+  const k = normalizeKey(s);
+  const comp = COMP_PILL_DISPLAY_BY_NAME_NORM[k];
+  if (comp) return comp;
+
+  const teamByName = TEAM_PILL_DISPLAY_BY_NAME_NORM[k];
+  if (teamByName) return teamByName;
+
+  const slug = beatSegmentToSlug(s);
+  if (slug && TEAM_PILL_DISPLAY_BY_SLUG[slug]) {
+    return TEAM_PILL_DISPLAY_BY_SLUG[slug];
+  }
+
+  return s;
+}
+
+/**
+ * Format author-page primary beat for display using Football Mad team/competition pill labels where available.
+ * Does not change stored data — UI only.
+ */
+export function formatPrimaryBeatForDisplay(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const splitParts = trimmed.split(/\s*&\s*|\s*·\s*|\s+\/\s+/).map((p) => p.trim()).filter(Boolean);
+  if (splitParts.length === 0) return trimmed;
+
+  const mapped = splitParts.map(mapPrimaryBeatSegment);
+  return mapped.join(splitParts.length > 1 ? " · " : "");
+}

@@ -17,6 +17,7 @@ import type { AuthorPageApiResponse } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
 import { isPaSportDeskAuthor } from "@shared/author-enrichment";
 import type { Article } from "@shared/schema";
+import { formatPrimaryBeatForDisplay } from "@/lib/pill-display-names";
 
 function authorBio(displayName: string): string {
   const name = displayName.trim() || "This journalist";
@@ -71,6 +72,13 @@ const socialLinkClass =
 /** Stat card value: one shared style for count, date, and primary beat. */
 const authorStatValueClass =
   "mt-1.5 text-base font-semibold leading-snug tracking-tight text-foreground tabular-nums sm:text-lg";
+
+/** Stat cards: tighter on mobile (single row), roomier from sm+. */
+const authorStatCardContentClass = "min-w-0 px-2.5 py-2.5 pt-3 sm:p-4";
+
+/** Stat labels: compact on xs for 3-up grid. */
+const authorStatLabelClass =
+  "text-[0.6rem] font-semibold uppercase tracking-wider text-muted-foreground leading-tight sm:text-[0.65rem]";
 
 export default function AuthorPage() {
   const { slug: rawSlug } = useParams<{ slug: string }>();
@@ -203,6 +211,7 @@ export default function AuthorPage() {
   const websiteUrl = data.websiteUrl?.trim();
   const hasSocialLinks = Boolean(linkedInUrl || xUrl || websiteUrl);
   const primaryBeat = data.primaryBeat?.trim() || null;
+  const primaryBeatDisplayed = primaryBeat ? formatPrimaryBeatForDisplay(primaryBeat) : null;
 
   return (
     <MainLayout>
@@ -301,29 +310,28 @@ export default function AuthorPage() {
                 </div>
               </div>
 
-              <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-3">
-                <Card className="border-border/60 bg-card/40 shadow-sm">
-                  <CardContent className="p-3.5 sm:p-4">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Articles written
-                    </p>
+              <div className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
+                <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
+                  <CardContent className={authorStatCardContentClass}>
+                    <p className={authorStatLabelClass}>Articles written</p>
                     <p className={authorStatValueClass}>{data.articleCount.toLocaleString()}</p>
                   </CardContent>
                 </Card>
-                <Card className="border-border/60 bg-card/40 shadow-sm">
-                  <CardContent className="p-3.5 sm:p-4">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                      First published
-                    </p>
-                    <p className={authorStatValueClass}>{first}</p>
+                <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
+                  <CardContent className={authorStatCardContentClass}>
+                    <p className={authorStatLabelClass}>First published</p>
+                    <p className={`${authorStatValueClass} break-words hyphens-auto`}>{first}</p>
                   </CardContent>
                 </Card>
-                <Card className="border-border/60 bg-card/40 shadow-sm">
-                  <CardContent className="p-3.5 sm:p-4">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Primary beat
+                <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
+                  <CardContent className={authorStatCardContentClass}>
+                    <p className={authorStatLabelClass}>Primary beat</p>
+                    <p
+                      className={`${authorStatValueClass} break-words hyphens-auto text-balance line-clamp-3 sm:line-clamp-2`}
+                      title={primaryBeat || undefined}
+                    >
+                      {primaryBeatDisplayed ?? "—"}
                     </p>
-                    <p className={`${authorStatValueClass} line-clamp-2`}>{primaryBeat ?? "—"}</p>
                   </CardContent>
                 </Card>
               </div>
