@@ -66,8 +66,9 @@ function authorRoleLine(data: AuthorPageApiResponse): string {
   return "Journalist · Football correspondent";
 }
 
-const socialLinkClass =
-  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-3 text-xs font-medium text-foreground/90 transition-colors hover:bg-muted/55 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+/** Icon-only social (LinkedIn, X, website); same on all breakpoints. */
+const socialIconLinkClass =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/30 text-foreground/90 transition-colors hover:bg-muted/55 hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
 /** Stat card value: one shared style for count, date, and primary beat. */
 const authorStatValueClass =
@@ -271,7 +272,7 @@ export default function AuthorPage() {
 
                   {hasSocialLinks && (
                     <nav
-                      className="mt-2.5 flex flex-wrap items-center justify-center gap-2 sm:justify-start"
+                      className="mt-2.5 flex flex-wrap items-center justify-center gap-2.5 sm:justify-start"
                       aria-label="Author social profiles"
                     >
                       {linkedInUrl && (
@@ -279,11 +280,11 @@ export default function AuthorPage() {
                           href={linkedInUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label="LinkedIn"
-                          className={socialLinkClass}
+                          aria-label="LinkedIn profile"
+                          title="LinkedIn profile"
+                          className={socialIconLinkClass}
                         >
-                          <FaLinkedin className="h-[18px] w-[18px] min-h-[18px] min-w-[18px] shrink-0 text-[#0A66C2]" aria-hidden />
-                          <span>LinkedIn</span>
+                          <FaLinkedin className="h-[18px] w-[18px] shrink-0 text-[#0A66C2]" aria-hidden />
                         </a>
                       )}
                       {xUrl && (
@@ -291,11 +292,11 @@ export default function AuthorPage() {
                           href={xUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label="X"
-                          className={socialLinkClass}
+                          aria-label="X profile"
+                          title="X profile"
+                          className={socialIconLinkClass}
                         >
-                          <SiX className="h-[17px] w-[17px] min-h-[17px] min-w-[17px] shrink-0 text-foreground" aria-hidden />
-                          <span>X</span>
+                          <SiX className="h-[17px] w-[17px] shrink-0 text-foreground" aria-hidden />
                         </a>
                       )}
                       {websiteUrl && (
@@ -304,10 +305,10 @@ export default function AuthorPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="Website"
-                          className={socialLinkClass}
+                          title="Website"
+                          className={socialIconLinkClass}
                         >
-                          <Globe className="h-[17px] w-[17px] min-h-[17px] min-w-[17px] shrink-0 text-muted-foreground" aria-hidden />
-                          <span>Website</span>
+                          <Globe className="h-[17px] w-[17px] shrink-0 text-muted-foreground" aria-hidden />
                         </a>
                       )}
                     </nav>
