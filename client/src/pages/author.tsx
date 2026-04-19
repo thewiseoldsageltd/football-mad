@@ -201,7 +201,16 @@ export default function AuthorPage() {
     );
   }
 
-  const first = data.firstPublishedAt ? format(new Date(data.firstPublishedAt), "d MMM yyyy") : "—";
+  const firstPublishedAtDate = data.firstPublishedAt ? new Date(data.firstPublishedAt) : null;
+  const firstPublishedFull =
+    firstPublishedAtDate && !Number.isNaN(firstPublishedAtDate.getTime())
+      ? format(firstPublishedAtDate, "d MMM yyyy")
+      : "—";
+  /** Mobile stat row only (<sm); date-fns '' → literal apostrophe before yy */
+  const firstPublishedShort =
+    firstPublishedAtDate && !Number.isNaN(firstPublishedAtDate.getTime())
+      ? format(firstPublishedAtDate, "d MMM ''yy")
+      : "—";
   const authorHeading = formatAuthorForUi(data.displayName);
   const headshotUrl = data.headshotUrl?.trim() || null;
   const showPa = Boolean(data.showPaDeskAvatar) || isPaSportDeskAuthor(data.displayName);
@@ -326,7 +335,10 @@ export default function AuthorPage() {
                       <span className="sm:hidden">First pub.</span>
                       <span className="hidden sm:inline">First Published</span>
                     </p>
-                    <p className={`${authorStatValueClass} break-words hyphens-auto`}>{first}</p>
+                    <p className={`${authorStatValueClass} break-words hyphens-auto`}>
+                      <span className="sm:hidden">{firstPublishedShort}</span>
+                      <span className="hidden sm:inline">{firstPublishedFull}</span>
+                    </p>
                   </CardContent>
                 </Card>
                 <Card className="min-w-0 border-border/60 bg-card/40 shadow-sm">
