@@ -13,6 +13,7 @@
     "db:baseline": "tsx script/db-baseline.ts",
     "db:migrate": "tsx script/db-migrate.ts",
     "ingest:squads": "tsx script/sync-squads.ts",
+    "ingest:competition-logo": "tsx script/import-competition-logo.ts",
     "audit:entity-images": "tsx script/entity-image-coverage.ts",
     "seed:author-identities": "tsx script/seed-author-identities.ts"
   },
