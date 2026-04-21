@@ -4,7 +4,7 @@ import {
   teams, players, articles, articleTeams, matches, transfers, injuries,
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
-  competitions, articleCompetitions, paEntityAliasMap, playerTeamMemberships, teamManagers,
+  competitions, articleCompetitions, paEntityAliasMap, entityAliases, playerTeamMemberships, teamManagers,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -315,6 +315,86 @@ export class DatabaseStorage implements IStorage {
         if (row.displayName) bucket.add(row.displayName);
         if (row.paTagName) bucket.add(row.paTagName);
         if (row.paTagNameNormalized) bucket.add(row.paTagNameNormalized);
+      }
+    }
+
+    const aliasQueries: Promise<Array<{ entityId: string; entityType: string; alias: string }>>[] = [];
+    if (byType.team.length > 0) {
+      aliasQueries.push(
+        db
+          .select({
+            entityId: entityAliases.entityId,
+            entityType: entityAliases.entityType,
+            alias: entityAliases.alias,
+          })
+          .from(entityAliases)
+          .where(
+            and(
+              eq(entityAliases.entityType, "team"),
+              inArray(entityAliases.entityId, byType.team),
+            ),
+          ),
+      );
+    }
+    if (byType.competition.length > 0) {
+      aliasQueries.push(
+        db
+          .select({
+            entityId: entityAliases.entityId,
+            entityType: entityAliases.entityType,
+            alias: entityAliases.alias,
+          })
+          .from(entityAliases)
+          .where(
+            and(
+              eq(entityAliases.entityType, "competition"),
+              inArray(entityAliases.entityId, byType.competition),
+            ),
+          ),
+      );
+    }
+    if (byType.player.length > 0) {
+      aliasQueries.push(
+        db
+          .select({
+            entityId: entityAliases.entityId,
+            entityType: entityAliases.entityType,
+            alias: entityAliases.alias,
+          })
+          .from(entityAliases)
+          .where(
+            and(
+              eq(entityAliases.entityType, "player"),
+              inArray(entityAliases.entityId, byType.player),
+            ),
+          ),
+      );
+    }
+    if (byType.manager.length > 0) {
+      aliasQueries.push(
+        db
+          .select({
+            entityId: entityAliases.entityId,
+            entityType: entityAliases.entityType,
+            alias: entityAliases.alias,
+          })
+          .from(entityAliases)
+          .where(
+            and(
+              eq(entityAliases.entityType, "manager"),
+              inArray(entityAliases.entityId, byType.manager),
+            ),
+          ),
+      );
+    }
+
+    const directAliasesByType = await Promise.all(aliasQueries);
+    for (const rows of directAliasesByType) {
+      for (const row of rows) {
+        const key = `${row.entityType}:${row.entityId}`;
+        if (!map.has(key)) map.set(key, new Set<string>());
+        const bucket = map.get(key)!;
+        if (row.alias) bucket.add(row.alias);
       }
     }
 
