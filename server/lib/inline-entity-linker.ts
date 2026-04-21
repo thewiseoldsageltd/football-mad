@@ -131,12 +131,23 @@ export function linkArticleHtmlFirstMentions(
       : [entity.name];
 
     let chosenCandidate: string | null = null;
+    let chosenStart = Number.POSITIVE_INFINITY;
     for (const candidate of candidates) {
       if (!candidate) continue;
       const candidateRegex = buildFirstMentionRegex(candidate);
-      if (candidateRegex.test(docText)) {
+      candidateRegex.lastIndex = 0;
+      const match = candidateRegex.exec(docText);
+      if (!match) continue;
+
+      const prefix = match[1] ?? "";
+      const start = (match.index ?? 0) + prefix.length;
+      const isBetter =
+        start < chosenStart ||
+        (start === chosenStart && (chosenCandidate === null || candidate.length > chosenCandidate.length));
+
+      if (isBetter) {
         chosenCandidate = candidate;
-        break;
+        chosenStart = start;
       }
     }
     if (!chosenCandidate) continue;
