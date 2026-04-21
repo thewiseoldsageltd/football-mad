@@ -133,6 +133,12 @@ export default function AdminJobsPage() {
   });
 
   const runs = runsQuery.data?.runs ?? [];
+  const hasPartialProtectedAuthFailure =
+    jobSecret.trim().length > 0 &&
+    (
+      (runsQuery.isError && !backfillQuery.isError) ||
+      (!runsQuery.isError && backfillQuery.isError)
+    );
 
   const squadsRun = useMemo(
     () => runs.find((r) => r.status === "success" && /squad/i.test(r.job_name)),
@@ -148,17 +154,30 @@ export default function AdminJobsPage() {
       <div className="container mx-auto px-4 py-6 space-y-6">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h1 className="text-2xl font-bold">Jobs Dashboard</h1>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              placeholder="GOALSERVE/PAMEDIA secret"
-              value={jobSecret}
-              onChange={(e) => setJobSecret(e.target.value)}
-              className="w-[280px]"
-            />
-            <Button onClick={() => runsQuery.refetch()}>Refresh</Button>
+          <div className="space-y-1">
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="Internal jobs secret"
+                value={jobSecret}
+                onChange={(e) => setJobSecret(e.target.value)}
+                className="w-[280px]"
+              />
+              <Button onClick={() => runsQuery.refetch()}>Refresh</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Some dashboard endpoints validate against different backend secrets.
+            </p>
           </div>
         </div>
+
+        {hasPartialProtectedAuthFailure && (
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="py-3 text-sm text-amber-900">
+              Some protected sections did not authorize with this secret. This can happen when jobs APIs use different backend secrets.
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>
