@@ -5,6 +5,7 @@ export type MatchStatus = "scheduled" | "live" | "finished" | "postponed";
 export interface MockMatch {
   id: string;
   competition: string;
+  competitionLogoUrl?: string | null;
   rawCompetition?: string | null;
   goalserveCompetitionId?: string | null;
   dateISO: string;

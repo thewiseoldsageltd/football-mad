@@ -51,6 +51,20 @@ interface GoalserveCompetitionMediaSyncResult {
   errors: string[];
 }
 
+export interface GoalserveCompetitionLogoSyncResult {
+  ok: boolean;
+  dryRun: boolean;
+  force: boolean;
+  scanned: number;
+  attempted: number;
+  ingested: number;
+  unchanged: number;
+  skippedMissingGoalserveId: number;
+  skippedNoLogo: number;
+  failed: number;
+  errors: string[];
+}
+
 interface GoalservePersonMediaSyncResult {
   ok: boolean;
   scope: "premier_league" | "mvp" | "team";
@@ -805,6 +819,129 @@ export async function syncGoalserveCompetitionMedia(params?: {
         }
       } else if (!logotipsAsset?.base64) {
         result.skippedMissingImage++;
+      }
+    }
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  return result;
+}
+
+export async function syncGoalserveCompetitionLogosMvp(params?: {
+  dryRun?: boolean;
+  force?: boolean;
+}): Promise<GoalserveCompetitionLogoSyncResult> {
+  const dryRun = params?.dryRun ?? false;
+  const force = params?.force ?? false;
+  const result: GoalserveCompetitionLogoSyncResult = {
+    ok: true,
+    dryRun,
+    force,
+    scanned: 0,
+    attempted: 0,
+    ingested: 0,
+    unchanged: 0,
+    skippedMissingGoalserveId: 0,
+    skippedNoLogo: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  try {
+    const priorityCompetitions = await db
+      .select({
+        id: competitions.id,
+        goalserveCompetitionId: competitions.goalserveCompetitionId,
+      })
+      .from(competitions)
+      .where(eq(competitions.isPriority, true));
+
+    result.scanned = priorityCompetitions.length;
+
+    const competitionsWithGoalserveId: Array<{ id: string; goalserveCompetitionId: string }> = [];
+    for (const row of priorityCompetitions) {
+      const goalserveCompetitionId = String(row.goalserveCompetitionId ?? "").trim();
+      if (!goalserveCompetitionId) {
+        result.skippedMissingGoalserveId++;
+        continue;
+      }
+      competitionsWithGoalserveId.push({ id: row.id, goalserveCompetitionId });
+    }
+
+    const goalserveIds = Array.from(new Set(competitionsWithGoalserveId.map((c) => c.goalserveCompetitionId)));
+    const logotipsByLeagueId = await fetchLogotipsCompetitionImageMap(goalserveIds);
+
+    for (const competition of competitionsWithGoalserveId) {
+      const goalserveLeagueId = competition.goalserveCompetitionId;
+      const asset = logotipsByLeagueId.get(goalserveLeagueId) ?? null;
+
+      if (!asset?.base64 && !asset?.url) {
+        result.skippedNoLogo++;
+        continue;
+      }
+
+      result.attempted++;
+      if (dryRun) continue;
+
+      if (asset?.base64) {
+        const decoded = decodeBase64Image(asset.base64);
+        if (decoded) {
+          const ingestFromBase64 = await ingestEntityMediaFromBuffer({
+            entityType: "competition",
+            entityId: competition.id,
+            mediaRole: "logo",
+            sourceSystem: "goalserve",
+            sourceRef: `goalserve:logotips:league:${goalserveLeagueId}`,
+            sourceFormatHint: decoded.formatHint,
+            sourceMimeTypeHint: decoded.mimeType,
+            makePrimary: true,
+            forceReingest: force,
+            allowManualPrimaryOverride: force,
+            originalBuffer: decoded.buffer,
+          });
+
+          if (!ingestFromBase64.ok) {
+            result.failed++;
+            if (ingestFromBase64.error) {
+              result.errors.push(`competition ${goalserveLeagueId} (base64): ${ingestFromBase64.error}`);
+            }
+          } else if (ingestFromBase64.unchanged) {
+            result.unchanged++;
+            continue;
+          } else {
+            result.ingested++;
+            continue;
+          }
+        }
+      }
+
+      if (asset?.url) {
+        const ingestFromUrl = await ingestEntityMediaFromUrl({
+          entityType: "competition",
+          entityId: competition.id,
+          mediaRole: "logo",
+          sourceSystem: "goalserve",
+          sourceUrl: asset.url,
+          sourceRef: `goalserve:logotips:league:${goalserveLeagueId}`,
+          makePrimary: true,
+          forceReingest: force,
+          allowManualPrimaryOverride: force,
+        });
+
+        if (!ingestFromUrl.ok) {
+          result.failed++;
+          if (ingestFromUrl.error) {
+            result.errors.push(`competition ${goalserveLeagueId} (url): ${ingestFromUrl.error}`);
+          }
+        } else if (ingestFromUrl.unchanged) {
+          result.unchanged++;
+        } else {
+          result.ingested++;
+        }
+      } else if (!asset?.base64) {
+        result.skippedNoLogo++;
       }
     }
   } catch (err) {

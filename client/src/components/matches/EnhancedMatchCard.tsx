@@ -33,7 +33,15 @@ function parseCompetitionLabel(competition: string | null | undefined): ParsedCo
   return { name: competition };
 }
 
-function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: string | null; displayName: string }) {
+function CompetitionBadge({
+  rawCompetition,
+  displayName,
+  logoUrl,
+}: {
+  rawCompetition?: string | null;
+  displayName: string;
+  logoUrl?: string | null;
+}) {
   const parsed = parseCompetitionLabel(rawCompetition);
   const flagUrl = getCountryFlagUrl(parsed.country);
 
@@ -42,7 +50,18 @@ function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: st
       variant="outline"
       className="text-[11px] font-medium flex-shrink-0 gap-1.5 border-border/70 bg-muted/40 text-foreground px-2.5 py-1 rounded-full"
     >
-      {flagUrl ? (
+      {logoUrl ? (
+        <span className="h-4 w-4 rounded-sm bg-white/95 dark:bg-background/95 border border-border/60 p-[1px] overflow-hidden flex items-center justify-center">
+          <img
+            src={logoUrl}
+            alt={displayName}
+            className="h-full w-full object-contain"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        </span>
+      ) : flagUrl ? (
         <img 
           src={flagUrl} 
           alt={parsed.country || ""} 
@@ -134,7 +153,11 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
         <CardContent className={`p-4 md:p-5 ${isLive ? "pl-5 md:pl-6" : ""} overflow-hidden`}>
           {/* LINE 1: Competition pill (centered) */}
           <div className="flex justify-center mb-2">
-            <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
+            <CompetitionBadge
+              rawCompetition={match.rawCompetition}
+              displayName={displayLabel}
+              logoUrl={match.competitionLogoUrl}
+            />
           </div>
 
           {/* LINE 2: 5-column grid [crest][name-right][kickoff][name-left][crest] */}

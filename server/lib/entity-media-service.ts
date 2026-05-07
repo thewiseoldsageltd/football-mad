@@ -21,6 +21,7 @@ export interface IngestEntityMediaFromUrlInput {
   makePrimary?: boolean;
   storageVersion?: string;
   forceReingest?: boolean;
+  allowManualPrimaryOverride?: boolean;
 }
 
 export interface IngestEntityMediaFromBufferInput {
@@ -34,6 +35,7 @@ export interface IngestEntityMediaFromBufferInput {
   makePrimary?: boolean;
   storageVersion?: string;
   forceReingest?: boolean;
+  allowManualPrimaryOverride?: boolean;
   originalBuffer: Buffer;
 }
 
@@ -169,6 +171,7 @@ async function ingestEntityMediaFromBufferCore(input: {
   makePrimary: boolean;
   storageVersion?: string;
   forceReingest?: boolean;
+  allowManualPrimaryOverride?: boolean;
   originalBuffer: Buffer;
 }): Promise<IngestEntityMediaResult> {
   const {
@@ -182,6 +185,7 @@ async function ingestEntityMediaFromBufferCore(input: {
     makePrimary,
     storageVersion,
     forceReingest = false,
+    allowManualPrimaryOverride = false,
     originalBuffer,
   } = input;
   const now = new Date();
@@ -224,7 +228,7 @@ async function ingestEntityMediaFromBufferCore(input: {
 
     // Keep manual assets as canonical when ingesting provider images.
     const keepManualPrimary =
-      sourceSystem === "goalserve" && existingPrimary[0]?.sourceSystem === "manual";
+      sourceSystem === "goalserve" && existingPrimary[0]?.sourceSystem === "manual" && !allowManualPrimaryOverride;
     const makePrimaryEffective = makePrimary && !keepManualPrimary;
 
     let dedupeRow = existingPrimary[0];
@@ -408,6 +412,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
     makePrimary = true,
     storageVersion,
     forceReingest = false,
+    allowManualPrimaryOverride = false,
   } = input;
   const fetched = await fetchImageBuffer(sourceSystem, sourceUrl);
   return ingestEntityMediaFromBufferCore({
@@ -421,6 +426,7 @@ export async function ingestEntityMediaFromUrl(input: IngestEntityMediaFromUrlIn
     makePrimary,
     storageVersion,
     forceReingest,
+    allowManualPrimaryOverride,
     originalBuffer: fetched.buffer,
   });
 }
@@ -437,6 +443,7 @@ export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBu
     makePrimary = true,
     storageVersion,
     forceReingest = false,
+    allowManualPrimaryOverride = false,
     originalBuffer,
   } = input;
   return ingestEntityMediaFromBufferCore({
@@ -450,6 +457,7 @@ export async function ingestEntityMediaFromBuffer(input: IngestEntityMediaFromBu
     makePrimary,
     storageVersion,
     forceReingest,
+    allowManualPrimaryOverride,
     originalBuffer,
   });
 }

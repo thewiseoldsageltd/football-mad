@@ -22,6 +22,7 @@ interface ApiMatch {
   awayScore: number | null;
   venue: string | null;
   competition: string | null;
+  competitionLogoUrl?: string | null;
   competitionId?: string | null;
   goalserveCompetitionId: string | null;
   goalserveMatchId: string | null;
@@ -124,6 +125,7 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   return {
     id: match.id,
     competition: competitionDisplay,
+    competitionLogoUrl: match.competitionLogoUrl ?? null,
     rawCompetition: match.competition,
     dateISO: match.kickoffTime,
     kickOffTime: match.kickoffTime,

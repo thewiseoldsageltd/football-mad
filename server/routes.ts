@@ -23,7 +23,7 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
+import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, entityMedia, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, ne, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -38,7 +38,7 @@ import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
 import { syncGoalserveManagers } from "./jobs/sync-goalserve-managers";
-import { syncGoalserveEntityMedia, syncGoalservePersonMediaPilot } from "./jobs/sync-goalserve-entity-media";
+import { syncGoalserveCompetitionLogosMvp, syncGoalserveEntityMedia, syncGoalservePersonMediaPilot } from "./jobs/sync-goalserve-entity-media";
 import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
@@ -1294,6 +1294,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       byGoalserveId: Map<string, { id: string; name: string; slug: string }>;
       competitionById: Map<string, string>;
       competitionByGoalserveId: Map<string, string>;
+      competitionLogoById: Map<string, string>;
+      competitionLogoByGoalserveId: Map<string, string>;
     },
   ) {
     const timeline = match.timeline && typeof match.timeline === "object" ? match.timeline as Record<string, any> : null;
@@ -1320,6 +1322,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         (match.goalserveCompetitionId ? maps.competitionByGoalserveId.get(match.goalserveCompetitionId) : undefined) ??
         "Unknown"
       : rawCompetition;
+    const competitionLogoUrl =
+      (match.competitionId ? maps.competitionLogoById.get(match.competitionId) : undefined) ??
+      (match.goalserveCompetitionId ? maps.competitionLogoByGoalserveId.get(match.goalserveCompetitionId) : undefined) ??
+      null;
 
     return {
       id: match.id,
@@ -1330,6 +1336,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       awayScore: match.awayScore,
       venue: match.venue,
       competition: resolvedCompetition,
+      competitionLogoUrl,
       goalserveCompetitionId: match.goalserveCompetitionId,
       goalserveMatchId: match.goalserveMatchId,
       goalserveRound: match.goalserveRound || null,
@@ -1409,6 +1416,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goalserveCompetitionIds.size > 0
         ? db
             .select({
+              id: competitions.id,
               goalserveCompetitionId: competitions.goalserveCompetitionId,
               name: competitions.name,
             })
@@ -1422,6 +1430,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         : Promise.resolve([]),
     ]);
 
+    const competitionIdsForLogoLookup = Array.from(
+      new Set(
+        [
+          ...Array.from(competitionIds),
+          ...goalserveCompetitions.map((c) => c.id).filter((id): id is string => typeof id === "string" && id.length > 0),
+        ].filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    );
+
+    const competitionLogos = competitionIdsForLogoLookup.length > 0
+      ? await db
+          .select({
+            entityId: entityMedia.entityId,
+            cdnOriginalUrl: entityMedia.cdnOriginalUrl,
+          })
+          .from(entityMedia)
+          .where(
+            and(
+              eq(entityMedia.entityType, "competition"),
+              eq(entityMedia.mediaRole, "logo"),
+              eq(entityMedia.isPrimary, true),
+              eq(entityMedia.status, "active"),
+              inArray(entityMedia.entityId, competitionIdsForLogoLookup),
+            ),
+          )
+      : [];
+
+    const competitionLogoById = new Map(
+      competitionLogos
+        .filter((row) => Boolean(row.cdnOriginalUrl))
+        .map((row) => [row.entityId, row.cdnOriginalUrl as string]),
+    );
+
     return {
       byCanonicalId: new Map(canonicalTeams.map((t) => [t.id, t])),
       byGoalserveId: new Map(
@@ -1434,6 +1475,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         goalserveCompetitions
           .filter((c) => Boolean(c.goalserveCompetitionId))
           .map((c) => [c.goalserveCompetitionId as string, c.name]),
+      ),
+      competitionLogoById,
+      competitionLogoByGoalserveId: new Map(
+        goalserveCompetitions
+          .filter((c) => Boolean(c.goalserveCompetitionId) && Boolean(competitionLogoById.get(c.id)))
+          .map((c) => [c.goalserveCompetitionId as string, competitionLogoById.get(c.id)!]),
       ),
     };
   }
@@ -2999,6 +3046,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         maxPlayers,
         maxManagers,
       });
+      res.json(result);
+    },
+  );
+
+  app.post(
+    "/api/jobs/sync-goalserve-competition-logos",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const dryRun = req.query.dryRun === "1";
+      const force = req.query.force === "1";
+      const result = await syncGoalserveCompetitionLogosMvp({ dryRun, force });
       res.json(result);
     },
   );
