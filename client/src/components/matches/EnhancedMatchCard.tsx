@@ -61,11 +61,11 @@ function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: st
 
 function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
   const sizeClasses = size === "sm" ? "w-12 h-12" : "w-14 h-14";
-  const iconSize = size === "sm" ? 36 : 42;
+  const iconSize = size === "sm" ? 42 : 48;
 
   return (
     <div
-      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-muted/40 p-1.5 shadow-sm`}
+      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-1 shadow-sm`}
     >
       <EntityIcon
         entityType="team"

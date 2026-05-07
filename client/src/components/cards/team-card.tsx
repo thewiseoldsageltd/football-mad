@@ -22,15 +22,12 @@ export function TeamCard({ team, isFollowing = false, onFollowToggle, showFollow
           className="flex items-center gap-4"
           data-testid={`link-team-${team.slug}`}
         >
-          <div 
-            className="w-16 h-16 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: team.primaryColor || "#1a1a2e" }}
-          >
+          <div className="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 shadow-sm p-1">
             <EntityIcon
               entityType="team"
               entityId={team.id}
               label={team.name}
-              size={48}
+              size={54}
               surface="pill"
               className="rounded-lg"
             />
