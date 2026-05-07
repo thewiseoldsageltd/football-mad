@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Globe } from "lucide-react";
+import { Calendar, Globe, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
@@ -38,7 +38,10 @@ function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: st
   const flagUrl = getCountryFlagUrl(parsed.country);
 
   return (
-    <Badge variant="outline" className="text-xs flex-shrink-0 gap-1.5">
+    <Badge
+      variant="outline"
+      className="text-[11px] font-medium flex-shrink-0 gap-1.5 border-border/70 bg-muted/40 text-foreground px-2.5 py-1 rounded-full"
+    >
       {flagUrl ? (
         <img 
           src={flagUrl} 
@@ -57,13 +60,12 @@ function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: st
 }
 
 function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
-  const sizeClasses = size === "sm" ? "w-8 h-8" : "w-12 h-12";
-  const iconSize = size === "sm" ? 32 : 48;
+  const sizeClasses = size === "sm" ? "w-12 h-12" : "w-14 h-14";
+  const iconSize = size === "sm" ? 36 : 42;
 
   return (
     <div
-      className={`${sizeClasses} rounded-lg flex items-center justify-center flex-shrink-0`}
-      style={{ backgroundColor: team.primaryColor }}
+      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-muted/40 p-1.5 shadow-sm`}
     >
       <EntityIcon
         entityType="team"
@@ -71,7 +73,7 @@ function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "
         size={iconSize}
         label={team.name}
         surface="pill"
-        className="rounded-lg"
+        className="rounded-lg object-contain"
       />
     </div>
   );
@@ -115,6 +117,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
   // Strip any country suffix like "(England)" or "• England" - flag is enough
   const rawLabel = competitionLabel || match.competition;
   const displayLabel = rawLabel.replace(/\s*\([^)]+\)\s*$/, "").replace(/\s*•\s*\w+\s*$/, "");
+  const hasVenue = typeof match.venue === "string" && match.venue.trim().length > 0;
 
   return (
     <div
@@ -126,23 +129,23 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
       {isLive && (
         <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
       )}
-      <Card className="hover-elevate active-elevate-2 overflow-hidden">
-        <CardContent className={`p-4 ${isLive ? "pl-5" : ""} overflow-hidden`}>
+      <Card className="hover-elevate active-elevate-2 overflow-hidden border-border/70">
+        <CardContent className={`p-4 md:p-5 ${isLive ? "pl-5 md:pl-6" : ""} overflow-hidden`}>
           {/* LINE 1: Competition pill (centered) */}
           <div className="flex justify-center mb-2">
             <CompetitionBadge rawCompetition={match.rawCompetition} displayName={displayLabel} />
           </div>
 
           {/* LINE 2: 5-column grid [crest][name-right][kickoff][name-left][crest] */}
-          <div className="grid grid-cols-[40px_minmax(0,1fr)_64px_minmax(0,1fr)_40px] md:grid-cols-[40px_minmax(0,1fr)_80px_minmax(0,1fr)_40px] gap-x-2 items-center">
+          <div className="grid grid-cols-[48px_minmax(0,1fr)_84px_minmax(0,1fr)_48px] md:grid-cols-[56px_minmax(0,1fr)_112px_minmax(0,1fr)_56px] gap-x-2 md:gap-x-3 items-center">
             {/* Home crest */}
-            <div className="h-10 flex items-center justify-center">
+            <div className="h-12 md:h-14 flex items-center justify-center">
               <TeamLogo team={match.homeTeam} size="sm" />
             </div>
 
             {/* Home name - right aligned toward center */}
             <div className="min-w-0 overflow-hidden flex items-center justify-end">
-              <span className="font-medium text-sm truncate leading-none">{homeDisplayName}</span>
+              <span className="font-semibold text-sm md:text-base truncate leading-tight">{homeDisplayName}</span>
             </div>
 
             {/* Center: kickoff time / score */}
@@ -154,7 +157,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
                 if (match.status === "finished" || match.status === "live") {
                   if (hasScores) {
                     return (
-                      <span className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
+                      <span className="text-xl md:text-2xl font-bold tabular-nums whitespace-nowrap leading-none">
                         {match.homeScore}–{match.awayScore}
                       </span>
                     );
@@ -167,7 +170,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
                 }
                 // Scheduled - show kickoff time
                 return (
-                  <span className="text-lg font-bold tabular-nums whitespace-nowrap leading-none">
+                  <span className="text-xl md:text-2xl font-bold tabular-nums whitespace-nowrap leading-none tracking-tight">
                     {format(kickoffTime, "HH:mm")}
                   </span>
                 );
@@ -176,21 +179,27 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
 
             {/* Away name - left aligned toward center */}
             <div className="min-w-0 overflow-hidden flex items-center justify-start">
-              <span className="font-medium text-sm truncate leading-none">{awayDisplayName}</span>
+              <span className="font-semibold text-sm md:text-base truncate leading-tight">{awayDisplayName}</span>
             </div>
 
             {/* Away crest */}
-            <div className="h-10 flex items-center justify-center">
+            <div className="h-12 md:h-14 flex items-center justify-center">
               <TeamLogo team={match.awayTeam} size="sm" />
             </div>
           </div>
 
-          {/* LINE 3: Date only (no venue) */}
-          <div className="flex items-center justify-center mt-2 text-xs text-muted-foreground/70">
+          {/* LINE 3: Date + optional venue */}
+          <div className="flex flex-col items-center justify-center mt-2 text-xs text-muted-foreground/80">
             <span className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               {format(kickoffTime, "EEE d MMM")}
             </span>
+            {hasVenue && (
+              <span className="mt-1 flex items-center gap-1 max-w-[85%] truncate">
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{match.venue?.trim()}</span>
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>

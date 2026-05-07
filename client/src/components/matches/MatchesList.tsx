@@ -44,7 +44,7 @@ function MatchesEmptyState() {
   return (
     <div className="text-center py-16" data-testid="empty-matches">
       <Calendar className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-      <h3 className="text-lg font-medium mb-2">No matches scheduled</h3>
+      <h3 className="text-lg font-medium mb-2">No priority fixtures found for this date</h3>
       <p className="text-sm text-muted-foreground">Try Tomorrow or Results.</p>
     </div>
   );
