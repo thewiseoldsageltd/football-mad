@@ -48,10 +48,10 @@ function CompetitionBadge({
   return (
     <Badge
       variant="outline"
-      className="text-[11px] font-medium flex-shrink-0 gap-1.5 border-border/70 bg-muted/40 text-foreground px-2.5 py-1 rounded-full"
+      className="text-[11px] font-medium flex-shrink-0 gap-2 border-border/70 bg-muted/40 text-foreground px-2.5 py-1 rounded-full"
     >
       {logoUrl ? (
-        <span className="h-4 w-4 rounded-sm bg-white/95 dark:bg-background/95 border border-border/60 p-[1px] overflow-hidden flex items-center justify-center">
+        <span className="h-5 w-5 rounded-md bg-white dark:bg-background border border-border/60 p-[1px] overflow-hidden flex items-center justify-center shadow-[0_0_0_1px_rgba(255,255,255,0.5)_inset]">
           <img
             src={logoUrl}
             alt={displayName}
