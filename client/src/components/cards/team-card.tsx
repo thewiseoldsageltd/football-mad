@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Heart, HeartOff } from "lucide-react";
 import { teamHub } from "@/lib/urls";
 import type { Team } from "@shared/schema";
-import { EntityIcon } from "@/components/entity-media";
+import { EntityAvatar } from "@/components/entity-media";
 
 interface TeamCardProps {
   team: Team;
@@ -22,13 +22,15 @@ export function TeamCard({ team, isFollowing = false, onFollowToggle, showFollow
           className="flex items-center gap-4"
           data-testid={`link-team-${team.slug}`}
         >
-          <div className="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 shadow-sm p-1">
-            <EntityIcon
+          <div className="w-[68px] h-[68px] rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 shadow-sm p-0.5">
+            <EntityAvatar
               entityType="team"
               entityId={team.id}
               label={team.name}
-              size={54}
-              surface="pill"
+              surface="hub_header"
+              sizeClassName="h-full w-full"
+              shape="square"
+              objectFit="contain"
               className="rounded-lg"
             />
           </div>

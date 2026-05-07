@@ -4,7 +4,7 @@ import { Calendar, Globe, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { EntityIcon } from "@/components/entity-media";
+import { EntityAvatar } from "@/components/entity-media";
 
 interface EnhancedMatchCardProps {
   match: MockMatch;
@@ -60,20 +60,21 @@ function CompetitionBadge({ rawCompetition, displayName }: { rawCompetition?: st
 }
 
 function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
-  const sizeClasses = size === "sm" ? "w-12 h-12" : "w-14 h-14";
-  const iconSize = size === "sm" ? 42 : 48;
+  const sizeClasses = size === "sm" ? "w-14 h-14 md:w-16 md:h-16" : "w-16 h-16";
 
   return (
     <div
-      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-1 shadow-sm`}
+      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm`}
     >
-      <EntityIcon
+      <EntityAvatar
         entityType="team"
         entityId={team.id}
-        size={iconSize}
         label={team.name}
-        surface="pill"
-        className="rounded-lg object-contain"
+        surface="hub_header"
+        sizeClassName="h-full w-full"
+        shape="square"
+        objectFit="contain"
+        className="rounded-lg"
       />
     </div>
   );
@@ -137,9 +138,9 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
           </div>
 
           {/* LINE 2: 5-column grid [crest][name-right][kickoff][name-left][crest] */}
-          <div className="grid grid-cols-[48px_minmax(0,1fr)_84px_minmax(0,1fr)_48px] md:grid-cols-[56px_minmax(0,1fr)_112px_minmax(0,1fr)_56px] gap-x-2 md:gap-x-3 items-center">
+          <div className="grid grid-cols-[56px_minmax(0,1fr)_88px_minmax(0,1fr)_56px] md:grid-cols-[64px_minmax(0,1fr)_116px_minmax(0,1fr)_64px] gap-x-2 md:gap-x-3 items-center">
             {/* Home crest */}
-            <div className="h-12 md:h-14 flex items-center justify-center">
+            <div className="h-14 md:h-16 flex items-center justify-center">
               <TeamLogo team={match.homeTeam} size="sm" />
             </div>
 
@@ -183,7 +184,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
             </div>
 
             {/* Away crest */}
-            <div className="h-12 md:h-14 flex items-center justify-center">
+            <div className="h-14 md:h-16 flex items-center justify-center">
               <TeamLogo team={match.awayTeam} size="sm" />
             </div>
           </div>
