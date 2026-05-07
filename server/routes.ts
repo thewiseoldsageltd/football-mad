@@ -1289,9 +1289,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   
   function formatMatchResponse(
     match: any,
-    teamMaps: {
+    maps: {
       byCanonicalId: Map<string, { id: string; name: string; slug: string }>;
       byGoalserveId: Map<string, { id: string; name: string; slug: string }>;
+      competitionById: Map<string, string>;
+      competitionByGoalserveId: Map<string, string>;
     },
   ) {
     const timeline = match.timeline && typeof match.timeline === "object" ? match.timeline as Record<string, any> : null;
@@ -1304,13 +1306,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       (timeline?.visitorteam?.name as string | undefined) ??
       null;
     const homeTeamData =
-      (match.homeTeamId ? teamMaps.byCanonicalId.get(match.homeTeamId) : undefined) ??
-      (match.homeGoalserveTeamId ? teamMaps.byGoalserveId.get(match.homeGoalserveTeamId) : undefined) ??
+      (match.homeTeamId ? maps.byCanonicalId.get(match.homeTeamId) : undefined) ??
+      (match.homeGoalserveTeamId ? maps.byGoalserveId.get(match.homeGoalserveTeamId) : undefined) ??
       null;
     const awayTeamData =
-      (match.awayTeamId ? teamMaps.byCanonicalId.get(match.awayTeamId) : undefined) ??
-      (match.awayGoalserveTeamId ? teamMaps.byGoalserveId.get(match.awayGoalserveTeamId) : undefined) ??
+      (match.awayTeamId ? maps.byCanonicalId.get(match.awayTeamId) : undefined) ??
+      (match.awayGoalserveTeamId ? maps.byGoalserveId.get(match.awayGoalserveTeamId) : undefined) ??
       null;
+    const rawCompetition = typeof match.competition === "string" ? match.competition.trim() : "";
+    const shouldResolveCompetition = rawCompetition.length === 0 || rawCompetition.toLowerCase() === "unknown";
+    const resolvedCompetition = shouldResolveCompetition
+      ? (match.competitionId ? maps.competitionById.get(match.competitionId) : undefined) ??
+        (match.goalserveCompetitionId ? maps.competitionByGoalserveId.get(match.goalserveCompetitionId) : undefined) ??
+        "Unknown"
+      : rawCompetition;
 
     return {
       id: match.id,
@@ -1320,7 +1329,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       homeScore: match.homeScore,
       awayScore: match.awayScore,
       venue: match.venue,
-      competition: match.competition,
+      competition: resolvedCompetition,
       goalserveCompetitionId: match.goalserveCompetitionId,
       goalserveMatchId: match.goalserveMatchId,
       goalserveRound: match.goalserveRound || null,
@@ -1346,15 +1355,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function fetchTeamMaps(matchRows: any[]) {
     const canonicalTeamIds = new Set<string>();
     const goalserveTeamIds = new Set<string>();
+    const competitionIds = new Set<string>();
+    const goalserveCompetitionIds = new Set<string>();
 
     for (const m of matchRows) {
       if (m.homeTeamId) canonicalTeamIds.add(m.homeTeamId);
       if (m.awayTeamId) canonicalTeamIds.add(m.awayTeamId);
       if (m.homeGoalserveTeamId) goalserveTeamIds.add(m.homeGoalserveTeamId);
       if (m.awayGoalserveTeamId) goalserveTeamIds.add(m.awayGoalserveTeamId);
+      if (m.competitionId) competitionIds.add(m.competitionId);
+      if (m.goalserveCompetitionId) goalserveCompetitionIds.add(m.goalserveCompetitionId);
     }
 
-    const [canonicalTeams, goalserveTeams] = await Promise.all([
+    const [canonicalTeams, goalserveTeams, canonicalCompetitions, goalserveCompetitions] = await Promise.all([
       canonicalTeamIds.size > 0
         ? db
             .select({ id: teams.id, name: teams.name, slug: teams.slug })
@@ -1382,6 +1395,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               )})`,
             )
         : Promise.resolve([]),
+      competitionIds.size > 0
+        ? db
+            .select({ id: competitions.id, name: competitions.name })
+            .from(competitions)
+            .where(
+              drizzleSql`${competitions.id} IN (${drizzleSql.join(
+                Array.from(competitionIds).map((id) => drizzleSql`${id}`),
+                drizzleSql`, `,
+              )})`,
+            )
+        : Promise.resolve([]),
+      goalserveCompetitionIds.size > 0
+        ? db
+            .select({
+              goalserveCompetitionId: competitions.goalserveCompetitionId,
+              name: competitions.name,
+            })
+            .from(competitions)
+            .where(
+              drizzleSql`${competitions.goalserveCompetitionId} IN (${drizzleSql.join(
+                Array.from(goalserveCompetitionIds).map((id) => drizzleSql`${id}`),
+                drizzleSql`, `,
+              )})`,
+            )
+        : Promise.resolve([]),
     ]);
 
     return {
@@ -1390,6 +1428,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         goalserveTeams
           .filter((t) => Boolean(t.goalserveTeamId))
           .map((t) => [t.goalserveTeamId as string, { id: t.id, name: t.name, slug: t.slug }]),
+      ),
+      competitionById: new Map(canonicalCompetitions.map((c) => [c.id, c.name])),
+      competitionByGoalserveId: new Map(
+        goalserveCompetitions
+          .filter((c) => Boolean(c.goalserveCompetitionId))
+          .map((c) => [c.goalserveCompetitionId as string, c.name]),
       ),
     };
   }
