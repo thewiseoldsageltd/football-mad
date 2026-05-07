@@ -1222,6 +1222,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     awayGoalserveTeamId: matches.awayGoalserveTeamId,
     seasonKey: matches.seasonKey,
     goalserveMatchId: matches.goalserveMatchId,
+    timeline: matches.timeline,
   };
 
   const clamp = (value: unknown, defaultValue: number, min: number, max: number) => {
@@ -1293,6 +1294,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       byGoalserveId: Map<string, { id: string; name: string; slug: string }>;
     },
   ) {
+    const timeline = match.timeline && typeof match.timeline === "object" ? match.timeline as Record<string, any> : null;
+    const rawHomeName =
+      (timeline?.home?.name as string | undefined) ??
+      (timeline?.localteam?.name as string | undefined) ??
+      null;
+    const rawAwayName =
+      (timeline?.away?.name as string | undefined) ??
+      (timeline?.visitorteam?.name as string | undefined) ??
+      null;
     const homeTeamData =
       (match.homeTeamId ? teamMaps.byCanonicalId.get(match.homeTeamId) : undefined) ??
       (match.homeGoalserveTeamId ? teamMaps.byGoalserveId.get(match.homeGoalserveTeamId) : undefined) ??
@@ -1316,11 +1326,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goalserveRound: match.goalserveRound || null,
       homeTeam: homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
-        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: "Unknown" },
+        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: rawHomeName || "Unknown" },
       awayTeam: awayTeamData
         ? { id: awayTeamData.id, name: awayTeamData.name, slug: awayTeamData.slug }
-        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: "Unknown" },
+        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: rawAwayName || "Unknown" },
     };
+  }
+
+  async function getPriorityGoalserveCompetitionIds(): Promise<string[]> {
+    const rows = await db
+      .select({ goalserveCompetitionId: competitions.goalserveCompetitionId })
+      .from(competitions)
+      .where(and(eq(competitions.isPriority, true), drizzleSql`trim(coalesce(${competitions.goalserveCompetitionId}, '')) <> ''`));
+    return rows
+      .map((row) => row.goalserveCompetitionId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
   }
 
   async function fetchTeamMaps(matchRows: any[]) {
@@ -1492,10 +1512,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
       const limit = clamp(req.query.limit, 200, 1, 500);
+      const priorityCompetitionIds = await getPriorityGoalserveCompetitionIds();
+
+      if (priorityCompetitionIds.length === 0) {
+        return res.json([]);
+      }
 
       // Live: status matches live patterns (case-insensitive)
       const conditions: any[] = [
         drizzleSql`(LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`,
+        inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
       ];
 
       if (competitionId) {
@@ -1802,6 +1828,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const competitionId = req.query.competitionId as string;
       const sortMode = (req.query.sort as string) || "competition"; // competition (default) or kickoff
       const limit = clamp(req.query.limit, 200, 1, 500);
+      const priorityCompetitionIds = await getPriorityGoalserveCompetitionIds();
+
+      if (priorityCompetitionIds.length === 0) {
+        return res.json([]);
+      }
 
       // Default to today in UTC if no date provided
       const effectiveDate = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) 
@@ -1817,6 +1848,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const conditions: any[] = [
         gte(matches.kickoffTime, start),
         drizzleSql`${matches.kickoffTime} < ${nextDate}`,
+        inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
       ];
 
       // Status filtering (case-insensitive)
