@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { compareCompetitionsByPriority } from "@/components/matches/competition-priority";
+import { compareCompetitionsByPriority, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 
 interface ApiMatch {
   id: string;
@@ -38,13 +38,6 @@ interface ParsedCompetition {
   id?: string;
 }
 
-function cleanCompetitionDisplayName(value: string): string {
-  return value
-    .replace(/\s*\[\d+\]\s*$/, "")
-    .replace(/\s*\((Eurocups|England|Germany|Spain|Italy|France|Netherlands|Portugal|Scotland|Turkey|Belgium|Austria|Switzerland)\)\s*$/i, "")
-    .trim();
-}
-
 function isCanonicalTeamId(value: string | undefined | null): value is string {
   if (!value) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -55,15 +48,15 @@ function parseCompetitionLabel(competition: string | null | undefined): ParsedCo
   
   const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
   if (fullMatch) {
-    return { name: cleanCompetitionDisplayName(fullMatch[1].trim()), country: fullMatch[2].trim(), id: fullMatch[3] };
+    return { name: getPublicCompetitionDisplayName(fullMatch[1].trim(), fullMatch[3]), country: fullMatch[2].trim(), id: fullMatch[3] };
   }
   
   const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
   if (colonMatch) {
-    return { name: cleanCompetitionDisplayName(colonMatch[2].trim()), country: colonMatch[1].trim() };
+    return { name: getPublicCompetitionDisplayName(colonMatch[2].trim(), null), country: colonMatch[1].trim() };
   }
   
-  return { name: cleanCompetitionDisplayName(competition) };
+  return { name: getPublicCompetitionDisplayName(competition, null) };
 }
 
 function CompetitionBadge({ competition }: { competition: string | null | undefined }) {
@@ -90,8 +83,7 @@ function CompetitionBadge({ competition }: { competition: string | null | undefi
 }
 
 function getDisplayCompetitionName(competition: string | null | undefined): string {
-  const parsed = parseCompetitionLabel(competition);
-  return parsed.name;
+  return getPublicCompetitionDisplayName(competition, null);
 }
 
 function normStatus(s?: string | null) {
@@ -117,7 +109,7 @@ function isScheduledStatus(s?: string | null) {
 function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   const homeName = (match.homeTeam.name || match.homeTeam.nameFromRaw || "Unknown").trim() || "Unknown";
   const awayName = (match.awayTeam.name || match.awayTeam.nameFromRaw || "Unknown").trim() || "Unknown";
-  const competitionDisplay = getDisplayCompetitionName(match.competition);
+  const competitionDisplay = getPublicCompetitionDisplayName(match.competition, match.goalserveCompetitionId);
   const homeCanonicalId = isCanonicalTeamId(match.homeTeam.id) ? match.homeTeam.id : undefined;
   const awayCanonicalId = isCanonicalTeamId(match.awayTeam.id) ? match.awayTeam.id : undefined;
   
@@ -265,7 +257,7 @@ export default function MatchesPage() {
       const id = String(m.competitionId || m.goalserveCompetitionId || m.competition || "");
       if (!id) continue;
       const rawName = String(m.competition || "Unknown");
-      const label = getDisplayCompetitionName(rawName);
+      const label = getPublicCompetitionDisplayName(rawName, m.goalserveCompetitionId);
       if (!map.has(id)) {
         map.set(id, { id, label, rawName });
       }
