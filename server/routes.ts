@@ -5564,17 +5564,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                     ? EFL_CUP_CANONICAL_ROUNDS 
                     : FA_CUP_CANONICAL_ROUNDS;
 
-      // FA Cup normalizer: returns canonical name or null (discard if null)
+      // FA Cup normalizer: canonical name, or "Unknown: {raw}" so fixtures are not silently dropped
       const normalizeToCanonicalRound_FA_CUP = (name: string): string | null => {
         const lower = name.toLowerCase().trim();
-        
+        const squashed = lower.replace(/\s+/g, "");
+
         // Map Goalserve fractional notation to proper round names
         if (lower === "1/128-finals") return "First Round";
         if (lower === "1/64-finals") return "Second Round";
         if (lower === "1/32-finals") return "Third Round";
         if (lower === "1/16-finals") return "Fourth Round";
         if (lower === "1/8-finals") return "Fifth Round";
-        
+
+        // Later knockout fractional labels (Goalserve often uses these instead of spelled-out rounds)
+        if (
+          lower === "1/4-finals" ||
+          lower === "1/4 finals" ||
+          squashed === "1/4-finals" ||
+          squashed === "1/4finals"
+        ) {
+          return "Quarter-finals";
+        }
+        if (
+          lower === "1/2-finals" ||
+          lower === "1/2 finals" ||
+          squashed === "1/2-finals" ||
+          squashed === "1/2finals"
+        ) {
+          return "Semi-finals";
+        }
+
+        // Abbreviations and spaced variants
+        if (
+          lower === "qf" ||
+          lower === "quarter-finals" ||
+          lower === "quarter finals" ||
+          lower === "quarter-final" ||
+          lower === "quarter final"
+        ) {
+          return "Quarter-finals";
+        }
+        if (
+          lower === "sf" ||
+          lower === "semi-finals" ||
+          lower === "semi finals" ||
+          lower === "semi-final" ||
+          lower === "semi final"
+        ) {
+          return "Semi-finals";
+        }
+
         // Map quarter/semi/final variations
         if (lower.includes("quarter") && lower.includes("final") && !lower.includes("qualifying")) {
           return "Quarter-finals";
@@ -5582,7 +5621,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (lower.includes("semi") && lower.includes("final") && !lower.includes("qualifying")) {
           return "Semi-finals";
         }
-        if ((lower === "final" || lower === "finals" || lower === "the final") && !lower.includes("qualifying")) {
+        if (
+          (lower === "final" ||
+            lower === "finals" ||
+            lower === "the final" ||
+            /^finals?$/.test(lower)) &&
+          !lower.includes("qualifying") &&
+          !lower.includes("quarter") &&
+          !lower.includes("semi")
+        ) {
           return "Final";
         }
         
@@ -5612,9 +5659,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         for (const canonical of Object.keys(FA_CUP_CANONICAL_ROUNDS)) {
           if (lower === canonical.toLowerCase()) return canonical;
         }
-        
-        // No match - discard this round (returns null)
-        return null;
+
+        // MVP: preserve unknown rounds (same pattern as EFL Cup) instead of hiding fixtures
+        console.log(`[FA Cup] Unknown round name preserved: "${name}"`);
+        return `Unknown: ${name}`;
       };
       
       // EFL Cup normalizer: returns canonical name or "Unknown: {name}" for safety
