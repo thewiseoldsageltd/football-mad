@@ -79,6 +79,7 @@ import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
+import { collectCupProgressMatchRefs, dedupeCupProgressRefs } from "./lib/goalserve-cup-progress-tree";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
@@ -5242,21 +5243,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const roundsMap = new Map<string, CupMatch[]>();
 
-      // Goalserve cup feed: results.tournament.stage... (note: "results" not "fixtures" for this feed)
-      // Try both data.results and data.res.fixtures for compatibility
-      const results = data?.results || data?.res?.fixtures;
-      if (!results) {
-        console.log("[CupProgress] No results/fixtures found in response, returning empty rounds");
-        return res.json({ competitionId, rounds: [] });
-      }
-
-      // Tournament can be single object or array
-      const tournaments = Array.isArray(results.tournament) 
-        ? results.tournament 
-        : results.tournament 
-          ? [results.tournament] 
-          : [];
-
       // Helper to robustly extract attributes from Goalserve match nodes
       // Handles: node[key], node["@"+key], node["@_"+key], node["@"]?.[key], node["$"]?.[key]
       const getAttr = (node: any, key: string): string | null => {
@@ -5397,49 +5383,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         roundsMap.get(roundName)!.push(match);
       };
 
-      // Helper to get matches as array
-      const toArray = (item: any) => {
-        if (!item) return [];
-        return Array.isArray(item) ? item : [item];
-      };
-
-      for (const tournament of tournaments) {
-        const stages = toArray(tournament.stage);
-
-        for (const stage of stages) {
-          const stageName = stage["@name"] || stage.name || "";
-          
-          // Shape A: stage.week[].match[] (some cup feeds use "week" for rounds)
-          const weeks = toArray(stage.week);
-          for (const week of weeks) {
-            const roundName = week["@name"] || week.name || week["@round_name"] || stageName || "Unknown Round";
-            const matches = toArray(week.match);
-            for (const m of matches) {
-              // Use match-level round info if available, else use week name
-              const matchRound = m["@round_name"] || m.round || roundName;
-              parseMatch(m, matchRound);
-            }
-          }
-
-          // Shape B: stage.round[].match[] (some cups use "round")
-          const rounds = toArray(stage.round);
-          for (const round of rounds) {
-            const roundName = round["@name"] || round.name || stageName || "Unknown Round";
-            const matches = toArray(round.match);
-            for (const m of matches) {
-              parseMatch(m, roundName);
-            }
-          }
-
-          // Shape C: stage.match[] (matches directly under stage)
-          if (stage.match && !weeks.length && !rounds.length) {
-            const matches = toArray(stage.match);
-            for (const m of matches) {
-              const roundName = m["@round_name"] || m.round || stageName || "Unknown Round";
-              parseMatch(m, roundName);
-            }
-          }
+      // Traverse Goalserve JSON using the same fixture-shape coverage as sync-goalserve-matches / standings (see goalserve-cup-progress-tree.ts)
+      const cupProgressDebug = process.env.DEBUG_CUP_PROGRESS === "1";
+      const { refs: cupRefsRaw, debugLines } = collectCupProgressMatchRefs(data, cupProgressDebug);
+      if (cupProgressDebug && debugLines.length > 0) {
+        for (const line of debugLines) {
+          console.log(line);
         }
+      }
+      const cupRefs = dedupeCupProgressRefs(cupRefsRaw);
+      if (cupProgressDebug) {
+        console.log(`[CupProgress] refs deduped: ${cupRefs.length} (raw ${cupRefsRaw.length}), entering roundsMap`);
+      }
+
+      if (cupRefs.length === 0) {
+        console.log("[CupProgress] No match nodes discovered in Goalserve response, returning empty rounds");
+        return res.json({ competitionId, rounds: [] });
+      }
+
+      for (const { m, defaultRound } of cupRefs) {
+        const matchRound = m?.["@round_name"] ?? m?.round ?? defaultRound;
+        parseMatch(m, String(matchRound));
       }
 
       // ============ COMPETITION-SPECIFIC CANONICAL ROUND SYSTEMS ============
