@@ -37,6 +37,13 @@ interface ParsedCompetition {
   id?: string;
 }
 
+function cleanCompetitionDisplayName(value: string): string {
+  return value
+    .replace(/\s*\[\d+\]\s*$/, "")
+    .replace(/\s*\((Eurocups|England|Germany|Spain|Italy|France|Netherlands|Portugal|Scotland|Turkey|Belgium|Austria|Switzerland)\)\s*$/i, "")
+    .trim();
+}
+
 function isCanonicalTeamId(value: string | undefined | null): value is string {
   if (!value) return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -47,15 +54,15 @@ function parseCompetitionLabel(competition: string | null | undefined): ParsedCo
   
   const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
   if (fullMatch) {
-    return { name: fullMatch[1].trim(), country: fullMatch[2].trim(), id: fullMatch[3] };
+    return { name: cleanCompetitionDisplayName(fullMatch[1].trim()), country: fullMatch[2].trim(), id: fullMatch[3] };
   }
   
   const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
   if (colonMatch) {
-    return { name: colonMatch[2].trim(), country: colonMatch[1].trim() };
+    return { name: cleanCompetitionDisplayName(colonMatch[2].trim()), country: colonMatch[1].trim() };
   }
   
-  return { name: competition };
+  return { name: cleanCompetitionDisplayName(competition) };
 }
 
 function CompetitionBadge({ competition }: { competition: string | null | undefined }) {
@@ -256,9 +263,10 @@ export default function MatchesPage() {
     for (const m of dayMatches) {
       const id = String(m.competitionId || m.goalserveCompetitionId || m.competition || "");
       if (!id) continue;
-      const label = String(m.competition || "Unknown");
+      const rawName = String(m.competition || "Unknown");
+      const label = getDisplayCompetitionName(rawName);
       if (!map.has(id)) {
-        map.set(id, { id, label, rawName: label });
+        map.set(id, { id, label, rawName });
       }
     }
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
