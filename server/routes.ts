@@ -3390,6 +3390,198 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  type FeedBatchSummary = {
+    ok: boolean;
+    feedsProcessed: number;
+    inserted: number;
+    updated: number;
+    skipped: number;
+    errors: string[];
+    durationMs: number;
+    results: Array<{
+      feed: string;
+      ok: boolean;
+      inserted: number;
+      updated: number;
+      skipped: number;
+      error?: string;
+    }>;
+  };
+
+  async function runGoalserveFeedBatch(feeds: string[]): Promise<FeedBatchSummary> {
+    const startedAt = Date.now();
+    const summary: FeedBatchSummary = {
+      ok: true,
+      feedsProcessed: 0,
+      inserted: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+      durationMs: 0,
+      results: [],
+    };
+
+    for (const feed of feeds) {
+      try {
+        const result = await upsertGoalserveMatches(feed);
+        const skipped = (result.skippedNoMatchId ?? 0) + (result.skippedNoKickoff ?? 0);
+        summary.feedsProcessed++;
+        summary.inserted += result.inserted ?? 0;
+        summary.updated += result.updated ?? 0;
+        summary.skipped += skipped;
+        if (!result.ok) {
+          summary.ok = false;
+          if (result.error) summary.errors.push(`${feed}: ${result.error}`);
+        }
+        summary.results.push({
+          feed,
+          ok: result.ok,
+          inserted: result.inserted ?? 0,
+          updated: result.updated ?? 0,
+          skipped,
+          error: result.error,
+        });
+        console.log(`[matches-refresh] feed=${feed} ok=${result.ok} inserted=${result.inserted ?? 0} updated=${result.updated ?? 0} skipped=${skipped}`);
+      } catch (error) {
+        summary.ok = false;
+        summary.feedsProcessed++;
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(`${feed}: ${message}`);
+        summary.results.push({ feed, ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
+        console.error(`[matches-refresh] feed=${feed} failed: ${message}`);
+      }
+    }
+
+    summary.durationMs = Date.now() - startedAt;
+    return summary;
+  }
+
+  // Render Cron cadence recommendation:
+  // - /api/jobs/refresh-matches-live: every 1 minute
+  // - /api/jobs/refresh-matches-today: every 5 minutes
+  // - /api/jobs/refresh-matches-recent: every 15 minutes
+  // - /api/jobs/refresh-matches-near-future: every 30 minutes
+  // - /api/jobs/refresh-matches-week-ahead: every 4 hours
+  // - /api/jobs/refresh-priority-league-fixtures: every 6 hours
+  app.post(
+    "/api/jobs/refresh-matches-live",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const summary = await runGoalserveFeedBatch(["soccernew/live"]);
+      res.json(summary);
+    },
+  );
+
+  app.post(
+    "/api/jobs/refresh-matches-today",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const summary = await runGoalserveFeedBatch(["soccernew/home"]);
+      res.json(summary);
+    },
+  );
+
+  app.post(
+    "/api/jobs/refresh-matches-recent",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const summary = await runGoalserveFeedBatch(["soccernew/d-1"]);
+      res.json(summary);
+    },
+  );
+
+  app.post(
+    "/api/jobs/refresh-matches-near-future",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const summary = await runGoalserveFeedBatch(["soccernew/d1", "soccernew/d2"]);
+      res.json(summary);
+    },
+  );
+
+  app.post(
+    "/api/jobs/refresh-matches-week-ahead",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const summary = await runGoalserveFeedBatch([
+        "soccernew/d3",
+        "soccernew/d4",
+        "soccernew/d5",
+        "soccernew/d6",
+        "soccernew/d7",
+      ]);
+      res.json(summary);
+    },
+  );
+
+  app.post(
+    "/api/jobs/refresh-priority-league-fixtures",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const startedAt = Date.now();
+      const rows = await db
+        .select({
+          goalserveCompetitionId: competitions.goalserveCompetitionId,
+        })
+        .from(competitions)
+        .where(and(eq(competitions.isPriority, true), drizzleSql`trim(coalesce(${competitions.goalserveCompetitionId}, '')) <> ''`));
+
+      const leagueIds = rows
+        .map((row) => row.goalserveCompetitionId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+
+      const summary = {
+        ok: true,
+        feedsProcessed: leagueIds.length,
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        errors: [] as string[],
+        durationMs: 0,
+        results: [] as Array<{
+          leagueId: string;
+          ok: boolean;
+          inserted: number;
+          updated: number;
+          skipped: number;
+          error?: string;
+        }>,
+      };
+
+      for (const leagueId of leagueIds) {
+        try {
+          const result = await syncGoalserveMatches(leagueId);
+          const skipped = (result.skippedNoStaticId ?? 0) + (result.skippedNoKickoff ?? 0);
+          summary.inserted += result.inserted ?? 0;
+          summary.updated += result.updated ?? 0;
+          summary.skipped += skipped;
+          if (!result.ok) {
+            summary.ok = false;
+            if (result.error) summary.errors.push(`league ${leagueId}: ${result.error}`);
+          }
+          summary.results.push({
+            leagueId,
+            ok: result.ok,
+            inserted: result.inserted ?? 0,
+            updated: result.updated ?? 0,
+            skipped,
+            error: result.error,
+          });
+          console.log(`[matches-refresh-priority] leagueId=${leagueId} ok=${result.ok} inserted=${result.inserted ?? 0} updated=${result.updated ?? 0} skipped=${skipped}`);
+        } catch (error) {
+          summary.ok = false;
+          const message = error instanceof Error ? error.message : String(error);
+          summary.errors.push(`league ${leagueId}: ${message}`);
+          summary.results.push({ leagueId, ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
+          console.error(`[matches-refresh-priority] leagueId=${leagueId} failed: ${message}`);
+        }
+      }
+
+      summary.durationMs = Date.now() - startedAt;
+      res.json(summary);
+    },
+  );
+
   // ========== GOALSERVE TABLE PREVIEW (DRY RUN) ==========
   app.post(
     "/api/jobs/preview-goalserve-table",
