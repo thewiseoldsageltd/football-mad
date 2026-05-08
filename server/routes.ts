@@ -3930,21 +3930,97 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const force = req.query.force === "1";
 
       try {
+        const KNOWN_CUP_OR_KNOCKOUT_SLUGS = new Set([
+          "fa-cup",
+          "efl-cup",
+          "scottish-cup",
+          "scottish-league-cup",
+          "copa-del-rey",
+          "coppa-italia",
+          "dfb-pokal",
+          "coupe-de-france",
+        ]);
+        const NON_STANDINGS_SLUGS = new Set([
+          "fifa-world-cup",
+        ]);
+
+        const isKnownCupOrKnockout = (slugOrName: string): boolean => {
+          const v = slugOrName.toLowerCase();
+          if (KNOWN_CUP_OR_KNOCKOUT_SLUGS.has(v)) return true;
+          return /\b(cup|pokal|coppa|copa)\b/.test(v);
+        };
+
+        const isNonStandingsCompetition = (slugOrName: string): boolean => {
+          const v = slugOrName.toLowerCase();
+          if (NON_STANDINGS_SLUGS.has(v)) return true;
+          return /\b(world-cup|world cup)\b/.test(v);
+        };
+
         const comps = await db
           .select({
             slug: competitions.slug,
+            name: competitions.name,
             canonicalSlug: competitions.canonicalSlug,
+            isCup: competitions.isCup,
             goalserveCompetitionId: competitions.goalserveCompetitionId,
           })
           .from(competitions)
-          .where(and(eq(competitions.isPriority, true), eq(competitions.isCup, false)));
+          .where(eq(competitions.isPriority, true));
 
-        const results: Array<{ canonicalSlug: string; leagueId: string | null; ok: boolean; skipped: boolean; error: string | null }> = [];
+        const results: Array<{
+          canonicalSlug: string;
+          leagueId: string | null;
+          ok: boolean;
+          skipped: boolean;
+          skipReason: "cup" | "missing_goalserve_id" | "non_standings" | null;
+          error: string | null;
+        }> = [];
+        let skippedCups = 0;
+        let skippedMissingGoalserveId = 0;
+        let skippedNonStandings = 0;
+
         for (const comp of comps) {
-          const leagueId = comp.goalserveCompetitionId;
           const canonicalSlug = comp.canonicalSlug || comp.slug;
+          const compName = comp.name || "";
+          const leagueId = comp.goalserveCompetitionId?.trim() || null;
+          const slugOrName = `${canonicalSlug} ${compName}`.trim();
+
+          if (comp.isCup || isKnownCupOrKnockout(slugOrName)) {
+            skippedCups++;
+            results.push({
+              canonicalSlug,
+              leagueId,
+              ok: true,
+              skipped: true,
+              skipReason: "cup",
+              error: null,
+            });
+            continue;
+          }
+
+          if (isNonStandingsCompetition(slugOrName)) {
+            skippedNonStandings++;
+            results.push({
+              canonicalSlug,
+              leagueId,
+              ok: true,
+              skipped: true,
+              skipReason: "non_standings",
+              error: null,
+            });
+            continue;
+          }
+
           if (!leagueId) {
-            results.push({ canonicalSlug, leagueId: null, ok: false, skipped: false, error: "No goalserve_competition_id" });
+            skippedMissingGoalserveId++;
+            results.push({
+              canonicalSlug,
+              leagueId: null,
+              ok: true,
+              skipped: true,
+              skipReason: "missing_goalserve_id",
+              error: "No goalserve_competition_id",
+            });
             continue;
           }
 
@@ -3954,18 +4030,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             leagueId,
             ok: !!result.ok,
             skipped: !!result.skipped,
+            skipReason: null,
             error: result.ok ? null : result.error || result.reason || "Unknown error",
           });
         }
 
-        const okCount = results.filter((r) => r.ok || r.skipped).length;
+        const succeeded = results.filter((r) => (r.ok && !r.skipped) || (r.ok && r.skipped)).length;
+        const failed = results.length - succeeded;
         res.json({
-          ok: true,
+          ok: failed === 0,
           season,
           force,
           total: results.length,
-          succeeded: okCount,
-          failed: results.length - okCount,
+          succeeded,
+          failed,
+          skippedCups,
+          skippedMissingGoalserveId,
+          skippedNonStandings,
           results,
         });
       } catch (error) {
