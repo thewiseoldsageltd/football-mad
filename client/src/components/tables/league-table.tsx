@@ -42,6 +42,19 @@ function getGDColorClass(gd: number): string {
   return "text-muted-foreground";
 }
 
+type RowMarker = { label: string; kind: "champion" | "promoted" | "relegated" };
+
+function deriveRowMarker(row: LeagueTableRow): RowMarker | null {
+  const note = String(row.qualificationNote ?? "").toLowerCase();
+  const movement = String(row.movementStatus ?? "").toLowerCase();
+  const source = `${note} ${movement}`;
+
+  if (/\b(champion|winner)\b/.test(source)) return { label: "Champion", kind: "champion" };
+  if (/\b(promoted|promotion)\b/.test(source)) return { label: "P", kind: "promoted" };
+  if (/\b(relegated|relegation)\b/.test(source)) return { label: "R", kind: "relegated" };
+  return null;
+}
+
 interface ExpandedRowContentProps {
   row: LeagueTableRow;
 }
@@ -93,6 +106,7 @@ const StandingsRow = memo(function StandingsRow({
   onToggle 
 }: StandingsRowProps) {
   const zoneStripeColor = getZoneStripeColor(row.pos, showZones, zones);
+  const marker = deriveRowMarker(row);
   
   return (
     <>
@@ -130,6 +144,20 @@ const StandingsRow = memo(function StandingsRow({
           <div className="flex items-center gap-2 min-w-0">
             <TeamCrest teamId={row.teamId} teamName={row.teamName} size="sm" />
             <span className="font-medium text-sm truncate">{row.teamName}</span>
+            {marker && (
+              <span
+                className={
+                  marker.kind === "champion"
+                    ? "inline-flex items-center rounded-md border border-amber-400/60 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900 dark:bg-amber-900/20 dark:text-amber-200"
+                    : marker.kind === "promoted"
+                      ? "inline-flex items-center rounded-md border border-emerald-400/60 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-200"
+                      : "inline-flex items-center rounded-md border border-red-400/60 bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-900 dark:bg-red-900/20 dark:text-red-200"
+                }
+                title={marker.kind === "champion" ? "Champion" : marker.kind === "promoted" ? "Promoted" : "Relegated"}
+              >
+                {marker.kind === "champion" ? "🏆" : marker.label}
+              </span>
+            )}
           </div>
         </TableCell>
 

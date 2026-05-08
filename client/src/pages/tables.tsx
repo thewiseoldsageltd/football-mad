@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Trophy, Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Trophy } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { CupProgress } from "@/components/tables/cup-progress";
 import { EuropeProgress } from "@/components/tables/europe-progress";
@@ -77,13 +78,17 @@ interface StandingsApiRow {
   goalDifference: number;
   points: number;
   recentForm?: string | null;
+  movementStatus?: string | null;
+  qualificationNote?: string | null;
 }
 
 interface StandingsApiResponse {
   snapshot: {
     leagueId: string;
     season: string;
-    fetchedAt: string;
+    fetchedAt?: string;
+    asOf?: string;
+    nowUtc?: string;
   };
   table: StandingsApiRow[];
 }
@@ -104,6 +109,8 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
     gd: row.goalDifference,
     pts: row.points,
     recentForm: row.recentForm ?? undefined,
+    movementStatus: row.movementStatus ?? null,
+    qualificationNote: row.qualificationNote ?? null,
   };
 }
 
@@ -151,7 +158,6 @@ export default function TablesPage() {
     if (apiSeason) {
       params.set("season", apiSeason);
     }
-    params.set("autoRefresh", "1");
     params.set("tablesOnly", "1");
     return `/api/standings?${params.toString()}`;
   }, [goalserveLeagueId, apiSeason]);
@@ -161,7 +167,7 @@ export default function TablesPage() {
     enabled: topTab === "leagues" && !!standingsUrl,
     staleTime: 30_000,
     refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const tableRows = useMemo(() => {
@@ -202,10 +208,18 @@ export default function TablesPage() {
 
     if (standingsLoading) {
       return (
-        <Card>
-          <CardContent className="p-6 flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading standings...</span>
+        <Card className="h-fit">
+          <CardContent className="p-4 sm:p-6 space-y-3">
+            <Skeleton className="h-4 w-36" />
+            <div className="space-y-2">
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div key={idx} className="grid grid-cols-[32px_1fr_52px] items-center gap-3">
+                  <Skeleton className="h-4 w-6" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-10 justify-self-end" />
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       );
@@ -234,6 +248,11 @@ export default function TablesPage() {
     return (
       <Card className="h-fit">
         <CardContent className="p-4 sm:p-6">
+          {standingsData?.snapshot?.asOf && (
+            <div className="mb-3 text-xs text-muted-foreground" data-testid="text-standings-last-updated">
+              Last updated: {new Date(standingsData.snapshot.asOf).toLocaleString("en-GB", { hour12: false })}
+            </div>
+          )}
           <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
         </CardContent>
       </Card>

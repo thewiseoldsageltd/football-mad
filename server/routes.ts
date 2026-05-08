@@ -3921,6 +3921,156 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== REFRESH PRIORITY STANDINGS (cron-friendly alias) ==========
+  app.post(
+    "/api/jobs/refresh-priority-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
+      const force = req.query.force === "1";
+
+      try {
+        const comps = await db
+          .select({
+            slug: competitions.slug,
+            canonicalSlug: competitions.canonicalSlug,
+            goalserveCompetitionId: competitions.goalserveCompetitionId,
+          })
+          .from(competitions)
+          .where(and(eq(competitions.isPriority, true), eq(competitions.isCup, false)));
+
+        const results: Array<{ canonicalSlug: string; leagueId: string | null; ok: boolean; skipped: boolean; error: string | null }> = [];
+        for (const comp of comps) {
+          const leagueId = comp.goalserveCompetitionId;
+          const canonicalSlug = comp.canonicalSlug || comp.slug;
+          if (!leagueId) {
+            results.push({ canonicalSlug, leagueId: null, ok: false, skipped: false, error: "No goalserve_competition_id" });
+            continue;
+          }
+
+          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
+          results.push({
+            canonicalSlug,
+            leagueId,
+            ok: !!result.ok,
+            skipped: !!result.skipped,
+            error: result.ok ? null : result.error || result.reason || "Unknown error",
+          });
+        }
+
+        const okCount = results.filter((r) => r.ok || r.skipped).length;
+        res.json({
+          ok: true,
+          season,
+          force,
+          total: results.length,
+          succeeded: okCount,
+          failed: results.length - okCount,
+          results,
+        });
+      } catch (error) {
+        console.error("Priority standings refresh error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
+  const CUP_REFRESH_TARGETS = [
+    { slug: "fa-cup", competitionId: "1198" },
+    { slug: "efl-cup", competitionId: "1199" },
+    { slug: "scottish-cup", competitionId: "1371" },
+    { slug: "scottish-league-cup", competitionId: "1372" },
+    { slug: "copa-del-rey", competitionId: "1397" },
+    { slug: "coppa-italia", competitionId: "1264" },
+    { slug: "dfb-pokal", competitionId: "1226" },
+    { slug: "coupe-de-france", competitionId: "1218" },
+  ] as const;
+
+  const EUROPE_REFRESH_TARGETS = [
+    { slug: "champions-league", competitionId: "1005" },
+    { slug: "europa-league", competitionId: "1007" },
+    { slug: "conference-league", competitionId: "18853" },
+  ] as const;
+
+  // NOTE: Cup/Europe feeds are currently live-read only (not persisted in DB).
+  // These protected jobs are lightweight "refresh checks" for cron/ops visibility.
+  app.post(
+    "/api/jobs/refresh-cup-progress",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const season = (req.query.season as string | undefined)?.trim();
+      try {
+        const { goalserveFetch } = await import("./integrations/goalserve/client");
+        const results: Array<{ slug: string; competitionId: string; ok: boolean; stageCount: number; error: string | null }> = [];
+
+        for (const target of CUP_REFRESH_TARGETS) {
+          const endpoint = season
+            ? `soccerfixtures/leagueid/${target.competitionId}?season=${encodeURIComponent(season)}`
+            : `soccerfixtures/leagueid/${target.competitionId}`;
+          try {
+            const data = await goalserveFetch(endpoint);
+            const tournament = data?.results?.tournament ?? data?.res?.fixtures?.tournament ?? null;
+            const stages = tournament?.stage;
+            const stageArr = Array.isArray(stages) ? stages : stages ? [stages] : [];
+            results.push({ slug: target.slug, competitionId: target.competitionId, ok: true, stageCount: stageArr.length, error: null });
+          } catch (err) {
+            results.push({
+              slug: target.slug,
+              competitionId: target.competitionId,
+              ok: false,
+              stageCount: 0,
+              error: err instanceof Error ? err.message : "Unknown error",
+            });
+          }
+        }
+
+        const okCount = results.filter((r) => r.ok).length;
+        res.json({ ok: true, season: season || null, total: results.length, succeeded: okCount, failed: results.length - okCount, results });
+      } catch (error) {
+        console.error("Cup progress refresh error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
+  app.post(
+    "/api/jobs/refresh-europe-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const season = (req.query.season as string | undefined)?.trim();
+      try {
+        const { goalserveFetch } = await import("./integrations/goalserve/client");
+        const results: Array<{ slug: string; competitionId: string; ok: boolean; hasStandings: boolean; error: string | null }> = [];
+
+        for (const target of EUROPE_REFRESH_TARGETS) {
+          const endpoint = season
+            ? `soccernew/standings/${target.competitionId}?season=${encodeURIComponent(season)}`
+            : `soccernew/standings/${target.competitionId}`;
+          try {
+            const data = await goalserveFetch(endpoint);
+            const categories = data?.standings?.category;
+            const hasStandings = Array.isArray(categories) ? categories.length > 0 : !!categories;
+            results.push({ slug: target.slug, competitionId: target.competitionId, ok: true, hasStandings, error: null });
+          } catch (err) {
+            results.push({
+              slug: target.slug,
+              competitionId: target.competitionId,
+              ok: false,
+              hasStandings: false,
+              error: err instanceof Error ? err.message : "Unknown error",
+            });
+          }
+        }
+
+        const okCount = results.filter((r) => r.ok).length;
+        res.json({ ok: true, season: season || null, total: results.length, succeeded: okCount, failed: results.length - okCount, results });
+      } catch (error) {
+        console.error("Europe standings refresh error:", error);
+        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
   // ========== SYNC GOALSERVE SQUADS (players + managers from soccerleague endpoint) ==========
   app.post(
     "/api/jobs/sync-goalserve-squads",
@@ -4250,9 +4400,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== PUBLIC STANDINGS ENDPOINT ==========
-  // In-memory throttle map for auto-refresh: key = "leagueId:season", value = lastRunMs
-  const standingsAutoRefreshThrottle = new Map<string, number>();
-  const STANDINGS_REFRESH_COOLDOWN_MS = 60_000; // 1 minute
+  // Read-only endpoint: no synchronous upstream refresh in public GET path.
 
   app.get("/api/standings", async (req, res) => {
     try {
@@ -4266,7 +4414,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const defaultSeason = `${currentYear}/${currentYear + 1}`;
       const season = (req.query.season as string) || defaultSeason;
       const asOfParam = req.query.asOf as string | undefined;
-      const autoRefresh = req.query.autoRefresh === "1";
       const tablesOnly = req.query.tablesOnly === "1";
 
       // Normalize season to YYYY-YYYY format for comparison (handles 2025/26, 2025-26, 2025/2026, etc.)
@@ -4288,27 +4435,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // When tablesOnly=1, skip round computation entirely for faster response
       const includeRounds = !tablesOnly && isCurrentSeason && isPremierLeague;
 
-      // Auto-refresh logic: attempt standings ingestion if allowed by throttle
-      if (autoRefresh) {
-        const throttleKey = `${leagueId}:${season}`;
-        const lastRun = standingsAutoRefreshThrottle.get(throttleKey) || 0;
-        const nowMs = Date.now();
-        
-        if (nowMs - lastRun >= STANDINGS_REFRESH_COOLDOWN_MS) {
-          standingsAutoRefreshThrottle.set(throttleKey, nowMs);
-          try {
-            const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
-            if (result.ok) {
-              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
-            } else {
-              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} FAILED: ${result.error}`);
-            }
-          } catch (refreshErr) {
-            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ERROR:`, refreshErr);
-          }
-        }
-      }
-
       const conditions = [
         eq(standingsSnapshots.leagueId, leagueId),
         eq(standingsSnapshots.season, season),
@@ -4325,30 +4451,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(and(...conditions))
         .orderBy(desc(standingsSnapshots.asOf))
         .limit(1);
-
-      // On-demand backfill: if no snapshot exists, try to ingest one
-      if (!snapshot) {
-        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${season}, attempting backfill...`);
-        try {
-          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force: true });
-          if (result.ok && !result.skipped) {
-            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${season} rows=${result.insertedRowsCount}`);
-            // Query again for the newly created snapshot
-            [snapshot] = await db
-              .select()
-              .from(standingsSnapshots)
-              .where(and(...conditions))
-              .orderBy(desc(standingsSnapshots.asOf))
-              .limit(1);
-          } else if (result.ok && result.skipped) {
-            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${season} (no change from Goalserve)`);
-          } else {
-            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${season}: ${result.error || result.reason}`);
-          }
-        } catch (backfillErr) {
-          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${season}:`, backfillErr);
-        }
-      }
 
       if (!snapshot) {
         return res.status(404).json({ 

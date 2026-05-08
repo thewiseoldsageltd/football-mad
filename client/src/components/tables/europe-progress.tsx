@@ -32,6 +32,7 @@ interface EuropeResponse {
   standings?: StandingTeam[];
   error?: string;
 }
+// TODO(post-MVP): Add knockout bracket/stage rendering when Europe data is persisted.
 
 interface EuropeProgressProps {
   competitionSlug: string;

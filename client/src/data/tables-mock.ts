@@ -13,6 +13,8 @@ export interface TableRow {
   gd: number;
   pts: number;
   recentForm?: string;
+  movementStatus?: string | null;
+  qualificationNote?: string | null;
 }
 
 export interface Competition {
