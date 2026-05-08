@@ -1222,6 +1222,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     awayGoalserveTeamId: matches.awayGoalserveTeamId,
     seasonKey: matches.seasonKey,
     goalserveMatchId: matches.goalserveMatchId,
+    goalserveStaticId: matches.goalserveStaticId,
     timeline: matches.timeline,
   };
 
@@ -1498,6 +1499,76 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!status) return false;
     const lower = status.toLowerCase();
     return LIVE_STATUSES.includes(lower) || /^\d+$/.test(status); // numeric minute = live
+  }
+
+  function filterSupersededMovedFixtures(matchRows: any[]): any[] {
+    if (matchRows.length <= 1) return matchRows;
+
+    const rowsByStaticId = new Map<string, any[]>();
+    const rowsByComposite = new Map<string, any[]>();
+
+    const toMs = (value: unknown): number => {
+      const d = value instanceof Date ? value : new Date(String(value ?? ""));
+      return d.getTime();
+    };
+
+    for (const row of matchRows) {
+      const staticId = String(row.goalserveStaticId ?? "").trim();
+      if (staticId) {
+        if (!rowsByStaticId.has(staticId)) rowsByStaticId.set(staticId, []);
+        rowsByStaticId.get(staticId)!.push(row);
+      }
+
+      const compId = String(row.goalserveCompetitionId ?? "").trim();
+      const homeGs = String(row.homeGoalserveTeamId ?? "").trim();
+      const awayGs = String(row.awayGoalserveTeamId ?? "").trim();
+      const round = String(row.goalserveRound ?? "").trim();
+      const season = String(row.seasonKey ?? "").trim();
+      if (compId && homeGs && awayGs && round && season) {
+        const key = `${compId}::${homeGs}::${awayGs}::${round}::${season}`;
+        if (!rowsByComposite.has(key)) rowsByComposite.set(key, []);
+        rowsByComposite.get(key)!.push(row);
+      }
+    }
+
+    for (const bucket of [...rowsByStaticId.values(), ...rowsByComposite.values()]) {
+      bucket.sort((a, b) => toMs(a.kickoffTime) - toMs(b.kickoffTime));
+    }
+
+    return matchRows.filter((row) => {
+      if (isFinishedStatus(row.status) || isLiveStatus(row.status)) return true;
+      if (String(row.status ?? "").toLowerCase() !== "scheduled") return true;
+
+      const kickoffMs = toMs(row.kickoffTime);
+      const staleWindowMs = 7 * 24 * 60 * 60 * 1000;
+
+      const staticId = String(row.goalserveStaticId ?? "").trim();
+      if (staticId) {
+        const bucket = rowsByStaticId.get(staticId) ?? [];
+        const hasNewerStaticRow = bucket.some((candidate) => {
+          if (candidate.id === row.id) return false;
+          const candidateMs = toMs(candidate.kickoffTime);
+          return candidateMs > kickoffMs && candidateMs - kickoffMs <= staleWindowMs;
+        });
+        if (hasNewerStaticRow) return false;
+      }
+
+      const compId = String(row.goalserveCompetitionId ?? "").trim();
+      const homeGs = String(row.homeGoalserveTeamId ?? "").trim();
+      const awayGs = String(row.awayGoalserveTeamId ?? "").trim();
+      const round = String(row.goalserveRound ?? "").trim();
+      const season = String(row.seasonKey ?? "").trim();
+      if (!(compId && homeGs && awayGs && round && season)) return true;
+
+      const key = `${compId}::${homeGs}::${awayGs}::${round}::${season}`;
+      const bucket = rowsByComposite.get(key) ?? [];
+      const hasNewerCompositeRow = bucket.some((candidate) => {
+        if (candidate.id === row.id) return false;
+        const candidateMs = toMs(candidate.kickoffTime);
+        return candidateMs > kickoffMs && candidateMs - kickoffMs <= staleWindowMs;
+      });
+      return !hasNewerCompositeRow;
+    });
   }
 
   // GET /api/matches/fixtures - upcoming matches (not finished) in next N days
@@ -1992,6 +2063,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
         }
       }
+
+      const staleScanEnd = new Date(nextDate);
+      staleScanEnd.setUTCDate(staleScanEnd.getUTCDate() + 7);
+      const staleScanRows = await db
+        .select(matchListFields)
+        .from(matches)
+        .where(
+          and(
+            gte(matches.kickoffTime, start),
+            drizzleSql`${matches.kickoffTime} < ${staleScanEnd}`,
+            inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
+          ),
+        )
+        .orderBy(asc(matches.kickoffTime))
+        .limit(2000);
+      const suppressedIds = new Set(
+        staleScanRows
+          .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
+          .map((row) => row.id),
+      );
+      const keptRows = filterSupersededMovedFixtures(staleScanRows);
+      const keptIds = new Set(
+        keptRows
+          .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
+          .map((row) => row.id),
+      );
+      results = results.filter((row) => !suppressedIds.has(row.id) || keptIds.has(row.id));
 
       const teamMaps = await fetchTeamMaps(results);
       const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
