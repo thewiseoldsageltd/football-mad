@@ -194,15 +194,16 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
 
     const dbCompetitions = await db
       .select({
+        id: competitions.id,
         goalserveCompetitionId: competitions.goalserveCompetitionId,
         name: competitions.name,
       })
       .from(competitions);
 
-    const competitionsMap = new Map<string, string>();
+    const competitionsMap = new Map<string, { id: string; name: string }>();
     for (const comp of dbCompetitions) {
       if (comp.goalserveCompetitionId) {
-        competitionsMap.set(comp.goalserveCompetitionId, comp.name);
+        competitionsMap.set(comp.goalserveCompetitionId, { id: comp.id, name: comp.name });
       }
     }
 
@@ -227,7 +228,9 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       const categoryFormattedDate = category.matches["@formatted_date"] ?? category.matches.formatted_date ?? "";
       
       const competitionId = String(category?.["@id"] ?? category?.id ?? "");
-      const competitionName = competitionsMap.get(competitionId) || String(category?.["@name"] ?? category?.name ?? "Unknown");
+      const mappedCompetition = competitionsMap.get(competitionId);
+      const competitionName = mappedCompetition?.name || String(category?.["@name"] ?? category?.name ?? "Unknown");
+      const competitionCanonicalId = mappedCompetition?.id || null;
 
       const matchData = category.matches.match;
       const matchList = Array.isArray(matchData) ? matchData : [matchData];
@@ -292,11 +295,19 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           away: { id: awayGsId, name: visitorTeam["@name"] ?? visitorTeam.name, score: awayScore },
         };
 
-        const existing = await db
+        let existing = (await db
           .select()
           .from(matches)
           .where(eq(matches.goalserveMatchId, goalserveMatchId))
-          .limit(1);
+          .limit(1))[0];
+
+        if (!existing && goalserveStaticId) {
+          existing = (await db
+            .select()
+            .from(matches)
+            .where(eq(matches.goalserveStaticId, goalserveStaticId))
+            .limit(1))[0];
+        }
 
         // extractScore already returns number | null
         const newHomeScore = homeScore;
@@ -311,19 +322,19 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           }
         }
 
-        if (existing.length > 0) {
-          const existingMatch = existing[0];
-          
+        if (existing) {
           // IMPORTANT: Never overwrite non-null final scores with null
           // This prevents later feeds from erasing valid scores
-          const finalHomeScore = newHomeScore !== null ? newHomeScore : existingMatch.homeScore;
-          const finalAwayScore = newAwayScore !== null ? newAwayScore : existingMatch.awayScore;
+          const finalHomeScore = newHomeScore !== null ? newHomeScore : existing.homeScore;
+          const finalAwayScore = newAwayScore !== null ? newAwayScore : existing.awayScore;
 
           await db
             .update(matches)
             .set({
-              goalserveStaticId: goalserveStaticId || null,
-              goalserveCompetitionId: competitionId || null,
+              goalserveMatchId: goalserveMatchId || existing.goalserveMatchId,
+              goalserveStaticId: goalserveStaticId || existing.goalserveStaticId,
+              goalserveCompetitionId: competitionId || existing.goalserveCompetitionId,
+              competitionId: competitionCanonicalId || existing.competitionId,
               goalserveRound,
               homeGoalserveTeamId: homeGsId || null,
               awayGoalserveTeamId: awayGsId || null,
@@ -337,7 +348,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               venue: venue || null,
               timeline: compactRaw,
             })
-            .where(eq(matches.goalserveMatchId, goalserveMatchId));
+            .where(eq(matches.id, existing.id));
           updated++;
         } else {
           await db.insert(matches).values({
@@ -345,6 +356,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             goalserveMatchId,
             goalserveStaticId: goalserveStaticId || null,
             goalserveCompetitionId: competitionId || null,
+            competitionId: competitionCanonicalId,
             goalserveRound,
             homeGoalserveTeamId: homeGsId || null,
             awayGoalserveTeamId: awayGsId || null,
