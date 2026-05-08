@@ -4,6 +4,7 @@ import { enGB } from "date-fns/locale";
 import { MockMatch } from "./mockMatches";
 import { EnhancedMatchCard } from "./EnhancedMatchCard";
 import { Calendar } from "lucide-react";
+import { compareCompetitionsByPriority } from "./competition-priority";
 
 interface MatchesListProps {
   matches: MockMatch[];
@@ -92,7 +93,7 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           displayLabelCounts.get(displayLabel)!.push(groupKey);
         });
 
-        // Build competition groups - no country disambiguation needed (flag conveys country)
+        // Build competition groups and apply editorial display ordering
         const competitions: CompetitionGroup[] = [];
         byCompetition.forEach((compMatches, groupKey) => {
           const displayLabel = compMatches[0].competition;
@@ -105,6 +106,18 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
             ),
           });
         });
+        competitions.sort((a, b) =>
+          compareCompetitionsByPriority(
+            {
+              name: a.displayLabel,
+              goalserveCompetitionId: a.matches[0]?.goalserveCompetitionId ?? null,
+            },
+            {
+              name: b.displayLabel,
+              goalserveCompetitionId: b.matches[0]?.goalserveCompetitionId ?? null,
+            },
+          ),
+        );
 
         return {
           date: dateKey,

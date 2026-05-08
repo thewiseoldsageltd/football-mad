@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { getCountryFlagUrl } from "@/lib/flags";
+import { compareCompetitionsByPriority } from "@/components/matches/competition-priority";
 
 interface ApiMatch {
   id: string;
@@ -269,7 +270,12 @@ export default function MatchesPage() {
         map.set(id, { id, label, rawName });
       }
     }
-    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+    return Array.from(map.values()).sort((a, b) =>
+      compareCompetitionsByPriority(
+        { name: a.label, goalserveCompetitionId: a.id },
+        { name: b.label, goalserveCompetitionId: b.id },
+      ),
+    );
   }, [dayMatches]);
 
   const statusFiltered = useMemo(() => {
