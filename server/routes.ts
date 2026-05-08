@@ -1981,8 +1981,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return null; // Outside supported range
   }
 
-  // GET /api/matches/day - date-driven matches endpoint
-  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1, refresh=1
+  // GET /api/matches/day - date-driven matches endpoint (read-only)
+  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1
   app.get("/api/matches/day", async (req, res) => {
     try {
       const dateStr = req.query.date as string;
@@ -2037,32 +2037,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(eq(matches.goalserveCompetitionId, competitionId));
       }
 
-      const refresh = req.query.refresh === "1";
-
       let results = await db.select(matchListFields)
         .from(matches)
         .where(and(...conditions))
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
-
-      // If no results (or refresh requested), try Goalserve sync
-      if (refresh || results.length === 0) {
-        const feed = goalserveFeedForDate(effectiveDate);
-        if (feed) {
-          try {
-            await upsertGoalserveMatches(feed);
-            // Re-run query after sync
-            results = await db.select(matchListFields)
-              .from(matches)
-              .where(and(...conditions))
-              .orderBy(asc(matches.kickoffTime))
-              .limit(limit);
-          } catch (syncErr) {
-            console.error(`Goalserve sync failed for feed ${feed}:`, syncErr);
-            // Continue with existing results (may be empty)
-          }
-        }
-      }
 
       const staleScanEnd = new Date(nextDate);
       staleScanEnd.setUTCDate(staleScanEnd.getUTCDate() + 7);
