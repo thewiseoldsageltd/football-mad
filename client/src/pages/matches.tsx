@@ -382,7 +382,7 @@ export default function MatchesPage() {
               <SelectItem value="all">All competitions</SelectItem>
               {competitionOptions.map((opt) => (
                 <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} displayName={opt.label} />
+                  <CompetitionOption competition={opt.rawName} competitionId={opt.id} displayName={opt.label} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -462,7 +462,7 @@ export default function MatchesPage() {
               <SelectItem value="all">All competitions</SelectItem>
               {competitionOptions.map((opt) => (
                 <SelectItem key={opt.id} value={opt.id}>
-                  <CompetitionOption competition={opt.rawName} displayName={opt.label} />
+                  <CompetitionOption competition={opt.rawName} competitionId={opt.id} displayName={opt.label} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -505,16 +505,25 @@ export default function MatchesPage() {
             </p>
           </div>
         ) : (
-          <MatchesList matches={currentMatches} activeTab={activeTab} />
+          <MatchesList matches={currentMatches} activeTab={activeTab} sortMode={sortMode} />
         )}
       </div>
     </MainLayout>
   );
 }
 
-function CompetitionOption({ competition, displayName }: { competition: string | null | undefined; displayName?: string }) {
+function CompetitionOption({
+  competition,
+  competitionId,
+  displayName,
+}: {
+  competition: string | null | undefined;
+  competitionId?: string | null;
+  displayName?: string;
+}) {
   const parsed = parseCompetitionLabel(competition);
-  const flagUrl = getCountryFlagUrl(parsed.country);
+  const country = parsed.country || getCompetitionCountryById(competitionId);
+  const flagUrl = getCountryFlagUrl(country);
   // Use provided displayName (may include disambiguation) or fallback to parsed name
   const label = displayName || parsed.name;
 
@@ -523,7 +532,7 @@ function CompetitionOption({ competition, displayName }: { competition: string |
       {flagUrl ? (
         <img 
           src={flagUrl} 
-          alt={parsed.country || ""} 
+          alt={country || ""} 
           className="w-4 h-3 object-cover rounded-sm"
           onError={(e) => {
             e.currentTarget.style.display = 'none';

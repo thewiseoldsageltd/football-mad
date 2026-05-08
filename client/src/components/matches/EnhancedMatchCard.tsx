@@ -43,14 +43,17 @@ function parseCompetitionLabel(competition: string | null | undefined): ParsedCo
 function CompetitionBadge({
   rawCompetition,
   displayName,
+  goalserveCompetitionId,
   logoUrl,
 }: {
   rawCompetition?: string | null;
   displayName: string;
+  goalserveCompetitionId?: string | null;
   logoUrl?: string | null;
 }) {
   const parsed = parseCompetitionLabel(rawCompetition);
-  const flagUrl = getCountryFlagUrl(parsed.country);
+  const country = parsed.country || getCompetitionCountryById(goalserveCompetitionId);
+  const flagUrl = getCountryFlagUrl(country ?? undefined);
 
   return (
     <Badge
@@ -71,7 +74,7 @@ function CompetitionBadge({
       ) : flagUrl ? (
         <img 
           src={flagUrl} 
-          alt={parsed.country || ""} 
+          alt={country || ""} 
           className="w-4 h-3 object-cover rounded-sm"
           onError={(e) => {
             e.currentTarget.style.display = 'none';
@@ -167,6 +170,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
             <CompetitionBadge
               rawCompetition={match.rawCompetition}
               displayName={displayLabel}
+              goalserveCompetitionId={match.goalserveCompetitionId}
               logoUrl={match.competitionLogoUrl}
             />
           </div>

@@ -9,6 +9,7 @@ import { compareCompetitionsByPriority } from "./competition-priority";
 interface MatchesListProps {
   matches: MockMatch[];
   activeTab?: string;
+  sortMode?: "competition" | "kickoff";
 }
 
 interface DateGroup {
@@ -58,7 +59,7 @@ function extractCountryFromRaw(raw: string | null | undefined): string | null {
   return match ? match[1] : null;
 }
 
-export function MatchesList({ matches, activeTab }: MatchesListProps) {
+export function MatchesList({ matches, activeTab, sortMode = "competition" }: MatchesListProps) {
   const groupedMatches = useMemo(() => {
     const byDate: Record<string, MockMatch[]> = {};
     
@@ -92,6 +93,24 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           }
           displayLabelCounts.get(displayLabel)!.push(groupKey);
         });
+
+        // Kickoff mode: single chronological list per date (no competition-priority grouping)
+        if (sortMode === "kickoff") {
+          const kickoffSorted = [...dateMatches].sort(
+            (a, b) => new Date(a.kickOffTime).getTime() - new Date(b.kickOffTime).getTime()
+          );
+          return {
+            date: dateKey,
+            label: formatDateLabel(dateKey),
+            competitions: [
+              {
+                groupKey: `kickoff-${dateKey}`,
+                displayLabel: "",
+                matches: kickoffSorted,
+              },
+            ],
+          };
+        }
 
         // Build competition groups and apply editorial display ordering
         const competitions: CompetitionGroup[] = [];
@@ -127,7 +146,7 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
       });
 
     return dateGroups;
-  }, [matches]);
+  }, [matches, sortMode]);
 
   if (matches.length === 0) {
     return <MatchesEmptyState />;
@@ -150,7 +169,7 @@ export function MatchesList({ matches, activeTab }: MatchesListProps) {
           
           {dateGroup.competitions.map((compGroup, compIndex) => (
             <div key={compGroup.groupKey}>
-              {compIndex > 0 && (
+              {sortMode !== "kickoff" && compIndex > 0 && (
                 <div className="border-t border-gray-200/60 dark:border-white/10 my-6" />
               )}
               <div className="grid grid-cols-1 gap-4">
