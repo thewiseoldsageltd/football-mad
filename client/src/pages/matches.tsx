@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { compareCompetitionsByPriority, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
+import { compareCompetitionsByPriority, getCompetitionCountryById, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 
 interface ApiMatch {
   id: string;
@@ -54,6 +54,12 @@ function parseCompetitionLabel(competition: string | null | undefined): ParsedCo
   const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
   if (colonMatch) {
     return { name: getPublicCompetitionDisplayName(colonMatch[2].trim(), null), country: colonMatch[1].trim() };
+  }
+
+  const idMatch = competition.match(/\[(\d+)\]\s*$/);
+  if (idMatch) {
+    const country = getCompetitionCountryById(idMatch[1]);
+    return { name: getPublicCompetitionDisplayName(competition, idMatch[1]), country: country ?? undefined, id: idMatch[1] };
   }
   
   return { name: getPublicCompetitionDisplayName(competition, null) };

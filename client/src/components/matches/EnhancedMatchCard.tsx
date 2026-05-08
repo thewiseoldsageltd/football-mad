@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
 import { EntityAvatar } from "@/components/entity-media";
+import { getCompetitionCountryById, getPublicCompetitionDisplayName } from "./competition-priority";
 
 interface EnhancedMatchCardProps {
   match: MockMatch;
@@ -17,27 +18,26 @@ interface ParsedCompetition {
   id?: string;
 }
 
-function cleanCompetitionDisplayName(value: string): string {
-  return value
-    .replace(/\s*\[\d+\]\s*$/, "")
-    .replace(/\s*\((Eurocups|England|Germany|Spain|Italy|France|Netherlands|Portugal|Scotland|Turkey|Belgium|Austria|Switzerland)\)\s*$/i, "")
-    .trim();
-}
-
 function parseCompetitionLabel(competition: string | null | undefined): ParsedCompetition {
   if (!competition) return { name: "Unknown" };
   
   const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
   if (fullMatch) {
-    return { name: cleanCompetitionDisplayName(fullMatch[1].trim()), country: fullMatch[2].trim(), id: fullMatch[3] };
+    return { name: getPublicCompetitionDisplayName(fullMatch[1].trim(), fullMatch[3]), country: fullMatch[2].trim(), id: fullMatch[3] };
   }
   
   const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
   if (colonMatch) {
-    return { name: cleanCompetitionDisplayName(colonMatch[2].trim()), country: colonMatch[1].trim() };
+    return { name: getPublicCompetitionDisplayName(colonMatch[2].trim(), null), country: colonMatch[1].trim() };
+  }
+
+  const idMatch = competition.match(/\[(\d+)\]\s*$/);
+  if (idMatch) {
+    const country = getCompetitionCountryById(idMatch[1]);
+    return { name: getPublicCompetitionDisplayName(competition, idMatch[1]), country: country ?? undefined, id: idMatch[1] };
   }
   
-  return { name: cleanCompetitionDisplayName(competition) };
+  return { name: getPublicCompetitionDisplayName(competition, null) };
 }
 
 function CompetitionBadge({
@@ -143,10 +143,10 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
   // Use provided competitionLabel (may be disambiguated), fallback to match.competition
   // Strip any country suffix like "(England)" or "• England" - flag is enough
   const rawLabel = competitionLabel || match.competition;
-  const displayLabel = cleanCompetitionDisplayName(
-    rawLabel
-      .replace(/\s*•\s*\w+\s*$/, "")
-      .trim(),
+  const idMatch = rawLabel.match(/\[(\d+)\]\s*$/);
+  const displayLabel = getPublicCompetitionDisplayName(
+    rawLabel.replace(/\s*•\s*\w+\s*$/, "").trim(),
+    idMatch ? idMatch[1] : match.goalserveCompetitionId ?? null,
   );
   const hasVenue = typeof match.venue === "string" && match.venue.trim().length > 0;
 

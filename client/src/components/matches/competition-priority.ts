@@ -6,12 +6,12 @@ const DISPLAY_ALIAS_BY_ID = new Map<string, string>([
   ["1203", "National League"],
   ["1198", "FA Cup"],
   ["1199", "EFL Cup"],
-  ["1370", "Scottish Premiership"],
-  ["1373", "Scottish Championship"],
-  ["1376", "Scottish League Two"],
-  ["1375", "Scottish League Three"],
-  ["1371", "Scottish FA Cup"],
-  ["1372", "Scottish League Cup"],
+  ["1370", "Premiership"],
+  ["1373", "Championship"],
+  ["1376", "League Two"],
+  ["1375", "League Three"],
+  ["1371", "FA Cup"],
+  ["1372", "League Cup"],
   ["1399", "La Liga"],
   ["202", "Copa del Rey"],
   ["1269", "Serie A"],
@@ -23,6 +23,40 @@ const DISPLAY_ALIAS_BY_ID = new Map<string, string>([
   ["1005", "UEFA Champions League"],
   ["1007", "UEFA Europa League"],
   ["18853", "UEFA Europa Conference League"],
+]);
+
+const COUNTRY_BY_ID = new Map<string, string>([
+  // England
+  ["1204", "England"],
+  ["1205", "England"],
+  ["1206", "England"],
+  ["1197", "England"],
+  ["1203", "England"],
+  ["1198", "England"],
+  ["1199", "England"],
+  // Scotland
+  ["1370", "Scotland"],
+  ["1373", "Scotland"],
+  ["1376", "Scotland"],
+  ["1375", "Scotland"],
+  ["1371", "Scotland"],
+  ["1372", "Scotland"],
+  // Spain
+  ["1399", "Spain"],
+  ["202", "Spain"],
+  // Italy
+  ["1269", "Italy"],
+  ["1264", "Italy"],
+  // Germany
+  ["1229", "Germany"],
+  ["221", "Germany"],
+  // France
+  ["1221", "France"],
+  ["231", "France"],
+  // Europe (neutral; no country flag override)
+  ["1005", ""],
+  ["1007", ""],
+  ["18853", ""],
 ]);
 
 const PRIORITY_IDS: string[] = [
@@ -120,6 +154,14 @@ export function getPublicCompetitionDisplayName(
   const normalizedName = normalizeName(name);
   if (/fifa world cup/i.test(normalizedName)) return "FIFA World Cup";
   return cleanCompetitionDisplayName(normalizedName || "Unknown");
+}
+
+export function getCompetitionCountryById(goalserveCompetitionId?: string | null): string | null {
+  const normalizedId = String(goalserveCompetitionId ?? "").trim();
+  if (!normalizedId) return null;
+  const country = COUNTRY_BY_ID.get(normalizedId);
+  if (!country) return null;
+  return country.trim() || null;
 }
 
 export function getCompetitionDisplayRank(name: string | null | undefined, goalserveCompetitionId?: string | null): number {
