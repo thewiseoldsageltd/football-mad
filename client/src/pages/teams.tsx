@@ -4,13 +4,13 @@ import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Search, Shield } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
-import { useLocation, useSearch } from "wouter";
+import { useLocation, useRoute, useSearch } from "wouter";
 import { normalizeTeamsMvpFilterSlug } from "@shared/teams-mvp";
 import { buildTeamsMvpCompetitionNavItems } from "@/lib/teams-mvp-tab-labels";
 
@@ -45,25 +45,47 @@ type NewsNavResponse = {
 };
 
 function buildTeamsListUrl(comp: string): string {
-  if (comp === "all") return "/teams";
-  return `/teams?comp=${encodeURIComponent(comp)}`;
+  if (comp === "all") return teamsIndex();
+  return teamsLeagueBrowse(comp);
 }
 
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
   const searchQuery = useSearch();
   const [, setLocation] = useLocation();
+  const [matchLeague, leagueParams] = useRoute<{ competitionSlug: string }>("/teams/league/:competitionSlug");
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  /** `?region=` ignored. UEFA `?comp=` values fall back to All. */
+  /** Legacy `?comp=` → `/teams/league/…` (replace). Path wins if both present. Invalid query → `/teams`. */
+  useEffect(() => {
+    if (matchLeague) return;
+    const params = new URLSearchParams(searchQuery);
+    const raw = params.get("comp");
+    if (raw == null || raw === "") return;
+    const n = normalizeTeamsMvpFilterSlug(raw);
+    setLocation(n ? teamsLeagueBrowse(n) : teamsIndex(), { replace: true });
+  }, [matchLeague, searchQuery, setLocation]);
+
+  /** Path `/teams/league/:slug` is canonical; invalid segment → `/teams`. */
+  useEffect(() => {
+    if (!matchLeague || !leagueParams?.competitionSlug) return;
+    const n = normalizeTeamsMvpFilterSlug(leagueParams.competitionSlug);
+    if (!n) setLocation(teamsIndex(), { replace: true });
+  }, [matchLeague, leagueParams?.competitionSlug, setLocation]);
+
+  /** League filter: prefer path; during legacy redirect, `?comp=` still applies. */
   const selectedComp = useMemo(() => {
+    if (matchLeague && leagueParams?.competitionSlug) {
+      const n = normalizeTeamsMvpFilterSlug(leagueParams.competitionSlug);
+      return n ?? "all";
+    }
     const params = new URLSearchParams(searchQuery);
     const raw = params.get("comp") ?? "all";
     if (raw === "all") return "all";
     const n = normalizeTeamsMvpFilterSlug(raw);
     return n ?? "all";
-  }, [searchQuery]);
+  }, [matchLeague, leagueParams?.competitionSlug, searchQuery]);
 
   const { data: teams, isLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams?teamsPage=1"],

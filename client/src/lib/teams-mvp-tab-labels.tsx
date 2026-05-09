@@ -24,8 +24,9 @@ const DISPLAY_NAME_BY_SLUG: Record<string, string> = {
   "league-one": "League One",
   "league-two": "League Two",
   "national-league": "National League",
-  "scottish-premiership": "Scottish Premiership",
-  "scottish-championship": "Scottish Championship",
+  /** Teams nav only — shorter labels; slugs stay `scottish-*`. */
+  "scottish-premiership": "Premiership",
+  "scottish-championship": "Championship",
   "la-liga": "La Liga",
   "serie-a": "Serie A",
   bundesliga: "Bundesliga",

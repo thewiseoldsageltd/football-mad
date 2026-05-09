@@ -64,6 +64,8 @@ function Router() {
       <Route path="/news" component={NewsPage} />
       <Route path="/authors/:slug" component={AuthorPage} />
       <Route path="/news/:slug" component={NewsResolver} />
+      {/* Teams browse must be before /teams/:slug — that segment is team hub (club profiles). */}
+      <Route path="/teams/league/:competitionSlug" component={TeamsPage} />
       <Route path="/teams" component={TeamsPage} />
       <Route path="/teams/:slug" component={TeamHubPage} />
       <Route path="/teams/:slug/:tab" component={TeamHubPage} />

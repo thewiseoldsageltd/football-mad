@@ -128,6 +128,11 @@ export function teamsIndex(): string {
   return "/teams";
 }
 
+/** Teams index filtered by MVP league tab (`scottish-premiership`, `premier-league`, …). */
+export function teamsLeagueBrowse(competitionSlug: string): string {
+  return `/teams/league/${encodeURIComponent(competitionSlug)}`;
+}
+
 export function teamHub(teamSlug: string): string {
   return `/teams/${teamSlug}`;
 }
