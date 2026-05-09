@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -119,30 +119,63 @@ type TopTab = "leagues" | "cups" | "europe";
 
 export default function TablesPage() {
   const [, setLocation] = useLocation();
-  
-  // Get URL params from route: /tables/:leagueSlug/:seasonSlug
-  const [, params] = useRoute("/tables/:leagueSlug/:seasonSlug");
-  const leagueSlug = params?.leagueSlug ?? "premier-league";
-  const seasonSlug = params?.seasonSlug ?? "2025-26";
-  
+
+  const [isCupRoute, cupParams] = useRoute("/tables/cups/:cupSlug/:seasonSlug");
+  const [isEuropeRoute, europeParams] = useRoute("/tables/europe/:competitionSlug/:seasonSlug");
+  const [isLeagueRoute, leagueParams] = useRoute("/tables/:leagueSlug/:seasonSlug");
+
+  const topTab: TopTab = isCupRoute ? "cups" : isEuropeRoute ? "europe" : "leagues";
+
+  const seasonSlug = useMemo(() => {
+    if (isCupRoute && cupParams?.seasonSlug) return cupParams.seasonSlug;
+    if (isEuropeRoute && europeParams?.seasonSlug) return europeParams.seasonSlug;
+    if (isLeagueRoute && leagueParams?.seasonSlug) return leagueParams.seasonSlug;
+    return "2025-26";
+  }, [isCupRoute, isEuropeRoute, isLeagueRoute, cupParams, europeParams, leagueParams]);
+
+  const leagueSlug = leagueParams?.leagueSlug ?? "premier-league";
+  const cupSlug = cupParams?.cupSlug ?? "fa-cup";
+  const europeSlug = europeParams?.competitionSlug ?? "champions-league";
+
   // Convert season slug to API format for queries
   const season = seasonSlugToApi(seasonSlug);
-  
-  const [topTab, setTopTab] = useState<TopTab>("leagues");
-  const [europeCompetition, setEuropeCompetition] = useState("champions-league");
-  const [cupCompetition, setCupCompetition] = useState("fa-cup");
-  
-  // Handle league change - navigate to new URL
-  const handleLeagueChange = useCallback((newLeague: string) => {
-    if (newLeague === leagueSlug) return;
-    setLocation(`/tables/${newLeague}/${seasonSlug}`, { replace: false });
-  }, [leagueSlug, seasonSlug, setLocation]);
-  
-  // Handle season change - navigate to new URL
-  const handleSeasonChange = useCallback((newSeason: string) => {
-    const newSlug = seasonApiToSlug(newSeason);
-    setLocation(`/tables/${leagueSlug}/${newSlug}`, { replace: false });
-  }, [leagueSlug, setLocation]);
+
+  const handleLeagueChange = useCallback(
+    (newLeague: string) => {
+      if (newLeague === leagueSlug && isLeagueRoute) return;
+      setLocation(`/tables/${newLeague}/${seasonSlug}`, { replace: false });
+    },
+    [leagueSlug, seasonSlug, setLocation, isLeagueRoute],
+  );
+
+  const handleSeasonChange = useCallback(
+    (newSeason: string) => {
+      const newSlug = seasonApiToSlug(newSeason);
+      if (topTab === "leagues") {
+        setLocation(`/tables/${leagueSlug}/${newSlug}`, { replace: false });
+      } else if (topTab === "cups") {
+        setLocation(`/tables/cups/${cupSlug}/${newSlug}`, { replace: false });
+      } else {
+        setLocation(`/tables/europe/${europeSlug}/${newSlug}`, { replace: false });
+      }
+    },
+    [topTab, leagueSlug, cupSlug, europeSlug, setLocation],
+  );
+
+  const navigateToGroup = useCallback(
+    (group: "all" | TopTab) => {
+      if (group === "all" || group === "leagues") {
+        setLocation(`/tables/premier-league/${seasonSlug}`, { replace: false });
+        return;
+      }
+      if (group === "cups") {
+        setLocation(`/tables/cups/fa-cup/${seasonSlug}`, { replace: false });
+        return;
+      }
+      setLocation(`/tables/europe/champions-league/${seasonSlug}`, { replace: false });
+    },
+    [seasonSlug, setLocation],
+  );
 
   const goalserveLeagueId = useMemo(
     () => getGoalserveLeagueId(leagueSlug),
@@ -176,24 +209,30 @@ export default function TablesPage() {
   }, [standingsData]);
 
   const currentLeagueConfig = getLeagueBySlug(leagueSlug);
-  const selectedCompetition = topTab === "leagues" ? leagueSlug : topTab === "cups" ? cupCompetition : europeCompetition;
+  const selectedCompetition =
+    topTab === "leagues" ? leagueSlug : topTab === "cups" ? cupSlug : europeSlug;
   const visibleCompetitions = useMemo(() => {
     if (topTab === "leagues") return leagueCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
     if (topTab === "cups") return cupCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
     return europeCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
   }, [topTab]);
 
-  const handleCompetitionChange = useCallback((value: string) => {
-    if (topTab === "leagues") {
-      handleLeagueChange(value);
-      return;
-    }
-    if (topTab === "cups") {
-      setCupCompetition(value);
-      return;
-    }
-    setEuropeCompetition(value);
-  }, [handleLeagueChange, topTab]);
+  const handleCompetitionChange = useCallback(
+    (value: string) => {
+      if (topTab === "leagues") {
+        handleLeagueChange(value);
+        return;
+      }
+      if (topTab === "cups") {
+        if (value === cupSlug && isCupRoute) return;
+        setLocation(`/tables/cups/${value}/${seasonSlug}`, { replace: false });
+        return;
+      }
+      if (value === europeSlug && isEuropeRoute) return;
+      setLocation(`/tables/europe/${value}/${seasonSlug}`, { replace: false });
+    },
+    [topTab, handleLeagueChange, cupSlug, europeSlug, seasonSlug, setLocation, isCupRoute, isEuropeRoute],
+  );
 
   const renderLeaguesContent = () => {
     if (!goalserveLeagueId) {
@@ -261,12 +300,12 @@ export default function TablesPage() {
 
   const renderEuropeContent = () => {
     const normalizedSeason = normalizeSeason(season) || "2025/2026";
-    return <EuropeProgress competitionSlug={europeCompetition} season={normalizedSeason} />;
+    return <EuropeProgress competitionSlug={europeSlug} season={normalizedSeason} />;
   };
 
   const renderCupsContent = () => {
     const normalizedSeason = normalizeSeason(season) || "2025/2026";
-    return <CupProgress cupSlug={cupCompetition} season={normalizedSeason} />;
+    return <CupProgress cupSlug={cupSlug} season={normalizedSeason} />;
   };
 
   const renderContent = () => {
@@ -298,11 +337,7 @@ export default function TablesPage() {
         <GroupedCompetitionNav
           selectedGroup={topTab}
           onGroupChange={(group) => {
-            if (group === "all") {
-              setTopTab("leagues");
-              return;
-            }
-            setTopTab(group);
+            navigateToGroup(group);
           }}
           selectedCompetition={selectedCompetition}
           onCompetitionChange={handleCompetitionChange}

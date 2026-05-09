@@ -38,6 +38,8 @@ function seasonApiToSlug(apiSeason: string): string {
   return apiSeason.replace("/", "-");
 }
 
+const TABLES_DEFAULT_SEASON_SLUG = "2025-26";
+
 function TablesLegacyRedirect() {
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);
@@ -45,6 +47,14 @@ function TablesLegacyRedirect() {
   const season = params.get("season") || "2025/26";
   const seasonSlug = seasonApiToSlug(season);
   return <Redirect to={`/tables/${league}/${seasonSlug}`} replace />;
+}
+
+function TablesCupsDefaultRedirect() {
+  return <Redirect to={`/tables/cups/fa-cup/${TABLES_DEFAULT_SEASON_SLUG}`} replace />;
+}
+
+function TablesEuropeDefaultRedirect() {
+  return <Redirect to={`/tables/europe/champions-league/${TABLES_DEFAULT_SEASON_SLUG}`} replace />;
 }
 
 function Router() {
@@ -65,6 +75,10 @@ function Router() {
       <Route path="/managers/:slug" component={ManagerProfilePage} />
       <Route path="/transfers" component={TransfersPage} />
       <Route path="/injuries" component={InjuriesPage} />
+      <Route path="/tables/cups/:cupSlug/:seasonSlug" component={TablesPage} />
+      <Route path="/tables/europe/:competitionSlug/:seasonSlug" component={TablesPage} />
+      <Route path="/tables/cups" component={TablesCupsDefaultRedirect} />
+      <Route path="/tables/europe" component={TablesEuropeDefaultRedirect} />
       <Route path="/tables/:leagueSlug/:seasonSlug" component={TablesPage} />
       <Route path="/tables" component={TablesLegacyRedirect} />
       <Route path="/fpl" component={FPLPage} />
