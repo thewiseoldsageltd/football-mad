@@ -1,9 +1,42 @@
 /**
- * Teams page: domestic leagues only. Canonical slugs match URL `?comp=` and nav `filterValue`.
+ * Teams page: priority domestic leagues only (`competitions.is_priority = true`), excluding
+ * domestic cups and UEFA club competitions. Canonical slugs match URL `?comp=` and nav `filterValue`.
  *
  * DB `competitions.slug` is often derived from Goalserve display names (sync-goalserve-competitions),
  * so it may NOT match `premier-league` etc. — **always** map by `goalserveCompetitionId` when present.
  */
+
+/** Goalserve IDs excluded from Teams page (domestic cups + UEFA; overlap/alternate feed IDs included). */
+export const TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS: readonly string[] = [
+  // UEFA club competitions
+  "1005",
+  "1007",
+  "18853",
+  // England
+  "1198",
+  "1199",
+  // Scotland cups
+  "1371",
+  "1372",
+  // Spain — Copa del Rey (alternate IDs seen across feeds)
+  "1397",
+  "202",
+  // Italy — Coppa Italia
+  "1264",
+  // Germany — DFB-Pokal (alternate IDs)
+  "1226",
+  "221",
+  // France — Coupe de France (alternate IDs)
+  "1218",
+  "231",
+];
+
+export const TEAMS_PAGE_EXCLUDED_GOALSERVE_ID_SET = new Set<string>(TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS);
+
+export function isTeamsPageExcludedGoalserveId(id: string | null | undefined): boolean {
+  const s = typeof id === "string" ? id.trim() : "";
+  return s.length > 0 && TEAMS_PAGE_EXCLUDED_GOALSERVE_ID_SET.has(s);
+}
 
 /** Goalserve competition ID → canonical filter slug. */
 export const TEAMS_DOMESTIC_GOALSERVE_ID_TO_SLUG: Record<string, string> = {
@@ -63,6 +96,20 @@ const LEGACY_UEFA_COMP_URL_SLUGS = new Set([
   "conference-league",
 ]);
 
+/** Domestic cups / European comps — invalid Teams tab `?comp=` (fall back to All). */
+const TEAMS_PAGE_INVALID_URL_SLUGS = new Set([
+  ...LEGACY_UEFA_COMP_URL_SLUGS,
+  "fa-cup",
+  "efl-cup",
+  "carabao-cup",
+  "scottish-cup",
+  "scottish-league-cup",
+  "copa-del-rey",
+  "coppa-italia",
+  "dfb-pokal",
+  "coupe-de-france",
+]);
+
 export function canonicalTeamsMvpCompSlug(slug: string): string {
   return slug.trim().toLowerCase();
 }
@@ -70,7 +117,7 @@ export function canonicalTeamsMvpCompSlug(slug: string): string {
 export function normalizeTeamsMvpFilterSlug(slug: string | null | undefined): string | null {
   if (!slug || typeof slug !== "string") return null;
   const s = slug.trim().toLowerCase();
-  if (LEGACY_UEFA_COMP_URL_SLUGS.has(s)) return null;
+  if (TEAMS_PAGE_INVALID_URL_SLUGS.has(s)) return null;
   return TEAMS_DOMESTIC_SLUG_SET.has(s) ? s : null;
 }
 

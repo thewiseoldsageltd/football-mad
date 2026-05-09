@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, or, gt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, notInArray, or, gt } from "drizzle-orm";
 import { db } from "../db";
 import {
   articleCompetitions,
@@ -11,7 +11,7 @@ import {
   playerTeamMemberships,
   players,
 } from "@shared/schema";
-import { TEAMS_DOMESTIC_GOALSERVE_IDS } from "@shared/teams-mvp";
+import { TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS } from "@shared/teams-mvp";
 
 type RowWithId = { id: string };
 
@@ -49,11 +49,11 @@ export class MvpGraphBoundary {
   }
 
   /**
-   * Teams page: domestic leagues only, keyed by Goalserve competition ID (stable; DB slug may differ).
+   * Teams page: `is_priority` competitions minus domestic cups and UEFA (see shared `TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS`).
    */
   async getTeamsPageMvpTeamIds(): Promise<Set<string>> {
     if (!this.teamsPageMvpTeamIdsPromise) {
-      const gsIds = [...TEAMS_DOMESTIC_GOALSERVE_IDS];
+      const excluded = [...TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS];
       this.teamsPageMvpTeamIdsPromise = (async () => {
         const rows = await db
           .select({ teamId: competitionTeamMemberships.teamId })
@@ -62,7 +62,12 @@ export class MvpGraphBoundary {
           .where(
             and(
               eq(competitionTeamMemberships.isCurrent, true),
-              inArray(competitions.goalserveCompetitionId, gsIds),
+              eq(competitions.isPriority, true),
+              eq(competitions.isCup, false),
+              or(
+                isNull(competitions.goalserveCompetitionId),
+                notInArray(competitions.goalserveCompetitionId, excluded),
+              ),
             ),
           );
         return new Set(

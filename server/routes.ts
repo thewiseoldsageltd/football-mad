@@ -24,9 +24,29 @@ function logWebhookAudit(line: string): void {
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, entityMedia, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
-import { TEAMS_DOMESTIC_SLUG_SET, resolveTeamsPageNavFilterSlug } from "@shared/teams-mvp";
+import {
+  TEAMS_DOMESTIC_SLUG_SET,
+  TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS,
+  resolveTeamsPageNavFilterSlug,
+} from "@shared/teams-mvp";
 import { db, pool } from "./db";
-import { eq, and, or, gte, lte, lt, ne, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
+import {
+  eq,
+  and,
+  or,
+  gte,
+  lte,
+  lt,
+  ne,
+  sql as drizzleSql,
+  asc,
+  desc,
+  ilike,
+  inArray,
+  notInArray,
+  isNull,
+  aliasedTable,
+} from "drizzle-orm";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
@@ -662,6 +682,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const teamsMvpScope = String(req.query.scope ?? "") === "teams-mvp";
 
+      const teamsMvpCompetitionFilter = and(
+        eq(competitions.isCup, false),
+        or(
+          isNull(competitions.goalserveCompetitionId),
+          notInArray(competitions.goalserveCompetitionId, [...TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS]),
+        ),
+      );
+
       const rows = await db
         .select({
           compId: competitions.id,
@@ -684,7 +712,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           ),
         )
         .leftJoin(teams, eq(competitionTeamMemberships.teamId, teams.id))
-        .where(eq(competitions.isPriority, true))
+        .where(
+          teamsMvpScope
+            ? and(eq(competitions.isPriority, true), teamsMvpCompetitionFilter)
+            : eq(competitions.isPriority, true),
+        )
         .orderBy(asc(competitions.name), asc(teams.name));
 
       const presenter = new EntityPresentationResolver();
