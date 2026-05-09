@@ -80,6 +80,14 @@ import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
 import { collectCupProgressMatchRefs, dedupeCupProgressRefs } from "./lib/goalserve-cup-progress-tree";
+import {
+  shouldExcludeFaCupQualifyingRound,
+  getCupDbRoundCounts,
+  fetchFaCupMatchesFromDb,
+  mergeFaCupDbFallback,
+  faCupFeedMissingLaterKnockoutRounds,
+  faCupDbCountsIncludeLaterKnockout,
+} from "./lib/fa-cup-cup-progress-db";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
@@ -5396,9 +5404,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.log(`[CupProgress] refs deduped: ${cupRefs.length} (raw ${cupRefsRaw.length}), entering roundsMap`);
       }
 
-      if (cupRefs.length === 0) {
+      if (cupRefs.length === 0 && competitionId !== "1198") {
         console.log("[CupProgress] No match nodes discovered in Goalserve response, returning empty rounds");
         return res.json({ competitionId, rounds: [] });
+      }
+
+      if (cupRefs.length === 0 && competitionId === "1198") {
+        console.log("[CupProgress] No Goalserve match nodes for FA Cup; continuing with empty feed map (DB fallback may apply)");
       }
 
       for (const { m, defaultRound } of cupRefs) {
@@ -6062,6 +6074,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const canonicalEntries = Array.from(canonicalRoundsMap.entries());
       for (const [canonicalName, matchMap] of canonicalEntries) {
         const matchList: CupMatch[] = Array.from(matchMap.values());
+
+        // FA Cup MVP: hide qualifying / preliminary rounds (proper competition from First Round onward only)
+        if (competitionId === "1198" && shouldExcludeFaCupQualifyingRound(canonicalName)) {
+          if (cupProgressDebug) {
+            console.log(
+              `[CupProgress] FA Cup excluded qualifying/preliminary round: "${canonicalName}" (${matchList.length} matches)`
+            );
+          }
+          continue;
+        }
         
         // EFL Cup specific: drop unknown rounds containing qualifying/preliminary keywords
         if (isEflCup && canonicalName.startsWith("Unknown: ")) {
@@ -6127,7 +6149,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Sort rounds by order (early rounds first)
       cupRounds.sort((a, b) => a.order - b.order);
 
-      res.json({ competitionId, rounds: cupRounds });
+      let roundsOut = cupRounds;
+
+      // FA Cup only: diagnostics + DB fallback when feed lacks Fifth Round+ but DB has later knockout rows
+      if (competitionId === "1198") {
+        let dbRoundCounts: Awaited<ReturnType<typeof getCupDbRoundCounts>> = [];
+        try {
+          dbRoundCounts = await getCupDbRoundCounts(competitionId, season);
+        } catch (dbErr) {
+          console.warn("[CupProgress] FA Cup DB round-count query failed:", dbErr);
+        }
+
+        const feedSummary = cupRounds.map((r) => `${r.name}:${r.matches.length}`).join(", ");
+        if (cupProgressDebug) {
+          console.log(`[CupProgress] FA Cup feed round counts → ${feedSummary}`);
+          console.log(`[CupProgress] FA Cup DB round counts → ${JSON.stringify(dbRoundCounts)}`);
+        }
+
+        const feedMissingLater = faCupFeedMissingLaterKnockoutRounds(cupRounds);
+        const dbHasLater = faCupDbCountsIncludeLaterKnockout(dbRoundCounts, (raw) =>
+          normalizeToCanonicalRound_FA_CUP(raw)
+        );
+
+        if (cupProgressDebug) {
+          console.log(
+            `[CupProgress] FA Cup feedMissingLaterKnockout=${feedMissingLater} dbHasLaterKnockout=${dbHasLater}`
+          );
+        }
+
+        if (feedMissingLater && dbHasLater) {
+          try {
+            const dbRows = await fetchFaCupMatchesFromDb(competitionId, season);
+            roundsOut = mergeFaCupDbFallback(cupRounds, dbRows, (raw) =>
+              normalizeToCanonicalRound_FA_CUP(raw)
+            );
+            if (cupProgressDebug) {
+              console.log(`[CupProgress] FA Cup DB fallback applied (merged ${dbRows.length} DB rows)`);
+            }
+          } catch (mergeErr) {
+            console.warn("[CupProgress] FA Cup DB fallback merge failed:", mergeErr);
+          }
+        } else if (cupProgressDebug) {
+          console.log("[CupProgress] FA Cup DB fallback not used (conditions not met or DB empty)");
+        }
+      }
+
+      res.json({ competitionId, rounds: roundsOut });
     } catch (error) {
       console.error("Error fetching cup progress:", error);
       res.status(500).json({ error: "Failed to fetch cup progress" });
