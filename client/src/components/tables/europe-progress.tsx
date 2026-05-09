@@ -134,34 +134,50 @@ const StandingsRow = memo(function StandingsRow({ team, isExpanded, onToggle }: 
           }
         }}
       >
-        <td className="py-2 px-2 font-medium relative pl-3">
+        <td className="w-10 py-2 px-2 font-medium relative pl-3 align-middle">
           <span 
             aria-hidden="true" 
             className={`absolute left-0 top-0 h-full w-1 ${zoneStripeColor}`} 
           />
           <span className="text-sm">{team.position}</span>
         </td>
-        <td className="py-2 px-2">
-          <span className="font-medium text-sm truncate" data-testid={`text-team-name-${team.position}`}>
+        <td className="min-w-[160px] w-[22%] py-2 px-2 align-middle overflow-hidden">
+          <span className="font-medium text-sm truncate block" data-testid={`text-team-name-${team.position}`}>
             {team.name}
           </span>
         </td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">{team.played}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">{team.won}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">{team.drawn}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">{team.lost}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">{team.goalsFor}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">{team.goalsAgainst}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+          {team.played}
+        </td>
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+          {team.won}
+        </td>
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+          {team.drawn}
+        </td>
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+          {team.lost}
+        </td>
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+          {team.goalsFor}
+        </td>
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+          {team.goalsAgainst}
+        </td>
+        <td className="w-11 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
           <span className={getGDColorClass(team.goalDifference)}>
             {formatGD(team.goalDifference)}
           </span>
         </td>
-        <td className="text-right py-2 px-2 font-bold md:text-center tabular-nums">{team.points}</td>
-        <td className="text-center py-2 px-2 hidden md:table-cell">
-          <FormPills form={team.recentForm || ""} maxPills={5} showPlaceholder />
+        <td className="w-14 min-w-[3.5rem] shrink-0 text-right py-2 px-2 font-bold md:text-center tabular-nums align-middle">
+          {team.points}
         </td>
-        <td className="md:hidden w-8 text-center">
+        <td className="hidden md:table-cell w-[120px] min-w-[120px] max-w-[120px] py-2 px-2 text-left align-middle whitespace-nowrap">
+          <div className="inline-flex justify-start min-w-0">
+            <FormPills form={team.recentForm || ""} maxPills={5} showPlaceholder />
+          </div>
+        </td>
+        <td className="md:hidden w-10 shrink-0 text-center align-middle">
           <ChevronDown 
             className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
             aria-hidden="true"
@@ -203,22 +219,45 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
   }
 
   return (
-    <div>
-      <table className="w-full text-sm" data-testid="table-standings">
+    <div className="w-full overflow-x-auto">
+      <table
+        className="w-full min-w-0 text-sm table-auto md:table-fixed md:min-w-[920px]"
+        data-testid="table-standings"
+      >
         <thead>
           <tr className="border-b">
-            <th className="text-left py-2 px-2 font-medium text-muted-foreground w-8">#</th>
-            <th className="text-left py-2 px-2 font-medium text-muted-foreground">Team</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">P</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">W</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">D</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">L</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">GF</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">GA</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">GD</th>
-            <th className="text-right py-2 px-2 font-semibold text-muted-foreground w-12 md:text-center">Pts</th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground hidden md:table-cell">Form</th>
-            <th className="md:hidden w-8"></th>
+            <th className="text-left py-2 px-2 font-medium text-muted-foreground w-10">#</th>
+            <th className="text-left py-2 px-2 font-medium text-muted-foreground min-w-[160px] w-[22%]">
+              Team
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
+              P
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
+              W
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
+              D
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
+              L
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
+              GF
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
+              GA
+            </th>
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-11 hidden md:table-cell">
+              GD
+            </th>
+            <th className="w-14 min-w-[3.5rem] shrink-0 text-right py-2 px-2 font-semibold text-muted-foreground md:text-center">
+              Pts
+            </th>
+            <th className="hidden md:table-cell w-[120px] min-w-[120px] max-w-[120px] py-2 px-2 font-medium text-muted-foreground text-left whitespace-nowrap">
+              Form
+            </th>
+            <th className="md:hidden w-10 shrink-0"></th>
           </tr>
         </thead>
         <tbody>
