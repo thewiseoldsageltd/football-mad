@@ -6167,9 +6167,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
 
         const feedMissingLater = faCupFeedMissingLaterKnockoutRounds(cupRounds);
-        const dbHasLater = faCupDbCountsIncludeLaterKnockout(dbRoundCounts, (raw) =>
-          normalizeToCanonicalRound_FA_CUP(raw)
-        );
+        const dbHasLater = faCupDbCountsIncludeLaterKnockout(dbRoundCounts);
 
         if (cupProgressDebug) {
           console.log(
@@ -6180,11 +6178,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (feedMissingLater && dbHasLater) {
           try {
             const dbRows = await fetchFaCupMatchesFromDb(competitionId, season);
-            roundsOut = mergeFaCupDbFallback(cupRounds, dbRows, (raw) =>
-              normalizeToCanonicalRound_FA_CUP(raw)
-            );
+            const merged = mergeFaCupDbFallback(cupRounds, dbRows, cupProgressDebug);
+            roundsOut = merged.rounds;
             if (cupProgressDebug) {
               console.log(`[CupProgress] FA Cup DB fallback applied (merged ${dbRows.length} DB rows)`);
+              console.log(`[CupProgress] FA Cup DB fallback acceptedByRound → ${JSON.stringify(merged.diagnostics.acceptedByRound)}`);
+              console.log(`[CupProgress] FA Cup DB fallback rejectedLabelReasons → ${JSON.stringify(merged.diagnostics.rejectedLabelReasons)}`);
+              console.log(`[CupProgress] FA Cup DB fallback dedupeDropped=${merged.diagnostics.dedupeDropped}`);
+              console.log(`[CupProgress] FA Cup DB fallback cappedRounds → ${JSON.stringify(merged.diagnostics.cappedRounds)}`);
             }
           } catch (mergeErr) {
             console.warn("[CupProgress] FA Cup DB fallback merge failed:", mergeErr);

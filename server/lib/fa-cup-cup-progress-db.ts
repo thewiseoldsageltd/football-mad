@@ -9,6 +9,7 @@ import { and, eq, inArray, sql, aliasedTable } from "drizzle-orm";
 
 /** Mirrors routes FA_CUP_CANONICAL_ROUNDS order keys for qualifying cut-off */
 export const FA_CUP_FIRST_PROPER_ORDER = 7;
+const FA_CUP_FALLBACK_MIN_ORDER = 11; // Fifth Round+
 
 const FA_CUP_ORDER_BY_NAME: Record<string, number> = {
   "Extra Preliminary Round": 1,
@@ -85,6 +86,13 @@ export function seasonKeyCandidates(seasonParam: string | undefined): string[] |
 }
 
 export type DbRoundCountRow = { roundLabel: string | null; count: number };
+type FallbackCanonical = "Fifth Round" | "Quarter-finals" | "Semi-finals" | "Final";
+const FALLBACK_MAX_MATCHES: Record<FallbackCanonical, number> = {
+  "Fifth Round": 8,
+  "Quarter-finals": 4,
+  "Semi-finals": 2,
+  "Final": 1,
+};
 
 /** Diagnostic: matches grouped by goalserve_round for a cup competition */
 export async function getCupDbRoundCounts(
@@ -112,6 +120,74 @@ export async function getCupDbRoundCounts(
   }));
 }
 
+function normalizeFaCupDbLaterRoundLabel(rawLabel: string | null | undefined): {
+  canonical: FallbackCanonical | null;
+  reason: string;
+} {
+  const raw = String(rawLabel ?? "").trim();
+  if (!raw) return { canonical: null, reason: "blank" };
+  const lower = raw.toLowerCase();
+  const squashed = lower.replace(/[\s._-]+/g, "");
+
+  if (lower.includes("unknown")) return { canonical: null, reason: "unknown" };
+  if (/(qualification|qualifying|preliminary|prelim|extra\s*preliminary)/.test(lower)) {
+    return { canonical: null, reason: "qualifying_or_preliminary" };
+  }
+
+  // Explicit Fifth Round only.
+  if (
+    /(^|\s)(fifth|5th)\s+round($|\s)/.test(lower) ||
+    /^round\s*5$/.test(lower) ||
+    /^r5$/.test(squashed)
+  ) {
+    return { canonical: "Fifth Round", reason: "accepted" };
+  }
+
+  // Explicit Quarter-finals.
+  if (
+    lower === "qf" ||
+    lower === "quarter-finals" ||
+    lower === "quarter finals" ||
+    lower === "quarter-final" ||
+    lower === "quarter final" ||
+    squashed === "quarterfinals" ||
+    lower === "1/4-finals" ||
+    lower === "1/4 finals" ||
+    squashed === "1/4finals"
+  ) {
+    return { canonical: "Quarter-finals", reason: "accepted" };
+  }
+
+  // Explicit Semi-finals.
+  if (
+    lower === "sf" ||
+    lower === "semi-finals" ||
+    lower === "semi finals" ||
+    lower === "semi-final" ||
+    lower === "semi final" ||
+    squashed === "semifinals" ||
+    lower === "1/2-finals" ||
+    lower === "1/2 finals" ||
+    squashed === "1/2finals"
+  ) {
+    return { canonical: "Semi-finals", reason: "accepted" };
+  }
+
+  // Explicit Final only (not semi/quarter finals).
+  if (/^(the\s+)?finals?$/.test(lower)) {
+    return { canonical: "Final", reason: "accepted" };
+  }
+
+  // Reject numeric-only / vague / early round labels.
+  if (/^round\s*[1-4]$/.test(lower) || /^r[1-4]$/.test(squashed)) {
+    return { canonical: null, reason: "early_round_label" };
+  }
+  if (/^\d+$/.test(lower)) return { canonical: null, reason: "numeric_only" };
+  if (/(round of|last)\s*(16|32|64)/.test(lower)) return { canonical: null, reason: "round_of_not_late_knockout" };
+
+  return { canonical: null, reason: "unmapped" };
+}
+
 function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
@@ -119,6 +195,7 @@ function pad2(n: number): string {
 export function dbRowToCupProgressMatch(row: {
   id: string;
   goalserveMatchId: string | null;
+  goalserveStaticId: string | null;
   homeGoalserveTeamId: string | null;
   awayGoalserveTeamId: string | null;
   homeScore: number | null;
@@ -165,7 +242,8 @@ export function dbRowToCupProgressMatch(row: {
     kickoffDate,
     kickoffTime: kickoffTimeStr,
     status: statusOut,
-  };
+    ...(row.goalserveStaticId ? ({ goalserveStaticId: row.goalserveStaticId } as any) : {}),
+  } as CupProgressMatchShape;
 }
 
 /** Fetch matches for FA Cup DB fallback (same competition id + season keys) */
@@ -191,6 +269,7 @@ export async function fetchFaCupMatchesFromDb(
     .select({
       id: matches.id,
       goalserveMatchId: matches.goalserveMatchId,
+      goalserveStaticId: matches.goalserveStaticId,
       goalserveRound: matches.goalserveRound,
       homeGoalserveTeamId: matches.homeGoalserveTeamId,
       awayGoalserveTeamId: matches.awayGoalserveTeamId,
@@ -211,6 +290,7 @@ export async function fetchFaCupMatchesFromDb(
     row: {
       id: r.id,
       goalserveMatchId: r.goalserveMatchId,
+      goalserveStaticId: r.goalserveStaticId,
       homeGoalserveTeamId: r.homeGoalserveTeamId,
       awayGoalserveTeamId: r.awayGoalserveTeamId,
       homeScore: r.homeScore,
@@ -232,14 +312,11 @@ export function faCupFeedMissingLaterKnockoutRounds(feedRounds: CupProgressRound
 /** True if DB has any match rows in Fifth Round or later (canonical order >= 11). */
 export function faCupDbCountsIncludeLaterKnockout(
   counts: DbRoundCountRow[],
-  normalizeRound: (raw: string) => string | null
 ): boolean {
   for (const { roundLabel, count } of counts) {
     if (!count) continue;
-    const c = normalizeRound(roundLabel || "") ?? "";
-    if (!c || shouldExcludeFaCupQualifyingRound(c)) continue;
-    const ord = FA_CUP_ORDER_BY_NAME[c] ?? 99;
-    if (ord >= 11) return true;
+    const mapped = normalizeFaCupDbLaterRoundLabel(roundLabel);
+    if (mapped.canonical) return true;
   }
   return false;
 }
@@ -270,20 +347,33 @@ function computeRoundStatus(matches: CupProgressMatchShape[]): "completed" | "in
 export function mergeFaCupDbFallback(
   feedRounds: CupProgressRoundShape[],
   dbRows: Array<{ goalserveRound: string | null; row: Parameters<typeof dbRowToCupProgressMatch>[0] }>,
-  normalizeRound: (raw: string) => string | null
-): CupProgressRoundShape[] {
+  debug = false
+): { rounds: CupProgressRoundShape[]; diagnostics: { rejectedLabelReasons: Record<string, number>; dedupeDropped: number; cappedRounds: Array<{ round: string; kept: number; dropped: number }>; acceptedByRound: Record<string, number> } } {
   const dbByCanonical = new Map<string, CupProgressMatchShape[]>();
+  const rejectedLabelReasons = new Map<string, number>();
+  const acceptedByRound = new Map<string, number>();
+  let dedupeDropped = 0;
+  const cappedRounds: Array<{ round: string; kept: number; dropped: number }> = [];
 
   for (const { goalserveRound, row } of dbRows) {
     const raw = goalserveRound?.trim() || "";
-    if (!raw) continue;
-
-    const canonical = normalizeRound(raw) ?? `Unknown: ${raw}`;
-    if (shouldExcludeFaCupQualifyingRound(canonical)) continue;
+    const mapped = normalizeFaCupDbLaterRoundLabel(raw);
+    if (!mapped.canonical) {
+      rejectedLabelReasons.set(mapped.reason, (rejectedLabelReasons.get(mapped.reason) ?? 0) + 1);
+      if (debug) {
+        console.log(`[CupProgress][FA Cup][DB] reject raw="${raw || "<blank>"}" reason=${mapped.reason}`);
+      }
+      continue;
+    }
+    const canonical = mapped.canonical;
 
     const cm = dbRowToCupProgressMatch(row);
     if (!dbByCanonical.has(canonical)) dbByCanonical.set(canonical, []);
     dbByCanonical.get(canonical)!.push(cm);
+    acceptedByRound.set(canonical, (acceptedByRound.get(canonical) ?? 0) + 1);
+    if (debug) {
+      console.log(`[CupProgress][FA Cup][DB] accept raw="${raw}" canonical="${canonical}"`);
+    }
   }
 
   const byName = new Map<string, CupProgressRoundShape>();
@@ -296,33 +386,81 @@ export function mergeFaCupDbFallback(
     const existing = byName.get(canonical);
     const seen = new Set<string>();
 
+    const dedupeKey = (m: CupProgressMatchShape): string => {
+      const anyMatch = m as any;
+      const staticId = String(anyMatch.goalserveStaticId ?? "").trim();
+      if (staticId) return `static:${staticId}`;
+      const gsId = String(anyMatch.id ?? "").trim();
+      if (gsId) return `match:${gsId}`;
+      const h = String(m.home?.id ?? m.home?.name ?? "").trim().toLowerCase();
+      const a = String(m.away?.id ?? m.away?.name ?? "").trim().toLowerCase();
+      const d = String(m.kickoffDate ?? m.kickoff ?? "").trim();
+      return `fallback:${d}:${h}:${a}`;
+    };
+
+    const reliabilityScore = (m: CupProgressMatchShape): number => {
+      const anyMatch = m as any;
+      let s = 0;
+      if (String(anyMatch.goalserveStaticId ?? "").trim()) s += 8;
+      if (String(anyMatch.id ?? "").trim()) s += 4;
+      if (m.kickoffDate || m.kickoff) s += 2;
+      if (m.home?.id && m.away?.id) s += 1;
+      return s;
+    };
+
+    const sortReliableRecent = (a: CupProgressMatchShape, b: CupProgressMatchShape): number => {
+      const ra = reliabilityScore(a);
+      const rb = reliabilityScore(b);
+      if (rb !== ra) return rb - ra;
+      const ta = Date.parse(`${a.kickoffDate ?? ""}T${a.kickoffTime ?? "00:00"}:00Z`);
+      const tb = Date.parse(`${b.kickoffDate ?? ""}T${b.kickoffTime ?? "00:00"}:00Z`);
+      const aMs = Number.isFinite(ta) ? ta : 0;
+      const bMs = Number.isFinite(tb) ? tb : 0;
+      return bMs - aMs;
+    };
+
     if (existing) {
-      for (const m of existing.matches) seen.add(m.id);
+      for (const m of existing.matches) seen.add(dedupeKey(m));
       const merged: CupProgressMatchShape[] = [...existing.matches];
       for (const m of dbMatches) {
-        if (!seen.has(m.id)) {
+        const k = dedupeKey(m);
+        if (!seen.has(k)) {
           merged.push(m);
-          seen.add(m.id);
+          seen.add(k);
+        } else {
+          dedupeDropped++;
         }
       }
-      merged.sort((a, b) => {
-        if (!a.kickoff && !b.kickoff) return 0;
-        if (!a.kickoff) return 1;
-        if (!b.kickoff) return -1;
-        return (a.kickoff || "").localeCompare(b.kickoff || "");
-      });
-      byName.set(canonical, { ...existing, matches: merged, order });
+      merged.sort(sortReliableRecent);
+      const cap = FALLBACK_MAX_MATCHES[canonical as FallbackCanonical];
+      const kept = cap ? merged.slice(0, cap) : merged;
+      if (cap && merged.length > cap) {
+        cappedRounds.push({ round: canonical, kept: kept.length, dropped: merged.length - kept.length });
+        console.warn(`[CupProgress][FA Cup][DB] cap applied for ${canonical}: keeping ${kept.length}/${merged.length}`);
+      }
+      byName.set(canonical, { ...existing, matches: kept, order });
     } else {
-      dbMatches.sort((a, b) => {
-        if (!a.kickoff && !b.kickoff) return 0;
-        if (!a.kickoff) return 1;
-        if (!b.kickoff) return -1;
-        return (a.kickoff || "").localeCompare(b.kickoff || "");
-      });
+      const unique: CupProgressMatchShape[] = [];
+      for (const m of dbMatches) {
+        const k = dedupeKey(m);
+        if (!seen.has(k)) {
+          seen.add(k);
+          unique.push(m);
+        } else {
+          dedupeDropped++;
+        }
+      }
+      unique.sort(sortReliableRecent);
+      const cap = FALLBACK_MAX_MATCHES[canonical as FallbackCanonical];
+      const kept = cap ? unique.slice(0, cap) : unique;
+      if (cap && unique.length > cap) {
+        cappedRounds.push({ round: canonical, kept: kept.length, dropped: unique.length - kept.length });
+        console.warn(`[CupProgress][FA Cup][DB] cap applied for ${canonical}: keeping ${kept.length}/${unique.length}`);
+      }
       byName.set(canonical, {
         name: canonical,
         order,
-        matches: dbMatches,
+        matches: kept,
         status: "upcoming",
       });
     }
@@ -330,8 +468,17 @@ export function mergeFaCupDbFallback(
 
   const out = [...byName.values()];
   out.sort((a, b) => a.order - b.order);
-  return out.map((r) => ({
+  const rounds = out.map((r) => ({
     ...r,
     status: computeRoundStatus(r.matches),
   }));
+  return {
+    rounds,
+    diagnostics: {
+      rejectedLabelReasons: Object.fromEntries(rejectedLabelReasons),
+      dedupeDropped,
+      cappedRounds,
+      acceptedByRound: Object.fromEntries(acceptedByRound),
+    },
+  };
 }
