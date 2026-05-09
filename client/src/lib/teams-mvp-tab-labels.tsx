@@ -16,9 +16,6 @@ const FLAG_COUNTRY_BY_SLUG: Record<string, string> = {
   "serie-a": "Italy",
   bundesliga: "Germany",
   "ligue-1": "France",
-  "uefa-champions-league": "Europe",
-  "uefa-europa-league": "Europe",
-  "uefa-conference-league": "Europe",
 };
 
 const DISPLAY_NAME_BY_SLUG: Record<string, string> = {
@@ -33,9 +30,6 @@ const DISPLAY_NAME_BY_SLUG: Record<string, string> = {
   "serie-a": "Serie A",
   bundesliga: "Bundesliga",
   "ligue-1": "Ligue 1",
-  "uefa-champions-league": "Champions League",
-  "uefa-europa-league": "Europa League",
-  "uefa-conference-league": "Conference League",
 };
 
 export const TeamsCompetitionTabLabel = memo(function TeamsCompetitionTabLabel({ slug }: { slug: string }) {

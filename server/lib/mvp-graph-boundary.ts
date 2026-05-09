@@ -11,7 +11,7 @@ import {
   playerTeamMemberships,
   players,
 } from "@shared/schema";
-import { TEAMS_PAGE_COMPETITION_SLUGS } from "@shared/teams-mvp";
+import { TEAMS_DOMESTIC_GOALSERVE_IDS } from "@shared/teams-mvp";
 
 type RowWithId = { id: string };
 
@@ -49,11 +49,11 @@ export class MvpGraphBoundary {
   }
 
   /**
-   * Teams page scope only: supported domestic leagues + UCL/UEL/UECL (see shared/teams-mvp.ts).
+   * Teams page: domestic leagues only, keyed by Goalserve competition ID (stable; DB slug may differ).
    */
   async getTeamsPageMvpTeamIds(): Promise<Set<string>> {
     if (!this.teamsPageMvpTeamIdsPromise) {
-      const slugList = [...TEAMS_PAGE_COMPETITION_SLUGS];
+      const gsIds = [...TEAMS_DOMESTIC_GOALSERVE_IDS];
       this.teamsPageMvpTeamIdsPromise = (async () => {
         const rows = await db
           .select({ teamId: competitionTeamMemberships.teamId })
@@ -62,7 +62,7 @@ export class MvpGraphBoundary {
           .where(
             and(
               eq(competitionTeamMemberships.isCurrent, true),
-              inArray(competitions.slug, slugList),
+              inArray(competitions.goalserveCompetitionId, gsIds),
             ),
           );
         return new Set(

@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { useLocation, useSearch } from "wouter";
-import { canonicalTeamsMvpCompSlug, normalizeTeamsMvpFilterSlug } from "@shared/teams-mvp";
+import { normalizeTeamsMvpFilterSlug } from "@shared/teams-mvp";
 import { buildTeamsMvpCompetitionNavItems } from "@/lib/teams-mvp-tab-labels";
 
 type NewsNavTeam = {
@@ -56,14 +56,13 @@ export default function TeamsPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  /** `?region=` from legacy URLs is ignored. */
+  /** `?region=` ignored. UEFA `?comp=` values fall back to All. */
   const selectedComp = useMemo(() => {
     const params = new URLSearchParams(searchQuery);
     const raw = params.get("comp") ?? "all";
     if (raw === "all") return "all";
     const n = normalizeTeamsMvpFilterSlug(raw);
-    if (!n) return "all";
-    return canonicalTeamsMvpCompSlug(n);
+    return n ?? "all";
   }, [searchQuery]);
 
   const { data: teams, isLoading } = useQuery<Team[]>({
@@ -121,10 +120,7 @@ export default function TeamsPage() {
             teams: c.teams,
           }));
 
-    const target = selectedComp;
-    const selected = groups.find(
-      (g) => canonicalTeamsMvpCompSlug(g.competitionFilterValue) === target,
-    );
+    const selected = groups.find((g) => g.competitionFilterValue === selectedComp);
     if (!selected) return new Set<string>();
     return new Set(selected.teams.map((t) => t.id));
   }, [selectedComp, newsNav]);
@@ -175,7 +171,7 @@ export default function TeamsPage() {
               Teams
             </h1>
             <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
-              Browse and follow clubs from supported leagues and European competitions
+              Browse and follow clubs from supported domestic leagues
             </p>
           </div>
         </div>

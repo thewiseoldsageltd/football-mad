@@ -24,7 +24,7 @@ function logWebhookAudit(line: string): void {
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, entityMedia, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
-import { TEAMS_MVP_COMPETITION_FILTER_SLUGS } from "@shared/teams-mvp";
+import { TEAMS_DOMESTIC_SLUG_SET, resolveTeamsPageNavFilterSlug } from "@shared/teams-mvp";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, ne, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -88,7 +88,7 @@ import {
   faCupDbCountsIncludeLaterKnockout,
 } from "./lib/fa-cup-cup-progress-db";
 
-const TEAMS_MVP_NAV_FILTER_SET = new Set<string>(TEAMS_MVP_COMPETITION_FILTER_SLUGS);
+const TEAMS_MVP_NAV_FILTER_SET = TEAMS_DOMESTIC_SLUG_SET;
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
@@ -660,6 +660,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return allowedCompetitionFilterSlugs.has(normalized) ? normalized : null;
       };
 
+      const teamsMvpScope = String(req.query.scope ?? "") === "teams-mvp";
+
       const rows = await db
         .select({
           compId: competitions.id,
@@ -667,6 +669,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           compCanonicalName: drizzleSql<string | null>`nullif(trim(canonical_name), '')`,
           compSlug: competitions.slug,
           compCanonicalSlug: competitions.canonicalSlug,
+          compGoalserveId: competitions.goalserveCompetitionId,
           teamId: teams.id,
           teamName: teams.name,
           teamSlug: teams.slug,
@@ -707,12 +710,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const presented = competitionPresentation.get(r.compId);
           const compName = resolveCompetitionDisplayName(r.compCanonicalName, presented?.name ?? r.compName);
           const compSlug = presented?.slug ?? r.compSlug;
-          const filterSlug =
-            normalizeAllowedSlug(filterSlugOverridesByName.get(compName.toLowerCase())) ??
-            normalizeAllowedSlug(presented?.slug) ??
-            normalizeAllowedSlug(r.compCanonicalSlug) ??
-            normalizeAllowedSlug(r.compSlug) ??
-            compSlug;
+
+          let filterSlug: string;
+          if (teamsMvpScope) {
+            const resolved = resolveTeamsPageNavFilterSlug({
+              goalserveCompetitionId: r.compGoalserveId,
+              dbSlug: r.compSlug,
+            });
+            if (!resolved) {
+              continue;
+            }
+            filterSlug = resolved;
+          } else {
+            const chain =
+              normalizeAllowedSlug(filterSlugOverridesByName.get(compName.toLowerCase())) ??
+              normalizeAllowedSlug(presented?.slug) ??
+              normalizeAllowedSlug(r.compCanonicalSlug) ??
+              normalizeAllowedSlug(r.compSlug) ??
+              compSlug;
+            filterSlug = chain;
+          }
+
           const fallbackSortOrder = compMap.size;
           comp = {
             id: r.compId,
@@ -738,8 +756,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       let result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-      if (String(req.query.scope ?? "") === "teams-mvp") {
+      if (teamsMvpScope) {
         result = result.filter((c) => TEAMS_MVP_NAV_FILTER_SET.has(c.filterValue));
+        if (process.env.DEBUG_TEAMS_NAV === "1") {
+          console.log(
+            "[news/nav][teams-mvp]",
+            result.map((c) => ({ filterValue: c.filterValue, teamCount: c.teams.length })),
+          );
+        }
       }
       res.json({
         competitions: result,
