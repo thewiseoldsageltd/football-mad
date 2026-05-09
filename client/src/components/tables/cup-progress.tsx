@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, Clock, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { getGoalserveCupId } from "@/lib/cup-config";
 
-interface CupMatch {
+export interface CupMatch {
   id: string;
   home: { id?: string; name: string };
   away: { id?: string; name: string };
@@ -18,14 +18,14 @@ interface CupMatch {
   status: string;
 }
 
-interface CupRound {
+export interface CupRound {
   name: string;
   order: number;
   matches: CupMatch[];
   status?: "completed" | "in_progress" | "upcoming";
 }
 
-interface CupProgressResponse {
+export interface CupProgressResponse {
   competitionId: string;
   rounds: CupRound[];
 }
@@ -233,9 +233,48 @@ function getDefaultOpenRound(rounds: CupRound[]): string | null {
   return latestRound.name;
 }
 
+export interface CupProgressRoundsListProps {
+  rounds: CupRound[];
+  /** Resets accordion state when competition or season changes */
+  resetKey?: string;
+}
+
+/** Presentational list of cup rounds (same accordions as the Cups tab). */
+export function CupProgressRoundsList({ rounds, resetKey }: CupProgressRoundsListProps) {
+  const [openRoundKey, setOpenRoundKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOpenRoundKey(null);
+  }, [resetKey]);
+
+  useEffect(() => {
+    if (rounds.length > 0 && openRoundKey === null) {
+      setOpenRoundKey(getDefaultOpenRound(rounds));
+    }
+  }, [rounds, openRoundKey]);
+
+  const handleToggle = (roundName: string) => {
+    setOpenRoundKey((prev) => (prev === roundName ? null : roundName));
+  };
+
+  if (rounds.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {rounds.map((round) => (
+        <RoundAccordion
+          key={round.name}
+          round={round}
+          isOpen={openRoundKey === round.name}
+          onToggle={() => handleToggle(round.name)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function CupProgress({ cupSlug, season }: CupProgressProps) {
   const competitionId = getGoalserveCupId(cupSlug);
-  const [openRoundKey, setOpenRoundKey] = useState<string | null>(null);
 
   const cupProgressUrl = useMemo(() => {
     if (!competitionId) return null;
@@ -251,16 +290,6 @@ export function CupProgress({ cupSlug, season }: CupProgressProps) {
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
-
-  useEffect(() => {
-    if (data?.rounds && openRoundKey === null) {
-      setOpenRoundKey(getDefaultOpenRound(data.rounds));
-    }
-  }, [data?.rounds, openRoundKey]);
-
-  const handleToggle = (roundName: string) => {
-    setOpenRoundKey((prev) => (prev === roundName ? null : roundName));
-  };
 
   if (!competitionId) {
     return (
@@ -304,15 +333,6 @@ export function CupProgress({ cupSlug, season }: CupProgressProps) {
   }
 
   return (
-    <div className="space-y-2">
-      {data.rounds.map((round) => (
-        <RoundAccordion
-          key={round.name}
-          round={round}
-          isOpen={openRoundKey === round.name}
-          onToggle={() => handleToggle(round.name)}
-        />
-      ))}
-    </div>
+    <CupProgressRoundsList rounds={data.rounds} resetKey={`${cupSlug}:${season}`} />
   );
 }

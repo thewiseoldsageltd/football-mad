@@ -25,7 +25,7 @@ export const europeConfigs: EuropeCompetitionConfig[] = [
     goalserveCompetitionId: "1007", 
     country: "Europe",
     format: "league_phase",
-    enabled: false
+    enabled: true
   },
   { 
     slug: "conference-league", 
@@ -34,7 +34,7 @@ export const europeConfigs: EuropeCompetitionConfig[] = [
     goalserveCompetitionId: "18853", 
     country: "Europe",
     format: "league_phase",
-    enabled: false
+    enabled: true
   },
 ];
 

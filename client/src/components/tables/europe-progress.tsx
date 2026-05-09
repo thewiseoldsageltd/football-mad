@@ -1,9 +1,13 @@
-import { useCallback, memo, useState } from "react";
+import { useCallback, memo, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { filterAndSortEuropeKnockoutRounds } from "@/lib/europe-knockout-filter";
+import { getGoalserveEuropeId } from "@/lib/europe-config";
 import { FormPills } from "./form-pills";
+import { CupProgressRoundsList, type CupProgressResponse } from "./cup-progress";
 
 interface StandingTeam {
   position: number;
@@ -32,7 +36,7 @@ interface EuropeResponse {
   standings?: StandingTeam[];
   error?: string;
 }
-// TODO(post-MVP): Add knockout bracket/stage rendering when Europe data is persisted.
+const UEFA_KNOCKOUT_SLUGS = new Set(["champions-league", "europa-league", "conference-league"]);
 
 interface EuropeProgressProps {
   competitionSlug: string;
@@ -249,27 +253,45 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
 
 export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps) {
   const europeUrl = `/api/europe/${competitionSlug}?season=${encodeURIComponent(season)}&tablesOnly=1`;
-  
-  const { data, isLoading, error } = useQuery<EuropeResponse>({
+  const goalserveId = getGoalserveEuropeId(competitionSlug);
+  const fetchKnockout = UEFA_KNOCKOUT_SLUGS.has(competitionSlug) && !!goalserveId;
+
+  const cupProgressUrl = useMemo(() => {
+    if (!fetchKnockout || !goalserveId) return null;
+    const params = new URLSearchParams();
+    params.set("competitionId", goalserveId);
+    params.set("season", season);
+    return `/api/cup/progress?${params.toString()}`;
+  }, [fetchKnockout, goalserveId, season]);
+
+  const { data, isLoading: europeLoading, error: europeError } = useQuery<EuropeResponse>({
     queryKey: [europeUrl],
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
 
+  const {
+    data: koData,
+    isLoading: koLoading,
+    isError: koError,
+  } = useQuery<CupProgressResponse>({
+    queryKey: [cupProgressUrl],
+    enabled: !!cupProgressUrl,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+
+  const knockoutRounds = useMemo(() => {
+    if (koError || !koData?.rounds?.length) return [];
+    return filterAndSortEuropeKnockoutRounds(koData.rounds);
+  }, [koData, koError]);
+
+  const showKnockoutProgress = fetchKnockout && !koLoading && knockoutRounds.length > 0;
+  const showKnockoutLoading = fetchKnockout && koLoading;
+
   const standings = data?.standings ?? [];
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="p-6 flex items-center justify-center gap-2 text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Loading competition data...</span>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (error || !data) {
+  if (europeError) {
     return (
       <Card>
         <CardContent className="p-6 text-center text-muted-foreground">
@@ -280,17 +302,49 @@ export function EuropeProgress({ competitionSlug, season }: EuropeProgressProps)
   }
 
   return (
-    <Card className="h-fit">
-      <CardContent className="p-4">
-        <h3 className="font-semibold mb-4">Standings</h3>
-        {standings.length > 0 ? (
-          <StandingsTable standings={standings} />
-        ) : (
-          <div className="text-center text-muted-foreground py-8">
-            No standings data available
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      {showKnockoutLoading && (
+        <Card className="h-fit">
+          <CardContent className="p-4 flex items-center gap-2 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden />
+            <span>Loading knockout fixtures…</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {showKnockoutProgress && (
+        <Card className="h-fit">
+          <CardContent className="p-4 sm:p-6">
+            <h3 className="font-semibold text-base mb-3">Knockout progress</h3>
+            <CupProgressRoundsList
+              rounds={knockoutRounds}
+              resetKey={`${competitionSlug}:${season}`}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="h-fit">
+        <CardContent className="p-4">
+          <h3 className="font-semibold mb-4">Standings</h3>
+          {europeLoading ? (
+            <div className="space-y-2" aria-busy="true">
+              <Skeleton className="h-4 w-40" />
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div key={idx} className="grid grid-cols-[32px_1fr_52px] items-center gap-3">
+                  <Skeleton className="h-4 w-6" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-10 justify-self-end" />
+                </div>
+              ))}
+            </div>
+          ) : standings.length > 0 ? (
+            <StandingsTable standings={standings} />
+          ) : (
+            <div className="text-center text-muted-foreground py-8">No standings data available</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
