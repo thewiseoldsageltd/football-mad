@@ -83,8 +83,6 @@ import { collectCupProgressMatchRefs, dedupeCupProgressRefs } from "./lib/goalse
 import {
   shouldExcludeFaCupQualifyingRound,
   getCupDbRoundCounts,
-  fetchFaCupMatchesFromDb,
-  mergeFaCupDbFallback,
   faCupFeedMissingLaterKnockoutRounds,
   faCupDbCountsIncludeLaterKnockout,
 } from "./lib/fa-cup-cup-progress-db";
@@ -5233,6 +5231,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Also handle: stage.round[].match[] (some cups use "round" instead of "week")
       interface CupMatch {
         id: string;
+        goalserveStaticId?: string | null;
         home: { id?: string; name: string };
         away: { id?: string; name: string };
         score?: { home: number; away: number } | null;
@@ -5250,6 +5249,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const roundsMap = new Map<string, CupMatch[]>();
+      const computeCupRoundStatus = (matchList: CupMatch[]): "completed" | "in_progress" | "upcoming" => {
+        if (matchList.length === 0) return "upcoming";
+        const completedStatuses = ["ft", "aet", "pen", "awarded", "cancelled", "postponed"];
+        const liveIndicators = ["ht", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+        const allCompleted = matchList.every((m) => {
+          const s = m.status.toLowerCase();
+          return completedStatuses.some((cs) => s.includes(cs));
+        });
+        const anyLive = matchList.some((m) => {
+          const s = m.status.toLowerCase();
+          if (s === "ht") return true;
+          if (/^\d+$/.test(s)) return true;
+          return liveIndicators.some((li) => s === li);
+        });
+        if (anyLive) return "in_progress";
+        if (allCompleted) return "completed";
+        return "upcoming";
+      };
 
       // Helper to robustly extract attributes from Goalserve match nodes
       // Handles: node[key], node["@"+key], node["@_"+key], node["@"]?.[key], node["$"]?.[key]
@@ -5307,7 +5324,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       // Helper to parse a single match object
-      const parseMatch = (m: any, roundName: string) => {
+      const parseMatch = (m: any, roundName: string, targetMap: Map<string, CupMatch[]> = roundsMap) => {
         const homeTeam = m.hometeam || m.localteam || {};
         const awayTeam = m.awayteam || m.visitorteam || {};
         
@@ -5366,6 +5383,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         const match: CupMatch = {
           id: getAttr(m, "id") || String(Math.random()),
+          goalserveStaticId: getAttr(m, "static_id") || null,
           home: {
             id: getAttr(homeTeam, "id") || undefined,
             name: getAttr(homeTeam, "name") || "TBD",
@@ -5385,10 +5403,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           status: getAttr(m, "status") || "NS",
         };
 
-        if (!roundsMap.has(roundName)) {
-          roundsMap.set(roundName, []);
+        if (!targetMap.has(roundName)) {
+          targetMap.set(roundName, []);
         }
-        roundsMap.get(roundName)!.push(match);
+        targetMap.get(roundName)!.push(match);
       };
 
       // Traverse Goalserve JSON using the same fixture-shape coverage as sync-goalserve-matches / standings (see goalserve-cup-progress-tree.ts)
@@ -5416,6 +5434,103 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const { m, defaultRound } of cupRefs) {
         const matchRound = m?.["@round_name"] ?? m?.round ?? defaultRound;
         parseMatch(m, String(matchRound));
+      }
+
+      // FA Cup only: supplement missing late rounds from trusted Goalserve date-window lookups.
+      const normalizeSeasonKey = (s: string | undefined): string => {
+        if (!s) return "";
+        const m = s.match(/^(\d{4})[\/\-](\d{2,4})$/);
+        if (!m) return s;
+        const y1 = m[1];
+        let y2 = m[2];
+        if (y2.length === 2) y2 = `${y1.slice(0, 2)}${y2}`;
+        return `${y1}-${y2}`;
+      };
+      const isFaCup = competitionId === "1198";
+      const isFaCupTargetSeason = normalizeSeasonKey(season) === "2025-2026";
+      const faCupSupplementMap = new Map<string, CupMatch[]>();
+      if (isFaCup && isFaCupTargetSeason) {
+        const windows = [
+          { round: "Fifth Round", start: "28.02.2026", end: "02.03.2026", max: 8 },
+          { round: "Quarter-finals", start: "28.03.2026", end: "29.03.2026", max: 4 },
+          { round: "Semi-finals", start: "25.04.2026", end: "26.04.2026", max: 2 },
+          { round: "Final", start: "16.05.2026", end: "16.05.2026", max: 1 },
+        ] as const;
+
+        for (const w of windows) {
+          const dateEndpoint = `soccerfixtures/leagueid/1198?season=${encodeURIComponent(season || "2025/2026")}&date_start=${encodeURIComponent(w.start)}&date_end=${encodeURIComponent(w.end)}`;
+          if (cupProgressDebug) {
+            console.log(`[CupProgress][FA Cup] date-window request round=${w.round} endpoint=${dateEndpoint}`);
+          }
+          try {
+            const dateData = await goalserveFetch(dateEndpoint);
+            const { refs: rawRefs } = collectCupProgressMatchRefs(dateData, false);
+            const refs = dedupeCupProgressRefs(rawRefs);
+
+            let valid = 0;
+            const staticIds: string[] = [];
+            for (const { m } of refs) {
+              const localTeam = m?.localteam ?? null;
+              const visitorTeam = m?.visitorteam ?? null;
+              const matchDate = m?.["@date"] ?? m?.date ?? m?.["@formatted_date"] ?? m?.formatted_date ?? null;
+              const stableId =
+                String(
+                  m?.["@static_id"] ??
+                  m?.static_id ??
+                  m?.["@_static_id"] ??
+                  m?.["@id"] ??
+                  m?.["@_id"] ??
+                  m?.id ??
+                  ""
+                ).trim();
+              // Trust only concrete fixture-like rows from date windows.
+              if (!localTeam || !visitorTeam || !matchDate) continue;
+              parseMatch(m, w.round, faCupSupplementMap);
+              valid++;
+              if (stableId) staticIds.push(stableId);
+            }
+
+            if (cupProgressDebug) {
+              console.log(
+                `[CupProgress][FA Cup] date-window result round=${w.round} valid_matches=${valid} static_ids=${JSON.stringify(staticIds.slice(0, 20))}`
+              );
+            }
+          } catch (dateErr) {
+            console.warn(`[CupProgress][FA Cup] date-window fetch failed for ${w.round}:`, dateErr);
+          }
+        }
+
+        // Dedupe and cap each supplemented round by stable id -> match id -> date+teams.
+        for (const w of windows) {
+          const list = faCupSupplementMap.get(w.round) ?? [];
+          const seen = new Set<string>();
+          const deduped: CupMatch[] = [];
+          for (const m of list) {
+            const stable = String(m.goalserveStaticId ?? "").trim();
+            const matchId = String(m.id ?? "").trim();
+            const key = stable
+              ? `static:${stable}`
+              : matchId
+                ? `match:${matchId}`
+                : `fallback:${m.kickoffDate ?? ""}:${m.home?.name ?? ""}:${m.away?.name ?? ""}`.toLowerCase();
+            if (seen.has(key)) continue;
+            seen.add(key);
+            deduped.push(m);
+          }
+          deduped.sort((a, b) => {
+            if (!a.kickoff && !b.kickoff) return 0;
+            if (!a.kickoff) return 1;
+            if (!b.kickoff) return -1;
+            return b.kickoff.localeCompare(a.kickoff);
+          });
+          const capped = deduped.slice(0, w.max);
+          if (cupProgressDebug) {
+            console.log(
+              `[CupProgress][FA Cup] supplemental round=${w.round} deduped=${deduped.length} capped=${capped.length}`
+            );
+          }
+          faCupSupplementMap.set(w.round, capped);
+        }
       }
 
       // ============ COMPETITION-SPECIFIC CANONICAL ROUND SYSTEMS ============
@@ -6151,6 +6266,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       let roundsOut = cupRounds;
 
+      if (isFaCup && isFaCupTargetSeason) {
+        const targetRounds = new Set(["Fifth Round", "Quarter-finals", "Semi-finals", "Final"]);
+        const preserved = cupRounds.filter((r) => !targetRounds.has(r.name));
+        const supplemented: CupRound[] = [];
+        for (const [name, list] of faCupSupplementMap.entries()) {
+          if (list.length === 0) continue;
+          supplemented.push({
+            name,
+            order: FA_CUP_CANONICAL_ROUNDS[name] ?? 99,
+            matches: list,
+            status: computeCupRoundStatus(list),
+          });
+        }
+        roundsOut = [...preserved, ...supplemented].sort((a, b) => a.order - b.order);
+        if (cupProgressDebug) {
+          console.log(
+            `[CupProgress][FA Cup] final round counts → ${roundsOut.map((r) => `${r.name}:${r.matches.length}`).join(", ")}`
+          );
+        }
+      }
+
       // FA Cup only: diagnostics + DB fallback when feed lacks Fifth Round+ but DB has later knockout rows
       if (competitionId === "1198") {
         let dbRoundCounts: Awaited<ReturnType<typeof getCupDbRoundCounts>> = [];
@@ -6175,23 +6311,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           );
         }
 
-        if (feedMissingLater && dbHasLater) {
-          try {
-            const dbRows = await fetchFaCupMatchesFromDb(competitionId, season);
-            const merged = mergeFaCupDbFallback(cupRounds, dbRows, cupProgressDebug);
-            roundsOut = merged.rounds;
-            if (cupProgressDebug) {
-              console.log(`[CupProgress] FA Cup DB fallback applied (merged ${dbRows.length} DB rows)`);
-              console.log(`[CupProgress] FA Cup DB fallback acceptedByRound → ${JSON.stringify(merged.diagnostics.acceptedByRound)}`);
-              console.log(`[CupProgress] FA Cup DB fallback rejectedLabelReasons → ${JSON.stringify(merged.diagnostics.rejectedLabelReasons)}`);
-              console.log(`[CupProgress] FA Cup DB fallback dedupeDropped=${merged.diagnostics.dedupeDropped}`);
-              console.log(`[CupProgress] FA Cup DB fallback cappedRounds → ${JSON.stringify(merged.diagnostics.cappedRounds)}`);
-            }
-          } catch (mergeErr) {
-            console.warn("[CupProgress] FA Cup DB fallback merge failed:", mergeErr);
+        // TODO(post-MVP): FA Cup DB fallback merge intentionally disabled.
+        // We observed qualifying/preliminary fixtures stored with misleading goalserve_round labels
+        // such as "Semi-finals"/"Final". Round label alone is not trustworthy enough to build
+        // FA Cup proper knockout rounds from DB rows. A safe future fallback should gate on a
+        // trusted stage identifier/source path/date boundary, not just goalserve_round text.
+        if (cupProgressDebug) {
+          if (feedMissingLater && dbHasLater) {
+            console.log(
+              "[CupProgress] FA Cup DB fallback disabled intentionally; response uses trusted Goalserve feed rounds only"
+            );
+          } else {
+            console.log("[CupProgress] FA Cup DB fallback disabled; conditions not met or DB has no later-round signal");
           }
-        } else if (cupProgressDebug) {
-          console.log("[CupProgress] FA Cup DB fallback not used (conditions not met or DB empty)");
         }
       }
 
