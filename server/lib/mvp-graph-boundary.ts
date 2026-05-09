@@ -11,6 +11,7 @@ import {
   playerTeamMemberships,
   players,
 } from "@shared/schema";
+import { TEAMS_PAGE_COMPETITION_SLUGS } from "@shared/teams-mvp";
 
 type RowWithId = { id: string };
 
@@ -20,6 +21,7 @@ function uniqueIds(ids: string[]): string[] {
 
 export class MvpGraphBoundary {
   private mvpTeamIdsPromise: Promise<Set<string>> | null = null;
+  private teamsPageMvpTeamIdsPromise: Promise<Set<string>> | null = null;
   private mvpCompetitionIdsPromise: Promise<Set<string>> | null = null;
   private playerCurrentTeamCache = new Map<string, string | null>();
   private managerCurrentTeamCache = new Map<string, string | null>();
@@ -44,6 +46,31 @@ export class MvpGraphBoundary {
       })();
     }
     return this.mvpTeamIdsPromise;
+  }
+
+  /**
+   * Teams page scope only: supported domestic leagues + UCL/UEL/UECL (see shared/teams-mvp.ts).
+   */
+  async getTeamsPageMvpTeamIds(): Promise<Set<string>> {
+    if (!this.teamsPageMvpTeamIdsPromise) {
+      const slugList = [...TEAMS_PAGE_COMPETITION_SLUGS];
+      this.teamsPageMvpTeamIdsPromise = (async () => {
+        const rows = await db
+          .select({ teamId: competitionTeamMemberships.teamId })
+          .from(competitionTeamMemberships)
+          .innerJoin(competitions, eq(competitionTeamMemberships.competitionId, competitions.id))
+          .where(
+            and(
+              eq(competitionTeamMemberships.isCurrent, true),
+              inArray(competitions.slug, slugList),
+            ),
+          );
+        return new Set(
+          rows.map((row) => row.teamId).filter((id): id is string => typeof id === "string" && id.length > 0),
+        );
+      })();
+    }
+    return this.teamsPageMvpTeamIdsPromise;
   }
 
   async getMvpCompetitionIds(): Promise<Set<string>> {

@@ -24,6 +24,7 @@ function logWebhookAudit(line: string): void {
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, entityMedia, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
+import { TEAMS_MVP_COMPETITION_FILTER_SLUGS } from "@shared/teams-mvp";
 import { db, pool } from "./db";
 import { eq, and, or, gte, lte, lt, ne, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
@@ -86,6 +87,8 @@ import {
   faCupFeedMissingLaterKnockoutRounds,
   faCupDbCountsIncludeLaterKnockout,
 } from "./lib/fa-cup-cup-progress-db";
+
+const TEAMS_MVP_NAV_FILTER_SET = new Set<string>(TEAMS_MVP_COMPETITION_FILTER_SLUGS);
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
 const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
@@ -464,8 +467,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/teams", async (req, res) => {
     try {
-      const teams = await storage.getTeams();
-      sendJsonNoEtag(res, teams);
+      const teamsPageOnly = String(req.query.teamsPage ?? "") === "1";
+      const teamRows = teamsPageOnly ? await storage.getTeamsForTeamsPage() : await storage.getTeams();
+      sendJsonNoEtag(res, teamRows);
     } catch (error) {
       console.error("Error fetching teams:", error);
       res.status(500).json({ error: "Failed to fetch teams" });
@@ -639,7 +643,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ========== NEWS NAV (MVP competitions + their teams) ==========
-  app.get("/api/news/nav", async (_req, res) => {
+  app.get("/api/news/nav", async (req, res) => {
     try {
       const filterSlugOverridesByName = new Map<string, string>([
         ["copa del rey", "copa-del-rey"],
@@ -733,7 +737,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
 
-      const result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+      let result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+      if (String(req.query.scope ?? "") === "teams-mvp") {
+        result = result.filter((c) => TEAMS_MVP_NAV_FILTER_SET.has(c.filterValue));
+      }
       res.json({
         competitions: result,
         refinement: {

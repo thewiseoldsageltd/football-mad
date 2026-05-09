@@ -132,6 +132,8 @@ type ArticleWithEntityArrays = {
 export interface IStorage {
   // Teams
   getTeams(): Promise<Team[]>;
+  /** Teams listed on /teams (supported leagues + European comps only). */
+  getTeamsForTeamsPage(): Promise<Team[]>;
   getTeamBySlug(slug: string): Promise<Team | undefined>;
   getTeamById(id: string): Promise<Team | undefined>;
   createTeam(data: InsertTeam): Promise<Team>;
@@ -488,6 +490,20 @@ export class DatabaseStorage implements IStorage {
   async getTeams(): Promise<Team[]> {
     const boundary = new MvpGraphBoundary();
     const mvpTeamIds = Array.from(await boundary.getMvpTeamIds());
+    if (mvpTeamIds.length === 0) return [];
+
+    const rows = await db
+      .select()
+      .from(teams)
+      .where(inArray(teams.id, mvpTeamIds))
+      .orderBy(teams.name);
+    const slugMap = await this.getTeamPublicSlugMap(rows.map((row) => row.id));
+    return rows.map((row) => ({ ...row, slug: slugMap.get(row.id) ?? row.slug }));
+  }
+
+  async getTeamsForTeamsPage(): Promise<Team[]> {
+    const boundary = new MvpGraphBoundary();
+    const mvpTeamIds = Array.from(await boundary.getTeamsPageMvpTeamIds());
     if (mvpTeamIds.length === 0) return [];
 
     const rows = await db
