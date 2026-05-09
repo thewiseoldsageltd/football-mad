@@ -13,6 +13,7 @@ import { GroupedCompetitionNav } from "@/components/navigation/grouped-competiti
 import { useLocation, useRoute, useSearch } from "wouter";
 import { normalizeTeamsMvpFilterSlug } from "@shared/teams-mvp";
 import { buildTeamsMvpCompetitionNavItems } from "@/lib/teams-mvp-tab-labels";
+import { teamsIndex, teamsLeagueBrowse } from "@/lib/urls";
 
 type NewsNavTeam = {
   id: string;
