@@ -91,6 +91,9 @@ const countryToISO2: Record<string, string> = {
   "Vietnam": "vn",
   "Wales": "gb-wls",
   "Gibraltar": "gi",
+  /** UEFA / European club competitions (flagcdn EU) */
+  "Europe": "eu",
+  "UEFA": "eu",
   "intl": "",
 };
 

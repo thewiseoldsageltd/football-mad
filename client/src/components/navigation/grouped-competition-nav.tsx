@@ -5,7 +5,7 @@ import type { CompetitionNavGroup } from "@/lib/competition-nav-groups";
 
 export interface GroupedCompetitionNavItem {
   value: string;
-  label: string;
+  label: ReactNode;
 }
 
 interface GroupedCompetitionNavProps {

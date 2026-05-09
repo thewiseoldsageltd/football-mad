@@ -11,15 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { useLocation, useSearch } from "wouter";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  TEAMS_MVP_COMPETITION_SLUG_SET,
-  TEAMS_MVP_COMPETITION_TAB_ORDER,
-  TEAMS_MVP_REGION_SLUGS,
-  type TeamsMvpRegion,
-  isTeamsMvpRegion,
-  normalizeTeamsMvpFilterSlug,
-} from "@shared/teams-mvp";
+import { canonicalTeamsMvpCompSlug, normalizeTeamsMvpFilterSlug } from "@shared/teams-mvp";
+import { buildTeamsMvpCompetitionNavItems } from "@/lib/teams-mvp-tab-labels";
 
 type NewsNavTeam = {
   id: string;
@@ -51,35 +44,9 @@ type NewsNavResponse = {
   };
 };
 
-function competitionTabOrderIndex(filterValue: string): number {
-  const order = [...TEAMS_MVP_COMPETITION_TAB_ORDER];
-  const idx = order.indexOf(filterValue);
-  if (idx >= 0) return idx;
-  const alias: Record<string, string> = {
-    "champions-league": "uefa-champions-league",
-    "europa-league": "uefa-europa-league",
-    "conference-league": "uefa-conference-league",
-  };
-  const mapped = alias[filterValue];
-  if (mapped) {
-    const j = order.indexOf(mapped);
-    if (j >= 0) return j;
-  }
-  return 100 + filterValue.charCodeAt(0);
-}
-
-function orderCompetitionTabs(tabs: { value: string; label: string }[]): { value: string; label: string }[] {
-  const allTab = tabs.find((t) => t.value === "all");
-  const rest = tabs.filter((t) => t.value !== "all").sort((a, b) => competitionTabOrderIndex(a.value) - competitionTabOrderIndex(b.value));
-  return allTab ? [allTab, ...rest] : rest;
-}
-
-function buildTeamsListUrl(region: TeamsMvpRegion, comp: string): string {
-  const params = new URLSearchParams();
-  if (region !== "all") params.set("region", region);
-  if (comp !== "all") params.set("comp", comp);
-  const q = params.toString();
-  return q ? `/teams?${q}` : "/teams";
+function buildTeamsListUrl(comp: string): string {
+  if (comp === "all") return "/teams";
+  return `/teams?comp=${encodeURIComponent(comp)}`;
 }
 
 export default function TeamsPage() {
@@ -89,14 +56,14 @@ export default function TeamsPage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const { region, comp } = useMemo(() => {
+  /** `?region=` from legacy URLs is ignored. */
+  const selectedComp = useMemo(() => {
     const params = new URLSearchParams(searchQuery);
-    const rawComp = params.get("comp") ?? "all";
-    const rawRegion = params.get("region") ?? "all";
-    const comp =
-      rawComp === "all" || TEAMS_MVP_COMPETITION_SLUG_SET.has(rawComp) ? rawComp : "all";
-    const region: TeamsMvpRegion = isTeamsMvpRegion(rawRegion) ? rawRegion : "all";
-    return { region, comp };
+    const raw = params.get("comp") ?? "all";
+    if (raw === "all") return "all";
+    const n = normalizeTeamsMvpFilterSlug(raw);
+    if (!n) return "all";
+    return canonicalTeamsMvpCompSlug(n);
   }, [searchQuery]);
 
   const { data: teams, isLoading } = useQuery<Team[]>({
@@ -111,6 +78,8 @@ export default function TeamsPage() {
     queryKey: ["/api/follows"],
     enabled: isAuthenticated,
   });
+
+  const competitionNavItems = useMemo(() => buildTeamsMvpCompetitionNavItems(), []);
 
   const followMutation = useMutation({
     mutationFn: async (teamId: string) => {
@@ -139,6 +108,8 @@ export default function TeamsPage() {
   });
 
   const selectedCompetitionTeamIds = useMemo(() => {
+    if (selectedComp === "all") return null;
+
     const groups =
       (newsNav?.refinement?.teamsByCompetition ?? []).length > 0
         ? (newsNav?.refinement?.teamsByCompetition ?? [])
@@ -150,54 +121,19 @@ export default function TeamsPage() {
             teams: c.teams,
           }));
 
-    if (comp !== "all") {
-      const normalized = normalizeTeamsMvpFilterSlug(comp);
-      const selected = groups.find((g) => normalizeTeamsMvpFilterSlug(g.competitionFilterValue) === normalized);
-      if (!selected) return new Set<string>();
-      return new Set(selected.teams.map((t) => t.id));
-    }
-
-    if (region === "all") return null;
-
-    const allowed = new Set(TEAMS_MVP_REGION_SLUGS[region]);
-    const ids = new Set<string>();
-    for (const g of groups) {
-      if (allowed.has(g.competitionFilterValue)) {
-        for (const t of g.teams) ids.add(t.id);
-      }
-    }
-    return ids;
-  }, [comp, region, newsNav]);
-
-  const competitionTabsOrdered = useMemo(() => {
-    const comps = newsNav?.competitions ?? [];
-    let scoped = comps;
-    if (region !== "all") {
-      const allowed = new Set(TEAMS_MVP_REGION_SLUGS[region]);
-      scoped = comps.filter((c) => allowed.has(c.filterValue));
-    }
-    const raw = [
-      { value: "all", label: "All" },
-      ...scoped.map((c) => ({ value: c.filterValue, label: c.name })),
-    ];
-    return orderCompetitionTabs(raw);
-  }, [newsNav?.competitions, region]);
-
-  const selectedCompetitionValue = comp;
-
-  const handleRegionChange = useCallback(
-    (next: string) => {
-      const r = isTeamsMvpRegion(next) ? next : "all";
-      setLocation(buildTeamsListUrl(r, "all"));
-    },
-    [setLocation],
-  );
+    const target = selectedComp;
+    const selected = groups.find(
+      (g) => canonicalTeamsMvpCompSlug(g.competitionFilterValue) === target,
+    );
+    if (!selected) return new Set<string>();
+    return new Set(selected.teams.map((t) => t.id));
+  }, [selectedComp, newsNav]);
 
   const handleCompetitionChange = useCallback(
     (value: string) => {
-      setLocation(buildTeamsListUrl(region, value));
+      setLocation(buildTeamsListUrl(value));
     },
-    [region, setLocation],
+    [setLocation],
   );
 
   const filteredTeams = useMemo(() => {
@@ -212,11 +148,6 @@ export default function TeamsPage() {
       })
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   }, [teams, search, selectedCompetitionTeamIds]);
-
-  const competitionTabsForNav = useMemo(() => {
-    if (competitionTabsOrdered.some((tab) => tab.value === selectedCompetitionValue)) return competitionTabsOrdered;
-    return [...competitionTabsOrdered, { value: selectedCompetitionValue, label: selectedCompetitionValue }];
-  }, [competitionTabsOrdered, selectedCompetitionValue]);
 
   const handleFollowToggle = (team: Team) => {
     if (!isAuthenticated) {
@@ -249,64 +180,42 @@ export default function TeamsPage() {
           </div>
         </div>
 
-        <div className="space-y-4 mb-6">
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Region</span>
-            <Tabs value={region} onValueChange={handleRegionChange}>
-              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 bg-muted/60 p-1">
-                <TabsTrigger value="all" className="text-sm" data-testid="tab-region-all">
-                  All
-                </TabsTrigger>
-                <TabsTrigger value="england" className="text-sm" data-testid="tab-region-england">
-                  England
-                </TabsTrigger>
-                <TabsTrigger value="scotland" className="text-sm" data-testid="tab-region-scotland">
-                  Scotland
-                </TabsTrigger>
-                <TabsTrigger value="europe" className="text-sm" data-testid="tab-region-europe">
-                  Europe
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-
-          <GroupedCompetitionNav
-            showGroupTabs={false}
-            selectedCompetition={selectedCompetitionValue}
-            onCompetitionChange={handleCompetitionChange}
-            competitions={competitionTabsForNav}
-            rightDesktopSlot={(
-              <div className="relative shrink-0">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search teams..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-[200px] pl-10"
-                  data-testid="input-search-teams"
-                />
-              </div>
-            )}
-            rightMobileSlot={(
-              <div className="relative">
-                <Input
-                  type="search"
-                  placeholder="Search teams..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="h-9 text-sm font-normal text-center pr-9 placeholder:text-center placeholder:text-muted-foreground"
-                  data-testid="input-search-teams-mobile"
-                />
-                <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              </div>
-            )}
-            desktopCompetitionTabsTestId="tabs-competition"
-            mobileCompetitionTabsTestId="tabs-competition-mobile"
-            desktopCompetitionTabTestIdPrefix="tab-competition"
-            mobileCompetitionTabTestIdPrefix="tab-competition"
-          />
-        </div>
+        <GroupedCompetitionNav
+          showGroupTabs={false}
+          selectedCompetition={selectedComp}
+          onCompetitionChange={handleCompetitionChange}
+          competitions={competitionNavItems}
+          rightDesktopSlot={(
+            <div className="relative shrink-0">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search in this list…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-[200px] pl-10"
+                data-testid="input-search-teams"
+              />
+            </div>
+          )}
+          rightMobileSlot={(
+            <div className="relative">
+              <Input
+                type="search"
+                placeholder="Search in this list…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 text-sm font-normal text-center pr-9 placeholder:text-center placeholder:text-muted-foreground"
+                data-testid="input-search-teams-mobile"
+              />
+              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            </div>
+          )}
+          desktopCompetitionTabsTestId="tabs-competition"
+          mobileCompetitionTabsTestId="tabs-competition-mobile"
+          desktopCompetitionTabTestIdPrefix="tab-competition"
+          mobileCompetitionTabTestIdPrefix="tab-competition"
+        />
 
         {isLoading || navLoading ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -333,7 +242,7 @@ export default function TeamsPage() {
             <p className="text-muted-foreground">
               {emptyDueToSearch
                 ? `No teams found matching "${search.trim()}"`
-                : "No clubs match this filter in the current scope. Try another league or region."}
+                : "No clubs match this competition filter yet. Try another league or check back later."}
             </p>
           </div>
         )}
