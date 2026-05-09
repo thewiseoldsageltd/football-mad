@@ -141,7 +141,7 @@ const StandingsRow = memo(function StandingsRow({ team, isExpanded, onToggle }: 
           />
           <span className="text-sm">{team.position}</span>
         </td>
-        <td className="min-w-[160px] w-[22%] py-2 px-2 align-middle overflow-hidden">
+        <td className="py-2 px-2 align-middle min-w-0">
           <span className="font-medium text-sm truncate block" data-testid={`text-team-name-${team.position}`}>
             {team.name}
           </span>
@@ -164,20 +164,20 @@ const StandingsRow = memo(function StandingsRow({ team, isExpanded, onToggle }: 
         <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
           {team.goalsAgainst}
         </td>
-        <td className="w-11 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
+        <td className="w-10 text-center py-2 px-2 hidden md:table-cell align-middle tabular-nums">
           <span className={getGDColorClass(team.goalDifference)}>
             {formatGD(team.goalDifference)}
           </span>
         </td>
-        <td className="w-14 min-w-[3.5rem] shrink-0 text-right py-2 px-2 font-bold md:text-center tabular-nums align-middle">
+        <td className="text-right w-12 min-w-[3rem] py-2 px-2 pr-3 font-bold md:text-center md:pr-0 tabular-nums align-middle whitespace-nowrap">
           {team.points}
         </td>
-        <td className="hidden md:table-cell w-[120px] min-w-[120px] max-w-[120px] py-2 px-2 text-left align-middle whitespace-nowrap">
+        <td className="hidden md:table-cell w-24 py-2 px-2 text-left align-middle whitespace-nowrap">
           <div className="inline-flex justify-start min-w-0">
             <FormPills form={team.recentForm || ""} maxPills={5} showPlaceholder />
           </div>
         </td>
-        <td className="md:hidden w-10 shrink-0 text-center align-middle">
+        <td className="md:hidden w-8 text-center align-middle">
           <ChevronDown 
             className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
             aria-hidden="true"
@@ -219,15 +219,15 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
   }
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="w-full overflow-x-visible md:overflow-x-auto">
       <table
-        className="w-full min-w-0 text-sm table-auto md:table-fixed md:min-w-[920px]"
+        className="w-full text-sm table-fixed md:table-auto"
         data-testid="table-standings"
       >
         <thead>
           <tr className="border-b">
             <th className="text-left py-2 px-2 font-medium text-muted-foreground w-10">#</th>
-            <th className="text-left py-2 px-2 font-medium text-muted-foreground min-w-[160px] w-[22%]">
+            <th className="text-left py-2 px-2 font-medium text-muted-foreground">
               Team
             </th>
             <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
@@ -248,16 +248,16 @@ function StandingsTable({ standings }: { standings: StandingTeam[] }) {
             <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
               GA
             </th>
-            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-11 hidden md:table-cell">
+            <th className="text-center py-2 px-2 font-medium text-muted-foreground w-10 hidden md:table-cell">
               GD
             </th>
-            <th className="w-14 min-w-[3.5rem] shrink-0 text-right py-2 px-2 font-semibold text-muted-foreground md:text-center">
+            <th className="w-12 min-w-[3rem] text-right py-2 px-2 pr-3 font-semibold text-muted-foreground md:text-center md:pr-0">
               Pts
             </th>
-            <th className="hidden md:table-cell w-[120px] min-w-[120px] max-w-[120px] py-2 px-2 font-medium text-muted-foreground text-left whitespace-nowrap">
+            <th className="hidden md:table-cell w-24 py-2 px-2 font-medium text-muted-foreground text-left whitespace-nowrap">
               Form
             </th>
-            <th className="md:hidden w-10 shrink-0"></th>
+            <th className="md:hidden w-8"></th>
           </tr>
         </thead>
         <tbody>
