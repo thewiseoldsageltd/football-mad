@@ -4005,131 +4005,97 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
       const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
-      const force = req.query.force === "1";
+      const force = req.query.force !== "0";
 
       try {
-        const KNOWN_CUP_OR_KNOCKOUT_SLUGS = new Set([
-          "fa-cup",
-          "efl-cup",
-          "scottish-cup",
-          "scottish-league-cup",
-          "copa-del-rey",
-          "coppa-italia",
-          "dfb-pokal",
-          "coupe-de-france",
-        ]);
-        const NON_STANDINGS_SLUGS = new Set([
-          "fifa-world-cup",
-        ]);
-
-        const isKnownCupOrKnockout = (slugOrName: string): boolean => {
-          const v = slugOrName.toLowerCase();
-          if (KNOWN_CUP_OR_KNOCKOUT_SLUGS.has(v)) return true;
-          return /\b(cup|pokal|coppa|copa)\b/.test(v);
-        };
-
-        const isNonStandingsCompetition = (slugOrName: string): boolean => {
-          const v = slugOrName.toLowerCase();
-          if (NON_STANDINGS_SLUGS.has(v)) return true;
-          return /\b(world-cup|world cup)\b/.test(v);
-        };
-
-        const comps = await db
-          .select({
-            slug: competitions.slug,
-            name: competitions.name,
-            canonicalSlug: competitions.canonicalSlug,
-            isCup: competitions.isCup,
-            goalserveCompetitionId: competitions.goalserveCompetitionId,
-          })
-          .from(competitions)
-          .where(eq(competitions.isPriority, true));
-
         const results: Array<{
           canonicalSlug: string;
-          leagueId: string | null;
+          competitionName: string;
+          leagueId: string;
           ok: boolean;
           skipped: boolean;
-          skipReason: "cup" | "missing_goalserve_id" | "non_standings" | null;
+          insertedRowsCount: number;
+          snapshotId?: string;
+          asOf?: Date;
+          status: "refreshed" | "error";
+          reason: string | null;
           error: string | null;
         }> = [];
-        let skippedCups = 0;
-        let skippedMissingGoalserveId = 0;
-        let skippedNonStandings = 0;
+        const targets = [
+          { canonicalSlug: "premier-league", competitionName: "Premier League", leagueId: "1204" },
+          { canonicalSlug: "championship", competitionName: "Championship", leagueId: "1205" },
+          { canonicalSlug: "league-one", competitionName: "League One", leagueId: "1206" },
+          { canonicalSlug: "league-two", competitionName: "League Two", leagueId: "1197" },
+          { canonicalSlug: "national-league", competitionName: "National League", leagueId: "1203" },
+          { canonicalSlug: "scottish-premiership", competitionName: "Scottish Premiership", leagueId: "1370" },
+          { canonicalSlug: "scottish-championship", competitionName: "Scottish Championship", leagueId: "1373" },
+          { canonicalSlug: "la-liga", competitionName: "La Liga", leagueId: "1399" },
+          { canonicalSlug: "serie-a", competitionName: "Serie A", leagueId: "1269" },
+          { canonicalSlug: "bundesliga", competitionName: "Bundesliga", leagueId: "1229" },
+          { canonicalSlug: "ligue-1", competitionName: "Ligue 1", leagueId: "1221" },
+        ] as const;
 
-        for (const comp of comps) {
-          const canonicalSlug = comp.canonicalSlug || comp.slug;
-          const compName = comp.name || "";
-          const leagueId = comp.goalserveCompetitionId?.trim() || null;
-          const slugOrName = `${canonicalSlug} ${compName}`.trim();
+        let refreshed = 0;
+        let failed = 0;
 
-          if (comp.isCup || isKnownCupOrKnockout(slugOrName)) {
-            skippedCups++;
+        for (const target of targets) {
+          try {
+            const result = await upsertGoalserveStandings(target.leagueId, { seasonParam: season, force });
+            const refreshedOk = result.ok && !result.skipped;
+
             results.push({
-              canonicalSlug,
-              leagueId,
-              ok: true,
-              skipped: true,
-              skipReason: "cup",
-              error: null,
+              canonicalSlug: target.canonicalSlug,
+              competitionName: target.competitionName,
+              leagueId: target.leagueId,
+              ok: result.ok,
+              skipped: result.skipped || false,
+              insertedRowsCount: result.insertedRowsCount ?? 0,
+              snapshotId: result.snapshotId,
+              asOf: result.asOf,
+              status: refreshedOk ? "refreshed" : "error",
+              reason: result.reason || null,
+              error: refreshedOk ? null : result.error || result.reason || "Standings refresh did not create a fresh snapshot",
             });
-            continue;
-          }
 
-          if (isNonStandingsCompetition(slugOrName)) {
-            skippedNonStandings++;
+            if (refreshedOk) refreshed++;
+            else failed++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
             results.push({
-              canonicalSlug,
-              leagueId,
-              ok: true,
-              skipped: true,
-              skipReason: "non_standings",
-              error: null,
+              canonicalSlug: target.canonicalSlug,
+              competitionName: target.competitionName,
+              leagueId: target.leagueId,
+              ok: false,
+              skipped: false,
+              insertedRowsCount: 0,
+              status: "error",
+              reason: null,
+              error: msg,
             });
-            continue;
+            failed++;
           }
-
-          if (!leagueId) {
-            skippedMissingGoalserveId++;
-            results.push({
-              canonicalSlug,
-              leagueId: null,
-              ok: true,
-              skipped: true,
-              skipReason: "missing_goalserve_id",
-              error: "No goalserve_competition_id",
-            });
-            continue;
-          }
-
-          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
-          results.push({
-            canonicalSlug,
-            leagueId,
-            ok: !!result.ok,
-            skipped: !!result.skipped,
-            skipReason: null,
-            error: result.ok ? null : result.error || result.reason || "Unknown error",
-          });
         }
 
-        const succeeded = results.filter((r) => (r.ok && !r.skipped) || (r.ok && r.skipped)).length;
-        const failed = results.length - succeeded;
         res.json({
           ok: failed === 0,
           season,
           force,
-          total: results.length,
-          succeeded,
+          total: targets.length,
+          refreshed,
           failed,
-          skippedCups,
-          skippedMissingGoalserveId,
-          skippedNonStandings,
+          refreshedCompetitions: results
+            .filter((r) => r.status === "refreshed")
+            .map((r) => r.canonicalSlug),
           results,
         });
       } catch (error) {
         console.error("Priority standings refresh error:", error);
-        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
+        res.status(500).json({
+          ok: false,
+          season,
+          force,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
       }
     }
   );
