@@ -1,13 +1,10 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { TeamCard } from "@/components/cards/team-card";
 import { TeamCardSkeleton } from "@/components/skeletons";
 import { Input } from "@/components/ui/input";
 import { Search, Shield } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth } from "@/hooks/use-auth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import type { Team } from "@shared/schema";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { useLocation, useRoute, useSearch } from "wouter";
@@ -55,8 +52,6 @@ export default function TeamsPage() {
   const searchQuery = useSearch();
   const [, setLocation] = useLocation();
   const [matchLeague, leagueParams] = useRoute<{ competitionSlug: string }>("/teams/league/:competitionSlug");
-  const { isAuthenticated } = useAuth();
-  const { toast } = useToast();
 
   /** Legacy `?comp=` → `/teams/league/…` (replace). Path wins if both present. Invalid query → `/teams`. */
   useEffect(() => {
@@ -96,38 +91,7 @@ export default function TeamsPage() {
     queryKey: ["/api/news/nav?scope=teams-mvp"],
   });
 
-  const { data: followedTeamIds } = useQuery<string[]>({
-    queryKey: ["/api/follows"],
-    enabled: isAuthenticated,
-  });
-
   const competitionNavItems = useMemo(() => buildTeamsMvpCompetitionNavItems(), []);
-
-  const followMutation = useMutation({
-    mutationFn: async (teamId: string) => {
-      return apiRequest("POST", "/api/follows", { teamId });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/follows"] });
-      toast({ title: "Team followed!" });
-    },
-    onError: () => {
-      toast({ title: "Failed to follow team", variant: "destructive" });
-    },
-  });
-
-  const unfollowMutation = useMutation({
-    mutationFn: async (teamId: string) => {
-      return apiRequest("DELETE", `/api/follows/${teamId}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/follows"] });
-      toast({ title: "Team unfollowed" });
-    },
-    onError: () => {
-      toast({ title: "Failed to unfollow team", variant: "destructive" });
-    },
-  });
 
   const selectedCompetitionTeamIds = useMemo(() => {
     if (selectedComp === "all") return null;
@@ -168,20 +132,6 @@ export default function TeamsPage() {
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   }, [teams, search, selectedCompetitionTeamIds]);
 
-  const handleFollowToggle = (team: Team) => {
-    if (!isAuthenticated) {
-      window.location.href = "/api/login";
-      return;
-    }
-
-    const isFollowing = followedTeamIds?.includes(team.id);
-    if (isFollowing) {
-      unfollowMutation.mutate(team.id);
-    } else {
-      followMutation.mutate(team.id);
-    }
-  };
-
   const emptyDueToSearch = Boolean(search.trim()) && filteredTeams.length === 0 && !isLoading && !navLoading;
 
   return (
@@ -194,7 +144,7 @@ export default function TeamsPage() {
               Teams
             </h1>
             <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
-              Browse and follow clubs from supported domestic leagues
+              Browse clubs from supported domestic leagues
             </p>
           </div>
         </div>
@@ -245,13 +195,7 @@ export default function TeamsPage() {
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredTeams.map((team) => (
-              <TeamCard
-                key={team.id}
-                team={team}
-                isFollowing={followedTeamIds?.includes(team.id)}
-                onFollowToggle={() => handleFollowToggle(team)}
-                showFollowButton={true}
-              />
+              <TeamCard key={team.id} team={team} />
             ))}
           </div>
         )}

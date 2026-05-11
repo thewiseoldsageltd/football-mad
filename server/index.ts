@@ -4,9 +4,10 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
-import { isStagingHost } from "./middleware/environment";
+import { shouldBlockSearchIndexing } from "./middleware/environment";
 
 const app = express();
+app.set("trust proxy", true);
 app.set("etag", false);
 const httpServer = createServer(app);
 
@@ -27,19 +28,23 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {
-  const host = req.hostname || req.headers.host || "";
-  if (isStagingHost(host)) {
+  const hostHeader = req.headers.host || "";
+  const host = req.hostname || hostHeader.split(":")[0] || "";
+  if (shouldBlockSearchIndexing(host)) {
     res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
   }
   next();
 });
 
 app.get("/robots.txt", (req, res) => {
-  const host = req.hostname || req.headers.host || "";
-  if (isStagingHost(host)) {
+  const hostHeader = req.headers.host || "";
+  const host = req.hostname || hostHeader.split(":")[0] || "";
+  if (shouldBlockSearchIndexing(host)) {
     res.type("text/plain").send("User-agent: *\nDisallow: /");
   } else {
-    res.type("text/plain").send("User-agent: *\nAllow: /");
+    res.type("text/plain").send(
+      ["User-agent: *", "Allow: /", ""].join("\n"),
+    );
   }
 });
 

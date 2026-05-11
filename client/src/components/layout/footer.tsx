@@ -5,9 +5,8 @@ const footerLinks = {
   content: [
     { label: "News", href: "/news" },
     { label: "Matches", href: "/matches" },
-    { label: "Transfers", href: "/transfers" },
-    { label: "Injuries", href: "/injuries" },
-    { label: "FPL", href: "/fpl" },
+    { label: "Tables", href: "/tables" },
+    { label: "Teams", href: "/teams" },
   ],
   teams: [
     { label: "All Teams", href: "/teams" },

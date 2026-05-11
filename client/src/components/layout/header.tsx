@@ -1,36 +1,21 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, User, ShoppingCart, Search, ChevronDown } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { useAuth } from "@/hooks/use-auth";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-const navItems = [
+/** MVP: News, Matches, Tables, Teams — hidden routes remain reachable by URL for v2. */
+const mvpNavItems = [
   { label: "News", href: "/news" },
   { label: "Matches", href: "/matches" },
   { label: "Tables", href: "/tables" },
   { label: "Teams", href: "/teams" },
-  { label: "Transfers", href: "/transfers" },
-  { label: "Injuries", href: "/injuries" },
-  { label: "FPL", href: "/fpl" },
-  { label: "Community", href: "/community" },
-  { label: "Shop", href: "/shop" },
 ];
 
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [cartCount, setCartCount] = useState(0);
   const [location] = useLocation();
-  const { user, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -38,25 +23,6 @@ export function Header() {
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
-    const loadCartCount = () => {
-      try {
-        const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-        const totalQuantity = cart.reduce((sum: number, item: { quantity: number }) => sum + item.quantity, 0);
-        setCartCount(totalQuantity);
-      } catch {
-        setCartCount(0);
-      }
-    };
-    loadCartCount();
-    window.addEventListener("cartUpdated", loadCartCount);
-    window.addEventListener("storage", loadCartCount);
-    return () => {
-      window.removeEventListener("cartUpdated", loadCartCount);
-      window.removeEventListener("storage", loadCartCount);
-    };
   }, []);
 
   return (
@@ -78,7 +44,7 @@ export function Header() {
             </Link>
 
             <nav className="hidden lg:flex items-center gap-1">
-              {navItems.map((item) => (
+              {mvpNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -96,66 +62,11 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="hidden sm:flex" data-testid="button-search">
+            <Button variant="ghost" size="icon" className="hidden sm:flex" type="button" data-testid="button-search">
               <Search className="h-5 w-5" />
             </Button>
 
-            <Link href="/shop/cart" className="relative">
-              <Button variant="ghost" size="icon" data-testid="button-cart">
-                <ShoppingCart className="h-5 w-5" />
-              </Button>
-              {cartCount > 0 && (
-                <span 
-                  className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
-                  data-testid="badge-cart-count"
-                >
-                  {cartCount > 99 ? "99+" : cartCount}
-                </span>
-              )}
-            </Link>
-
             <ThemeToggle />
-
-            {isAuthenticated ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="gap-2" data-testid="button-user-menu">
-                    <Avatar className="h-7 w-7">
-                      <AvatarImage src={user?.profileImageUrl || undefined} alt={user?.firstName || "User"} />
-                      <AvatarFallback>
-                        {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <ChevronDown className="h-4 w-4 hidden sm:block" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <div className="px-2 py-1.5">
-                    <p className="text-sm font-medium">{user?.firstName} {user?.lastName}</p>
-                    <p className="text-xs text-muted-foreground">{user?.email}</p>
-                  </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/account" className="w-full cursor-pointer" data-testid="link-account">
-                      My Account
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/account/follows" className="w-full cursor-pointer" data-testid="link-follows">
-                      Followed Teams
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => logout()} data-testid="button-logout">
-                    Sign out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button asChild data-testid="button-login">
-                <a href="/api/login">Sign in</a>
-              </Button>
-            )}
 
             <Button
               variant="ghost"
@@ -172,7 +83,7 @@ export function Header() {
         {isMobileMenuOpen && (
           <div className="lg:hidden pb-4 border-t pt-4">
             <nav className="flex flex-col gap-1">
-              {navItems.map((item) => (
+              {mvpNavItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
