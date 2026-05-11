@@ -3264,17 +3264,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
-  // ========== DEBUG: GOALSERVE MATCHES UPSERT (no auth, for dev) ==========
-  app.get("/api/debug/upsert-goalserve-matches", async (req, res) => {
-    try {
-      const feed = String(req.query.feed || "soccernew/home");
-      const result = await upsertGoalserveMatches(feed);
-      res.json(result);
-    } catch (error) {
-      console.error("Debug upsert-goalserve-matches error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
-    }
-  });
+  // ========== DEBUG: GOALSERVE MATCHES UPSERT ==========
+  // Local non-production dev may use this without auth; production-like envs require GOALSERVE_SYNC_SECRET.
+  app.get(
+    "/api/debug/upsert-goalserve-matches",
+    (req, res, next) => {
+      if (process.env.NODE_ENV !== "production") return next();
+      return requireJobSecret("GOALSERVE_SYNC_SECRET")(req, res, next);
+    },
+    async (req, res) => {
+      try {
+        const feed = String(req.query.feed || "soccernew/home");
+        const result = await upsertGoalserveMatches(feed);
+        res.json(result);
+      } catch (error) {
+        console.error("Debug upsert-goalserve-matches error:", error);
+        res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    },
+  );
 
   // ========== DEBUG: Team Anomaly Investigation ==========
   app.post(
