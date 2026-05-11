@@ -2797,6 +2797,103 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // ========== REFRESH PRIORITY STANDINGS (MVP domestic leagues only) ==========
+  app.post(
+    "/api/jobs/refresh-priority-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
+      const force = req.query.force !== "0";
+      const targets = [
+        { canonicalSlug: "premier-league", competitionName: "Premier League", leagueId: "1204" },
+        { canonicalSlug: "championship", competitionName: "Championship", leagueId: "1205" },
+        { canonicalSlug: "league-one", competitionName: "League One", leagueId: "1206" },
+        { canonicalSlug: "league-two", competitionName: "League Two", leagueId: "1197" },
+        { canonicalSlug: "national-league", competitionName: "National League", leagueId: "1203" },
+        { canonicalSlug: "scottish-premiership", competitionName: "Scottish Premiership", leagueId: "1370" },
+        { canonicalSlug: "scottish-championship", competitionName: "Scottish Championship", leagueId: "1373" },
+        { canonicalSlug: "la-liga", competitionName: "La Liga", leagueId: "1399" },
+        { canonicalSlug: "serie-a", competitionName: "Serie A", leagueId: "1269" },
+        { canonicalSlug: "bundesliga", competitionName: "Bundesliga", leagueId: "1229" },
+        { canonicalSlug: "ligue-1", competitionName: "Ligue 1", leagueId: "1221" },
+      ] as const;
+
+      try {
+        const results: Array<{
+          canonicalSlug: string;
+          competitionName: string;
+          leagueId: string;
+          ok: boolean;
+          skipped: boolean;
+          insertedRowsCount: number;
+          snapshotId?: string;
+          asOf?: Date;
+          status: "refreshed" | "skipped" | "error";
+          reason: string | null;
+          error: string | null;
+        }> = [];
+
+        let refreshed = 0;
+        let failed = 0;
+
+        for (const target of targets) {
+          try {
+            const r = await upsertGoalserveStandings(target.leagueId, { seasonParam: season, force });
+            const status: "refreshed" | "skipped" | "error" =
+              r.ok && !r.skipped ? "refreshed" : r.ok ? "skipped" : "error";
+
+            results.push({
+              canonicalSlug: target.canonicalSlug,
+              competitionName: target.competitionName,
+              leagueId: target.leagueId,
+              ok: r.ok,
+              skipped: r.skipped || false,
+              insertedRowsCount: r.insertedRowsCount ?? 0,
+              snapshotId: r.snapshotId,
+              asOf: r.asOf,
+              status,
+              reason: r.reason || null,
+              error: r.error || null,
+            });
+
+            if (status === "refreshed") refreshed++;
+            if (status === "error") failed++;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            results.push({
+              canonicalSlug: target.canonicalSlug,
+              competitionName: target.competitionName,
+              leagueId: target.leagueId,
+              ok: false,
+              skipped: false,
+              insertedRowsCount: 0,
+              status: "error",
+              reason: null,
+              error: msg,
+            });
+            failed++;
+          }
+        }
+
+        res.json({
+          ok: failed === 0,
+          season,
+          force,
+          total: targets.length,
+          refreshed,
+          failed,
+          refreshedCompetitions: results
+            .filter((r) => r.status === "refreshed")
+            .map((r) => r.canonicalSlug),
+          results,
+        });
+      } catch (error) {
+        console.error("Priority standings refresh error:", error);
+        res.status(500).json({ ok: false, season, force, error: error instanceof Error ? error.message : "Unknown error" });
+      }
+    }
+  );
+
   // ========== SYNC GOALSERVE SQUADS (players + managers from soccerleague endpoint) ==========
   app.post(
     "/api/jobs/sync-goalserve-squads",
