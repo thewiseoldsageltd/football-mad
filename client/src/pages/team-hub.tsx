@@ -1,7 +1,7 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useEffect, useMemo, useState } from "react";
-import { Heart, HeartOff, Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Inbox, Bell, MessageSquarePlus, LogIn, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Clock } from "lucide-react";
+import { Calendar, Newspaper, Activity, TrendingUp, Users, ArrowLeft, ArrowRight, Inbox, ChevronRight, ChevronLeft, Ban, UserCircle2, Search, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -17,10 +17,6 @@ import { MatchCard } from "@/components/cards/match-card";
 import { InjuryCard } from "@/components/cards/injury-card";
 import { PostCard } from "@/components/cards/post-card";
 import { TransferCard } from "@/components/cards/transfer-card";
-import { NewsletterForm } from "@/components/newsletter-form";
-import { useAuth } from "@/hooks/use-auth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
@@ -53,6 +49,7 @@ interface TeamArchiveResponse {
 
 const VALID_TABS = ["latest", "injuries", "discipline", "transfers", "matches", "squad", "fans"] as const;
 type TabValue = typeof VALID_TABS[number];
+const MVP_VISIBLE_TABS: readonly TabValue[] = ["latest", "matches", "squad"];
 
 const TAB_META: Record<TabValue, { icon: typeof Newspaper; label: string; title: string }> = {
   latest: { icon: Newspaper, label: "Latest", title: "News" },
@@ -1912,41 +1909,12 @@ function MatchesTabContent({
   );
 }
 
-const NEWSLETTER_NAMES: Record<string, string> = {
-  "arsenal": "Gunners Mad",
-  "tottenham": "Spurs Mad",
-  "chelsea": "Blues Mad",
-  "liverpool": "Reds Mad",
-  "manchester-city": "City Mad",
-  "manchester-united": "Red Devils Mad",
-  "newcastle": "Magpies Mad",
-  "aston-villa": "Villa Mad",
-  "brighton": "Seagulls Mad",
-  "brentford": "Bees Mad",
-  "crystal-palace": "Eagles Mad",
-  "everton": "Toffees Mad",
-  "fulham": "Fulham Mad",
-  "nottingham-forest": "Forest Mad",
-  "wolves": "Wolves Mad",
-  "west-ham": "Hammers Mad",
-  "bournemouth": "Cherries Mad",
-  "leicester-city": "Foxes Mad",
-  "ipswich-town": "Ipswich Mad",
-  "southampton": "Saints Mad",
-};
-
-function getNewsletterName(teamSlug: string, teamName: string): string {
-  return NEWSLETTER_NAMES[teamSlug] || `${teamName} Mad`;
-}
-
 function FansTabContent({ 
   posts, 
   teamName,
-  isAuthenticated
 }: { 
   posts?: (Post & { team?: Team })[];
   teamName: string;
-  isAuthenticated: boolean;
 }) {
   if (!posts || posts.length === 0) {
     return (
@@ -1957,22 +1925,9 @@ function FansTabContent({
               <Users className="h-6 w-6 text-muted-foreground" />
             </div>
             <h3 className="font-semibold mb-1">No fan posts yet</h3>
-            <p className="text-sm text-muted-foreground max-w-xs mb-4">
-              Be the first to share your thoughts about {teamName}!
+            <p className="text-sm text-muted-foreground max-w-xs">
+              Fan discussion is not part of the public MVP yet. Check back later for community features.
             </p>
-            {isAuthenticated ? (
-              <Button data-testid="button-create-post">
-                <MessageSquarePlus className="h-4 w-4 mr-2" />
-                Create Post
-              </Button>
-            ) : (
-              <Button variant="outline" asChild data-testid="button-login-to-post">
-                <a href="/api/login">
-                  <LogIn className="h-4 w-4 mr-2" />
-                  Sign in to post
-                </a>
-              </Button>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -1981,14 +1936,6 @@ function FansTabContent({
 
   return (
     <div className="space-y-4">
-      {isAuthenticated && (
-        <div className="flex justify-end mb-4">
-          <Button data-testid="button-create-post">
-            <MessageSquarePlus className="h-4 w-4 mr-2" />
-            Create Post
-          </Button>
-        </div>
-      )}
       {posts.map((post) => (
         <PostCard key={post.id} post={post} />
       ))}
@@ -2425,17 +2372,9 @@ function SquadTabContent({
 function TeamRightRail({ 
   team, 
   articles,
-  isAuthenticated,
-  isFollowing,
-  onFollowToggle,
-  isPending
 }: { 
   team: Team;
   articles: Article[];
-  isAuthenticated: boolean;
-  isFollowing: boolean;
-  onFollowToggle: () => void;
-  isPending: boolean;
 }) {
   const relatedArticles = useMemo(() => {
     return [...articles]
@@ -2448,106 +2387,42 @@ function TeamRightRail({
       })
       .slice(0, 4);
   }, [articles]);
-
-  const newsletterName = getNewsletterName(team.slug, team.name);
+  if (relatedArticles.length === 0) return null;
 
   return (
     <div className="lg:sticky lg:top-32 space-y-6">
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Heart className="h-4 w-4 text-primary" />
-            Follow {team.name}
-          </CardTitle>
-          <CardDescription className="text-sm">
-            {isAuthenticated 
-              ? (isFollowing 
-                  ? "You're following this team. We'll personalise your feed." 
-                  : "Follow to get personalised news in your feed.")
-              : "Sign in to follow teams and personalise your experience."}
-          </CardDescription>
+          <CardTitle className="text-base">More from {team.name}</CardTitle>
         </CardHeader>
-        <CardContent>
-          {isAuthenticated ? (
-            <Button
-              className="w-full"
-              variant={isFollowing ? "outline" : "default"}
-              onClick={onFollowToggle}
-              disabled={isPending}
-              data-testid="rail-button-follow"
-            >
-              {isFollowing ? (
-                <>
-                  <HeartOff className="h-4 w-4 mr-2" />
-                  Following
-                </>
-              ) : (
-                <>
-                  <Heart className="h-4 w-4 mr-2" />
-                  Follow
-                </>
-              )}
-            </Button>
-          ) : (
-            <Button className="w-full" variant="outline" asChild data-testid="rail-button-login">
-              <a href="/api/login">
-                <LogIn className="h-4 w-4 mr-2" />
-                Sign in to follow
-              </a>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Bell className="h-4 w-4 text-primary" />
-            {newsletterName}
-          </CardTitle>
-          <CardDescription className="text-sm">
-            Get {team.name} news straight to your inbox.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <NewsletterForm edition={team.slug} compact />
-        </CardContent>
-      </Card>
-
-      {relatedArticles.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">More from {team.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ul className="space-y-3">
-              {relatedArticles.map((article, idx) => (
-                <li key={article.id}>
-                  <Link href={newsArticle(article.slug)}>
-                    <div className="group flex items-start gap-2 hover-elevate rounded-md p-2 -mx-2 cursor-pointer">
-                      <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
-                          {article.title}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {article.isBreaking && (
-                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Breaking</Badge>
-                          )}
-                          {article.isTrending && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Trending</Badge>
-                          )}
-                        </div>
+        <CardContent className="pt-0">
+          <ul className="space-y-3">
+            {relatedArticles.map((article, idx) => (
+              <li key={article.id}>
+                <Link href={newsArticle(article.slug)}>
+                  <div className="group flex items-start gap-2 hover-elevate rounded-md p-2 -mx-2 cursor-pointer">
+                    <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                        {article.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {article.isBreaking && (
+                          <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Breaking</Badge>
+                        )}
+                        {article.isTrending && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Trending</Badge>
+                        )}
                       </div>
                     </div>
-                  </Link>
-                  {idx < relatedArticles.length - 1 && <Separator className="mt-3" />}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+                  </div>
+                </Link>
+                {idx < relatedArticles.length - 1 && <Separator className="mt-3" />}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -2570,8 +2445,6 @@ function parseTabFromPath(pathname: string): { slug: string; tab: TabValue } {
 
 export default function TeamHubPage() {
   const [pathname, navigate] = useLocation();
-  const { isAuthenticated } = useAuth();
-  const { toast } = useToast();
 
   const { slug, tab: activeTab } = parseTabFromPath(pathname);
 
@@ -2707,56 +2580,6 @@ export default function TeamHubPage() {
     ? { id: teamManagers[0].id, name: teamManagers[0].name, slug: teamManagers[0].slug }
     : null;
 
-  const { data: followedTeamIds } = useQuery<string[]>({
-    queryKey: ["/api/follows"],
-    queryFn: async () => {
-      const res = await fetch("/api/follows");
-      if (!res.ok) throw new Error("Failed to fetch follows");
-      return res.json();
-    },
-    enabled: isAuthenticated,
-  });
-
-  const isFollowing = team && followedTeamIds?.includes(team.id);
-
-  const followMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/follows", { teamId: team?.id });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/follows"] });
-      toast({ title: `Now following ${team?.name}!` });
-    },
-  });
-
-  const unfollowMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("DELETE", `/api/follows/${team?.id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/follows"] });
-      toast({ title: `Unfollowed ${team?.name}` });
-    },
-  });
-
-  const handleFollowToggle = () => {
-    if (!isAuthenticated) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to follow teams. Redirecting...",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 1500);
-      return;
-    }
-    if (isFollowing) {
-      unfollowMutation.mutate();
-    } else {
-      followMutation.mutate();
-    }
-  };
-
   const handleTabChange = (tab: TabValue) => {
     if (tab === activeTab) return;
     trackTabClick(slug, tab);
@@ -2860,9 +2683,6 @@ export default function TeamHubPage() {
         clubPrimaryColor={resolvedPrimary}
         clubSecondaryColor={branding.secondary}
         teamEntityId={team.id}
-        isFollowing={Boolean(isFollowing)}
-        isFollowPending={followMutation.isPending || unfollowMutation.isPending}
-        onFollowToggle={handleFollowToggle}
       />
 
       <div className="h-4 bg-gradient-to-b from-muted/50 to-background" aria-hidden="true" />
@@ -2874,7 +2694,7 @@ export default function TeamHubPage() {
         <div className="max-w-7xl mx-auto px-4">
           <nav className="overflow-x-auto scrollbar-hide">
             <div className="inline-flex w-max gap-2 py-3">
-              {VALID_TABS.map((tab) => {
+              {MVP_VISIBLE_TABS.map((tab) => {
                 const { icon: TabIcon, label } = TAB_META[tab];
                 const isActive = tab === activeTab;
                 return (
@@ -2971,21 +2791,18 @@ export default function TeamHubPage() {
               <FansTabContent 
                 posts={posts}
                 teamName={team.name}
-                isAuthenticated={isAuthenticated}
               />
             )}
           </main>
 
-          <aside className="w-full lg:w-80 shrink-0 space-y-6">
-            <TeamRightRail 
-              team={team}
-              articles={articles}
-              isAuthenticated={isAuthenticated}
-              isFollowing={isFollowing ?? false}
-              onFollowToggle={handleFollowToggle}
-              isPending={followMutation.isPending || unfollowMutation.isPending}
-            />
-          </aside>
+          {articles.length > 0 && (
+            <aside className="w-full lg:w-80 shrink-0 space-y-6">
+              <TeamRightRail 
+                team={team}
+                articles={articles}
+              />
+            </aside>
+          )}
         </div>
       </div>
     </MainLayout>

@@ -1,5 +1,3 @@
-import { Heart, HeartOff, Mail } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { EntityAvatar } from "@/components/entity-media";
 
 function getInitials(name: string): string {
@@ -16,9 +14,6 @@ export interface TeamHubHeaderProps {
   clubPrimaryColor: string;
   clubSecondaryColor?: string;
   teamEntityId?: string | null;
-  isFollowing: boolean;
-  isFollowPending?: boolean;
-  onFollowToggle: () => void;
 }
 
 export function TeamHubHeader({
@@ -29,9 +24,6 @@ export function TeamHubHeader({
   clubPrimaryColor,
   clubSecondaryColor,
   teamEntityId,
-  isFollowing,
-  isFollowPending = false,
-  onFollowToggle,
 }: TeamHubHeaderProps) {
   const safeTeamName = typeof teamName === "string" && teamName.trim() ? teamName.trim() : "Team";
   const safeTeamSlug = typeof teamSlug === "string" ? teamSlug.trim().toLowerCase() : "";
@@ -99,37 +91,6 @@ export function TeamHubHeader({
             ) : null}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              size="lg"
-              variant={isFollowing ? "secondary" : "default"}
-              onClick={onFollowToggle}
-              disabled={isFollowPending}
-              className="bg-white text-black shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md transition-all duration-200"
-              data-testid="button-follow-team"
-            >
-              {isFollowing ? (
-                <>
-                  <HeartOff className="h-5 w-5 mr-2" />
-                  Unfollow
-                </>
-              ) : (
-                <>
-                  <Heart className="h-5 w-5 mr-2" />
-                  Follow
-                </>
-              )}
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="bg-white/10 border-white/30 text-white shadow-md hover:shadow-lg hover:-translate-y-0.5 hover:bg-white/20 active:translate-y-0 active:shadow-md transition-all duration-200"
-              data-testid="button-subscribe-newsletter"
-            >
-              <Mail className="h-5 w-5 mr-2" />
-              Subscribe
-            </Button>
-          </div>
         </div>
       </div>
     </div>
