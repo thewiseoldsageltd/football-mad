@@ -25,6 +25,7 @@ function logWebhookAudit(line: string): void {
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
 import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, entityMedia, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
 import {
+  TEAMS_DOMESTIC_GOALSERVE_ID_TO_SLUG,
   TEAMS_DOMESTIC_SLUG_SET,
   TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS,
   resolveTeamsPageNavFilterSlug,
@@ -4005,7 +4006,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
     async (req, res) => {
       const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
-      const force = req.query.force === "1";
+      // "refresh" should create fresh snapshots for the supported MVP domestic leagues by default.
+      // Callers can opt back into hash-based no-op behavior with ?force=0.
+      const force = req.query.force !== "0";
 
       try {
         const KNOWN_CUP_OR_KNOCKOUT_SLUGS = new Set([
@@ -4021,6 +4024,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const NON_STANDINGS_SLUGS = new Set([
           "fifa-world-cup",
         ]);
+        const EXPECTED_MVP_STANDINGS_GOALSERVE_IDS = new Set(
+          Object.keys(TEAMS_DOMESTIC_GOALSERVE_ID_TO_SLUG),
+        );
 
         const isKnownCupOrKnockout = (slugOrName: string): boolean => {
           const v = slugOrName.toLowerCase();
@@ -4046,16 +4052,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .where(eq(competitions.isPriority, true));
 
         const results: Array<{
+          competitionName: string;
           canonicalSlug: string;
           leagueId: string | null;
+          status: "refreshed" | "skipped" | "error";
           ok: boolean;
           skipped: boolean;
-          skipReason: "cup" | "missing_goalserve_id" | "non_standings" | null;
+          skipReason:
+            | "cup"
+            | "missing_goalserve_id"
+            | "non_standings"
+            | "not_mvp_domestic_league"
+            | "no_change"
+            | "unsupported_or_unavailable"
+            | string
+            | null;
           error: string | null;
+          insertedRowsCount: number;
         }> = [];
         let skippedCups = 0;
         let skippedMissingGoalserveId = 0;
         let skippedNonStandings = 0;
+        let skippedNonDomestic = 0;
+        let refreshed = 0;
+        let failed = 0;
 
         for (const comp of comps) {
           const canonicalSlug = comp.canonicalSlug || comp.slug;
@@ -4066,12 +4086,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (comp.isCup || isKnownCupOrKnockout(slugOrName)) {
             skippedCups++;
             results.push({
+              competitionName: compName,
               canonicalSlug,
               leagueId,
+              status: "skipped",
               ok: true,
               skipped: true,
               skipReason: "cup",
               error: null,
+              insertedRowsCount: 0,
             });
             continue;
           }
@@ -4079,12 +4102,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (isNonStandingsCompetition(slugOrName)) {
             skippedNonStandings++;
             results.push({
+              competitionName: compName,
               canonicalSlug,
               leagueId,
+              status: "skipped",
               ok: true,
               skipped: true,
               skipReason: "non_standings",
               error: null,
+              insertedRowsCount: 0,
             });
             continue;
           }
@@ -4092,39 +4118,80 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (!leagueId) {
             skippedMissingGoalserveId++;
             results.push({
+              competitionName: compName,
               canonicalSlug,
               leagueId: null,
+              status: "skipped",
               ok: true,
               skipped: true,
               skipReason: "missing_goalserve_id",
               error: "No goalserve_competition_id",
+              insertedRowsCount: 0,
+            });
+            continue;
+          }
+
+          if (!EXPECTED_MVP_STANDINGS_GOALSERVE_IDS.has(leagueId)) {
+            skippedNonDomestic++;
+            results.push({
+              competitionName: compName,
+              canonicalSlug,
+              leagueId,
+              status: "skipped",
+              ok: true,
+              skipped: true,
+              skipReason: "not_mvp_domestic_league",
+              error: null,
+              insertedRowsCount: 0,
             });
             continue;
           }
 
           const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
+          const skipReason =
+            result.skipped
+              ? result.reason === "season_not_available"
+                ? "unsupported_or_unavailable"
+                : result.reason || "no_change"
+              : null;
+          const status: "refreshed" | "skipped" | "error" =
+            result.ok && !result.skipped ? "refreshed" : result.ok ? "skipped" : "error";
+
+          if (status === "refreshed") refreshed++;
+          if (status === "error") failed++;
+
           results.push({
+            competitionName: compName,
             canonicalSlug,
             leagueId,
+            status,
             ok: !!result.ok,
             skipped: !!result.skipped,
-            skipReason: null,
+            skipReason,
             error: result.ok ? null : result.error || result.reason || "Unknown error",
+            insertedRowsCount: result.insertedRowsCount ?? 0,
           });
         }
 
-        const succeeded = results.filter((r) => (r.ok && !r.skipped) || (r.ok && r.skipped)).length;
-        const failed = results.length - succeeded;
+        const skipped = results.filter((r) => r.status === "skipped").length;
+        const succeeded = results.length - failed;
         res.json({
           ok: failed === 0,
           season,
           force,
           total: results.length,
+          refreshed,
+          skipped,
           succeeded,
           failed,
           skippedCups,
           skippedMissingGoalserveId,
           skippedNonStandings,
+          skippedNonDomestic,
+          refreshedCompetitions: results.filter((r) => r.status === "refreshed").map((r) => r.canonicalSlug),
+          skippedCompetitions: results
+            .filter((r) => r.status === "skipped")
+            .map((r) => ({ canonicalSlug: r.canonicalSlug, skipReason: r.skipReason })),
           results,
         });
       } catch (error) {
