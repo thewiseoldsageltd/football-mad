@@ -53,6 +53,7 @@ import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-i
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
 import { normalizeText, computeSalienceScore } from "./utils/text";
+import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
 
 const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE !== "false"; // default true
 
@@ -3338,43 +3339,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(standingsRows.snapshotId, snapshot.id))
         .orderBy(asc(standingsRows.position));
 
-      // Use joined team name if available, otherwise fall back to row's stored teamName
-      const table = rows.map((r) => ({
-        position: r.position,
-        team: {
-          id: r.teamId,
-          name: r.joinedTeamName || r.rowTeamName || r.teamGoalserveId,
-          slug: r.teamSlug,
-          crestUrl: r.teamCrestUrl,
-        },
-        played: r.played,
-        won: r.won,
-        drawn: r.drawn,
-        lost: r.lost,
-        goalsFor: r.goalsFor,
-        goalsAgainst: r.goalsAgainst,
-        goalDifference: r.goalDifference,
-        points: r.points,
-        recentForm: r.recentForm,
-        movementStatus: r.movementStatus,
-        qualificationNote: r.qualificationNote,
-        home: {
-          played: r.homePlayed,
-          won: r.homeWon,
-          drawn: r.homeDrawn,
-          lost: r.homeLost,
-          goalsFor: r.homeGoalsFor,
-          goalsAgainst: r.homeGoalsAgainst,
-        },
-        away: {
-          played: r.awayPlayed,
-          won: r.awayWon,
-          drawn: r.awayDrawn,
-          lost: r.awayLost,
-          goalsFor: r.awayGoalsFor,
-          goalsAgainst: r.awayGoalsAgainst,
-        },
-      }));
+      // Resolve crests from entity_media/R2 first; teams.logoUrl is only a fallback inside the resolver.
+      const table = await Promise.all(
+        rows.map(async (r) => {
+          const resolvedMedia = r.teamId
+            ? await getEntityDisplayMedia({
+                entityType: "team",
+                entityId: r.teamId,
+                surface: "pill",
+                fallbackLabel: r.joinedTeamName || r.rowTeamName || r.teamGoalserveId,
+              })
+            : null;
+
+          return {
+            position: r.position,
+            team: {
+              id: r.teamId,
+              name: r.joinedTeamName || r.rowTeamName || r.teamGoalserveId,
+              slug: r.teamSlug,
+              crestUrl: resolvedMedia?.hasMedia ? resolvedMedia.url : null,
+            },
+            played: r.played,
+            won: r.won,
+            drawn: r.drawn,
+            lost: r.lost,
+            goalsFor: r.goalsFor,
+            goalsAgainst: r.goalsAgainst,
+            goalDifference: r.goalDifference,
+            points: r.points,
+            recentForm: r.recentForm,
+            movementStatus: r.movementStatus,
+            qualificationNote: r.qualificationNote,
+            home: {
+              played: r.homePlayed,
+              won: r.homeWon,
+              drawn: r.homeDrawn,
+              lost: r.homeLost,
+              goalsFor: r.homeGoalsFor,
+              goalsAgainst: r.homeGoalsAgainst,
+            },
+            away: {
+              played: r.awayPlayed,
+              won: r.awayWon,
+              drawn: r.awayDrawn,
+              lost: r.awayLost,
+              goalsFor: r.awayGoalsFor,
+              goalsAgainst: r.awayGoalsAgainst,
+            },
+          };
+        }),
+      );
 
       // Fetch fixtures from Goalserve XML to get proper <week number="X"> containers
       interface RoundInfo {

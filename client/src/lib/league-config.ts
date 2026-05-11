@@ -46,6 +46,18 @@ const NationalLeagueZones: StandingsZone[] = [
   { from: 21, to: 24, label: "Relegation", color: "red" },
 ];
 
+const ScottishPremiershipZones: StandingsZone[] = [
+  { from: 1, to: 1, label: "Champions", color: "emerald" },
+  { from: 2, to: 4, label: "Europe", color: "amber" },
+  { from: 11, to: 12, label: "Relegation", color: "red" },
+];
+
+const ScottishChampionshipZones: StandingsZone[] = [
+  { from: 1, to: 1, label: "Promoted", color: "emerald" },
+  { from: 2, to: 4, label: "Play Off", color: "amber" },
+  { from: 9, to: 10, label: "Relegation", color: "red" },
+];
+
 const LaLigaZones: StandingsZone[] = [
   { from: 1, to: 4, label: "Champions League", color: "emerald" },
   { from: 5, to: 5, label: "Europa League", color: "amber" },
@@ -83,6 +95,8 @@ export const leagueConfigs: LeagueConfig[] = [
   { slug: "league-one", name: "League One", shortName: "L1", goalserveLeagueId: "1206", standingsZones: LeagueOneZones },
   { slug: "league-two", name: "League Two", shortName: "L2", goalserveLeagueId: "1197", standingsZones: LeagueTwoZones },
   { slug: "national-league", name: "National League", shortName: "NL", goalserveLeagueId: "1203", standingsZones: NationalLeagueZones },
+  { slug: "scottish-premiership", name: "Scottish Premiership", shortName: "SP", goalserveLeagueId: "1370", standingsZones: ScottishPremiershipZones },
+  { slug: "scottish-championship", name: "Scottish Championship", shortName: "SC", goalserveLeagueId: "1373", standingsZones: ScottishChampionshipZones },
   { slug: "la-liga", name: "La Liga", shortName: "LL", goalserveLeagueId: "1399", standingsZones: LaLigaZones },
   { slug: "serie-a", name: "Serie A", shortName: "SA", goalserveLeagueId: "1269", standingsZones: SerieAZones },
   { slug: "bundesliga", name: "Bundesliga", shortName: "BUN", goalserveLeagueId: "1229", standingsZones: BundesligaZones },
