@@ -23,31 +23,9 @@ function logWebhookAudit(line: string): void {
   }
 }
 import { setupAuth, isAuthenticated } from "./replit_integrations/auth";
-import { newsFiltersSchema, NEWS_COMPETITION_SLUGS, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, entityMedia, jobRuns, jobHttpCalls, competitionTeamMemberships, paEntityAliasMap } from "@shared/schema";
-import {
-  TEAMS_DOMESTIC_GOALSERVE_ID_TO_SLUG,
-  TEAMS_DOMESTIC_SLUG_SET,
-  TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS,
-  resolveTeamsPageNavFilterSlug,
-} from "@shared/teams-mvp";
+import { newsFiltersSchema, matches, teams, standingsSnapshots, standingsRows, competitions, players, managers, articles, articleTeams, articlePlayers, articleManagers, articleCompetitions, entityAliases, jobRuns, jobHttpCalls, mvpCompetitions, competitionTeamMemberships } from "@shared/schema";
 import { db, pool } from "./db";
-import {
-  eq,
-  and,
-  or,
-  gte,
-  lte,
-  lt,
-  ne,
-  sql as drizzleSql,
-  asc,
-  desc,
-  ilike,
-  inArray,
-  notInArray,
-  isNull,
-  aliasedTable,
-} from "drizzle-orm";
+import { eq, and, or, gte, lte, lt, sql as drizzleSql, asc, desc, ilike, inArray, aliasedTable } from "drizzle-orm";
 import { z } from "zod";
 import { syncFplAvailability, syncFplTeams, classifyPlayer } from "./fpl-sync";
 import { syncTeamMetadata } from "./team-metadata-sync";
@@ -60,7 +38,6 @@ import { syncGoalserveCompetitions } from "./jobs/sync-goalserve-competitions";
 import { syncGoalserveTeams } from "./jobs/sync-goalserve-teams";
 import { syncGoalservePlayers } from "./jobs/sync-goalserve-players";
 import { syncGoalserveManagers } from "./jobs/sync-goalserve-managers";
-import { syncGoalserveCompetitionLogosMvp, syncGoalserveEntityMedia, syncGoalservePersonMediaPilot } from "./jobs/sync-goalserve-entity-media";
 import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
@@ -70,52 +47,14 @@ import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
-import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
-import { runBackfillPaMediaEntities } from "./jobs/backfill-pamedia-entities";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
-import {
-  getEntityBackfillStatus,
-  resetEntityBackfillCheckpoint,
-  runEntityBackfill,
-  type EntityBackfillMode,
-} from "./jobs/backfill-entity-enrichment";
-import {
-  getPamediaStatus,
-  markPamediaEnabled,
-  markPamediaRunCompleted,
-  markPamediaRunFailed,
-  markPamediaRunStarted,
-  setPamediaRunnerConfig,
-} from "./lib/pamedia-status";
 import { normalizeText, computeSalienceScore } from "./utils/text";
-import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib/entity-presentation-resolver";
-import {
-  attachAuthorProfileSlugsToArticleRows,
-  resolveAuthorIdentityForRequestSlug,
-} from "./lib/author-identity-resolver";
-import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
-import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
-import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
-import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
-import { collectCupProgressMatchRefs, dedupeCupProgressRefs } from "./lib/goalserve-cup-progress-tree";
-import {
-  shouldExcludeFaCupQualifyingRound,
-  getCupDbRoundCounts,
-  faCupFeedMissingLaterKnockoutRounds,
-  faCupDbCountsIncludeLaterKnockout,
-} from "./lib/fa-cup-cup-progress-db";
 
-const TEAMS_MVP_NAV_FILTER_SET = TEAMS_DOMESTIC_SLUG_SET;
-
-const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE === "true"; // default false
-const ENABLE_TAG_REDIRECTS = process.env.ENABLE_TAG_REDIRECTS === "true";
-let liveMatchesCache: any = null;
-let liveMatchesLastFetch = 0;
-const LIVE_CACHE_TTL_MS = 30000; // 30 seconds
+const PAMEDIA_BASIC_MODE = process.env.PAMEDIA_BASIC_MODE !== "false"; // default true
 
 const shareClickSchema = z.object({
   articleId: z.string(),
@@ -402,95 +341,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.end(body);
   }
 
-  async function resolveCanonicalTeamPublicSlug(requestSlug: string): Promise<string | null> {
-    const [teamByInternalSlug] = await db
-      .select({ id: teams.id, slug: teams.slug })
-      .from(teams)
-      .where(eq(teams.slug, requestSlug))
-      .limit(1);
-
-    if (teamByInternalSlug) {
-      const [alias] = await db
-        .select({ publicSlug: paEntityAliasMap.publicSlug })
-        .from(paEntityAliasMap)
-        .where(
-          and(
-            eq(paEntityAliasMap.source, "pa_media"),
-            inArray(paEntityAliasMap.entityType, ["team", "teams"]),
-            eq(paEntityAliasMap.entityId, teamByInternalSlug.id),
-            drizzleSql`${paEntityAliasMap.publicSlug} IS NOT NULL AND trim(${paEntityAliasMap.publicSlug}) <> ''`,
-          ),
-        )
-        .limit(1);
-
-      const canonicalSlug = alias?.publicSlug ?? teamByInternalSlug.slug;
-      return canonicalSlug || null;
-    }
-
-    const aliasMatches = await db
-      .select({ entityId: paEntityAliasMap.entityId })
-      .from(paEntityAliasMap)
-      .where(
-        and(
-          eq(paEntityAliasMap.source, "pa_media"),
-          inArray(paEntityAliasMap.entityType, ["team", "teams"]),
-          eq(paEntityAliasMap.publicSlug, requestSlug),
-        ),
-      )
-      .limit(2);
-
-    const uniqueEntityIds = Array.from(new Set(aliasMatches.map((row) => row.entityId)));
-    if (uniqueEntityIds.length === 1) return requestSlug;
-    return null;
-  }
-
-  async function resolveCanonicalCompetitionSlug(requestSlug: string): Promise<string | null> {
-    const [competitionByCanonicalSlug] = await db
-      .select({ canonicalSlug: competitions.canonicalSlug, slug: competitions.slug })
-      .from(competitions)
-      .where(eq(competitions.canonicalSlug, requestSlug))
-      .limit(1);
-    if (competitionByCanonicalSlug) {
-      return competitionByCanonicalSlug.canonicalSlug || competitionByCanonicalSlug.slug || requestSlug;
-    }
-
-    const [competitionByAliasPublicSlug] = await db
-      .select({
-        canonicalSlug: competitions.canonicalSlug,
-        slug: competitions.slug,
-      })
-      .from(paEntityAliasMap)
-      .innerJoin(competitions, eq(paEntityAliasMap.entityId, competitions.id))
-      .where(
-        and(
-          eq(paEntityAliasMap.source, "pa_media"),
-          inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
-          eq(paEntityAliasMap.publicSlug, requestSlug),
-        ),
-      )
-      .limit(1);
-    if (competitionByAliasPublicSlug) {
-      return competitionByAliasPublicSlug.canonicalSlug || requestSlug;
-    }
-
-    const [competitionByInternalSlug] = await db
-      .select({ canonicalSlug: competitions.canonicalSlug, slug: competitions.slug })
-      .from(competitions)
-      .where(eq(competitions.slug, requestSlug))
-      .limit(1);
-    if (competitionByInternalSlug) {
-      return competitionByInternalSlug.canonicalSlug || competitionByInternalSlug.slug || requestSlug;
-    }
-
-    return null;
-  }
-
-
   app.get("/api/teams", async (req, res) => {
     try {
-      const teamsPageOnly = String(req.query.teamsPage ?? "") === "1";
-      const teamRows = teamsPageOnly ? await storage.getTeamsForTeamsPage() : await storage.getTeams();
-      sendJsonNoEtag(res, teamRows);
+      const teams = await storage.getTeams();
+      sendJsonNoEtag(res, teams);
     } catch (error) {
       console.error("Error fetching teams:", error);
       res.status(500).json({ error: "Failed to fetch teams" });
@@ -507,81 +361,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching team:", error);
       res.status(500).json({ error: "Failed to fetch team" });
-    }
-  });
-
-  /** HTML author pages: 301 to canonical slug when URL matched an alias (not authors.slug). */
-  app.get("/authors/:slug", async (req, res, next) => {
-    try {
-      const raw = String(req.params.slug ?? "");
-      const slug = decodeURIComponent(raw).trim().toLowerCase();
-      if (!slug) return next();
-      const resolved = await resolveAuthorIdentityForRequestSlug(slug);
-      const canon = resolved?.canonicalSlug?.trim().toLowerCase() ?? "";
-      if (resolved && canon && canon !== slug) {
-        const q = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-        return res.redirect(301, `/authors/${encodeURIComponent(canon)}${q}`);
-      }
-    } catch (e) {
-      console.error("[authors] canonical redirect", e);
-    }
-    next();
-  });
-
-  app.get("/api/authors/:slug", async (req, res) => {
-    try {
-      const slug = String(req.params.slug ?? "").trim();
-      if (!slug) {
-        return res.status(400).json({ error: "Author slug is required" });
-      }
-      const query = z
-        .object({
-          limit: z.coerce.number().min(1).max(50).optional(),
-          cursor: z.string().optional(),
-        })
-        .safeParse(req.query);
-      const limit = query.success ? query.data.limit : undefined;
-      const cursor = query.success ? query.data.cursor : undefined;
-      const data = await storage.getAuthorPage({ slug, limit, cursor: cursor ?? null });
-      sendJsonNoEtag(res, data);
-    } catch (error) {
-      console.error("Error fetching author page:", error);
-      res.status(500).json({ error: "Failed to fetch author" });
-    }
-  });
-
-  app.get("/api/entity-media/:entityType/:entityId", async (req, res) => {
-    const params = z
-      .object({
-        entityType: z.enum(["competition", "team", "player", "manager"]),
-        entityId: z.string().min(1),
-      })
-      .safeParse(req.params);
-    if (!params.success) {
-      return res.status(400).json({ error: "Invalid entity media parameters" });
-    }
-
-    const query = z
-      .object({
-        surface: z.enum(["pill", "hub_header"]).optional(),
-        fallbackLabel: z.string().optional(),
-      })
-      .safeParse(req.query);
-    if (!query.success) {
-      return res.status(400).json({ error: "Invalid entity media query parameters" });
-    }
-
-    try {
-      const data = await getEntityDisplayMedia({
-        entityType: params.data.entityType,
-        entityId: params.data.entityId,
-        surface: query.data.surface ?? "pill",
-        fallbackLabel: query.data.fallbackLabel,
-      });
-      sendJsonNoEtag(res, data);
-    } catch (error) {
-      console.error("Error resolving entity media:", error);
-      res.status(500).json({ error: "Failed to resolve entity media" });
     }
   });
 
@@ -664,153 +443,50 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ========== NEWS NAV (MVP competitions + their teams) ==========
-  app.get("/api/news/nav", async (req, res) => {
+  app.get("/api/news/nav", async (_req, res) => {
     try {
-      const filterSlugOverridesByName = new Map<string, string>([
-        ["copa del rey", "copa-del-rey"],
-        ["coppa italia", "coppa-italia"],
-        ["dfb-pokal", "dfb-pokal"],
-        ["coupe de france", "coupe-de-france"],
-        ["fifa world cup", "fifa-world-cup"],
-        ["world cup", "fifa-world-cup"],
-      ]);
-      const allowedCompetitionFilterSlugs = new Set<string>(NEWS_COMPETITION_SLUGS);
-      const normalizeAllowedSlug = (value?: string | null): string | null => {
-        if (!value) return null;
-        const normalized = value.trim().toLowerCase();
-        return allowedCompetitionFilterSlugs.has(normalized) ? normalized : null;
-      };
-
-      const teamsMvpScope = String(req.query.scope ?? "") === "teams-mvp";
-
-      const teamsMvpCompetitionFilter = and(
-        eq(competitions.isCup, false),
-        or(
-          isNull(competitions.goalserveCompetitionId),
-          notInArray(competitions.goalserveCompetitionId, [...TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS]),
-        ),
-      );
-
       const rows = await db
         .select({
           compId: competitions.id,
           compName: competitions.name,
-          compCanonicalName: drizzleSql<string | null>`nullif(trim(canonical_name), '')`,
           compSlug: competitions.slug,
-          compCanonicalSlug: competitions.canonicalSlug,
-          compGoalserveId: competitions.goalserveCompetitionId,
+          sortOrder: mvpCompetitions.sortOrder,
           teamId: teams.id,
           teamName: teams.name,
           teamSlug: teams.slug,
           teamShortName: teams.shortName,
         })
-        .from(competitions)
-        .leftJoin(
+        .from(mvpCompetitions)
+        .innerJoin(competitions, eq(mvpCompetitions.competitionId, competitions.id))
+        .innerJoin(
           competitionTeamMemberships,
           and(
             eq(competitionTeamMemberships.competitionId, competitions.id),
             eq(competitionTeamMemberships.isCurrent, true),
           ),
         )
-        .leftJoin(teams, eq(competitionTeamMemberships.teamId, teams.id))
-        .where(
-          teamsMvpScope
-            ? and(eq(competitions.isPriority, true), teamsMvpCompetitionFilter)
-            : eq(competitions.isPriority, true),
-        )
-        .orderBy(asc(competitions.name), asc(teams.name));
-
-      const presenter = new EntityPresentationResolver();
-      const [competitionPresentation, teamPresentation] = await Promise.all([
-        presenter.resolveCompetitions(
-          Array.from(new Set(rows.map((r) => r.compId))),
-          { source: "pa_media" },
-        ),
-        presenter.resolveTeams(
-          Array.from(new Set(rows.map((r) => r.teamId).filter((id): id is string => Boolean(id)))),
-          { source: "pa_media" },
-        ),
-      ]);
+        .innerJoin(teams, eq(competitionTeamMemberships.teamId, teams.id))
+        .where(eq(mvpCompetitions.enabled, true))
+        .orderBy(asc(mvpCompetitions.sortOrder), asc(competitions.name), asc(teams.name));
 
       const compMap = new Map<string, {
-        id: string; name: string; slug: string; sortOrder: number; filterValue: string;
+        id: string; name: string; slug: string; sortOrder: number;
         teams: { id: string; name: string; slug: string; shortName: string | null }[];
       }>();
 
       for (const r of rows) {
         let comp = compMap.get(r.compId);
         if (!comp) {
-          const presented = competitionPresentation.get(r.compId);
-          const compName = resolveCompetitionDisplayName(r.compCanonicalName, presented?.name ?? r.compName);
-          const compSlug = presented?.slug ?? r.compSlug;
-
-          let filterSlug: string;
-          if (teamsMvpScope) {
-            const resolved = resolveTeamsPageNavFilterSlug({
-              goalserveCompetitionId: r.compGoalserveId,
-              dbSlug: r.compSlug,
-            });
-            if (!resolved) {
-              continue;
-            }
-            filterSlug = resolved;
-          } else {
-            const chain =
-              normalizeAllowedSlug(filterSlugOverridesByName.get(compName.toLowerCase())) ??
-              normalizeAllowedSlug(presented?.slug) ??
-              normalizeAllowedSlug(r.compCanonicalSlug) ??
-              normalizeAllowedSlug(r.compSlug) ??
-              compSlug;
-            filterSlug = chain;
-          }
-
-          const fallbackSortOrder = compMap.size;
-          comp = {
-            id: r.compId,
-            name: compName,
-            slug: compSlug,
-            sortOrder: fallbackSortOrder,
-            filterValue: filterSlug,
-            teams: [],
-          };
+          comp = { id: r.compId, name: r.compName, slug: r.compSlug, sortOrder: r.sortOrder, teams: [] };
           compMap.set(r.compId, comp);
         }
         if (r.teamId && !comp.teams.some((t) => t.id === r.teamId)) {
-          const teamResolved = teamPresentation.get(r.teamId);
-          const resolvedSlug = teamResolved?.slug || r.teamSlug || "";
-          if (!resolvedSlug) continue;
-          comp.teams.push({
-            id: r.teamId,
-            name: teamResolved?.name || r.teamName || "Unknown Team",
-            slug: resolvedSlug,
-            shortName: r.teamShortName,
-          });
+          comp.teams.push({ id: r.teamId, name: r.teamName, slug: r.teamSlug, shortName: r.teamShortName });
         }
       }
 
-      let result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-      if (teamsMvpScope) {
-        result = result.filter((c) => TEAMS_MVP_NAV_FILTER_SET.has(c.filterValue));
-        if (process.env.DEBUG_TEAMS_NAV === "1") {
-          console.log(
-            "[news/nav][teams-mvp]",
-            result.map((c) => ({ filterValue: c.filterValue, teamCount: c.teams.length })),
-          );
-        }
-      }
-      res.json({
-        competitions: result,
-        refinement: {
-          teamsByCompetition: result.map((comp) => ({
-            competitionId: comp.id,
-            competitionName: comp.name,
-            competitionSlug: comp.slug,
-            competitionFilterValue: comp.filterValue,
-            teams: comp.teams,
-          })),
-          players: [],
-        },
-      });
+      const result = Array.from(compMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+      res.json({ competitions: result });
     } catch (err) {
       console.error("[news/nav] Error:", err);
       res.status(500).json({ error: "Failed to fetch news nav" });
@@ -829,7 +505,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         });
       }
       
-      const { group, comp, type, teams: teamsParam, sort, range, breaking } = parsed.data;
+      const { comp, type, teams: teamsParam, sort, range, breaking } = parsed.data;
       
       if (sort === "for-you" && !req.user) {
         return res.status(401).json({ error: "Authentication required for 'For You' sort" });
@@ -857,7 +533,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const cursor = req.query.cursor as string | undefined;
       
       const result = await storage.getNewsArticles({
-        group,
         comp,
         type,
         teamSlugs,
@@ -878,94 +553,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching news:", error);
       res.status(500).json({ error: "Failed to fetch news" });
-    }
-  });
-
-  app.get("/api/news/archive/competition/:slug", async (req, res) => {
-    try {
-      const limitParam = parseInt(req.query.limit as string, 10) || 15;
-      const limit = Math.min(Math.max(1, limitParam), 50);
-      const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
-        entityType: "competition",
-        entitySlug: req.params.slug,
-        limit,
-        cursor,
-      });
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-      res.setHeader("Surrogate-Control", "no-store");
-      res.json(result);
-    } catch (error) {
-      console.error("Error fetching competition archive:", error);
-      res.status(500).json({ error: "Failed to fetch competition archive" });
-    }
-  });
-
-  app.get("/api/news/archive/team/:slug", async (req, res) => {
-    try {
-      const limitParam = parseInt(req.query.limit as string, 10) || 15;
-      const limit = Math.min(Math.max(1, limitParam), 50);
-      const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
-        entityType: "team",
-        entitySlug: req.params.slug,
-        limit,
-        cursor,
-      });
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-      res.setHeader("Surrogate-Control", "no-store");
-      res.json(result);
-    } catch (error) {
-      console.error("Error fetching team archive:", error);
-      res.status(500).json({ error: "Failed to fetch team archive" });
-    }
-  });
-
-  app.get("/api/news/archive/player/:slug", async (req, res) => {
-    try {
-      const limitParam = parseInt(req.query.limit as string, 10) || 15;
-      const limit = Math.min(Math.max(1, limitParam), 50);
-      const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
-        entityType: "player",
-        entitySlug: req.params.slug,
-        limit,
-        cursor,
-      });
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-      res.setHeader("Surrogate-Control", "no-store");
-      res.json(result);
-    } catch (error) {
-      console.error("Error fetching player archive:", error);
-      res.status(500).json({ error: "Failed to fetch player archive" });
-    }
-  });
-
-  app.get("/api/news/archive/manager/:slug", async (req, res) => {
-    try {
-      const limitParam = parseInt(req.query.limit as string, 10) || 15;
-      const limit = Math.min(Math.max(1, limitParam), 50);
-      const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
-        entityType: "manager",
-        entitySlug: req.params.slug,
-        limit,
-        cursor,
-      });
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-      res.setHeader("Pragma", "no-cache");
-      res.setHeader("Expires", "0");
-      res.setHeader("Surrogate-Control", "no-store");
-      res.json(result);
-    } catch (error) {
-      console.error("Error fetching manager archive:", error);
-      res.status(500).json({ error: "Failed to fetch manager archive" });
     }
   });
 
@@ -1024,7 +611,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(articles.publishedAt))
         .limit(50);
-      res.json(await attachAuthorProfileSlugsToArticleRows(rows));
+      res.json(rows);
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -1058,7 +645,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         ? page[page.length - 1].publishedAt!.toISOString()
         : null;
 
-      res.json({ articles: await attachAuthorProfileSlugsToArticleRows(page), nextCursor, hasMore });
+      res.json({ articles: page, nextCursor, hasMore });
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -1081,7 +668,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(articles.category, req.params.category))
         .orderBy(desc(articles.publishedAt))
         .limit(50);
-      res.json(await attachAuthorProfileSlugsToArticleRows(rows));
+      res.json(rows);
     } catch (error) {
       console.error("Error fetching articles:", error);
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -1098,147 +685,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/articles/popular", async (req, res) => {
+  app.get("/api/articles/related/:slug", async (req, res) => {
     try {
-      const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "6"), 10) || 6, 1), 12);
-      const openingText = drizzleSql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`;
       const rows = await db
         .select({
           id: articles.id,
           slug: articles.slug,
           title: articles.title,
           excerpt: articles.excerpt,
-          openingText,
           coverImage: articles.coverImage,
           publishedAt: articles.publishedAt,
-          updatedAt: articles.updatedAt,
-          createdAt: articles.createdAt,
           authorName: articles.authorName,
-          category: articles.category,
           competition: articles.competition,
           contentType: articles.contentType,
           tags: articles.tags,
           isBreaking: articles.isBreaking,
           isTrending: articles.isTrending,
           isFeatured: articles.isFeatured,
-          isEditorPick: articles.isEditorPick,
           viewCount: articles.viewCount,
-          commentsCount: articles.commentsCount,
         })
         .from(articles)
-        .orderBy(desc(articles.viewCount), desc(articles.publishedAt))
-        .limit(limit);
-      const mapped = rows.map((row) => ({
-        ...row,
-        content: "",
-        excerpt: row.excerpt ?? "",
-        tags: row.tags ?? [],
-        competition: row.competition ?? null,
-        contentType: row.contentType ?? "story",
-        category: row.category ?? "news",
-        commentsCount: row.commentsCount ?? 0,
-        viewCount: row.viewCount ?? 0,
-      }));
-      res.json(await attachAuthorProfileSlugsToArticleRows(mapped));
-    } catch (error) {
-      console.error("Error fetching popular articles:", error);
-      res.status(500).json({ error: "Failed to fetch popular articles" });
-    }
-  });
-
-  app.get("/api/articles/related/:slug", async (req, res) => {
-    try {
-      const slug = req.params.slug;
-      const [src] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
-      if (!src) {
-        return res.json([]);
-      }
-
-      const openingText = drizzleSql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`;
-      const listFields = {
-        id: articles.id,
-        slug: articles.slug,
-        title: articles.title,
-        excerpt: articles.excerpt,
-        openingText,
-        coverImage: articles.coverImage,
-        publishedAt: articles.publishedAt,
-        updatedAt: articles.updatedAt,
-        createdAt: articles.createdAt,
-        authorName: articles.authorName,
-        category: articles.category,
-        competition: articles.competition,
-        contentType: articles.contentType,
-        tags: articles.tags,
-        isBreaking: articles.isBreaking,
-        isTrending: articles.isTrending,
-        isFeatured: articles.isFeatured,
-        isEditorPick: articles.isEditorPick,
-        viewCount: articles.viewCount,
-        commentsCount: articles.commentsCount,
-      };
-
-      const candidates = await db
-        .select(listFields)
-        .from(articles)
-        .where(ne(articles.id, src.id))
+        .where(drizzleSql`${articles.slug} != ${req.params.slug}`)
         .orderBy(desc(articles.publishedAt))
-        .limit(60);
-
-      const articleTags = src.tags ?? [];
-      const srcCategory = src.category ?? "news";
-
-      const scored = candidates.map((a) => {
-        let score = 0;
-        if ((a.category ?? "news") === srcCategory) score += 5;
-        const atags = a.tags ?? [];
-        const tagOverlap = articleTags.filter((t: string) => atags.includes(t)).length;
-        score += tagOverlap * 3;
-        if (a.isTrending) score += 3;
-        if (a.isEditorPick) score += 2;
-        return { row: a, score };
-      });
-
-      scored.sort((x, y) => {
-        if (y.score !== x.score) return y.score - x.score;
-        const dx = new Date(x.row.publishedAt ?? 0).getTime();
-        const dy = new Date(y.row.publishedAt ?? 0).getTime();
-        return dy - dx;
-      });
-
-      const picked: typeof candidates = [];
-      const seen = new Set<string>();
-      for (const { row } of scored) {
-        if (picked.length >= 3) break;
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        picked.push(row);
-      }
-
-      if (picked.length < 3) {
-        const byViews = [...candidates].sort(
-          (a, b) => (b.viewCount ?? 0) - (a.viewCount ?? 0) || new Date(b.publishedAt ?? 0).getTime() - new Date(a.publishedAt ?? 0).getTime(),
-        );
-        for (const row of byViews) {
-          if (picked.length >= 3) break;
-          if (seen.has(row.id)) continue;
-          seen.add(row.id);
-          picked.push(row);
-        }
-      }
-
-      const relatedMapped = picked.map((row) => ({
-        ...row,
-        content: "",
-        excerpt: row.excerpt ?? "",
-        tags: row.tags ?? [],
-        competition: row.competition ?? null,
-        contentType: row.contentType ?? "story",
-        category: row.category ?? "news",
-        commentsCount: row.commentsCount ?? 0,
-        viewCount: row.viewCount ?? 0,
-      }));
-      res.json(await attachAuthorProfileSlugsToArticleRows(relatedMapped));
+        .limit(6);
+      res.json(rows);
     } catch (error) {
       console.error("Error fetching related articles:", error);
       res.status(500).json({ error: "Failed to fetch related articles" });
@@ -1293,8 +763,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     awayGoalserveTeamId: matches.awayGoalserveTeamId,
     seasonKey: matches.seasonKey,
     goalserveMatchId: matches.goalserveMatchId,
-    goalserveStaticId: matches.goalserveStaticId,
-    timeline: matches.timeline,
   };
 
   const clamp = (value: unknown, defaultValue: number, min: number, max: number) => {
@@ -1359,46 +827,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== MATCHES API (Fixtures, Results, Live) ==========
   // These must be defined BEFORE /api/matches/:slug to avoid slug matching "fixtures", "results", "live"
   
-  function formatMatchResponse(
-    match: any,
-    maps: {
-      byCanonicalId: Map<string, { id: string; name: string; slug: string }>;
-      byGoalserveId: Map<string, { id: string; name: string; slug: string }>;
-      competitionById: Map<string, string>;
-      competitionByGoalserveId: Map<string, string>;
-      competitionLogoById: Map<string, string>;
-      competitionLogoByGoalserveId: Map<string, string>;
-    },
-  ) {
-    const timeline = match.timeline && typeof match.timeline === "object" ? match.timeline as Record<string, any> : null;
-    const rawHomeName =
-      (timeline?.home?.name as string | undefined) ??
-      (timeline?.localteam?.name as string | undefined) ??
-      null;
-    const rawAwayName =
-      (timeline?.away?.name as string | undefined) ??
-      (timeline?.visitorteam?.name as string | undefined) ??
-      null;
-    const homeTeamData =
-      (match.homeTeamId ? maps.byCanonicalId.get(match.homeTeamId) : undefined) ??
-      (match.homeGoalserveTeamId ? maps.byGoalserveId.get(match.homeGoalserveTeamId) : undefined) ??
-      null;
-    const awayTeamData =
-      (match.awayTeamId ? maps.byCanonicalId.get(match.awayTeamId) : undefined) ??
-      (match.awayGoalserveTeamId ? maps.byGoalserveId.get(match.awayGoalserveTeamId) : undefined) ??
-      null;
-    const rawCompetition = typeof match.competition === "string" ? match.competition.trim() : "";
-    const shouldResolveCompetition = rawCompetition.length === 0 || rawCompetition.toLowerCase() === "unknown";
-    const resolvedCompetition = shouldResolveCompetition
-      ? (match.competitionId ? maps.competitionById.get(match.competitionId) : undefined) ??
-        (match.goalserveCompetitionId ? maps.competitionByGoalserveId.get(match.goalserveCompetitionId) : undefined) ??
-        "Unknown"
-      : rawCompetition;
-    const competitionLogoUrl =
-      (match.competitionId ? maps.competitionLogoById.get(match.competitionId) : undefined) ??
-      (match.goalserveCompetitionId ? maps.competitionLogoByGoalserveId.get(match.goalserveCompetitionId) : undefined) ??
-      null;
-
+  function formatMatchResponse(match: any, homeTeamData: any, awayTeamData: any) {
     return {
       id: match.id,
       slug: match.slug,
@@ -1407,154 +836,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       homeScore: match.homeScore,
       awayScore: match.awayScore,
       venue: match.venue,
-      competition: resolvedCompetition,
-      competitionLogoUrl,
+      competition: match.competition,
       goalserveCompetitionId: match.goalserveCompetitionId,
       goalserveMatchId: match.goalserveMatchId,
       goalserveRound: match.goalserveRound || null,
-      homeTeam: homeTeamData
+      homeTeam: match.homeTeamId && homeTeamData
         ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
-        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: rawHomeName || "Unknown" },
-      awayTeam: awayTeamData
+        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: "Unknown" },
+      awayTeam: match.awayTeamId && awayTeamData
         ? { id: awayTeamData.id, name: awayTeamData.name, slug: awayTeamData.slug }
-        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: rawAwayName || "Unknown" },
+        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: "Unknown" },
     };
   }
 
-  async function getPriorityGoalserveCompetitionIds(): Promise<string[]> {
-    const rows = await db
-      .select({ goalserveCompetitionId: competitions.goalserveCompetitionId })
-      .from(competitions)
-      .where(and(eq(competitions.isPriority, true), drizzleSql`trim(coalesce(${competitions.goalserveCompetitionId}, '')) <> ''`));
-    return rows
-      .map((row) => row.goalserveCompetitionId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0);
-  }
-
-  async function fetchTeamMaps(matchRows: any[]) {
-    const canonicalTeamIds = new Set<string>();
-    const goalserveTeamIds = new Set<string>();
-    const competitionIds = new Set<string>();
-    const goalserveCompetitionIds = new Set<string>();
-
-    for (const m of matchRows) {
-      if (m.homeTeamId) canonicalTeamIds.add(m.homeTeamId);
-      if (m.awayTeamId) canonicalTeamIds.add(m.awayTeamId);
-      if (m.homeGoalserveTeamId) goalserveTeamIds.add(m.homeGoalserveTeamId);
-      if (m.awayGoalserveTeamId) goalserveTeamIds.add(m.awayGoalserveTeamId);
-      if (m.competitionId) competitionIds.add(m.competitionId);
-      if (m.goalserveCompetitionId) goalserveCompetitionIds.add(m.goalserveCompetitionId);
-    }
-
-    const [canonicalTeams, goalserveTeams, canonicalCompetitions, goalserveCompetitions] = await Promise.all([
-      canonicalTeamIds.size > 0
-        ? db
-            .select({ id: teams.id, name: teams.name, slug: teams.slug })
-            .from(teams)
-            .where(
-              drizzleSql`${teams.id} IN (${drizzleSql.join(
-                Array.from(canonicalTeamIds).map((id) => drizzleSql`${id}`),
-                drizzleSql`, `,
-              )})`,
-            )
-        : Promise.resolve([]),
-      goalserveTeamIds.size > 0
-        ? db
-            .select({
-              id: teams.id,
-              name: teams.name,
-              slug: teams.slug,
-              goalserveTeamId: teams.goalserveTeamId,
-            })
-            .from(teams)
-            .where(
-              drizzleSql`${teams.goalserveTeamId} IN (${drizzleSql.join(
-                Array.from(goalserveTeamIds).map((id) => drizzleSql`${id}`),
-                drizzleSql`, `,
-              )})`,
-            )
-        : Promise.resolve([]),
-      competitionIds.size > 0
-        ? db
-            .select({ id: competitions.id, name: competitions.name })
-            .from(competitions)
-            .where(
-              drizzleSql`${competitions.id} IN (${drizzleSql.join(
-                Array.from(competitionIds).map((id) => drizzleSql`${id}`),
-                drizzleSql`, `,
-              )})`,
-            )
-        : Promise.resolve([]),
-      goalserveCompetitionIds.size > 0
-        ? db
-            .select({
-              id: competitions.id,
-              goalserveCompetitionId: competitions.goalserveCompetitionId,
-              name: competitions.name,
-            })
-            .from(competitions)
-            .where(
-              drizzleSql`${competitions.goalserveCompetitionId} IN (${drizzleSql.join(
-                Array.from(goalserveCompetitionIds).map((id) => drizzleSql`${id}`),
-                drizzleSql`, `,
-              )})`,
-            )
-        : Promise.resolve([]),
-    ]);
-
-    const competitionIdsForLogoLookup = Array.from(
-      new Set(
-        [
-          ...Array.from(competitionIds),
-          ...goalserveCompetitions.map((c) => c.id).filter((id): id is string => typeof id === "string" && id.length > 0),
-        ].filter((id): id is string => typeof id === "string" && id.length > 0),
-      ),
-    );
-
-    const competitionLogos = competitionIdsForLogoLookup.length > 0
-      ? await db
-          .select({
-            entityId: entityMedia.entityId,
-            cdnOriginalUrl: entityMedia.cdnOriginalUrl,
-          })
-          .from(entityMedia)
-          .where(
-            and(
-              eq(entityMedia.entityType, "competition"),
-              eq(entityMedia.mediaRole, "logo"),
-              eq(entityMedia.isPrimary, true),
-              eq(entityMedia.status, "active"),
-              inArray(entityMedia.entityId, competitionIdsForLogoLookup),
-            ),
-          )
-      : [];
-
-    const competitionLogoById = new Map(
-      competitionLogos
-        .filter((row) => Boolean(row.cdnOriginalUrl))
-        .map((row) => [row.entityId, row.cdnOriginalUrl as string]),
-    );
-
-    return {
-      byCanonicalId: new Map(canonicalTeams.map((t) => [t.id, t])),
-      byGoalserveId: new Map(
-        goalserveTeams
-          .filter((t) => Boolean(t.goalserveTeamId))
-          .map((t) => [t.goalserveTeamId as string, { id: t.id, name: t.name, slug: t.slug }]),
-      ),
-      competitionById: new Map(canonicalCompetitions.map((c) => [c.id, c.name])),
-      competitionByGoalserveId: new Map(
-        goalserveCompetitions
-          .filter((c) => Boolean(c.goalserveCompetitionId))
-          .map((c) => [c.goalserveCompetitionId as string, c.name]),
-      ),
-      competitionLogoById,
-      competitionLogoByGoalserveId: new Map(
-        goalserveCompetitions
-          .filter((c) => Boolean(c.goalserveCompetitionId) && Boolean(competitionLogoById.get(c.id)))
-          .map((c) => [c.goalserveCompetitionId as string, competitionLogoById.get(c.id)!]),
-      ),
-    };
+  async function fetchTeamMap(teamIds: Set<string>) {
+    if (teamIds.size === 0) return new Map();
+    const teamsData = await db.select({ id: teams.id, name: teams.name, slug: teams.slug })
+      .from(teams)
+      .where(drizzleSql`${teams.id} IN (${drizzleSql.join(Array.from(teamIds).map(id => drizzleSql`${id}`), drizzleSql`, `)})`);
+    return new Map(teamsData.map(t => [t.id, t]));
   }
 
   // Status sets for robust matching (case-insensitive)
@@ -1570,76 +870,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!status) return false;
     const lower = status.toLowerCase();
     return LIVE_STATUSES.includes(lower) || /^\d+$/.test(status); // numeric minute = live
-  }
-
-  function filterSupersededMovedFixtures(matchRows: any[]): any[] {
-    if (matchRows.length <= 1) return matchRows;
-
-    const rowsByStaticId = new Map<string, any[]>();
-    const rowsByComposite = new Map<string, any[]>();
-
-    const toMs = (value: unknown): number => {
-      const d = value instanceof Date ? value : new Date(String(value ?? ""));
-      return d.getTime();
-    };
-
-    for (const row of matchRows) {
-      const staticId = String(row.goalserveStaticId ?? "").trim();
-      if (staticId) {
-        if (!rowsByStaticId.has(staticId)) rowsByStaticId.set(staticId, []);
-        rowsByStaticId.get(staticId)!.push(row);
-      }
-
-      const compId = String(row.goalserveCompetitionId ?? "").trim();
-      const homeGs = String(row.homeGoalserveTeamId ?? "").trim();
-      const awayGs = String(row.awayGoalserveTeamId ?? "").trim();
-      const round = String(row.goalserveRound ?? "").trim();
-      const season = String(row.seasonKey ?? "").trim();
-      if (compId && homeGs && awayGs && round && season) {
-        const key = `${compId}::${homeGs}::${awayGs}::${round}::${season}`;
-        if (!rowsByComposite.has(key)) rowsByComposite.set(key, []);
-        rowsByComposite.get(key)!.push(row);
-      }
-    }
-
-    for (const bucket of [...rowsByStaticId.values(), ...rowsByComposite.values()]) {
-      bucket.sort((a, b) => toMs(a.kickoffTime) - toMs(b.kickoffTime));
-    }
-
-    return matchRows.filter((row) => {
-      if (isFinishedStatus(row.status) || isLiveStatus(row.status)) return true;
-      if (String(row.status ?? "").toLowerCase() !== "scheduled") return true;
-
-      const kickoffMs = toMs(row.kickoffTime);
-      const staleWindowMs = 7 * 24 * 60 * 60 * 1000;
-
-      const staticId = String(row.goalserveStaticId ?? "").trim();
-      if (staticId) {
-        const bucket = rowsByStaticId.get(staticId) ?? [];
-        const hasNewerStaticRow = bucket.some((candidate) => {
-          if (candidate.id === row.id) return false;
-          const candidateMs = toMs(candidate.kickoffTime);
-          return candidateMs > kickoffMs && candidateMs - kickoffMs <= staleWindowMs;
-        });
-        if (hasNewerStaticRow) return false;
-      }
-
-      const compId = String(row.goalserveCompetitionId ?? "").trim();
-      const homeGs = String(row.homeGoalserveTeamId ?? "").trim();
-      const awayGs = String(row.awayGoalserveTeamId ?? "").trim();
-      const round = String(row.goalserveRound ?? "").trim();
-      const season = String(row.seasonKey ?? "").trim();
-      if (!(compId && homeGs && awayGs && round && season)) return true;
-
-      const key = `${compId}::${homeGs}::${awayGs}::${round}::${season}`;
-      const bucket = rowsByComposite.get(key) ?? [];
-      const hasNewerCompositeRow = bucket.some((candidate) => {
-        if (candidate.id === row.id) return false;
-        const candidateMs = toMs(candidate.kickoffTime);
-        return candidateMs > kickoffMs && candidateMs - kickoffMs <= staleWindowMs;
-      });
-      return !hasNewerCompositeRow;
-    });
   }
 
   // GET /api/matches/fixtures - upcoming matches (not finished) in next N days
@@ -1674,8 +904,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
 
-      const teamMaps = await fetchTeamMaps(results);
-      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
 
       res.json(formatted);
     } catch (error) {
@@ -1721,8 +957,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(desc(matches.kickoffTime))
         .limit(limit);
 
-      const teamMaps = await fetchTeamMaps(results);
-      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
 
       res.json(formatted);
     } catch (error) {
@@ -1734,27 +976,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // GET /api/matches/live - currently live matches (case-insensitive status matching)
   app.get("/api/matches/live", async (req, res) => {
     try {
-      const now = Date.now();
-
-      // Return cached response if within 30s
-      if (liveMatchesCache && (now - liveMatchesLastFetch < LIVE_CACHE_TTL_MS)) {
-        console.log("[live-cache] hit");
-        return res.json(liveMatchesCache);
-      }
-
       const competitionId = req.query.competitionId as string;
       const teamId = req.query.teamId as string;
       const limit = clamp(req.query.limit, 200, 1, 500);
-      const priorityCompetitionIds = await getPriorityGoalserveCompetitionIds();
-
-      if (priorityCompetitionIds.length === 0) {
-        return res.json([]);
-      }
 
       // Live: status matches live patterns (case-insensitive)
       const conditions: any[] = [
         drizzleSql`(LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`,
-        inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
       ];
 
       if (competitionId) {
@@ -1771,13 +999,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
 
-      const teamMaps = await fetchTeamMaps(results);
-      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
 
-      // Store in cache
-      liveMatchesCache = formatted;
-      liveMatchesLastFetch = now;
-      console.log("[live-cache] refreshed");
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
+
       res.json(formatted);
     } catch (error) {
       console.error("Error fetching live matches:", error);
@@ -2052,8 +1282,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return null; // Outside supported range
   }
 
-  // GET /api/matches/day - date-driven matches endpoint (read-only)
-  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1
+  // GET /api/matches/day - date-driven matches endpoint
+  // Query params: date=YYYY-MM-DD (required), status=all|live|scheduled|fulltime, competitionId, sort=kickoff|competition, debug=1, refresh=1
   app.get("/api/matches/day", async (req, res) => {
     try {
       const dateStr = req.query.date as string;
@@ -2061,11 +1291,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const competitionId = req.query.competitionId as string;
       const sortMode = (req.query.sort as string) || "competition"; // competition (default) or kickoff
       const limit = clamp(req.query.limit, 200, 1, 500);
-      const priorityCompetitionIds = await getPriorityGoalserveCompetitionIds();
-
-      if (priorityCompetitionIds.length === 0) {
-        return res.json([]);
-      }
 
       // Default to today in UTC if no date provided
       const effectiveDate = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) 
@@ -2081,7 +1306,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const conditions: any[] = [
         gte(matches.kickoffTime, start),
         drizzleSql`${matches.kickoffTime} < ${nextDate}`,
-        inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
       ];
 
       // Status filtering (case-insensitive)
@@ -2108,41 +1332,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(eq(matches.goalserveCompetitionId, competitionId));
       }
 
+      const refresh = req.query.refresh === "1";
+
       let results = await db.select(matchListFields)
         .from(matches)
         .where(and(...conditions))
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
 
-      const staleScanEnd = new Date(nextDate);
-      staleScanEnd.setUTCDate(staleScanEnd.getUTCDate() + 7);
-      const staleScanRows = await db
-        .select(matchListFields)
-        .from(matches)
-        .where(
-          and(
-            gte(matches.kickoffTime, start),
-            drizzleSql`${matches.kickoffTime} < ${staleScanEnd}`,
-            inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
-          ),
-        )
-        .orderBy(asc(matches.kickoffTime))
-        .limit(2000);
-      const suppressedIds = new Set(
-        staleScanRows
-          .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
-          .map((row) => row.id),
-      );
-      const keptRows = filterSupersededMovedFixtures(staleScanRows);
-      const keptIds = new Set(
-        keptRows
-          .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
-          .map((row) => row.id),
-      );
-      results = results.filter((row) => !suppressedIds.has(row.id) || keptIds.has(row.id));
+      // If no results (or refresh requested), try Goalserve sync
+      if (refresh || results.length === 0) {
+        const feed = goalserveFeedForDate(effectiveDate);
+        if (feed) {
+          try {
+            await upsertGoalserveMatches(feed);
+            // Re-run query after sync
+            results = await db.select(matchListFields)
+              .from(matches)
+              .where(and(...conditions))
+              .orderBy(asc(matches.kickoffTime))
+              .limit(limit);
+          } catch (syncErr) {
+            console.error(`Goalserve sync failed for feed ${feed}:`, syncErr);
+            // Continue with existing results (may be empty)
+          }
+        }
+      }
 
-      const teamMaps = await fetchTeamMaps(results);
-      const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
+      const teamIds = new Set<string>();
+      results.forEach(m => {
+        if (m.homeTeamId) teamIds.add(m.homeTeamId);
+        if (m.awayTeamId) teamIds.add(m.awayTeamId);
+      });
+
+      const teamMap = await fetchTeamMap(teamIds);
+      const formatted = results.map(m => formatMatchResponse(m, m.homeTeamId ? teamMap.get(m.homeTeamId) : null, m.awayTeamId ? teamMap.get(m.awayTeamId) : null));
 
       // Count UEFA matches for Euro nights override detection
       const uefaCounts = { ucl: 0, uel: 0, uecl: 0 };
@@ -2758,141 +1982,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/jobs/pamedia/backfill-entities", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
-    try {
-      const daysParam = parseInt(req.query.days as string, 10);
-      const days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 90) : 7;
-      const result = await runBackfillPaMediaEntities(days);
-      if (result.ok) {
-        res.status(200).json(result);
-      } else {
-        res.status(500).json(result);
-      }
-    } catch (err) {
-      console.error("[backfill-pamedia-entities] Job error:", err);
-      res.status(500).json({
-        ok: false,
-        processed: 0,
-        updated: 0,
-        skippedInvalidDate: 0,
-        insertedCompetitions: 0,
-        insertedTeams: 0,
-        insertedPlayers: 0,
-        insertedManagers: 0,
-        createdPlayersFromPa: 0,
-        createdManagersFromPa: 0,
-        error: (err as Error).message,
-      });
-    }
-  });
-
-  app.post("/api/jobs/entity-backfill/run", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
-    const run = await startJobRun("entity_backfill", {
-      triggeredBy: "api",
-      query: req.query,
-    });
-    try {
-      await runWithJobContext(run.id, async () => {
-        const modeRaw = String(req.query.mode ?? "all").trim().toLowerCase();
-        const mode: EntityBackfillMode =
-          modeRaw === "tags" || modeRaw === "deterministic" || modeRaw === "all"
-            ? (modeRaw as EntityBackfillMode)
-            : "all";
-
-        const batchSizeRaw = parseInt(String(req.query.batchSize ?? "200"), 10);
-        const timeBudgetRaw = parseInt(String(req.query.timeBudgetMs ?? "30000"), 10);
-        const maxBatchesRaw = parseInt(String(req.query.maxBatches ?? "20"), 10);
-        const dryRun = String(req.query.dryRun ?? "false").toLowerCase() === "true";
-
-        const batchSize = Number.isFinite(batchSizeRaw) ? Math.min(Math.max(batchSizeRaw, 1), 1000) : 200;
-        const timeBudgetMs = Number.isFinite(timeBudgetRaw) ? Math.min(Math.max(timeBudgetRaw, 1000), 300000) : 30000;
-        const maxBatches = Number.isFinite(maxBatchesRaw) ? Math.min(Math.max(maxBatchesRaw, 1), 500) : 20;
-
-        const result = await runEntityBackfill({
-          mode,
-          batchSize,
-          timeBudgetMs,
-          maxBatches,
-          dryRun,
-          runId: run.id,
-        });
-
-        const finishCounters: Record<string, number | undefined> = {
-          scanned_articles: result.counters.scanned_articles,
-          processed_articles: result.counters.processed_articles,
-          updated_articles: result.counters.updated_articles,
-          unchanged_articles: result.counters.unchanged_articles,
-          error_articles: result.counters.error_articles,
-          inserted_competitions: result.counters.inserted_competitions,
-          inserted_teams: result.counters.inserted_teams,
-          inserted_players: result.counters.inserted_players,
-          inserted_managers: result.counters.inserted_managers,
-          alias_matches: result.counters.alias_matches,
-          stale_recovered: result.counters.stale_recovered,
-          time_ms: result.counters.time_ms,
-          batch_size: batchSize,
-          max_batches: maxBatches,
-        };
-
-        const status = result.ok && result.stoppedReason === "done" ? "success" : "partial";
-        await finishJobRun(run.id, {
-          status,
-          counters: finishCounters,
-          stoppedReason: result.stoppedReason,
-          error: null,
-        });
-
-        res.status(200).json({ runId: run.id, ...result });
-      });
-    } catch (err) {
-      await finishJobRun(run.id, { status: "error", error: String(err) });
-      res.status(500).json({
-        ok: false,
-        runId: run.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  app.get("/api/jobs/entity-backfill/status", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (_req, res) => {
-    try {
-      const status = await getEntityBackfillStatus();
-      res.status(200).json({
-        ok: true,
-        status,
-      });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
-  app.post("/api/jobs/entity-backfill/reset", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
-    try {
-      const laneRaw = String(req.query.lane ?? "all").trim().toLowerCase();
-      const lane =
-        laneRaw === "tags" || laneRaw === "deterministic" || laneRaw === "all"
-          ? (laneRaw as "tags" | "deterministic" | "all")
-          : "all";
-      const confirmation = String(req.query.confirm ?? "").trim();
-      if (confirmation !== "RESET") {
-        return res.status(400).json({
-          ok: false,
-          error: "Missing confirm=RESET",
-        });
-      }
-      const result = await resetEntityBackfillCheckpoint(lane);
-      res.status(200).json({ ok: true, ...result });
-    } catch (err) {
-      res.status(500).json({
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  });
-
   // PA Media ingest runner status (lightweight; no auth for visibility)
   app.get("/api/jobs/pamedia/status", (_req, res) => {
     res.json({
@@ -2903,10 +1992,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       lastSummary: lastPaRunnerSummary,
       lastError: lastPaRunnerError,
     });
-  });
-
-  app.get("/api/ingest/pamedia/status", (_req, res) => {
-    res.json(getPamediaStatus());
   });
 
   app.post("/api/jobs/pamedia/run", (req, res) => {
@@ -3121,94 +2206,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(result);
   });
 
-  app.post(
-    "/api/jobs/sync-goalserve-entity-media",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : undefined;
-      const includeTeams = req.query.includeTeams === "0" ? false : true;
-      const includeCompetitions = req.query.includeCompetitions === "0" ? false : true;
-      const includePlayers = req.query.includePlayers === "1";
-      const includeManagers = req.query.includeManagers === "1";
-      const mvpCompetitionsOnly = req.query.mvpCompetitionsOnly === "1";
-      const mvpTeamsOnly = req.query.mvpTeamsOnly === "1";
-      const mvpPeopleOnly = req.query.mvpPeopleOnly === "1";
-      const personTeamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
-      const personTeamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
-      const dryRun = req.query.dryRun === "1";
-      const maxPlayers =
-        typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
-          ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
-          : undefined;
-      const maxManagers =
-        typeof req.query.maxManagers === "string" && Number.isFinite(Number(req.query.maxManagers))
-          ? Math.max(1, Math.floor(Number(req.query.maxManagers)))
-          : undefined;
-      const result = await syncGoalserveEntityMedia({
-        leagueId,
-        includeTeams,
-        includeCompetitions,
-        mvpCompetitionsOnly,
-        includePlayers,
-        includeManagers,
-        mvpTeamsOnly,
-        personScope: personTeamId || personTeamSlug ? "team" : mvpPeopleOnly ? "mvp" : "league",
-        personTeamId,
-        personTeamSlug,
-        maxPlayers,
-        maxManagers,
-        dryRun,
-      });
-      res.json(result);
-    },
-  );
-
-  app.post(
-    "/api/jobs/sync-goalserve-person-media-pilot",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : "1204";
-      const includePlayers = req.query.includePlayers === "0" ? false : true;
-      const includeManagers = req.query.includeManagers === "0" ? false : true;
-      const mvpScope = req.query.mvpScope === "1";
-      const teamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
-      const teamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
-      const dryRun = req.query.dryRun === "1";
-      const maxPlayers =
-        typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
-          ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
-          : undefined;
-      const maxManagers =
-        typeof req.query.maxManagers === "string" && Number.isFinite(Number(req.query.maxManagers))
-          ? Math.max(1, Math.floor(Number(req.query.maxManagers)))
-          : undefined;
-
-      const result = await syncGoalservePersonMediaPilot({
-        leagueId,
-        scope: teamId || teamSlug ? "team" : mvpScope ? "mvp" : "league",
-        teamId,
-        teamSlug,
-        includePlayers,
-        includeManagers,
-        dryRun,
-        maxPlayers,
-        maxManagers,
-      });
-      res.json(result);
-    },
-  );
-
-  app.post(
-    "/api/jobs/sync-goalserve-competition-logos",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const dryRun = req.query.dryRun === "1";
-      const force = req.query.force === "1";
-      const result = await syncGoalserveCompetitionLogosMvp({ dryRun, force });
-      res.json(result);
-    },
-  );
-
   // ========== GOALSERVE TEAMS SYNC ==========
   app.post(
     "/api/jobs/sync-goalserve-teams",
@@ -3265,25 +2262,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
-  // ========== DEBUG: GOALSERVE MATCHES UPSERT ==========
-  // Local non-production dev may use this without auth; production-like envs require GOALSERVE_SYNC_SECRET.
-  app.get(
-    "/api/debug/upsert-goalserve-matches",
-    (req, res, next) => {
-      if (process.env.NODE_ENV !== "production") return next();
-      return requireJobSecret("GOALSERVE_SYNC_SECRET")(req, res, next);
-    },
-    async (req, res) => {
-      try {
-        const feed = String(req.query.feed || "soccernew/home");
-        const result = await upsertGoalserveMatches(feed);
-        res.json(result);
-      } catch (error) {
-        console.error("Debug upsert-goalserve-matches error:", error);
-        res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
-      }
-    },
-  );
+  // ========== DEBUG: GOALSERVE MATCHES UPSERT (no auth, for dev) ==========
+  app.get("/api/debug/upsert-goalserve-matches", async (req, res) => {
+    try {
+      const feed = String(req.query.feed || "soccernew/home");
+      const result = await upsertGoalserveMatches(feed);
+      res.json(result);
+    } catch (error) {
+      console.error("Debug upsert-goalserve-matches error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
 
   // ========== DEBUG: Team Anomaly Investigation ==========
   app.post(
@@ -3544,198 +2533,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         feeds: results,
       });
     }
-  );
-
-  type FeedBatchSummary = {
-    ok: boolean;
-    feedsProcessed: number;
-    inserted: number;
-    updated: number;
-    skipped: number;
-    errors: string[];
-    durationMs: number;
-    results: Array<{
-      feed: string;
-      ok: boolean;
-      inserted: number;
-      updated: number;
-      skipped: number;
-      error?: string;
-    }>;
-  };
-
-  async function runGoalserveFeedBatch(feeds: string[]): Promise<FeedBatchSummary> {
-    const startedAt = Date.now();
-    const summary: FeedBatchSummary = {
-      ok: true,
-      feedsProcessed: 0,
-      inserted: 0,
-      updated: 0,
-      skipped: 0,
-      errors: [],
-      durationMs: 0,
-      results: [],
-    };
-
-    for (const feed of feeds) {
-      try {
-        const result = await upsertGoalserveMatches(feed);
-        const skipped = (result.skippedNoMatchId ?? 0) + (result.skippedNoKickoff ?? 0);
-        summary.feedsProcessed++;
-        summary.inserted += result.inserted ?? 0;
-        summary.updated += result.updated ?? 0;
-        summary.skipped += skipped;
-        if (!result.ok) {
-          summary.ok = false;
-          if (result.error) summary.errors.push(`${feed}: ${result.error}`);
-        }
-        summary.results.push({
-          feed,
-          ok: result.ok,
-          inserted: result.inserted ?? 0,
-          updated: result.updated ?? 0,
-          skipped,
-          error: result.error,
-        });
-        console.log(`[matches-refresh] feed=${feed} ok=${result.ok} inserted=${result.inserted ?? 0} updated=${result.updated ?? 0} skipped=${skipped}`);
-      } catch (error) {
-        summary.ok = false;
-        summary.feedsProcessed++;
-        const message = error instanceof Error ? error.message : String(error);
-        summary.errors.push(`${feed}: ${message}`);
-        summary.results.push({ feed, ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
-        console.error(`[matches-refresh] feed=${feed} failed: ${message}`);
-      }
-    }
-
-    summary.durationMs = Date.now() - startedAt;
-    return summary;
-  }
-
-  // Render Cron cadence recommendation:
-  // - /api/jobs/refresh-matches-live: every 1 minute
-  // - /api/jobs/refresh-matches-today: every 5 minutes
-  // - /api/jobs/refresh-matches-recent: every 15 minutes
-  // - /api/jobs/refresh-matches-near-future: every 30 minutes
-  // - /api/jobs/refresh-matches-week-ahead: every 4 hours
-  // - /api/jobs/refresh-priority-league-fixtures: every 6 hours
-  app.post(
-    "/api/jobs/refresh-matches-live",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const summary = await runGoalserveFeedBatch(["soccernew/live"]);
-      res.json(summary);
-    },
-  );
-
-  app.post(
-    "/api/jobs/refresh-matches-today",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const summary = await runGoalserveFeedBatch(["soccernew/home"]);
-      res.json(summary);
-    },
-  );
-
-  app.post(
-    "/api/jobs/refresh-matches-recent",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const summary = await runGoalserveFeedBatch(["soccernew/d-1"]);
-      res.json(summary);
-    },
-  );
-
-  app.post(
-    "/api/jobs/refresh-matches-near-future",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const summary = await runGoalserveFeedBatch(["soccernew/d1", "soccernew/d2"]);
-      res.json(summary);
-    },
-  );
-
-  app.post(
-    "/api/jobs/refresh-matches-week-ahead",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const summary = await runGoalserveFeedBatch([
-        "soccernew/d3",
-        "soccernew/d4",
-        "soccernew/d5",
-        "soccernew/d6",
-        "soccernew/d7",
-      ]);
-      res.json(summary);
-    },
-  );
-
-  app.post(
-    "/api/jobs/refresh-priority-league-fixtures",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const startedAt = Date.now();
-      const rows = await db
-        .select({
-          goalserveCompetitionId: competitions.goalserveCompetitionId,
-        })
-        .from(competitions)
-        .where(and(eq(competitions.isPriority, true), drizzleSql`trim(coalesce(${competitions.goalserveCompetitionId}, '')) <> ''`));
-
-      const leagueIds = rows
-        .map((row) => row.goalserveCompetitionId)
-        .filter((id): id is string => typeof id === "string" && id.length > 0);
-
-      const summary = {
-        ok: true,
-        feedsProcessed: leagueIds.length,
-        inserted: 0,
-        updated: 0,
-        skipped: 0,
-        errors: [] as string[],
-        durationMs: 0,
-        results: [] as Array<{
-          leagueId: string;
-          ok: boolean;
-          inserted: number;
-          updated: number;
-          skipped: number;
-          error?: string;
-        }>,
-      };
-
-      for (const leagueId of leagueIds) {
-        try {
-          const result = await syncGoalserveMatches(leagueId);
-          const skipped = (result.skippedNoStaticId ?? 0) + (result.skippedNoKickoff ?? 0);
-          summary.inserted += result.inserted ?? 0;
-          summary.updated += result.updated ?? 0;
-          summary.skipped += skipped;
-          if (!result.ok) {
-            summary.ok = false;
-            if (result.error) summary.errors.push(`league ${leagueId}: ${result.error}`);
-          }
-          summary.results.push({
-            leagueId,
-            ok: result.ok,
-            inserted: result.inserted ?? 0,
-            updated: result.updated ?? 0,
-            skipped,
-            error: result.error,
-          });
-          console.log(`[matches-refresh-priority] leagueId=${leagueId} ok=${result.ok} inserted=${result.inserted ?? 0} updated=${result.updated ?? 0} skipped=${skipped}`);
-        } catch (error) {
-          summary.ok = false;
-          const message = error instanceof Error ? error.message : String(error);
-          summary.errors.push(`league ${leagueId}: ${message}`);
-          summary.results.push({ leagueId, ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
-          console.error(`[matches-refresh-priority] leagueId=${leagueId} failed: ${message}`);
-        }
-      }
-
-      summary.durationMs = Date.now() - startedAt;
-      res.json(summary);
-    },
   );
 
   // ========== GOALSERVE TABLE PREVIEW (DRY RUN) ==========
@@ -4000,303 +2797,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
-  // ========== REFRESH PRIORITY STANDINGS (cron-friendly alias) ==========
-  app.post(
-    "/api/jobs/refresh-priority-standings",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const season = (req.query.season as string | undefined)?.trim() || "2025/2026";
-      // "refresh" should create fresh snapshots for the supported MVP domestic leagues by default.
-      // Callers can opt back into hash-based no-op behavior with ?force=0.
-      const force = req.query.force !== "0";
-
-      try {
-        const KNOWN_CUP_OR_KNOCKOUT_SLUGS = new Set([
-          "fa-cup",
-          "efl-cup",
-          "scottish-cup",
-          "scottish-league-cup",
-          "copa-del-rey",
-          "coppa-italia",
-          "dfb-pokal",
-          "coupe-de-france",
-        ]);
-        const NON_STANDINGS_SLUGS = new Set([
-          "fifa-world-cup",
-        ]);
-        const EXPECTED_MVP_STANDINGS_GOALSERVE_IDS = new Set(
-          Object.keys(TEAMS_DOMESTIC_GOALSERVE_ID_TO_SLUG),
-        );
-
-        const isKnownCupOrKnockout = (slugOrName: string): boolean => {
-          const v = slugOrName.toLowerCase();
-          if (KNOWN_CUP_OR_KNOCKOUT_SLUGS.has(v)) return true;
-          return /\b(cup|pokal|coppa|copa)\b/.test(v);
-        };
-
-        const isNonStandingsCompetition = (slugOrName: string): boolean => {
-          const v = slugOrName.toLowerCase();
-          if (NON_STANDINGS_SLUGS.has(v)) return true;
-          return /\b(world-cup|world cup)\b/.test(v);
-        };
-
-        const comps = await db
-          .select({
-            slug: competitions.slug,
-            name: competitions.name,
-            canonicalSlug: competitions.canonicalSlug,
-            isCup: competitions.isCup,
-            goalserveCompetitionId: competitions.goalserveCompetitionId,
-          })
-          .from(competitions)
-          .where(eq(competitions.isPriority, true));
-
-        const results: Array<{
-          competitionName: string;
-          canonicalSlug: string;
-          leagueId: string | null;
-          status: "refreshed" | "skipped" | "error";
-          ok: boolean;
-          skipped: boolean;
-          skipReason:
-            | "cup"
-            | "missing_goalserve_id"
-            | "non_standings"
-            | "not_mvp_domestic_league"
-            | "no_change"
-            | "unsupported_or_unavailable"
-            | string
-            | null;
-          error: string | null;
-          insertedRowsCount: number;
-        }> = [];
-        let skippedCups = 0;
-        let skippedMissingGoalserveId = 0;
-        let skippedNonStandings = 0;
-        let skippedNonDomestic = 0;
-        let refreshed = 0;
-        let failed = 0;
-
-        for (const comp of comps) {
-          const canonicalSlug = comp.canonicalSlug || comp.slug;
-          const compName = comp.name || "";
-          const leagueId = comp.goalserveCompetitionId?.trim() || null;
-          const slugOrName = `${canonicalSlug} ${compName}`.trim();
-
-          if (comp.isCup || isKnownCupOrKnockout(slugOrName)) {
-            skippedCups++;
-            results.push({
-              competitionName: compName,
-              canonicalSlug,
-              leagueId,
-              status: "skipped",
-              ok: true,
-              skipped: true,
-              skipReason: "cup",
-              error: null,
-              insertedRowsCount: 0,
-            });
-            continue;
-          }
-
-          if (isNonStandingsCompetition(slugOrName)) {
-            skippedNonStandings++;
-            results.push({
-              competitionName: compName,
-              canonicalSlug,
-              leagueId,
-              status: "skipped",
-              ok: true,
-              skipped: true,
-              skipReason: "non_standings",
-              error: null,
-              insertedRowsCount: 0,
-            });
-            continue;
-          }
-
-          if (!leagueId) {
-            skippedMissingGoalserveId++;
-            results.push({
-              competitionName: compName,
-              canonicalSlug,
-              leagueId: null,
-              status: "skipped",
-              ok: true,
-              skipped: true,
-              skipReason: "missing_goalserve_id",
-              error: "No goalserve_competition_id",
-              insertedRowsCount: 0,
-            });
-            continue;
-          }
-
-          if (!EXPECTED_MVP_STANDINGS_GOALSERVE_IDS.has(leagueId)) {
-            skippedNonDomestic++;
-            results.push({
-              competitionName: compName,
-              canonicalSlug,
-              leagueId,
-              status: "skipped",
-              ok: true,
-              skipped: true,
-              skipReason: "not_mvp_domestic_league",
-              error: null,
-              insertedRowsCount: 0,
-            });
-            continue;
-          }
-
-          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force });
-          const skipReason =
-            result.skipped
-              ? result.reason === "season_not_available"
-                ? "unsupported_or_unavailable"
-                : result.reason || "no_change"
-              : null;
-          const status: "refreshed" | "skipped" | "error" =
-            result.ok && !result.skipped ? "refreshed" : result.ok ? "skipped" : "error";
-
-          if (status === "refreshed") refreshed++;
-          if (status === "error") failed++;
-
-          results.push({
-            competitionName: compName,
-            canonicalSlug,
-            leagueId,
-            status,
-            ok: !!result.ok,
-            skipped: !!result.skipped,
-            skipReason,
-            error: result.ok ? null : result.error || result.reason || "Unknown error",
-            insertedRowsCount: result.insertedRowsCount ?? 0,
-          });
-        }
-
-        const skipped = results.filter((r) => r.status === "skipped").length;
-        const succeeded = results.length - failed;
-        res.json({
-          ok: failed === 0,
-          season,
-          force,
-          total: results.length,
-          refreshed,
-          skipped,
-          succeeded,
-          failed,
-          skippedCups,
-          skippedMissingGoalserveId,
-          skippedNonStandings,
-          skippedNonDomestic,
-          refreshedCompetitions: results.filter((r) => r.status === "refreshed").map((r) => r.canonicalSlug),
-          skippedCompetitions: results
-            .filter((r) => r.status === "skipped")
-            .map((r) => ({ canonicalSlug: r.canonicalSlug, skipReason: r.skipReason })),
-          results,
-        });
-      } catch (error) {
-        console.error("Priority standings refresh error:", error);
-        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
-      }
-    }
-  );
-
-  const CUP_REFRESH_TARGETS = [
-    { slug: "fa-cup", competitionId: "1198" },
-    { slug: "efl-cup", competitionId: "1199" },
-    { slug: "scottish-cup", competitionId: "1371" },
-    { slug: "scottish-league-cup", competitionId: "1372" },
-    { slug: "copa-del-rey", competitionId: "1397" },
-    { slug: "coppa-italia", competitionId: "1264" },
-    { slug: "dfb-pokal", competitionId: "1226" },
-    { slug: "coupe-de-france", competitionId: "1218" },
-  ] as const;
-
-  const EUROPE_REFRESH_TARGETS = [
-    { slug: "champions-league", competitionId: "1005" },
-    { slug: "europa-league", competitionId: "1007" },
-    { slug: "conference-league", competitionId: "18853" },
-  ] as const;
-
-  // NOTE: Cup/Europe feeds are currently live-read only (not persisted in DB).
-  // These protected jobs are lightweight "refresh checks" for cron/ops visibility.
-  app.post(
-    "/api/jobs/refresh-cup-progress",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const season = (req.query.season as string | undefined)?.trim();
-      try {
-        const { goalserveFetch } = await import("./integrations/goalserve/client");
-        const results: Array<{ slug: string; competitionId: string; ok: boolean; stageCount: number; error: string | null }> = [];
-
-        for (const target of CUP_REFRESH_TARGETS) {
-          const endpoint = season
-            ? `soccerfixtures/leagueid/${target.competitionId}?season=${encodeURIComponent(season)}`
-            : `soccerfixtures/leagueid/${target.competitionId}`;
-          try {
-            const data = await goalserveFetch(endpoint);
-            const tournament = data?.results?.tournament ?? data?.res?.fixtures?.tournament ?? null;
-            const stages = tournament?.stage;
-            const stageArr = Array.isArray(stages) ? stages : stages ? [stages] : [];
-            results.push({ slug: target.slug, competitionId: target.competitionId, ok: true, stageCount: stageArr.length, error: null });
-          } catch (err) {
-            results.push({
-              slug: target.slug,
-              competitionId: target.competitionId,
-              ok: false,
-              stageCount: 0,
-              error: err instanceof Error ? err.message : "Unknown error",
-            });
-          }
-        }
-
-        const okCount = results.filter((r) => r.ok).length;
-        res.json({ ok: true, season: season || null, total: results.length, succeeded: okCount, failed: results.length - okCount, results });
-      } catch (error) {
-        console.error("Cup progress refresh error:", error);
-        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
-      }
-    }
-  );
-
-  app.post(
-    "/api/jobs/refresh-europe-standings",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const season = (req.query.season as string | undefined)?.trim();
-      try {
-        const { goalserveFetch } = await import("./integrations/goalserve/client");
-        const results: Array<{ slug: string; competitionId: string; ok: boolean; hasStandings: boolean; error: string | null }> = [];
-
-        for (const target of EUROPE_REFRESH_TARGETS) {
-          const endpoint = season
-            ? `soccernew/standings/${target.competitionId}?season=${encodeURIComponent(season)}`
-            : `soccernew/standings/${target.competitionId}`;
-          try {
-            const data = await goalserveFetch(endpoint);
-            const categories = data?.standings?.category;
-            const hasStandings = Array.isArray(categories) ? categories.length > 0 : !!categories;
-            results.push({ slug: target.slug, competitionId: target.competitionId, ok: true, hasStandings, error: null });
-          } catch (err) {
-            results.push({
-              slug: target.slug,
-              competitionId: target.competitionId,
-              ok: false,
-              hasStandings: false,
-              error: err instanceof Error ? err.message : "Unknown error",
-            });
-          }
-        }
-
-        const okCount = results.filter((r) => r.ok).length;
-        res.json({ ok: true, season: season || null, total: results.length, succeeded: okCount, failed: results.length - okCount, results });
-      } catch (error) {
-        console.error("Europe standings refresh error:", error);
-        res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
-      }
-    }
-  );
-
   // ========== SYNC GOALSERVE SQUADS (players + managers from soccerleague endpoint) ==========
   app.post(
     "/api/jobs/sync-goalserve-squads",
@@ -4383,38 +2883,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
       }
     }
-  );
-
-  // ========== GOALSERVE PLAYER NATIONALITY ENRICHMENT ==========
-  app.post(
-    "/api/jobs/enrich-goalserve-player-nationality",
-    requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (req, res) => {
-      const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : "1204";
-      const mvpScope = req.query.mvpScope === "1" || req.query.mvpScope === "true";
-      const teamId = typeof req.query.teamId === "string" ? req.query.teamId : undefined;
-      const teamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
-      const dryRun = req.query.dryRun === "1";
-      const force = req.query.force === "1";
-      const maxPlayers =
-        typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
-          ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
-          : undefined;
-
-      const scope = teamId || teamSlug ? "team" : mvpScope || !req.query.leagueId ? "mvp" : "league";
-
-      const result = await enrichGoalservePlayerNationality({
-        scope,
-        leagueId,
-        teamId,
-        teamSlug,
-        dryRun,
-        force,
-        maxPlayers,
-      });
-
-      res.json(result);
-    },
   );
 
   // ========== BACKFILL STANDINGS (dev-only for historical seasons) ==========
@@ -4626,7 +3094,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   );
 
   // ========== PUBLIC STANDINGS ENDPOINT ==========
-  // Read-only endpoint: no synchronous upstream refresh in public GET path.
+  // In-memory throttle map for auto-refresh: key = "leagueId:season", value = lastRunMs
+  const standingsAutoRefreshThrottle = new Map<string, number>();
+  const STANDINGS_REFRESH_COOLDOWN_MS = 60_000; // 1 minute
 
   app.get("/api/standings", async (req, res) => {
     try {
@@ -4640,6 +3110,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const defaultSeason = `${currentYear}/${currentYear + 1}`;
       const season = (req.query.season as string) || defaultSeason;
       const asOfParam = req.query.asOf as string | undefined;
+      const autoRefresh = req.query.autoRefresh === "1";
       const tablesOnly = req.query.tablesOnly === "1";
 
       // Normalize season to YYYY-YYYY format for comparison (handles 2025/26, 2025-26, 2025/2026, etc.)
@@ -4661,6 +3132,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // When tablesOnly=1, skip round computation entirely for faster response
       const includeRounds = !tablesOnly && isCurrentSeason && isPremierLeague;
 
+      // Auto-refresh logic: attempt standings ingestion if allowed by throttle
+      if (autoRefresh) {
+        const throttleKey = `${leagueId}:${season}`;
+        const lastRun = standingsAutoRefreshThrottle.get(throttleKey) || 0;
+        const nowMs = Date.now();
+        
+        if (nowMs - lastRun >= STANDINGS_REFRESH_COOLDOWN_MS) {
+          standingsAutoRefreshThrottle.set(throttleKey, nowMs);
+          try {
+            const result = await upsertGoalserveStandings(leagueId, { seasonParam: season });
+            if (result.ok) {
+              console.log(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ${result.skipped ? "SKIPPED (no change)" : `rows=${result.insertedRowsCount}`}`);
+            } else {
+              console.warn(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} FAILED: ${result.error}`);
+            }
+          } catch (refreshErr) {
+            console.error(`[StandingsAutoRefresh] leagueId=${leagueId} season=${season} ERROR:`, refreshErr);
+          }
+        }
+      }
+
       const conditions = [
         eq(standingsSnapshots.leagueId, leagueId),
         eq(standingsSnapshots.season, season),
@@ -4677,6 +3169,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(and(...conditions))
         .orderBy(desc(standingsSnapshots.asOf))
         .limit(1);
+
+      // On-demand backfill: if no snapshot exists, try to ingest one
+      if (!snapshot) {
+        console.log(`[StandingsOnDemand] No snapshot for leagueId=${leagueId} season=${season}, attempting backfill...`);
+        try {
+          const result = await upsertGoalserveStandings(leagueId, { seasonParam: season, force: true });
+          if (result.ok && !result.skipped) {
+            console.log(`[StandingsOnDemand] Backfill SUCCESS leagueId=${leagueId} season=${season} rows=${result.insertedRowsCount}`);
+            // Query again for the newly created snapshot
+            [snapshot] = await db
+              .select()
+              .from(standingsSnapshots)
+              .where(and(...conditions))
+              .orderBy(desc(standingsSnapshots.asOf))
+              .limit(1);
+          } else if (result.ok && result.skipped) {
+            console.log(`[StandingsOnDemand] Backfill SKIPPED leagueId=${leagueId} season=${season} (no change from Goalserve)`);
+          } else {
+            console.warn(`[StandingsOnDemand] Backfill FAILED leagueId=${leagueId} season=${season}: ${result.error || result.reason}`);
+          }
+        } catch (backfillErr) {
+          console.error(`[StandingsOnDemand] Backfill ERROR leagueId=${leagueId} season=${season}:`, backfillErr);
+        }
+      }
 
       if (!snapshot) {
         return res.status(404).json({ 
@@ -4725,79 +3241,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(standingsRows.snapshotId, snapshot.id))
         .orderBy(asc(standingsRows.position));
 
-      // Backfill canonical team identity for rows where snapshot teamId is missing
-      // by using goalserve_team_id mapping from teams table.
-      const fallbackGoalserveIds = Array.from(
-        new Set(
-          rows
-            .filter((r) => !r.teamId && !!r.teamGoalserveId)
-            .map((r) => r.teamGoalserveId as string),
-        ),
-      );
-      const fallbackTeamMap = new Map<string, { id: string; name: string; slug: string; logoUrl: string | null }>();
-      if (fallbackGoalserveIds.length > 0) {
-        const fallbackTeams = await db
-          .select({
-            id: teams.id,
-            name: teams.name,
-            slug: teams.slug,
-            logoUrl: teams.logoUrl,
-            goalserveTeamId: teams.goalserveTeamId,
-          })
-          .from(teams)
-          .where(inArray(teams.goalserveTeamId, fallbackGoalserveIds));
-        for (const t of fallbackTeams) {
-          if (t.goalserveTeamId) {
-            fallbackTeamMap.set(t.goalserveTeamId, {
-              id: t.id,
-              name: t.name,
-              slug: t.slug,
-              logoUrl: t.logoUrl,
-            });
-          }
-        }
-      }
-
-      // Use joined canonical team identity first, then fallback by goalserve id.
-      const table = rows.map((r) => {
-        const fallbackTeam = r.teamGoalserveId ? fallbackTeamMap.get(r.teamGoalserveId) : undefined;
-        return {
-          position: r.position,
-          team: {
-            id: r.teamId || fallbackTeam?.id || null,
-            name: r.joinedTeamName || fallbackTeam?.name || r.rowTeamName || r.teamGoalserveId,
-            slug: r.teamSlug || fallbackTeam?.slug || null,
-            crestUrl: r.teamCrestUrl || fallbackTeam?.logoUrl || null,
-          },
-          played: r.played,
-          won: r.won,
-          drawn: r.drawn,
-          lost: r.lost,
-          goalsFor: r.goalsFor,
-          goalsAgainst: r.goalsAgainst,
-          goalDifference: r.goalDifference,
-          points: r.points,
-          recentForm: r.recentForm,
-          movementStatus: r.movementStatus,
-          qualificationNote: r.qualificationNote,
-          home: {
-            played: r.homePlayed,
-            won: r.homeWon,
-            drawn: r.homeDrawn,
-            lost: r.homeLost,
-            goalsFor: r.homeGoalsFor,
-            goalsAgainst: r.homeGoalsAgainst,
-          },
-          away: {
-            played: r.awayPlayed,
-            won: r.awayWon,
-            drawn: r.awayDrawn,
-            lost: r.awayLost,
-            goalsFor: r.awayGoalsFor,
-            goalsAgainst: r.awayGoalsAgainst,
-          },
-        };
-      });
+      // Use joined team name if available, otherwise fall back to row's stored teamName
+      const table = rows.map((r) => ({
+        position: r.position,
+        team: {
+          id: r.teamId,
+          name: r.joinedTeamName || r.rowTeamName || r.teamGoalserveId,
+          slug: r.teamSlug,
+          crestUrl: r.teamCrestUrl,
+        },
+        played: r.played,
+        won: r.won,
+        drawn: r.drawn,
+        lost: r.lost,
+        goalsFor: r.goalsFor,
+        goalsAgainst: r.goalsAgainst,
+        goalDifference: r.goalDifference,
+        points: r.points,
+        recentForm: r.recentForm,
+        movementStatus: r.movementStatus,
+        qualificationNote: r.qualificationNote,
+        home: {
+          played: r.homePlayed,
+          won: r.homeWon,
+          drawn: r.homeDrawn,
+          lost: r.homeLost,
+          goalsFor: r.homeGoalsFor,
+          goalsAgainst: r.homeGoalsAgainst,
+        },
+        away: {
+          played: r.awayPlayed,
+          won: r.awayWon,
+          drawn: r.awayDrawn,
+          lost: r.awayLost,
+          goalsFor: r.awayGoalsFor,
+          goalsAgainst: r.awayGoalsAgainst,
+        },
+      }));
 
       // Fetch fixtures from Goalserve XML to get proper <week number="X"> containers
       interface RoundInfo {
@@ -5369,7 +3849,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Also handle: stage.round[].match[] (some cups use "round" instead of "week")
       interface CupMatch {
         id: string;
-        goalserveStaticId?: string | null;
         home: { id?: string; name: string };
         away: { id?: string; name: string };
         score?: { home: number; away: number } | null;
@@ -5387,24 +3866,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       const roundsMap = new Map<string, CupMatch[]>();
-      const computeCupRoundStatus = (matchList: CupMatch[]): "completed" | "in_progress" | "upcoming" => {
-        if (matchList.length === 0) return "upcoming";
-        const completedStatuses = ["ft", "aet", "pen", "awarded", "cancelled", "postponed"];
-        const liveIndicators = ["ht", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
-        const allCompleted = matchList.every((m) => {
-          const s = m.status.toLowerCase();
-          return completedStatuses.some((cs) => s.includes(cs));
-        });
-        const anyLive = matchList.some((m) => {
-          const s = m.status.toLowerCase();
-          if (s === "ht") return true;
-          if (/^\d+$/.test(s)) return true;
-          return liveIndicators.some((li) => s === li);
-        });
-        if (anyLive) return "in_progress";
-        if (allCompleted) return "completed";
-        return "upcoming";
-      };
+
+      // Goalserve cup feed: results.tournament.stage... (note: "results" not "fixtures" for this feed)
+      // Try both data.results and data.res.fixtures for compatibility
+      const results = data?.results || data?.res?.fixtures;
+      if (!results) {
+        console.log("[CupProgress] No results/fixtures found in response, returning empty rounds");
+        return res.json({ competitionId, rounds: [] });
+      }
+
+      // Tournament can be single object or array
+      const tournaments = Array.isArray(results.tournament) 
+        ? results.tournament 
+        : results.tournament 
+          ? [results.tournament] 
+          : [];
 
       // Helper to robustly extract attributes from Goalserve match nodes
       // Handles: node[key], node["@"+key], node["@_"+key], node["@"]?.[key], node["$"]?.[key]
@@ -5462,7 +3938,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       // Helper to parse a single match object
-      const parseMatch = (m: any, roundName: string, targetMap: Map<string, CupMatch[]> = roundsMap) => {
+      const parseMatch = (m: any, roundName: string) => {
         const homeTeam = m.hometeam || m.localteam || {};
         const awayTeam = m.awayteam || m.visitorteam || {};
         
@@ -5521,7 +3997,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
         const match: CupMatch = {
           id: getAttr(m, "id") || String(Math.random()),
-          goalserveStaticId: getAttr(m, "static_id") || null,
           home: {
             id: getAttr(homeTeam, "id") || undefined,
             name: getAttr(homeTeam, "name") || "TBD",
@@ -5541,133 +4016,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           status: getAttr(m, "status") || "NS",
         };
 
-        if (!targetMap.has(roundName)) {
-          targetMap.set(roundName, []);
+        if (!roundsMap.has(roundName)) {
+          roundsMap.set(roundName, []);
         }
-        targetMap.get(roundName)!.push(match);
+        roundsMap.get(roundName)!.push(match);
       };
 
-      // Traverse Goalserve JSON using the same fixture-shape coverage as sync-goalserve-matches / standings (see goalserve-cup-progress-tree.ts)
-      const cupProgressDebug = process.env.DEBUG_CUP_PROGRESS === "1";
-      const { refs: cupRefsRaw, debugLines } = collectCupProgressMatchRefs(data, cupProgressDebug);
-      if (cupProgressDebug && debugLines.length > 0) {
-        for (const line of debugLines) {
-          console.log(line);
-        }
-      }
-      const cupRefs = dedupeCupProgressRefs(cupRefsRaw);
-      if (cupProgressDebug) {
-        console.log(`[CupProgress] refs deduped: ${cupRefs.length} (raw ${cupRefsRaw.length}), entering roundsMap`);
-      }
-
-      if (cupRefs.length === 0 && competitionId !== "1198") {
-        console.log("[CupProgress] No match nodes discovered in Goalserve response, returning empty rounds");
-        return res.json({ competitionId, rounds: [] });
-      }
-
-      if (cupRefs.length === 0 && competitionId === "1198") {
-        console.log("[CupProgress] No Goalserve match nodes for FA Cup; continuing with empty feed map (DB fallback may apply)");
-      }
-
-      for (const { m, defaultRound } of cupRefs) {
-        const matchRound = m?.["@round_name"] ?? m?.round ?? defaultRound;
-        parseMatch(m, String(matchRound));
-      }
-
-      // FA Cup only: supplement missing late rounds from trusted Goalserve date-window lookups.
-      const normalizeSeasonKey = (s: string | undefined): string => {
-        if (!s) return "";
-        const m = s.match(/^(\d{4})[\/\-](\d{2,4})$/);
-        if (!m) return s;
-        const y1 = m[1];
-        let y2 = m[2];
-        if (y2.length === 2) y2 = `${y1.slice(0, 2)}${y2}`;
-        return `${y1}-${y2}`;
+      // Helper to get matches as array
+      const toArray = (item: any) => {
+        if (!item) return [];
+        return Array.isArray(item) ? item : [item];
       };
-      const isFaCup = competitionId === "1198";
-      const isFaCupTargetSeason = normalizeSeasonKey(season) === "2025-2026";
-      const faCupSupplementMap = new Map<string, CupMatch[]>();
-      if (isFaCup && isFaCupTargetSeason) {
-        const windows = [
-          { round: "Fifth Round", start: "28.02.2026", end: "02.03.2026", max: 8 },
-          { round: "Quarter-finals", start: "28.03.2026", end: "29.03.2026", max: 4 },
-          { round: "Semi-finals", start: "25.04.2026", end: "26.04.2026", max: 2 },
-          { round: "Final", start: "16.05.2026", end: "16.05.2026", max: 1 },
-        ] as const;
 
-        for (const w of windows) {
-          const dateEndpoint = `soccerfixtures/leagueid/1198?season=${encodeURIComponent(season || "2025/2026")}&date_start=${encodeURIComponent(w.start)}&date_end=${encodeURIComponent(w.end)}`;
-          if (cupProgressDebug) {
-            console.log(`[CupProgress][FA Cup] date-window request round=${w.round} endpoint=${dateEndpoint}`);
-          }
-          try {
-            const dateData = await goalserveFetch(dateEndpoint);
-            const { refs: rawRefs } = collectCupProgressMatchRefs(dateData, false);
-            const refs = dedupeCupProgressRefs(rawRefs);
+      for (const tournament of tournaments) {
+        const stages = toArray(tournament.stage);
 
-            let valid = 0;
-            const staticIds: string[] = [];
-            for (const { m } of refs) {
-              const localTeam = m?.localteam ?? null;
-              const visitorTeam = m?.visitorteam ?? null;
-              const matchDate = m?.["@date"] ?? m?.date ?? m?.["@formatted_date"] ?? m?.formatted_date ?? null;
-              const stableId =
-                String(
-                  m?.["@static_id"] ??
-                  m?.static_id ??
-                  m?.["@_static_id"] ??
-                  m?.["@id"] ??
-                  m?.["@_id"] ??
-                  m?.id ??
-                  ""
-                ).trim();
-              // Trust only concrete fixture-like rows from date windows.
-              if (!localTeam || !visitorTeam || !matchDate) continue;
-              parseMatch(m, w.round, faCupSupplementMap);
-              valid++;
-              if (stableId) staticIds.push(stableId);
+        for (const stage of stages) {
+          const stageName = stage["@name"] || stage.name || "";
+          
+          // Shape A: stage.week[].match[] (some cup feeds use "week" for rounds)
+          const weeks = toArray(stage.week);
+          for (const week of weeks) {
+            const roundName = week["@name"] || week.name || week["@round_name"] || stageName || "Unknown Round";
+            const matches = toArray(week.match);
+            for (const m of matches) {
+              // Use match-level round info if available, else use week name
+              const matchRound = m["@round_name"] || m.round || roundName;
+              parseMatch(m, matchRound);
             }
+          }
 
-            if (cupProgressDebug) {
-              console.log(
-                `[CupProgress][FA Cup] date-window result round=${w.round} valid_matches=${valid} static_ids=${JSON.stringify(staticIds.slice(0, 20))}`
-              );
+          // Shape B: stage.round[].match[] (some cups use "round")
+          const rounds = toArray(stage.round);
+          for (const round of rounds) {
+            const roundName = round["@name"] || round.name || stageName || "Unknown Round";
+            const matches = toArray(round.match);
+            for (const m of matches) {
+              parseMatch(m, roundName);
             }
-          } catch (dateErr) {
-            console.warn(`[CupProgress][FA Cup] date-window fetch failed for ${w.round}:`, dateErr);
           }
-        }
 
-        // Dedupe and cap each supplemented round by stable id -> match id -> date+teams.
-        for (const w of windows) {
-          const list = faCupSupplementMap.get(w.round) ?? [];
-          const seen = new Set<string>();
-          const deduped: CupMatch[] = [];
-          for (const m of list) {
-            const stable = String(m.goalserveStaticId ?? "").trim();
-            const matchId = String(m.id ?? "").trim();
-            const key = stable
-              ? `static:${stable}`
-              : matchId
-                ? `match:${matchId}`
-                : `fallback:${m.kickoffDate ?? ""}:${m.home?.name ?? ""}:${m.away?.name ?? ""}`.toLowerCase();
-            if (seen.has(key)) continue;
-            seen.add(key);
-            deduped.push(m);
+          // Shape C: stage.match[] (matches directly under stage)
+          if (stage.match && !weeks.length && !rounds.length) {
+            const matches = toArray(stage.match);
+            for (const m of matches) {
+              const roundName = m["@round_name"] || m.round || stageName || "Unknown Round";
+              parseMatch(m, roundName);
+            }
           }
-          deduped.sort((a, b) => {
-            if (!a.kickoff && !b.kickoff) return 0;
-            if (!a.kickoff) return 1;
-            if (!b.kickoff) return -1;
-            return b.kickoff.localeCompare(a.kickoff);
-          });
-          const capped = deduped.slice(0, w.max);
-          if (cupProgressDebug) {
-            console.log(
-              `[CupProgress][FA Cup] supplemental round=${w.round} deduped=${deduped.length} capped=${capped.length}`
-            );
-          }
-          faCupSupplementMap.set(w.round, capped);
         }
       }
 
@@ -5793,56 +4189,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
                     ? EFL_CUP_CANONICAL_ROUNDS 
                     : FA_CUP_CANONICAL_ROUNDS;
 
-      // FA Cup normalizer: canonical name, or "Unknown: {raw}" so fixtures are not silently dropped
+      // FA Cup normalizer: returns canonical name or null (discard if null)
       const normalizeToCanonicalRound_FA_CUP = (name: string): string | null => {
         const lower = name.toLowerCase().trim();
-        const squashed = lower.replace(/\s+/g, "");
-
+        
         // Map Goalserve fractional notation to proper round names
         if (lower === "1/128-finals") return "First Round";
         if (lower === "1/64-finals") return "Second Round";
         if (lower === "1/32-finals") return "Third Round";
         if (lower === "1/16-finals") return "Fourth Round";
         if (lower === "1/8-finals") return "Fifth Round";
-
-        // Later knockout fractional labels (Goalserve often uses these instead of spelled-out rounds)
-        if (
-          lower === "1/4-finals" ||
-          lower === "1/4 finals" ||
-          squashed === "1/4-finals" ||
-          squashed === "1/4finals"
-        ) {
-          return "Quarter-finals";
-        }
-        if (
-          lower === "1/2-finals" ||
-          lower === "1/2 finals" ||
-          squashed === "1/2-finals" ||
-          squashed === "1/2finals"
-        ) {
-          return "Semi-finals";
-        }
-
-        // Abbreviations and spaced variants
-        if (
-          lower === "qf" ||
-          lower === "quarter-finals" ||
-          lower === "quarter finals" ||
-          lower === "quarter-final" ||
-          lower === "quarter final"
-        ) {
-          return "Quarter-finals";
-        }
-        if (
-          lower === "sf" ||
-          lower === "semi-finals" ||
-          lower === "semi finals" ||
-          lower === "semi-final" ||
-          lower === "semi final"
-        ) {
-          return "Semi-finals";
-        }
-
+        
         // Map quarter/semi/final variations
         if (lower.includes("quarter") && lower.includes("final") && !lower.includes("qualifying")) {
           return "Quarter-finals";
@@ -5850,15 +4207,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (lower.includes("semi") && lower.includes("final") && !lower.includes("qualifying")) {
           return "Semi-finals";
         }
-        if (
-          (lower === "final" ||
-            lower === "finals" ||
-            lower === "the final" ||
-            /^finals?$/.test(lower)) &&
-          !lower.includes("qualifying") &&
-          !lower.includes("quarter") &&
-          !lower.includes("semi")
-        ) {
+        if ((lower === "final" || lower === "finals" || lower === "the final") && !lower.includes("qualifying")) {
           return "Final";
         }
         
@@ -5888,10 +4237,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         for (const canonical of Object.keys(FA_CUP_CANONICAL_ROUNDS)) {
           if (lower === canonical.toLowerCase()) return canonical;
         }
-
-        // MVP: preserve unknown rounds (same pattern as EFL Cup) instead of hiding fixtures
-        console.log(`[FA Cup] Unknown round name preserved: "${name}"`);
-        return `Unknown: ${name}`;
+        
+        // No match - discard this round (returns null)
+        return null;
       };
       
       // EFL Cup normalizer: returns canonical name or "Unknown: {name}" for safety
@@ -6327,16 +4675,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const canonicalEntries = Array.from(canonicalRoundsMap.entries());
       for (const [canonicalName, matchMap] of canonicalEntries) {
         const matchList: CupMatch[] = Array.from(matchMap.values());
-
-        // FA Cup MVP: hide qualifying / preliminary rounds (proper competition from First Round onward only)
-        if (competitionId === "1198" && shouldExcludeFaCupQualifyingRound(canonicalName)) {
-          if (cupProgressDebug) {
-            console.log(
-              `[CupProgress] FA Cup excluded qualifying/preliminary round: "${canonicalName}" (${matchList.length} matches)`
-            );
-          }
-          continue;
-        }
         
         // EFL Cup specific: drop unknown rounds containing qualifying/preliminary keywords
         if (isEflCup && canonicalName.startsWith("Unknown: ")) {
@@ -6402,70 +4740,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Sort rounds by order (early rounds first)
       cupRounds.sort((a, b) => a.order - b.order);
 
-      let roundsOut = cupRounds;
-
-      if (isFaCup && isFaCupTargetSeason) {
-        const targetRounds = new Set(["Fifth Round", "Quarter-finals", "Semi-finals", "Final"]);
-        const preserved = cupRounds.filter((r) => !targetRounds.has(r.name));
-        const supplemented: CupRound[] = [];
-        for (const [name, list] of faCupSupplementMap.entries()) {
-          if (list.length === 0) continue;
-          supplemented.push({
-            name,
-            order: FA_CUP_CANONICAL_ROUNDS[name] ?? 99,
-            matches: list,
-            status: computeCupRoundStatus(list),
-          });
-        }
-        roundsOut = [...preserved, ...supplemented].sort((a, b) => a.order - b.order);
-        if (cupProgressDebug) {
-          console.log(
-            `[CupProgress][FA Cup] final round counts → ${roundsOut.map((r) => `${r.name}:${r.matches.length}`).join(", ")}`
-          );
-        }
-      }
-
-      // FA Cup only: diagnostics + DB fallback when feed lacks Fifth Round+ but DB has later knockout rows
-      if (competitionId === "1198") {
-        let dbRoundCounts: Awaited<ReturnType<typeof getCupDbRoundCounts>> = [];
-        try {
-          dbRoundCounts = await getCupDbRoundCounts(competitionId, season);
-        } catch (dbErr) {
-          console.warn("[CupProgress] FA Cup DB round-count query failed:", dbErr);
-        }
-
-        const feedSummary = cupRounds.map((r) => `${r.name}:${r.matches.length}`).join(", ");
-        if (cupProgressDebug) {
-          console.log(`[CupProgress] FA Cup feed round counts → ${feedSummary}`);
-          console.log(`[CupProgress] FA Cup DB round counts → ${JSON.stringify(dbRoundCounts)}`);
-        }
-
-        const feedMissingLater = faCupFeedMissingLaterKnockoutRounds(cupRounds);
-        const dbHasLater = faCupDbCountsIncludeLaterKnockout(dbRoundCounts);
-
-        if (cupProgressDebug) {
-          console.log(
-            `[CupProgress] FA Cup feedMissingLaterKnockout=${feedMissingLater} dbHasLaterKnockout=${dbHasLater}`
-          );
-        }
-
-        // TODO(post-MVP): FA Cup DB fallback merge intentionally disabled.
-        // We observed qualifying/preliminary fixtures stored with misleading goalserve_round labels
-        // such as "Semi-finals"/"Final". Round label alone is not trustworthy enough to build
-        // FA Cup proper knockout rounds from DB rows. A safe future fallback should gate on a
-        // trusted stage identifier/source path/date boundary, not just goalserve_round text.
-        if (cupProgressDebug) {
-          if (feedMissingLater && dbHasLater) {
-            console.log(
-              "[CupProgress] FA Cup DB fallback disabled intentionally; response uses trusted Goalserve feed rounds only"
-            );
-          } else {
-            console.log("[CupProgress] FA Cup DB fallback disabled; conditions not met or DB has no later-round signal");
-          }
-        }
-      }
-
-      res.json({ competitionId, rounds: roundsOut });
+      res.json({ competitionId, rounds: cupRounds });
     } catch (error) {
       console.error("Error fetching cup progress:", error);
       res.status(500).json({ error: "Failed to fetch cup progress" });
@@ -7311,26 +5586,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     return result;
   };
-
-  const filterExtractedEntitiesToMvpBoundary = async (
-    mentions: ExtractedEntities,
-  ): Promise<ExtractedEntities> => {
-    const boundary = new MvpGraphBoundary();
-    const [allowedTeamIds, allowedPlayerIds, allowedManagerIds, allowedCompetitionIds] =
-      await Promise.all([
-        boundary.filterTeamIds(mentions.teams.map((row) => row.id)),
-        boundary.filterPlayerIds(mentions.players.map((row) => row.id)),
-        boundary.filterManagerIds(mentions.managers.map((row) => row.id)),
-        boundary.filterCompetitionIds(mentions.competitions.map((row) => row.id)),
-      ]);
-
-    return {
-      teams: mentions.teams.filter((row) => allowedTeamIds.has(row.id)),
-      players: mentions.players.filter((row) => allowedPlayerIds.has(row.id)),
-      managers: mentions.managers.filter((row) => allowedManagerIds.has(row.id)),
-      competitions: mentions.competitions.filter((row) => allowedCompetitionIds.has(row.id)),
-    };
-  };
   
   const extractEntityMentions = async (
     text: string,
@@ -7640,9 +5895,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Extract entity mentions with salience scoring
-      const mentions = await filterExtractedEntitiesToMvpBoundary(
-        await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, tags),
-      );
+      const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, tags);
       
       // Clear existing entity links
       await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
@@ -7854,9 +6107,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Extract entity mentions with salience scoring
-      const mentions = await filterExtractedEntitiesToMvpBoundary(
-        await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags),
-      );
+      const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
       
       // Clear and re-link entities with provenance
       await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
@@ -8226,9 +6477,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             }
             
             // Extract and link entities with salience scoring
-            const mentions = await filterExtractedEntitiesToMvpBoundary(
-              await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags),
-            );
+            const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
             
             await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
             await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -8482,9 +6731,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     
     // Extract and link entities with salience scoring
-    const mentions = await filterExtractedEntitiesToMvpBoundary(
-      await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags),
-    );
+    const mentions = await extractEntityMentionsWithSalience(title, excerpt, bodyHtml, ghostTags);
     
     await db.delete(articleTeams).where(eq(articleTeams.articleId, articleId));
     await db.delete(articlePlayers).where(eq(articlePlayers.articleId, articleId));
@@ -8721,202 +6968,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .where(eq(articles.id, article.id));
       
       // Fetch linked entities
-      let linkedTeams = await db
+      const linkedTeams = await db
         .select({ id: teams.id, name: teams.name, slug: teams.slug, logoUrl: teams.logoUrl })
         .from(articleTeams)
         .innerJoin(teams, eq(articleTeams.teamId, teams.id))
         .where(eq(articleTeams.articleId, article.id));
       
-      let linkedPlayers = await db
+      const linkedPlayers = await db
         .select({ id: players.id, name: players.name, slug: players.slug, imageUrl: players.imageUrl, position: players.position })
         .from(articlePlayers)
         .innerJoin(players, eq(articlePlayers.playerId, players.id))
         .where(eq(articlePlayers.articleId, article.id));
       
-      let linkedManagers = await db
+      const linkedManagers = await db
         .select({ id: managers.id, name: managers.name, slug: managers.slug })
         .from(articleManagers)
         .innerJoin(managers, eq(articleManagers.managerId, managers.id))
         .where(eq(articleManagers.articleId, article.id));
       
-      let linkedCompetitions = await db
+      const linkedCompetitions = await db
         .select({ id: competitions.id, name: competitions.name, slug: competitions.slug })
         .from(articleCompetitions)
         .innerJoin(competitions, eq(articleCompetitions.competitionId, competitions.id))
         .where(eq(articleCompetitions.articleId, article.id));
-      const boundary = new MvpGraphBoundary();
-      [linkedTeams, linkedPlayers, linkedManagers, linkedCompetitions] = await Promise.all([
-        boundary.filterRowsById(linkedTeams, "team"),
-        boundary.filterRowsById(linkedPlayers, "player"),
-        boundary.filterRowsById(linkedManagers, "manager"),
-        boundary.filterRowsById(linkedCompetitions, "competition"),
-      ]);
-      const presenter = new EntityPresentationResolver();
-      const [teamPresentationMap, competitionPresentationMap] = await Promise.all([
-        presenter.resolveTeams(linkedTeams.map((row) => row.id), { source: article.source }),
-        presenter.resolveCompetitions(linkedCompetitions.map((row) => row.id), { source: article.source }),
-      ]);
-      linkedTeams = linkedTeams.map((team) => {
-        const presentation = teamPresentationMap.get(team.id);
-        return {
-          ...team,
-          name: presentation?.name || team.name,
-          slug: presentation?.slug || team.slug,
-          logoUrl: presentation?.logoUrl ?? team.logoUrl,
-        };
-      });
-      linkedCompetitions = linkedCompetitions.map((competition) => {
-        const presentation = competitionPresentationMap.get(competition.id);
-        return {
-          ...competition,
-          name: presentation?.name || competition.name,
-          slug: presentation?.slug || competition.slug,
-        };
-      });
-
-      const inlineSourceEntities = [
-        ...linkedCompetitions.map((c) => ({ id: c.id, type: "competition" as const, name: c.name })),
-        ...linkedTeams.map((t) => ({ id: t.id, type: "team" as const, name: t.name })),
-        ...linkedPlayers.map((p) => ({ id: p.id, type: "player" as const, name: p.name })),
-        ...linkedManagers.map((m) => ({ id: m.id, type: "manager" as const, name: m.name })),
-      ];
-      const byType = {
-        team: inlineSourceEntities.filter((e) => e.type === "team").map((e) => e.id),
-        competition: inlineSourceEntities.filter((e) => e.type === "competition").map((e) => e.id),
-        player: inlineSourceEntities.filter((e) => e.type === "player").map((e) => e.id),
-        manager: inlineSourceEntities.filter((e) => e.type === "manager").map((e) => e.id),
-      };
-
-      const aliasQueries: Promise<Array<{
-        entityId: string;
-        entityType: string;
-        paTagName: string;
-        displayName: string | null;
-        paTagNameNormalized: string;
-      }>>[] = [];
-      if (byType.team.length > 0) {
-        aliasQueries.push(
-          db.select({
-            entityId: paEntityAliasMap.entityId,
-            entityType: paEntityAliasMap.entityType,
-            paTagName: paEntityAliasMap.paTagName,
-            displayName: paEntityAliasMap.displayName,
-            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
-          })
-            .from(paEntityAliasMap)
-            .where(and(
-              eq(paEntityAliasMap.source, "pa_media"),
-              inArray(paEntityAliasMap.entityType, ["team", "teams"]),
-              inArray(paEntityAliasMap.entityId, byType.team),
-            )),
-        );
-      }
-      if (byType.competition.length > 0) {
-        aliasQueries.push(
-          db.select({
-            entityId: paEntityAliasMap.entityId,
-            entityType: paEntityAliasMap.entityType,
-            paTagName: paEntityAliasMap.paTagName,
-            displayName: paEntityAliasMap.displayName,
-            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
-          })
-            .from(paEntityAliasMap)
-            .where(and(
-              eq(paEntityAliasMap.source, "pa_media"),
-              inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
-              inArray(paEntityAliasMap.entityId, byType.competition),
-            )),
-        );
-      }
-      if (byType.player.length > 0) {
-        aliasQueries.push(
-          db.select({
-            entityId: paEntityAliasMap.entityId,
-            entityType: paEntityAliasMap.entityType,
-            paTagName: paEntityAliasMap.paTagName,
-            displayName: paEntityAliasMap.displayName,
-            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
-          })
-            .from(paEntityAliasMap)
-            .where(and(
-              eq(paEntityAliasMap.source, "pa_media"),
-              inArray(paEntityAliasMap.entityType, ["player", "players"]),
-              inArray(paEntityAliasMap.entityId, byType.player),
-            )),
-        );
-      }
-      if (byType.manager.length > 0) {
-        aliasQueries.push(
-          db.select({
-            entityId: paEntityAliasMap.entityId,
-            entityType: paEntityAliasMap.entityType,
-            paTagName: paEntityAliasMap.paTagName,
-            displayName: paEntityAliasMap.displayName,
-            paTagNameNormalized: paEntityAliasMap.paTagNameNormalized,
-          })
-            .from(paEntityAliasMap)
-            .where(and(
-              eq(paEntityAliasMap.source, "pa_media"),
-              inArray(paEntityAliasMap.entityType, ["manager", "managers"]),
-              inArray(paEntityAliasMap.entityId, byType.manager),
-            )),
-        );
-      }
-      const aliasRowsByType = await Promise.all(aliasQueries);
-      const aliasCandidates = new Map<string, string[]>();
-      for (const rows of aliasRowsByType) {
-        for (const row of rows) {
-          const normalizedType =
-            row.entityType === "teams" ? "team"
-            : row.entityType === "competitions" ? "competition"
-            : row.entityType === "players" ? "player"
-            : row.entityType === "managers" ? "manager"
-            : row.entityType;
-          const key = `${normalizedType}:${row.entityId}`;
-          if (!aliasCandidates.has(key)) aliasCandidates.set(key, []);
-          const bucket = aliasCandidates.get(key)!;
-          if (row.displayName) bucket.push(row.displayName);
-          if (row.paTagName) bucket.push(row.paTagName);
-          if (row.paTagNameNormalized) bucket.push(row.paTagNameNormalized);
-        }
-      }
-      for (const e of inlineSourceEntities) {
-        const key = `${e.type}:${e.id}`;
-        if (!aliasCandidates.has(key)) aliasCandidates.set(key, []);
-        aliasCandidates.get(key)!.push(e.name);
-      }
-
-      const inlineEntities: InlineLinkEntity[] = [
-        ...linkedCompetitions.map((c) => ({
-          id: c.id,
-          type: "competition" as const,
-          name: c.name,
-          href: `/competitions/${c.slug}`,
-          candidates: aliasCandidates.get(`competition:${c.id}`) ?? [c.name],
-        })),
-        ...linkedTeams.map((t) => ({
-          id: t.id,
-          type: "team" as const,
-          name: t.name,
-          href: `/teams/${t.slug}`,
-          candidates: aliasCandidates.get(`team:${t.id}`) ?? [t.name],
-        })),
-        ...linkedPlayers.map((p) => ({
-          id: p.id,
-          type: "player" as const,
-          name: p.name,
-          href: `/players/${p.slug}`,
-          candidates: aliasCandidates.get(`player:${p.id}`) ?? [p.name],
-        })),
-        ...linkedManagers.map((m) => ({
-          id: m.id,
-          type: "manager" as const,
-          name: m.name,
-          href: `/managers/${m.slug}`,
-          candidates: aliasCandidates.get(`manager:${m.id}`) ?? [m.name],
-        })),
-      ];
-      const linkedContent = linkArticleHtmlFirstMentions(article.content, inlineEntities);
       
       // Find more-like-this articles (share entities or same competition)
       let moreLikeThis: any[] = [];
@@ -8972,7 +7046,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({
         article: {
           ...article,
-          content: linkedContent,
           viewCount: (article.viewCount || 0) + 1,
         },
         entities: {
@@ -8989,123 +7062,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ========== PUBLIC ENTITY REDIRECTS (must run before SPA fallback) ==========
-  app.get("/teams/:slug", async (req, res, next) => {
-    try {
-      const requestedSlug = req.params.slug;
-      const canonicalSlug = await resolveCanonicalTeamPublicSlug(requestedSlug);
-      if (canonicalSlug && canonicalSlug !== requestedSlug) {
-        return res.redirect(301, `/teams/${canonicalSlug}`);
-      }
-      return next();
-    } catch (error) {
-      console.error("[canonical-team-redirect] Error:", error);
-      return next();
-    }
-  });
-
-  app.get("/competitions/:slug", async (req, res, next) => {
-    try {
-      const requestedSlug = req.params.slug;
-      const canonicalSlug = await resolveCanonicalCompetitionSlug(requestedSlug);
-      if (canonicalSlug && canonicalSlug !== requestedSlug) {
-        return res.redirect(301, `/competitions/${canonicalSlug}`);
-      }
-      return next();
-    } catch (error) {
-      console.error("[canonical-competition-redirect] Error:", error);
-      return next();
-    }
-  });
-
-  app.get("/tag/:slug", async (req, res) => {
-    try {
-      if (!ENABLE_TAG_REDIRECTS) {
-        return res.status(404).json({ error: "Not found" });
-      }
-
-      const normalizedTag = normalizePaTagForAliasLookup(req.params.slug ?? "");
-      if (!normalizedTag) {
-        return res.status(404).json({ error: "Not found" });
-      }
-
-      const rows = await db
-        .select({
-          entityType: paEntityAliasMap.entityType,
-          entityId: paEntityAliasMap.entityId,
-          publicSlug: paEntityAliasMap.publicSlug,
-        })
-        .from(paEntityAliasMap)
-        .where(
-          and(
-            eq(paEntityAliasMap.source, "pa_media"),
-            eq(paEntityAliasMap.paTagNameNormalized, normalizedTag),
-          ),
-        )
-        .limit(10);
-
-      const distinctTargets = Array.from(
-        new Map(
-          rows.map((row) => [`${row.entityType}:${row.entityId}`, row]),
-        ).values(),
-      );
-
-      if (distinctTargets.length !== 1) {
-        return res.status(404).json({ error: "Not found" });
-      }
-
-      const target = distinctTargets[0];
-      const normalizedType = target.entityType.toLowerCase();
-
-      if (normalizedType === "team" || normalizedType === "teams") {
-        const [team] = await db
-          .select({ slug: teams.slug })
-          .from(teams)
-          .where(eq(teams.id, target.entityId))
-          .limit(1);
-        const slug = target.publicSlug || team?.slug;
-        if (!slug) return res.status(404).json({ error: "Not found" });
-        return res.redirect(302, `/teams/${slug}`);
-      }
-
-      if (normalizedType === "competition" || normalizedType === "competitions") {
-        const [competition] = await db
-          .select({ canonicalSlug: competitions.canonicalSlug, slug: competitions.slug })
-          .from(competitions)
-          .where(eq(competitions.id, target.entityId))
-          .limit(1);
-        const slug = competition?.canonicalSlug || target.publicSlug || competition?.slug;
-        if (!slug) return res.status(404).json({ error: "Not found" });
-        return res.redirect(302, `/competitions/${slug}`);
-      }
-
-      if (normalizedType === "player" || normalizedType === "players") {
-        const [player] = await db
-          .select({ slug: players.slug })
-          .from(players)
-          .where(eq(players.id, target.entityId))
-          .limit(1);
-        if (!player?.slug) return res.status(404).json({ error: "Not found" });
-        return res.redirect(302, `/players/${player.slug}`);
-      }
-
-      if (normalizedType === "manager" || normalizedType === "managers") {
-        const [manager] = await db
-          .select({ slug: managers.slug })
-          .from(managers)
-          .where(eq(managers.id, target.entityId))
-          .limit(1);
-        if (!manager?.slug) return res.status(404).json({ error: "Not found" });
-        return res.redirect(302, `/managers/${manager.slug}`);
-      }
-
-      return res.status(404).json({ error: "Not found" });
-    } catch (error) {
-      console.error("[tag-redirect]", error);
-      return res.status(500).json({ error: "Failed to resolve tag redirect" });
-    }
-  });
-
   // State for PA Media ingest runner
   let paRunnerRunning = false;
   let lastPaRunnerRunAt: string | null = null;
@@ -9115,7 +7071,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== PA MEDIA INGEST RUNNER (scheduled) ==========
   const PAMEDIA_INGEST_RUNNER_ENABLED = process.env.PAMEDIA_INGEST_RUNNER_ENABLED === "true";
   const PAMEDIA_INGEST_RUNNER_INTERVAL_MS = Math.max(60000, parseInt(process.env.PAMEDIA_INGEST_RUNNER_INTERVAL_MS ?? "900000", 10) || 900000);
-  setPamediaRunnerConfig(PAMEDIA_INGEST_RUNNER_ENABLED, PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
 
   const scheduledPaMediaIngest = async () => {
     if (!PAMEDIA_INGEST_RUNNER_ENABLED) return;
@@ -9127,32 +7082,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     paRunnerRunning = true;
     console.log("[pamedia-runner] Started");
-    markPamediaRunStarted();
     try {
       const result = await runPaMediaIngest();
       lastPaRunnerRunAt = new Date().toISOString();
-      if (!result.ok) {
-        lastPaRunnerError = result.error ?? "PA Media ingest failed";
-        lastPaRunnerSummary = result as Record<string, unknown>;
-        markPamediaRunFailed(lastPaRunnerError);
-        console.warn("[pamedia-runner] Failed:", lastPaRunnerError);
-        return;
-      }
-
       lastPaRunnerSummary = result as Record<string, unknown>;
       lastPaRunnerError = null;
-      markPamediaRunCompleted({
-        fetched: result.itemsFetched ?? null,
-        processed: result.processed ?? null,
-        skipped: result.skipped ?? null,
-        imagesUploaded: result.imagesUploaded ?? null,
-        inlineRewritten: result.inlineRewritten ?? null,
-        inlineSkippedDueToCap: result.inlineSkippedDueToCap ?? null,
-        timeMs: result.timeMs ?? null,
-        stoppedReason: result.stoppedReason ?? null,
-        watermarkTs: result.watermarkTs ?? null,
-        watermarkId: result.watermarkId ?? null,
-      });
       console.log("[pamedia-runner] Completed", result.processed, "processed", result.inlineRewritten ?? 0, "inline rewritten");
       if (!PAMEDIA_BASIC_MODE) {
         setImmediate(() =>
@@ -9166,7 +7100,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (err: unknown) {
       lastPaRunnerRunAt = new Date().toISOString();
       lastPaRunnerError = err instanceof Error ? err.message : String(err);
-      markPamediaRunFailed(err);
       console.warn("[pamedia-runner] Failed:", lastPaRunnerError);
     } finally {
       paRunnerRunning = false;
@@ -9174,7 +7107,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
 
   if (PAMEDIA_INGEST_RUNNER_ENABLED) {
-    markPamediaEnabled(PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
     setInterval(scheduledPaMediaIngest, PAMEDIA_INGEST_RUNNER_INTERVAL_MS);
     console.log(`[pamedia-runner] Enabled interval=${PAMEDIA_INGEST_RUNNER_INTERVAL_MS}ms`);
   }
