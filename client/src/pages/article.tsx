@@ -11,7 +11,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { PillsRow } from "@/components/pills-row";
-import { NewsletterForm } from "@/components/newsletter-form";
 import { ArticleMetaBar } from "@/components/article-meta-bar";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -397,14 +396,6 @@ function RightRail({
             </CardContent>
           </Card>
         )}
-
-        <Card data-testid="card-newsletter-rail">
-          <CardContent className="p-4">
-            <h3 className="font-semibold mb-2">Stay in the loop</h3>
-            <p className="text-sm text-muted-foreground mb-3">Get breaking news delivered to your inbox.</p>
-            <NewsletterForm compact />
-          </CardContent>
-        </Card>
 
         {relatedArticles.length > 0 && (
           <Card data-testid="card-more-like-this">
@@ -803,10 +794,6 @@ export default function ArticlePage() {
                 <PillsRow pills={footerPills} max={footerPills.length} constrainHeight={false} />
               </section>
             )}
-
-            <section className="mb-12 lg:hidden">
-              <NewsletterForm />
-            </section>
 
             {articleTeams.length > 0 && !followedTeamIds.includes(articleTeams[0].id) && isAuthenticated && (
               <section className="mb-12 lg:hidden">

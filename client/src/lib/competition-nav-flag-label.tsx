@@ -26,6 +26,15 @@ const FLAG_COUNTRY_BY_SLUG: Record<string, string> = {
   "coupe-de-france": "France",
 };
 
+const DISPLAY_LABEL_OVERRIDE_BY_SLUG: Record<string, string> = {
+  "scottish-premiership": "Premiership",
+  "scottish-championship": "Championship",
+  "scottish-league-one": "League One",
+  "scottish-league-two": "League Two",
+  "scottish-cup": "Cup",
+  "scottish-league-cup": "League Cup",
+};
+
 export function getCompetitionFlagUrlBySlug(slug: string): string | null {
   const country = FLAG_COUNTRY_BY_SLUG[slug];
   return country ? getCountryFlagUrl(country) : null;
@@ -39,6 +48,8 @@ export const CompetitionFlagLabel = memo(function CompetitionFlagLabel({
   label: ReactNode;
 }) {
   const flagUrl = getCompetitionFlagUrlBySlug(slug);
+  const displayLabel =
+    typeof label === "string" ? (DISPLAY_LABEL_OVERRIDE_BY_SLUG[slug] ?? label) : label;
 
   return (
     <span className="inline-flex items-center gap-2">
@@ -50,7 +61,7 @@ export const CompetitionFlagLabel = memo(function CompetitionFlagLabel({
           loading="lazy"
         />
       ) : null}
-      <span>{label}</span>
+      <span>{displayLabel}</span>
     </span>
   );
 });

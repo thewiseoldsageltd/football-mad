@@ -312,11 +312,11 @@ export default function MatchesPage() {
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-3 mb-6">
-          <Calendar className="h-8 w-8 text-primary" />
+        <div className="flex items-center gap-3 mb-8">
+          <Calendar className="h-8 w-8 text-primary shrink-0" aria-hidden="true" />
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold" data-testid="heading-matches">Matches</h1>
-            <p className="text-muted-foreground text-sm md:text-base">
+            <h1 className="text-4xl md:text-5xl font-bold" data-testid="heading-matches">Matches</h1>
+            <p className="text-muted-foreground text-lg">
               Football fixtures and results
             </p>
           </div>
