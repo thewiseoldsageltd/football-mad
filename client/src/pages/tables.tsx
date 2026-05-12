@@ -13,6 +13,7 @@ import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
 import { leagueCompetitions, cupCompetitions, europeCompetitions } from "@/data/tables-mock";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
+import { CompetitionFlagLabel } from "@/lib/competition-nav-flag-label";
 
 // Season slug helpers: "2025/26" <-> "2025-26"
 function seasonApiToSlug(apiSeason: string): string {
@@ -212,7 +213,12 @@ export default function TablesPage() {
   const selectedCompetition =
     topTab === "leagues" ? leagueSlug : topTab === "cups" ? cupSlug : europeSlug;
   const visibleCompetitions = useMemo(() => {
-    if (topTab === "leagues") return leagueCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
+    if (topTab === "leagues") {
+      return leagueCompetitions.map((comp) => ({
+        value: comp.id,
+        label: <CompetitionFlagLabel slug={comp.id} label={comp.name} />,
+      }));
+    }
     if (topTab === "cups") return cupCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
     return europeCompetitions.map((comp) => ({ value: comp.id, label: comp.name }));
   }, [topTab]);

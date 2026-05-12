@@ -20,6 +20,7 @@ import { type Team, type NewsFiltersResponse } from "@shared/schema";
 import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competition-nav-groups";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { sortCompetitionItemsLikeTables } from "@/lib/competition-nav-order";
+import { CompetitionFlagLabel } from "@/lib/competition-nav-flag-label";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
 interface NavCompetition {
@@ -408,6 +409,20 @@ export default function NewsPage() {
     return selected ? [...baseTabs, selected] : baseTabs;
   }, [allCompetitionTabs, groupedCompetitionTabs, navGroup, filters.comp]);
 
+  const visibleCompetitionNavItems = useMemo(
+    () =>
+      visibleCompetitionTabs.map((tab) => ({
+        value: tab.value,
+        label:
+          tab.value === "all" ? (
+            tab.label
+          ) : (
+            <CompetitionFlagLabel slug={tab.value} label={tab.label} />
+          ),
+      })),
+    [visibleCompetitionTabs],
+  );
+
   const competitionTabsForRender = useMemo(() => {
     if (filters.comp === "all") return allCompetitionTabs;
     if (allCompetitionTabs.some((tab) => tab.value === filters.comp)) return allCompetitionTabs;
@@ -480,7 +495,7 @@ export default function NewsPage() {
             includeAllGroupTab
             selectedCompetition={filters.comp}
             onCompetitionChange={handleCompetitionChange}
-            competitions={visibleCompetitionTabs}
+            competitions={visibleCompetitionNavItems}
             rightDesktopSlot={(
               <Button 
                 variant="outline" 
