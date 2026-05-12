@@ -56,7 +56,7 @@ function useSEO() {
 function HeroStory({ article }: { article: Article }) {
   return (
     <section className="mb-8" data-testid="section-hero">
-      <ArticleCard article={article} featured />
+      <ArticleCard article={article} featured featuredHeadlineOnly />
     </section>
   );
 }

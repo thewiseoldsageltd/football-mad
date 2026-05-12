@@ -14,6 +14,7 @@ import { buildPillsForCard, type PillSourceArticle } from "@/lib/entity-utils";
 interface ArticleCardProps {
   article: Article;
   featured?: boolean;
+  featuredHeadlineOnly?: boolean;
   teamBadge?: string;
   teamColor?: string;
   teams?: Team[];
@@ -47,7 +48,15 @@ function getCardExcerpt(article: Article): string | null {
   );
 }
 
-export function ArticleCard({ article, featured = false, teamBadge, teamColor, teams, showPills = true }: ArticleCardProps) {
+export function ArticleCard({
+  article,
+  featured = false,
+  featuredHeadlineOnly = false,
+  teamBadge,
+  teamColor,
+  teams,
+  showPills = true,
+}: ArticleCardProps) {
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const viewCount = article.viewCount ?? 0;
   const cardExcerpt = getCardExcerpt(article);
@@ -80,51 +89,55 @@ export function ArticleCard({ article, featured = false, teamBadge, teamColor, t
             </div>
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6">
-            <div className="relative z-20 mb-2">
-              <PillsRow
-                pills={displayPills}
-                max={3}
-                className="mb-2"
-                pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
-                constrainHeight={false}
-              />
-            </div>
-            <h3 className="text-2xl md:text-3xl font-bold text-white mt-2 mb-2 line-clamp-2">
+          <div className={`absolute bottom-0 left-0 right-0 ${featuredHeadlineOnly ? "p-5 md:p-6" : "p-6"}`}>
+            {!featuredHeadlineOnly && (
+              <div className="relative z-20 mb-2">
+                <PillsRow
+                  pills={displayPills}
+                  max={3}
+                  className="mb-2"
+                  pillClassName="bg-white/20 border-white/30 text-white [&_span]:text-white"
+                  constrainHeight={false}
+                />
+              </div>
+            )}
+            <h3 className={`text-white line-clamp-2 ${featuredHeadlineOnly ? "text-2xl md:text-3xl font-bold" : "text-2xl md:text-3xl font-bold mt-2 mb-2"}`}>
               {article.title}
             </h3>
-            {cardExcerpt && (
+            {!featuredHeadlineOnly && cardExcerpt && (
               <p className="text-white/80 text-sm md:text-base line-clamp-2 mb-3">
                 {cardExcerpt}
               </p>
             )}
-            <div className="flex items-center gap-4 text-white/60 text-sm">
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                {formatDistanceToNow(publishedAt, { addSuffix: true })}
-              </span>
-              {viewCount > 0 && (
+            {!featuredHeadlineOnly && (
+              <div className="flex items-center gap-4 text-white/60 text-sm">
                 <span className="flex items-center gap-1">
-                  <Eye className="h-4 w-4" />
-                  {viewCount.toLocaleString()}
+                  <Clock className="h-4 w-4" />
+                  {formatDistanceToNow(publishedAt, { addSuffix: true })}
                 </span>
-              )}
-              {authorLine && authorSlug ? (
-                <span className="relative z-20">
-                  By{" "}
-                  <Link
-                    href={authorProfile(authorSlug)}
-                    className="hover:underline font-medium"
-                    onClick={(e) => e.stopPropagation()}
-                    data-testid="link-card-author"
-                  >
-                    {authorLine}
-                  </Link>
-                </span>
-              ) : authorLine ? (
-                <span>By {authorLine}</span>
-              ) : null}
-            </div>
+                {viewCount > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Eye className="h-4 w-4" />
+                    {viewCount.toLocaleString()}
+                  </span>
+                )}
+                {authorLine && authorSlug ? (
+                  <span className="relative z-20">
+                    By{" "}
+                    <Link
+                      href={authorProfile(authorSlug)}
+                      className="hover:underline font-medium"
+                      onClick={(e) => e.stopPropagation()}
+                      data-testid="link-card-author"
+                    >
+                      {authorLine}
+                    </Link>
+                  </span>
+                ) : authorLine ? (
+                  <span>By {authorLine}</span>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
       </Card>
