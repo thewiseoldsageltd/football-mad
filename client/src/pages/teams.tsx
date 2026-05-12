@@ -11,6 +11,7 @@ import { useLocation, useRoute, useSearch } from "wouter";
 import { normalizeTeamsMvpFilterSlug } from "@shared/teams-mvp";
 import { buildTeamsMvpCompetitionNavItems } from "@/lib/teams-mvp-tab-labels";
 import { teamsIndex, teamsLeagueBrowse } from "@/lib/urls";
+import { usePageSeo } from "@/lib/seo";
 
 type NewsNavTeam = {
   id: string;
@@ -47,6 +48,20 @@ function buildTeamsListUrl(comp: string): string {
   return teamsLeagueBrowse(comp);
 }
 
+const SEO_TEAM_COMPETITION_NAME_BY_SLUG: Record<string, string> = {
+  "premier-league": "Premier League",
+  championship: "Championship",
+  "league-one": "League One",
+  "league-two": "League Two",
+  "national-league": "National League",
+  "scottish-premiership": "Scottish Premiership",
+  "scottish-championship": "Scottish Championship",
+  "la-liga": "La Liga",
+  "serie-a": "Serie A",
+  bundesliga: "Bundesliga",
+  "ligue-1": "Ligue 1",
+};
+
 export default function TeamsPage() {
   const [search, setSearch] = useState("");
   const searchQuery = useSearch();
@@ -82,6 +97,16 @@ export default function TeamsPage() {
     const n = normalizeTeamsMvpFilterSlug(raw);
     return n ?? "all";
   }, [matchLeague, leagueParams?.competitionSlug, searchQuery]);
+
+  const teamsSeoName = selectedComp === "all" ? null : SEO_TEAM_COMPETITION_NAME_BY_SLUG[selectedComp] ?? null;
+  usePageSeo({
+    title: teamsSeoName ? `${teamsSeoName} Teams | Football Mad` : "Teams | Football Mad",
+    description: teamsSeoName
+      ? `Browse clubs from ${teamsSeoName} on Football Mad.`
+      : "Browse clubs from Football Mad's supported domestic leagues.",
+    canonicalPath: selectedComp === "all" ? "/teams" : `/teams/league/${selectedComp}`,
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
 
   const { data: teams, isLoading } = useQuery<Team[]>({
     queryKey: ["/api/teams?teamsPage=1"],

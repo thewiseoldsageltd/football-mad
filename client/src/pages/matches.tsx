@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { getCountryFlagUrl } from "@/lib/flags";
 import { compareCompetitionsByPriority, getCompetitionCountryById, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
+import { usePageSeo } from "@/lib/seo";
 
 interface ApiMatch {
   id: string;
@@ -165,6 +166,13 @@ function formatDateLabel(date: Date, isToday: boolean): string {
 }
 
 export default function MatchesPage() {
+  usePageSeo({
+    title: "Matches | Football Mad",
+    description: "Live scores, fixtures and results from Football Mad's priority competitions.",
+    canonicalPath: "/matches",
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
+
   const [activeTab, setActiveTab] = useState<MatchTab>("all");
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
   const [selectedCompetitionId, setSelectedCompetitionId] = useState("");

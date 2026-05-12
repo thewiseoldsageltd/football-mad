@@ -21,6 +21,7 @@ import { getCompetitionNavGroup, type CompetitionNavGroup } from "@/lib/competit
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { sortCompetitionItemsLikeTables } from "@/lib/competition-nav-order";
 import { CompetitionFlagLabel } from "@/lib/competition-nav-flag-label";
+import { usePageSeo } from "@/lib/seo";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
 interface NavCompetition {
@@ -274,38 +275,6 @@ export default function NewsPage() {
     retry: false,
   });
 
-  useEffect(() => {
-    const fullCanonicalUrl = `${window.location.origin}${canonicalUrl}`;
-    
-    let canonicalLink = document.getElementById("news-page-canonical") as HTMLLinkElement | null;
-    if (!canonicalLink) {
-      canonicalLink = document.createElement("link");
-      canonicalLink.id = "news-page-canonical";
-      canonicalLink.rel = "canonical";
-      document.head.appendChild(canonicalLink);
-    }
-    canonicalLink.href = fullCanonicalUrl;
-    
-    let robotsMeta = document.getElementById("news-page-robots") as HTMLMetaElement | null;
-    
-    if (shouldNoIndex) {
-      if (!robotsMeta) {
-        robotsMeta = document.createElement("meta");
-        robotsMeta.id = "news-page-robots";
-        robotsMeta.name = "robots";
-        document.head.appendChild(robotsMeta);
-      }
-      robotsMeta.content = "noindex,follow";
-    } else if (robotsMeta) {
-      robotsMeta.remove();
-    }
-    
-    return () => {
-      document.getElementById("news-page-canonical")?.remove();
-      document.getElementById("news-page-robots")?.remove();
-    };
-  }, [canonicalUrl, shouldNoIndex]);
-
   const groupedTeams = useMemo(() => {
     if (!newsNav) return [];
     const lc = teamSearch.toLowerCase();
@@ -437,6 +406,23 @@ export default function NewsPage() {
   }, [allCompetitionTabs, filters.comp]);
 
   const currentCompetition = competitionTabsForRender.find((c) => c.value === filters.comp) ?? competitionTabsForRender[0];
+
+  const newsSeoTitle =
+    currentCompetition?.value && currentCompetition.value !== "all"
+      ? `${currentCompetition.label} News | Football Mad`
+      : "News | Football Mad";
+  const newsSeoDescription =
+    currentCompetition?.value && currentCompetition.value !== "all"
+      ? `Latest ${currentCompetition.label} news, analysis and breaking stories from Football Mad.`
+      : "Latest football news, analysis and breaking stories from Football Mad.";
+
+  usePageSeo({
+    title: newsSeoTitle,
+    description: newsSeoDescription,
+    canonicalPath: canonicalUrl,
+    imagePath: "/assets/football-mad-fm-logo.webp",
+    noIndex: shouldNoIndex,
+  });
 
   const handleCompetitionChange = (value: string) => {
     const nextValue = value as CompetitionValue;

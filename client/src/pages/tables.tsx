@@ -14,6 +14,7 @@ import type { TableRow } from "@/data/tables-mock";
 import { leagueCompetitions, cupCompetitions, europeCompetitions } from "@/data/tables-mock";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { CompetitionFlagLabel } from "@/lib/competition-nav-flag-label";
+import { usePageSeo } from "@/lib/seo";
 
 // Season slug helpers: "2025/26" <-> "2025-26"
 function seasonApiToSlug(apiSeason: string): string {
@@ -119,7 +120,7 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
 type TopTab = "leagues" | "cups" | "europe";
 
 export default function TablesPage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const [isCupRoute, cupParams] = useRoute("/tables/cups/:cupSlug/:seasonSlug");
   const [isEuropeRoute, europeParams] = useRoute("/tables/europe/:competitionSlug/:seasonSlug");
@@ -212,6 +213,20 @@ export default function TablesPage() {
   const currentLeagueConfig = getLeagueBySlug(leagueSlug);
   const selectedCompetition =
     topTab === "leagues" ? leagueSlug : topTab === "cups" ? cupSlug : europeSlug;
+  const selectedCompetitionLabel =
+    topTab === "leagues"
+      ? currentLeagueConfig?.name ?? "Tables"
+      : topTab === "cups"
+        ? cupCompetitions.find((comp) => comp.id === cupSlug)?.name ?? "Cups"
+        : europeCompetitions.find((comp) => comp.id === europeSlug)?.name ?? "Europe";
+
+  usePageSeo({
+    title: `${selectedCompetitionLabel} Tables | Football Mad`,
+    description: `League tables and tournament progress for ${selectedCompetitionLabel} on Football Mad.`,
+    canonicalPath: location,
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
+
   const visibleCompetitions = useMemo(() => {
     if (topTab === "leagues") {
       return leagueCompetitions.map((comp) => ({

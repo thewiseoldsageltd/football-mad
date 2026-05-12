@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { useEffect } from "react";
 import { TrendingUp, Calendar, Users, Newspaper, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,45 +11,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn } from "@/lib/queryClient";
 import { compareCompetitionsByPriority, getCompetitionCountryById, getCompetitionDisplayRank, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 import { getCountryFlagUrl } from "@/lib/flags";
+import { usePageSeo } from "@/lib/seo";
 import type { Article, Team } from "@shared/schema";
 import { format } from "date-fns";
 
 function useSEO() {
-  useEffect(() => {
-    document.title = "Football Mad – News, Teams, Transfers & Fan Insight";
-    
-    const baseUrl = window.location.origin;
-    
-    let canonical = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.rel = "canonical";
-      document.head.appendChild(canonical);
-    }
-    canonical.href = baseUrl + "/";
-
-    const ensureMeta = (property: string, content: string, isProperty = false) => {
-      const attr = isProperty ? "property" : "name";
-      let tag = document.querySelector(`meta[${attr}="${property}"]`) as HTMLMetaElement | null;
-      if (!tag) {
-        tag = document.createElement("meta");
-        tag.setAttribute(attr, property);
-        document.head.appendChild(tag);
-      }
-      tag.content = content;
-    };
-
-    ensureMeta("description", "Your daily destination for Premier League news, match coverage, transfer rumours, and fan community.");
-    ensureMeta("og:title", "Football Mad – News, Teams, Transfers & Fan Insight", true);
-    ensureMeta("og:description", "Your daily destination for Premier League news, match coverage, transfer rumours, and fan community.", true);
-    ensureMeta("og:url", baseUrl + "/", true);
-    ensureMeta("og:type", "website", true);
-    ensureMeta("og:site_name", "Football Mad", true);
-    
-    return () => {
-      document.querySelector('link[rel="canonical"]')?.remove();
-    };
-  }, []);
+  usePageSeo({
+    title: "Football Mad | News, Matches, Tables & Teams",
+    description: "Football news, live matches, tables and team coverage from the competitions that matter most.",
+    canonicalPath: "/",
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
 }
 
 function HeroStory({ article }: { article: Article }) {

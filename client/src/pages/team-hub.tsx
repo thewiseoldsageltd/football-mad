@@ -23,6 +23,7 @@ import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
 import { getClubBranding } from "@/lib/club-branding";
 import { getCountryFlagUrl } from "@/lib/flags";
+import { absoluteSeoUrl, useJsonLd } from "@/lib/seo";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -2634,6 +2635,26 @@ export default function TeamHubPage() {
   const canonicalPath = `/teams/${slug}${activeTab !== "latest" ? `/${activeTab}` : ""}`;
 
   useDocumentMeta(pageTitle, pageDescription, canonicalPath);
+
+  const sportsTeamJsonLd = useMemo(() => {
+    if (!team) return null;
+    return {
+      "@context": "https://schema.org",
+      "@type": "SportsTeam",
+      name: team.name,
+      sport: "Soccer",
+      url: absoluteSeoUrl(canonicalPath),
+      logo: team.imageUrl ? absoluteSeoUrl(team.imageUrl) : absoluteSeoUrl("/assets/football-mad-fm-logo.webp"),
+      coach: currentManager
+        ? {
+            "@type": "Person",
+            name: currentManager.name,
+          }
+        : undefined,
+    };
+  }, [team, canonicalPath, currentManager]);
+
+  useJsonLd("team-hub-sports-team", sportsTeamJsonLd);
 
   if (teamLoading) {
     return (

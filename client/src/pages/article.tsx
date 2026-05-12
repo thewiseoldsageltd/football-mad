@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
+import { absoluteSeoUrl } from "@/lib/seo";
 import { effectiveAuthorProfileSlug } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
 import { buildPillsForFooter, buildPillsForHeader, type PillSourceArticle } from "@/lib/entity-utils";
@@ -257,7 +258,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string, auth
         name: "Football Mad",
         logo: baseUrl ? {
           "@type": "ImageObject",
-          url: `${baseUrl}/favicon.ico`,
+          url: absoluteSeoUrl("/assets/football-mad-fm-logo.webp"),
         } : undefined,
       },
       mainEntityOfPage: {
