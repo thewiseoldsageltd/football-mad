@@ -1,18 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useEffect } from "react";
-import { ArrowRight, TrendingUp, Calendar, Users, Newspaper, ShoppingBag, Mail, ChevronRight, Heart } from "lucide-react";
+import { TrendingUp, Calendar, Users, Newspaper, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
-import { NewsletterForm } from "@/components/newsletter-form";
 import { ArticleCardSkeleton } from "@/components/skeletons";
+import { EntityAvatar } from "@/components/entity-media";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn } from "@/lib/queryClient";
-import type { Article, Match, Team, Product } from "@shared/schema";
-import { format, isToday } from "date-fns";
+import { compareCompetitionsByPriority, getCompetitionDisplayRank, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
+import type { Article, Team } from "@shared/schema";
+import { format } from "date-fns";
 
 function useSEO() {
   useEffect(() => {
@@ -60,7 +61,67 @@ function HeroStory({ article }: { article: Article }) {
   );
 }
 
-function TodaysMatchesStrip({ matches }: { matches: (Match & { homeTeam?: Team; awayTeam?: Team })[] }) {
+type HomeApiMatch = {
+  id: string;
+  slug: string;
+  kickoffTime: string;
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  competition: string | null;
+  goalserveCompetitionId: string | null;
+  homeTeam: {
+    id?: string;
+    name?: string;
+    shortName?: string;
+    nameFromRaw?: string;
+  };
+  awayTeam: {
+    id?: string;
+    name?: string;
+    shortName?: string;
+    nameFromRaw?: string;
+  };
+};
+
+function normStatus(status?: string | null): string {
+  return (status || "").toLowerCase();
+}
+
+function isLiveStatus(status?: string | null): boolean {
+  const s = normStatus(status);
+  return ["live", "inplay", "in_play", "ht", "halftime", "et", "extra_time", "pen", "penalties", "1h", "2h"].includes(s) || /^\d+$/.test(s);
+}
+
+function isFinishedStatus(status?: string | null): boolean {
+  const s = normStatus(status);
+  return ["finished", "ft", "full_time", "ended", "final", "aet", "pen"].includes(s);
+}
+
+function getMatchStatusRank(match: HomeApiMatch): number {
+  if (isLiveStatus(match.status)) return 0;
+  if (!isFinishedStatus(match.status)) return 1;
+  return 2;
+}
+
+function getTeamDisplayName(team: HomeApiMatch["homeTeam"]): string {
+  return team.name?.trim() || team.nameFromRaw?.trim() || team.shortName?.trim() || "Unknown";
+}
+
+function getMatchStatusText(match: HomeApiMatch): string {
+  const s = normStatus(match.status);
+  if (isLiveStatus(s)) {
+    if (/^\d+$/.test(s)) return `${s}'`;
+    if (s === "ht" || s === "halftime") return "HT";
+    if (s === "et" || s === "extra_time") return "ET";
+    if (s === "pen" || s === "penalties") return "Pens";
+    return "LIVE";
+  }
+  if (isFinishedStatus(s)) return "FT";
+  return format(new Date(match.kickoffTime), "HH:mm");
+}
+
+function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
   if (matches.length === 0) return null;
 
   return (
@@ -79,24 +140,43 @@ function TodaysMatchesStrip({ matches }: { matches: (Match & { homeTeam?: Team; 
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
         {matches.map((match) => {
           const kickoffTime = new Date(match.kickoffTime);
+          const homeName = getTeamDisplayName(match.homeTeam);
+          const awayName = getTeamDisplayName(match.awayTeam);
+          const isLive = isLiveStatus(match.status);
+          const isFinished = isFinishedStatus(match.status);
+          const competitionLabel = getPublicCompetitionDisplayName(match.competition, match.goalserveCompetitionId);
           return (
             <Link key={match.id} href={`/matches/${match.slug}`}>
               <Card 
-                className="flex-shrink-0 w-[200px] hover-elevate cursor-pointer"
+                className="flex-shrink-0 w-[240px] hover-elevate cursor-pointer"
                 data-testid={`card-todays-match-${match.id}`}
               >
                 <CardContent className="p-3">
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-[11px] font-medium text-muted-foreground truncate">
+                      {competitionLabel || "Match"}
+                    </span>
+                    {isLive ? (
+                      <Badge className="bg-red-500 text-white text-[10px] py-0">LIVE</Badge>
+                    ) : isFinished ? (
+                      <Badge variant="secondary" className="text-[10px] py-0">FT</Badge>
+                    ) : null}
+                  </div>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div 
-                        className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: match.homeTeam?.primaryColor || "#333" }}
-                      >
-                        <span className="text-[10px] font-bold text-white">
-                          {match.homeTeam?.shortName?.slice(0, 3) || "H"}
-                        </span>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
+                        <EntityAvatar
+                          entityType="team"
+                          entityId={match.homeTeam.id}
+                          label={homeName}
+                          surface="hub_header"
+                          sizeClassName="h-full w-full"
+                          shape="square"
+                          objectFit="contain"
+                          className="rounded-md"
+                        />
                       </div>
-                      <span className="text-sm font-medium truncate">{match.homeTeam?.shortName || "Home"}</span>
+                      <span className="text-sm font-medium truncate">{homeName}</span>
                     </div>
                     {match.homeScore !== null ? (
                       <span className="font-bold text-sm">{match.homeScore}</span>
@@ -104,28 +184,32 @@ function TodaysMatchesStrip({ matches }: { matches: (Match & { homeTeam?: Team; 
                   </div>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div 
-                        className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: match.awayTeam?.primaryColor || "#333" }}
-                      >
-                        <span className="text-[10px] font-bold text-white">
-                          {match.awayTeam?.shortName?.slice(0, 3) || "A"}
-                        </span>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
+                        <EntityAvatar
+                          entityType="team"
+                          entityId={match.awayTeam.id}
+                          label={awayName}
+                          surface="hub_header"
+                          sizeClassName="h-full w-full"
+                          shape="square"
+                          objectFit="contain"
+                          className="rounded-md"
+                        />
                       </div>
-                      <span className="text-sm font-medium truncate">{match.awayTeam?.shortName || "Away"}</span>
+                      <span className="text-sm font-medium truncate">{awayName}</span>
                     </div>
                     {match.awayScore !== null ? (
                       <span className="font-bold text-sm">{match.awayScore}</span>
                     ) : null}
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                    <span>{format(kickoffTime, "HH:mm")}</span>
-                    {match.status === "live" ? (
-                      <Badge className="bg-red-500 text-white text-[10px] py-0">LIVE</Badge>
-                    ) : match.status === "finished" ? (
-                      <Badge variant="secondary" className="text-[10px] py-0">FT</Badge>
+                    <span>{getMatchStatusText(match)}</span>
+                    {isLive ? (
+                      <span className="text-[11px] font-medium text-red-500">In play</span>
+                    ) : isFinished ? (
+                      <span className="text-[11px] font-medium">Full time</span>
                     ) : (
-                      <Badge variant="outline" className="text-[10px] py-0">Upcoming</Badge>
+                      <span className="text-[11px] font-medium">Upcoming</span>
                     )}
                   </div>
                 </CardContent>
@@ -255,95 +339,6 @@ function LatestNewsSection({ articles, isLoading }: { articles: Article[]; isLoa
   );
 }
 
-
-function NewsletterCTA() {
-  return (
-    <section className="mb-8" data-testid="section-newsletter">
-      <Card className="bg-gradient-to-br from-primary/5 via-background to-primary/10">
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row md:items-center gap-6">
-            <div className="flex-shrink-0">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                <Mail className="h-8 w-8 text-primary" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-bold mb-1">Stay in the Loop</h2>
-              <p className="text-muted-foreground mb-4">
-                Get the best football news delivered straight to your inbox. Daily updates, transfer scoops, and match previews.
-              </p>
-              <NewsletterForm compact />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </section>
-  );
-}
-
-function ShopTeaser({ products }: { products: Product[] }) {
-  const featuredProducts = products.slice(0, 3);
-
-  return (
-    <section className="mb-8" data-testid="section-shop">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <ShoppingBag className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-bold">Shop</h2>
-        </div>
-        <Link href="/shop">
-          <Button variant="ghost" size="sm" className="gap-1" data-testid="link-visit-shop">
-            Visit Shop <ChevronRight className="h-4 w-4" />
-          </Button>
-        </Link>
-      </div>
-      <div className="grid sm:grid-cols-3 gap-4">
-        {featuredProducts.length > 0 ? (
-          featuredProducts.map((product) => (
-            <Link key={product.id} href={`/shop`}>
-              <Card className="hover-elevate cursor-pointer" data-testid={`card-product-${product.id}`}>
-                <CardContent className="p-4">
-                  <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
-                    {product.imageUrl ? (
-                      <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover rounded-lg" />
-                    ) : (
-                      <ShoppingBag className="h-12 w-12 text-muted-foreground/30" />
-                    )}
-                  </div>
-                  <h3 className="font-medium text-sm truncate">{product.name}</h3>
-                  <p className="text-primary font-bold">{product.price}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))
-        ) : (
-          <>
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="hover-elevate cursor-pointer">
-                <CardContent className="p-4">
-                  <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
-                    <ShoppingBag className="h-12 w-12 text-muted-foreground/30" />
-                  </div>
-                  <div className="h-4 bg-muted rounded w-3/4 mb-2" />
-                  <div className="h-5 bg-muted rounded w-1/4" />
-                </CardContent>
-              </Card>
-            ))}
-          </>
-        )}
-      </div>
-      <div className="text-center mt-4">
-        <Link href="/shop">
-          <Button className="gap-2" data-testid="button-shop-now">
-            <ShoppingBag className="h-4 w-4" />
-            Shop Now
-          </Button>
-        </Link>
-      </div>
-    </section>
-  );
-}
-
 export default function HomePage() {
   useSEO();
   const { isAuthenticated } = useAuth();
@@ -353,7 +348,7 @@ export default function HomePage() {
   });
 
   const todayYmd = new Date().toISOString().slice(0, 10);
-  const { data: allMatches = [] } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
+  const { data: allMatches = [] } = useQuery<HomeApiMatch[]>({
     queryKey: [`/api/matches/day?date=${todayYmd}&status=all&sort=competition&limit=200`],
   });
 
@@ -363,12 +358,27 @@ export default function HomePage() {
     enabled: isAuthenticated,
   });
 
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-  });
-
   const heroArticle = articles.find((a) => a.isEditorPick) || articles[0];
-  const todaysMatches = allMatches.filter((m) => isToday(new Date(m.kickoffTime)));
+  const todaysMatches = [...allMatches]
+    .filter((m) => Number.isFinite(getCompetitionDisplayRank(m.competition, m.goalserveCompetitionId)))
+    .sort((a, b) => {
+      const statusRank = getMatchStatusRank(a) - getMatchStatusRank(b);
+      if (statusRank !== 0) return statusRank;
+
+      if (getMatchStatusRank(a) === 1) {
+        const kickoffDiff = new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime();
+        if (kickoffDiff !== 0) return kickoffDiff;
+      }
+
+      const compDiff = compareCompetitionsByPriority(
+        { name: a.competition, goalserveCompetitionId: a.goalserveCompetitionId },
+        { name: b.competition, goalserveCompetitionId: b.goalserveCompetitionId },
+      );
+      if (compDiff !== 0) return compDiff;
+
+      return new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime();
+    })
+    .slice(0, 12);
   const latestArticles = articles.filter((a) => a.id !== heroArticle?.id);
   const showForYou = isAuthenticated && followedTeamIds.length > 0;
 
@@ -390,10 +400,6 @@ export default function HomePage() {
         <TrendingSection articles={articles} />
 
         <LatestNewsSection articles={latestArticles} isLoading={articlesLoading} />
-
-        <NewsletterCTA />
-
-        <ShopTeaser products={products} />
       </div>
     </MainLayout>
   );
