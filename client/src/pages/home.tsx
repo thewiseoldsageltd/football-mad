@@ -11,7 +11,8 @@ import { ArticleCardSkeleton } from "@/components/skeletons";
 import { EntityAvatar } from "@/components/entity-media";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn } from "@/lib/queryClient";
-import { compareCompetitionsByPriority, getCompetitionDisplayRank, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
+import { compareCompetitionsByPriority, getCompetitionCountryById, getCompetitionDisplayRank, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
+import { getCountryFlagUrl } from "@/lib/flags";
 import type { Article, Team } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -121,6 +122,11 @@ function getMatchStatusText(match: HomeApiMatch): string {
   return format(new Date(match.kickoffTime), "HH:mm");
 }
 
+function getCompetitionFlagUrl(goalserveCompetitionId?: string | null): string | null {
+  const country = getCompetitionCountryById(goalserveCompetitionId);
+  return getCountryFlagUrl(country ?? undefined);
+}
+
 function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
   if (matches.length === 0) return null;
 
@@ -145,6 +151,7 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
           const isLive = isLiveStatus(match.status);
           const isFinished = isFinishedStatus(match.status);
           const competitionLabel = getPublicCompetitionDisplayName(match.competition, match.goalserveCompetitionId);
+          const competitionFlagUrl = getCompetitionFlagUrl(match.goalserveCompetitionId);
           return (
             <Link key={match.id} href={`/matches/${match.slug}`}>
               <Card 
@@ -153,8 +160,19 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
               >
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="text-[11px] font-medium text-muted-foreground truncate">
-                      {competitionLabel || "Match"}
+                    <span className="flex items-center gap-1.5 min-w-0 text-[11px] font-medium text-muted-foreground">
+                      {competitionFlagUrl ? (
+                        <img
+                          src={competitionFlagUrl}
+                          alt=""
+                          aria-hidden="true"
+                          className="h-3 w-4 rounded-[2px] object-cover flex-shrink-0"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : null}
+                      <span className="truncate">{competitionLabel || "Match"}</span>
                     </span>
                     {isLive ? (
                       <Badge className="bg-red-500 text-white text-[10px] py-0">LIVE</Badge>
