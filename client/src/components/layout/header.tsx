@@ -36,13 +36,13 @@ export function Header() {
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex h-16 items-center justify-between gap-4">
           <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2 min-w-0" data-testid="link-logo">
+            <Link href="/" className="flex items-center gap-2" data-testid="link-logo">
               <img
                 src="/assets/football-mad-fm-logo.webp"
                 alt="Football Mad"
                 className="h-8 w-8 shrink-0 rounded-md object-contain"
               />
-              <span className="font-bold text-xl sm:hidden truncate">
+              <span className="font-bold text-xl sm:hidden">
                 Football Mad
               </span>
               <span className="hidden text-xl font-bold leading-none sm:block">Football Mad</span>
