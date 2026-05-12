@@ -42,7 +42,7 @@ export function Header() {
                 alt="Football Mad"
                 className="h-8 w-8 shrink-0 rounded-md object-contain"
               />
-              <span className="text-xl font-bold leading-none tracking-tight sm:hidden truncate">
+              <span className="font-bold text-xl sm:hidden truncate">
                 Football Mad
               </span>
               <span className="hidden text-xl font-bold leading-none sm:block">Football Mad</span>
