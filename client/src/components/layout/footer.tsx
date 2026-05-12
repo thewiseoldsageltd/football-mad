@@ -35,9 +35,11 @@ export function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
           <div className="col-span-2 lg:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4" data-testid="link-footer-logo">
-              <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">F</span>
-              </div>
+              <img
+                src="/assets/football-mad-fm-logo.webp"
+                alt="Football Mad"
+                className="h-8 w-8 shrink-0 rounded-md object-contain"
+              />
               <span className="font-bold text-xl">Football Mad</span>
             </Link>
             <p className="text-sm text-muted-foreground mb-4">
