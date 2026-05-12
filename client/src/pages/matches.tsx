@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Calendar, Loader2, Globe, ChevronLeft, ChevronRight } from "lucide-react";
@@ -216,36 +216,12 @@ export default function MatchesPage() {
     retry: 1,
   });
 
-  const isLiveTab = activeTab === "live";
-
-  const { data: liveMatches = [], isFetching: isLiveFetching } = useQuery<ApiMatch[]>({
-    queryKey: ["matches-live"],
-    queryFn: async () => {
-      const res = await fetch("/api/matches/live");
-      if (!res.ok) throw new Error("Failed to fetch live matches");
-      return res.json();
-    },
-    enabled: isLiveTab,           // only run when Live tab is selected
-    refetchInterval: isLiveTab ? 30_000 : false,
-    staleTime: 0,                 // live = always “fresh”
-    gcTime: 5 * 60_000,           // keep a short cache
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    retry: 1,
-  });
-
-  useEffect(() => {
-    // no-op placeholder; ensures React sees isLiveTab as a lifecycle boundary (helps avoid weird transient states)
-  }, [isLiveTab]);
-
   const allMatches = useMemo(() => {
     return dayMatches.map(apiMatchToMockMatch);
   }, [dayMatches]);
 
   const counts = useMemo(() => {
-    const liveFromDay = allMatches.filter(m => m.status === "live").length;
-    const live = isLiveTab ? liveMatches.length : liveFromDay;
-
+    const live = allMatches.filter(m => m.status === "live").length;
     const scheduled = allMatches.filter(m => m.status === "scheduled" || m.status === "postponed").length;
     const fulltime = allMatches.filter(m => m.status === "finished").length;
 
@@ -255,7 +231,7 @@ export default function MatchesPage() {
       scheduled,
       fulltime,
     };
-  }, [allMatches, isLiveTab, liveMatches.length]);
+  }, [allMatches]);
 
   const competitionOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string; rawName: string }>();
@@ -277,14 +253,13 @@ export default function MatchesPage() {
   }, [dayMatches]);
 
   const statusFiltered = useMemo(() => {
-    // Live tab uses dedicated endpoint + 30s refresh
-    if (statusParam === "live") return liveMatches;
+    if (statusParam === "live") return dayMatches.filter((m) => isLiveStatus(m.status));
 
     if (statusParam === "scheduled") return dayMatches.filter((m) => isScheduledStatus(m.status));
     if (statusParam === "fulltime") return dayMatches.filter((m) => isFinishedStatus(m.status));
 
     return dayMatches;
-  }, [dayMatches, liveMatches, statusParam]);
+  }, [dayMatches, statusParam]);
 
   const matchesToRender = useMemo(() => {
     return statusFiltered;
