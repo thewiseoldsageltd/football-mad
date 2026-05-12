@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import { TrendingUp, Calendar, Users, Newspaper, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -145,22 +144,71 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
         {matches.map((match) => {
-          const kickoffTime = new Date(match.kickoffTime);
           const homeName = getTeamDisplayName(match.homeTeam);
           const awayName = getTeamDisplayName(match.awayTeam);
           const isLive = isLiveStatus(match.status);
           const isFinished = isFinishedStatus(match.status);
+          const showScores = isLive || isFinished || match.homeScore !== null || match.awayScore !== null;
           const competitionLabel = getPublicCompetitionDisplayName(match.competition, match.goalserveCompetitionId);
           const competitionFlagUrl = getCompetitionFlagUrl(match.goalserveCompetitionId);
+          const statusText = getMatchStatusText(match);
           return (
             <Link key={match.id} href={`/matches/${match.slug}`}>
               <Card 
-                className="flex-shrink-0 w-[240px] hover-elevate cursor-pointer"
+                className={`flex-shrink-0 w-[240px] hover-elevate cursor-pointer ${isLive ? "border-red-200/70 dark:border-red-900/40" : ""}`}
                 data-testid={`card-todays-match-${match.id}`}
               >
                 <CardContent className="p-3">
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className="flex items-center gap-1.5 min-w-0 text-[11px] font-medium text-muted-foreground">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
+                          <EntityAvatar
+                            entityType="team"
+                            entityId={match.homeTeam.id}
+                            label={homeName}
+                            surface="hub_header"
+                            sizeClassName="h-full w-full"
+                            shape="square"
+                            objectFit="contain"
+                            className="rounded-md"
+                          />
+                        </div>
+                        <span className="text-sm font-medium truncate">{homeName}</span>
+                      </div>
+                      {showScores ? (
+                        <span className={`min-w-[20px] text-right tabular-nums ${isLive ? "text-base font-bold text-foreground" : "text-sm font-bold text-foreground"}`}>
+                          {match.homeScore ?? "-"}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 w-full">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
+                            <EntityAvatar
+                              entityType="team"
+                              entityId={match.awayTeam.id}
+                              label={awayName}
+                              surface="hub_header"
+                              sizeClassName="h-full w-full"
+                              shape="square"
+                              objectFit="contain"
+                              className="rounded-md"
+                            />
+                          </div>
+                          <span className="text-sm font-medium truncate">{awayName}</span>
+                        </div>
+                        {showScores ? (
+                          <span className={`min-w-[20px] text-right tabular-nums ${isLive ? "text-base font-bold text-foreground" : "text-sm font-bold text-foreground"}`}>
+                            {match.awayScore ?? "-"}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground pt-3 mt-3 border-t">
+                    <span className="flex items-center gap-1.5 min-w-0 font-medium">
                       {competitionFlagUrl ? (
                         <img
                           src={competitionFlagUrl}
@@ -174,61 +222,9 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
                       ) : null}
                       <span className="truncate">{competitionLabel || "Match"}</span>
                     </span>
-                    {isLive ? (
-                      <Badge className="bg-red-500 text-white text-[10px] py-0">LIVE</Badge>
-                    ) : isFinished ? (
-                      <Badge variant="secondary" className="text-[10px] py-0">FT</Badge>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
-                        <EntityAvatar
-                          entityType="team"
-                          entityId={match.homeTeam.id}
-                          label={homeName}
-                          surface="hub_header"
-                          sizeClassName="h-full w-full"
-                          shape="square"
-                          objectFit="contain"
-                          className="rounded-md"
-                        />
-                      </div>
-                      <span className="text-sm font-medium truncate">{homeName}</span>
-                    </div>
-                    {match.homeScore !== null ? (
-                      <span className="font-bold text-sm">{match.homeScore}</span>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
-                        <EntityAvatar
-                          entityType="team"
-                          entityId={match.awayTeam.id}
-                          label={awayName}
-                          surface="hub_header"
-                          sizeClassName="h-full w-full"
-                          shape="square"
-                          objectFit="contain"
-                          className="rounded-md"
-                        />
-                      </div>
-                      <span className="text-sm font-medium truncate">{awayName}</span>
-                    </div>
-                    {match.awayScore !== null ? (
-                      <span className="font-bold text-sm">{match.awayScore}</span>
-                    ) : null}
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-                    <span>{getMatchStatusText(match)}</span>
-                    {isLive ? (
-                      <span className="text-[11px] font-medium text-red-500">In play</span>
-                    ) : isFinished ? (
-                      <span className="text-[11px] font-medium">Full time</span>
-                    ) : (
-                      <span className="text-[11px] font-medium">Upcoming</span>
-                    )}
+                    <span className={`font-semibold whitespace-nowrap ${isLive ? "text-red-500" : "text-muted-foreground"}`}>
+                      {statusText}
+                    </span>
                   </div>
                 </CardContent>
               </Card>
