@@ -107,6 +107,7 @@ import {
   faCupFeedMissingLaterKnockoutRounds,
   faCupDbCountsIncludeLaterKnockout,
 } from "./lib/fa-cup-cup-progress-db";
+import { registerSitemapRoute } from "./sitemap";
 
 const TEAMS_MVP_NAV_FILTER_SET = TEAMS_DOMESTIC_SLUG_SET;
 
@@ -122,6 +123,8 @@ const shareClickSchema = z.object({
 });
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
+  registerSitemapRoute(app);
+
   // ========== DEBUG ROUTER (mounted first to avoid SPA catch-all) ==========
   const debugRouter = Router();
 
