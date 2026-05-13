@@ -79,7 +79,7 @@ export function ArticleCard({
           aria-label={article.title}
           data-testid={`link-article-featured-${article.id}`}
         />
-        <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
+        <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5 [contain:layout]">
           {article.coverImage ? (
             <img
               src={article.coverImage}
@@ -155,7 +155,7 @@ export function ArticleCard({
 
   return (
     <Card 
-      className={`group relative h-full overflow-hidden hover-elevate active-elevate-2 cursor-pointer border ${teamColor ? "team-card-hover" : ""}`}
+      className={`group relative flex h-full flex-col overflow-hidden hover-elevate active-elevate-2 cursor-pointer border ${teamColor ? "team-card-hover" : ""}`}
       style={teamCardStyle}
       data-testid={`card-article-${article.id}`}
     >
@@ -165,7 +165,7 @@ export function ArticleCard({
         aria-label={article.title}
         data-testid={`link-article-${article.id}`}
       />
-      <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5">
+      <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5 [contain:layout]">
         {article.coverImage ? (
           <img
             src={article.coverImage}
@@ -188,7 +188,7 @@ export function ArticleCard({
           </div>
         )}
       </div>
-      <CardContent className="p-4">
+      <CardContent className="flex flex-1 flex-col p-4">
         <div className="relative z-20">
           <PillsRow pills={displayPills} max={3} className="mb-2" constrainHeight={false} />
         </div>

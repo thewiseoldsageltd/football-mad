@@ -5,19 +5,20 @@ export function ArticleCardSkeleton({ featured = false }: { featured?: boolean }
   if (featured) {
     return (
       <Card className="overflow-hidden">
-        <Skeleton className="aspect-[16/9] w-full" />
+        <Skeleton className="aspect-video w-full" />
       </Card>
     );
   }
 
   return (
-    <Card className="h-full overflow-hidden">
-      <Skeleton className="aspect-[16/9] w-full" />
-      <CardContent className="p-4">
-        <Skeleton className="h-4 w-16 mb-2" />
-        <Skeleton className="h-6 w-full mb-2" />
-        <Skeleton className="h-4 w-3/4 mb-3" />
-        <Skeleton className="h-3 w-24" />
+    <Card className="flex h-full min-h-[300px] flex-col overflow-hidden">
+      <Skeleton className="aspect-video w-full shrink-0" />
+      <CardContent className="flex flex-1 flex-col p-4">
+        <Skeleton className="mb-2 h-4 w-16" />
+        <Skeleton className="mb-2 h-5 w-full" />
+        <Skeleton className="mb-2 h-5 w-[92%]" />
+        <Skeleton className="mb-3 h-4 w-full" />
+        <Skeleton className="mt-auto h-3 w-28" />
       </CardContent>
     </Card>
   );

@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { TrendingUp, Calendar, Users, Newspaper, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -97,8 +98,15 @@ function getCompetitionFlagUrl(goalserveCompetitionId?: string | null): string |
   return getCountryFlagUrl(country ?? undefined);
 }
 
-function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
-  if (matches.length === 0) return null;
+function TodaysMatchesStrip({
+  matches,
+  isLoading,
+}: {
+  matches: HomeApiMatch[];
+  isLoading: boolean;
+}) {
+  const showSkeleton = isLoading && matches.length === 0;
+  if (!showSkeleton && matches.length === 0) return null;
 
   return (
     <section className="mb-8" data-testid="section-todays-matches">
@@ -113,8 +121,36 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
           </Button>
         </Link>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-        {matches.map((match) => {
+      <div className="flex min-h-[142px] gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {showSkeleton ? (
+          <>
+            {[0, 1, 2].map((slot) => (
+              <Card key={slot} className="w-[240px] shrink-0">
+                <CardContent className="space-y-2 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                      <Skeleton className="h-4 max-w-[120px] flex-1" />
+                    </div>
+                    <Skeleton className="h-5 w-7 shrink-0" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                      <Skeleton className="h-4 max-w-[120px] flex-1" />
+                    </div>
+                    <Skeleton className="h-5 w-7 shrink-0" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t pt-3 mt-3">
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-10" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        ) : (
+          matches.map((match) => {
           const homeName = getTeamDisplayName(match.homeTeam);
           const awayName = getTeamDisplayName(match.awayTeam);
           const isLive = isLiveStatus(match.status);
@@ -147,11 +183,12 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
                         </div>
                         <span className="text-sm font-medium truncate">{homeName}</span>
                       </div>
-                      {showScores ? (
-                        <span className={`min-w-[20px] text-right tabular-nums ${isLive ? "text-base font-bold text-foreground" : "text-sm font-bold text-foreground"}`}>
-                          {match.homeScore ?? "-"}
-                        </span>
-                      ) : null}
+                      <span
+                        className={`inline-block min-w-[28px] text-right tabular-nums ${showScores ? (isLive ? "text-base font-bold text-foreground" : "text-sm font-bold text-foreground") : "invisible"}`}
+                        aria-hidden={!showScores}
+                      >
+                        {showScores ? match.homeScore ?? "-" : "—"}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 w-full">
@@ -170,27 +207,34 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
                           </div>
                           <span className="text-sm font-medium truncate">{awayName}</span>
                         </div>
-                        {showScores ? (
-                          <span className={`min-w-[20px] text-right tabular-nums ${isLive ? "text-base font-bold text-foreground" : "text-sm font-bold text-foreground"}`}>
-                            {match.awayScore ?? "-"}
-                          </span>
-                        ) : null}
+                        <span
+                          className={`inline-block min-w-[28px] text-right tabular-nums ${showScores ? (isLive ? "text-base font-bold text-foreground" : "text-sm font-bold text-foreground") : "invisible"}`}
+                          aria-hidden={!showScores}
+                        >
+                          {showScores ? match.awayScore ?? "-" : "—"}
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground pt-3 mt-3 border-t">
-                    <span className="flex items-center gap-1.5 min-w-0 font-medium">
-                      {competitionFlagUrl ? (
-                        <img
-                          src={competitionFlagUrl}
-                          alt=""
-                          aria-hidden="true"
-                          className="h-3 w-4 rounded-[2px] object-cover flex-shrink-0"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                        />
-                      ) : null}
+                    <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                      <span className="inline-block h-3 w-4 shrink-0 overflow-hidden rounded-[2px] bg-muted/40">
+                        {competitionFlagUrl ? (
+                          <img
+                            src={competitionFlagUrl}
+                            alt=""
+                            aria-hidden="true"
+                            className="h-3 w-4 object-cover"
+                            width={16}
+                            height={12}
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              e.currentTarget.style.visibility = "hidden";
+                            }}
+                          />
+                        ) : null}
+                      </span>
                       <span className="truncate">{competitionLabel || "Match"}</span>
                     </span>
                     <span className={`font-semibold whitespace-nowrap ${isLive ? "text-red-500" : "text-muted-foreground"}`}>
@@ -201,7 +245,8 @@ function TodaysMatchesStrip({ matches }: { matches: HomeApiMatch[] }) {
               </Card>
             </Link>
           );
-        })}
+        })
+        )}
       </div>
     </section>
   );
@@ -333,7 +378,7 @@ export default function HomePage() {
   });
 
   const todayYmd = new Date().toISOString().slice(0, 10);
-  const { data: allMatches = [] } = useQuery<HomeApiMatch[]>({
+  const { data: allMatches = [], isLoading: matchesLoading } = useQuery<HomeApiMatch[]>({
     queryKey: [`/api/matches/day?date=${todayYmd}&status=all&sort=competition&limit=200`],
   });
 
@@ -367,12 +412,20 @@ export default function HomePage() {
   const latestArticles = articles.filter((a) => a.id !== heroArticle?.id);
   const showForYou = isAuthenticated && followedTeamIds.length > 0;
 
+  const showHeroSkeleton = articlesLoading && articles.length === 0;
+
   return (
     <MainLayout>
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {heroArticle && <HeroStory article={heroArticle} />}
+        {showHeroSkeleton ? (
+          <section className="mb-8" aria-busy="true" aria-label="Loading featured story">
+            <ArticleCardSkeleton featured />
+          </section>
+        ) : heroArticle ? (
+          <HeroStory article={heroArticle} />
+        ) : null}
 
-        <TodaysMatchesStrip matches={todaysMatches} />
+        <TodaysMatchesStrip matches={todaysMatches} isLoading={matchesLoading} />
 
         {showForYou && (
           <ForYouSection 
