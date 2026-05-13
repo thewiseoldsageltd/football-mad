@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { Router } from "express";
 import type { Server } from "http";
 import crypto from "crypto";
@@ -100,6 +100,7 @@ import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { computeMvpIndexable } from "./lib/mvp-indexing";
 import { resolveCanonicalCompetitionSlug, resolveCanonicalTeamPublicSlug } from "./lib/canonical-entity-slugs";
 import { registerLegacyGhostTagRedirects } from "./lib/legacy-ghost-tag-redirects";
+import { maybeApplyNonMvpEntityNoindexHeader } from "./lib/spa-entity-noindex";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
 import { collectCupProgressMatchRefs, dedupeCupProgressRefs } from "./lib/goalserve-cup-progress-tree";
@@ -8834,34 +8835,64 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ========== PUBLIC ENTITY REDIRECTS (must run before SPA fallback) ==========
-  app.get("/teams/:slug", async (req, res, next) => {
+  // ========== PUBLIC ENTITY REDIRECTS + SPA noindex for non-MVP entities (before SPA fallback) ==========
+  const teamEntitySpaSeo = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const requestedSlug = req.params.slug;
       const canonicalSlug = await resolveCanonicalTeamPublicSlug(requestedSlug);
       if (canonicalSlug && canonicalSlug !== requestedSlug) {
         return res.redirect(301, `/teams/${canonicalSlug}`);
       }
+      await maybeApplyNonMvpEntityNoindexHeader(res, "team", requestedSlug);
       return next();
     } catch (error) {
       console.error("[canonical-team-redirect] Error:", error);
       return next();
     }
-  });
+  };
+  app.get("/teams/:slug", teamEntitySpaSeo);
+  app.head("/teams/:slug", teamEntitySpaSeo);
 
-  app.get("/competitions/:slug", async (req, res, next) => {
+  const competitionEntitySpaSeo = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const requestedSlug = req.params.slug;
       const canonicalSlug = await resolveCanonicalCompetitionSlug(requestedSlug);
       if (canonicalSlug && canonicalSlug !== requestedSlug) {
         return res.redirect(301, `/competitions/${canonicalSlug}`);
       }
+      await maybeApplyNonMvpEntityNoindexHeader(res, "competition", requestedSlug);
       return next();
     } catch (error) {
       console.error("[canonical-competition-redirect] Error:", error);
       return next();
     }
-  });
+  };
+  app.get("/competitions/:slug", competitionEntitySpaSeo);
+  app.head("/competitions/:slug", competitionEntitySpaSeo);
+
+  const playerEntitySpaSeo = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await maybeApplyNonMvpEntityNoindexHeader(res, "player", req.params.slug);
+      return next();
+    } catch (error) {
+      console.error("[player-entity-spa-seo] Error:", error);
+      return next();
+    }
+  };
+  app.get("/players/:slug", playerEntitySpaSeo);
+  app.head("/players/:slug", playerEntitySpaSeo);
+
+  const managerEntitySpaSeo = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await maybeApplyNonMvpEntityNoindexHeader(res, "manager", req.params.slug);
+      return next();
+    } catch (error) {
+      console.error("[manager-entity-spa-seo] Error:", error);
+      return next();
+    }
+  };
+  app.get("/managers/:slug", managerEntitySpaSeo);
+  app.head("/managers/:slug", managerEntitySpaSeo);
 
   // State for PA Media ingest runner
   let paRunnerRunning = false;
