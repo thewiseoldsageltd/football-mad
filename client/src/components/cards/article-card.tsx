@@ -15,7 +15,7 @@ interface ArticleCardProps {
   article: Article;
   featured?: boolean;
   featuredHeadlineOnly?: boolean;
-  /** Homepage hero/LCP: high fetch priority, explicit dimensions, no lazy load. */
+  /** When true: eager load + fetchPriority high (homepage hero LCP only). */
   priorityCover?: boolean;
   teamBadge?: string;
   teamColor?: string;
@@ -89,7 +89,7 @@ export function ArticleCard({
               sizes="(max-width: 1280px) 100vw, 1216px"
               decoding="async"
               fetchPriority={priorityCover ? "high" : undefined}
-              loading="eager"
+              loading={priorityCover ? "eager" : "lazy"}
               className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
