@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { GoogleAnalytics } from "@/components/google-analytics";
 import NotFound from "@/pages/not-found";
 import HomePage from "@/pages/home";
 import NewsPage from "@/pages/news";
@@ -101,6 +102,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <ScrollToTop />
+          <GoogleAnalytics />
           <Toaster />
           <Router />
         </TooltipProvider>
