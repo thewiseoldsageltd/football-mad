@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, notInArray, or, gt } from "drizzle-orm";
+import { and, type SQL, asc, desc, eq, inArray, isNull, notInArray, or, gt } from "drizzle-orm";
 import { db } from "../db";
 import {
   articleCompetitions,
@@ -19,6 +19,19 @@ function uniqueIds(ids: string[]): string[] {
   return Array.from(new Set(ids.filter((id) => typeof id === "string" && id.length > 0)));
 }
 
+/**
+ * Current membership in a priority competition that is not a cup (canonical `competitions.is_cup`).
+ * Used as the entity-graph root for teams/players/managers (indexing, sitemaps, `mvpIndexable`).
+ * Priority cups remain in `getMvpCompetitionIds()` / competition sitemap only.
+ */
+function mvpLeagueCompetitionTeamMembershipFilter(): SQL {
+  return and(
+    eq(competitionTeamMemberships.isCurrent, true),
+    eq(competitions.isPriority, true),
+    eq(competitions.isCup, false),
+  )!;
+}
+
 export class MvpGraphBoundary {
   private mvpTeamIdsPromise: Promise<Set<string>> | null = null;
   private teamsPageMvpTeamIdsPromise: Promise<Set<string>> | null = null;
@@ -26,6 +39,7 @@ export class MvpGraphBoundary {
   private playerCurrentTeamCache = new Map<string, string | null>();
   private managerCurrentTeamCache = new Map<string, string | null>();
 
+  /** Teams with current membership in a priority non-cup competition (MVP league roots). */
   async getMvpTeamIds(): Promise<Set<string>> {
     if (!this.mvpTeamIdsPromise) {
       this.mvpTeamIdsPromise = (async () => {
@@ -36,20 +50,17 @@ export class MvpGraphBoundary {
             competitions,
             eq(competitionTeamMemberships.competitionId, competitions.id),
           )
-          .where(
-            and(
-              eq(competitions.isPriority, true),
-              eq(competitionTeamMemberships.isCurrent, true),
-            ),
-          );
-        return new Set(rows.map((row) => row.teamId));
+          .where(mvpLeagueCompetitionTeamMembershipFilter());
+        return new Set(
+          rows.map((row) => row.teamId).filter((id): id is string => typeof id === "string" && id.length > 0),
+        );
       })();
     }
     return this.mvpTeamIdsPromise;
   }
 
   /**
-   * Teams page: `is_priority` competitions minus domestic cups and UEFA (see shared `TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS`).
+   * Teams page: MVP league roots plus exclusion of UEFA browse list (see shared `TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS`).
    */
   async getTeamsPageMvpTeamIds(): Promise<Set<string>> {
     if (!this.teamsPageMvpTeamIdsPromise) {
@@ -61,9 +72,7 @@ export class MvpGraphBoundary {
           .innerJoin(competitions, eq(competitionTeamMemberships.competitionId, competitions.id))
           .where(
             and(
-              eq(competitionTeamMemberships.isCurrent, true),
-              eq(competitions.isPriority, true),
-              eq(competitions.isCup, false),
+              mvpLeagueCompetitionTeamMembershipFilter(),
               or(
                 isNull(competitions.goalserveCompetitionId),
                 notInArray(competitions.goalserveCompetitionId, excluded),
