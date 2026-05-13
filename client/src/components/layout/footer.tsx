@@ -50,6 +50,7 @@ export function Footer() {
                 href="https://twitter.com"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Football Mad on X"
                 className="text-muted-foreground hover:text-foreground transition-colors"
                 data-testid="link-social-twitter"
               >
@@ -59,6 +60,7 @@ export function Footer() {
                 href="https://instagram.com"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Football Mad on Instagram"
                 className="text-muted-foreground hover:text-foreground transition-colors"
                 data-testid="link-social-instagram"
               >
@@ -68,6 +70,7 @@ export function Footer() {
                 href="https://facebook.com"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Football Mad on Facebook"
                 className="text-muted-foreground hover:text-foreground transition-colors"
                 data-testid="link-social-facebook"
               >
@@ -77,6 +80,7 @@ export function Footer() {
                 href="https://youtube.com"
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label="Football Mad on YouTube"
                 className="text-muted-foreground hover:text-foreground transition-colors"
                 data-testid="link-social-youtube"
               >

@@ -67,7 +67,14 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="hidden sm:flex" type="button" data-testid="button-search">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden sm:flex"
+              type="button"
+              aria-label="Search"
+              data-testid="button-search"
+            >
               <Search className="h-5 w-5" />
             </Button>
 
@@ -77,6 +84,10 @@ export function Header() {
               variant="ghost"
               size="icon"
               className="lg:hidden"
+              type="button"
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="primary-mobile-navigation"
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               data-testid="button-mobile-menu"
             >
@@ -86,7 +97,7 @@ export function Header() {
         </div>
 
         {isMobileMenuOpen && (
-          <div className="lg:hidden pb-4 border-t pt-4">
+          <div id="primary-mobile-navigation" className="lg:hidden pb-4 border-t pt-4">
             <nav className="flex flex-col gap-1">
               {mvpNavItems.map((item) => (
                 <Link

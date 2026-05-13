@@ -15,6 +15,8 @@ interface ArticleCardProps {
   article: Article;
   featured?: boolean;
   featuredHeadlineOnly?: boolean;
+  /** Homepage hero/LCP: high fetch priority, explicit dimensions, no lazy load. */
+  priorityCover?: boolean;
   teamBadge?: string;
   teamColor?: string;
   teams?: Team[];
@@ -52,6 +54,7 @@ export function ArticleCard({
   article,
   featured = false,
   featuredHeadlineOnly = false,
+  priorityCover = false,
   teamBadge,
   teamColor,
   teams,
@@ -81,6 +84,12 @@ export function ArticleCard({
             <img
               src={article.coverImage}
               alt={article.title}
+              width={1280}
+              height={720}
+              sizes="(max-width: 1280px) 100vw, 1216px"
+              decoding="async"
+              fetchPriority={priorityCover ? "high" : undefined}
+              loading="eager"
               className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
@@ -161,6 +170,11 @@ export function ArticleCard({
           <img
             src={article.coverImage}
             alt={article.title}
+            width={640}
+            height={360}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            decoding="async"
+            loading="lazy"
             className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
           />
         ) : (

@@ -27,7 +27,7 @@ function useSEO() {
 function HeroStory({ article }: { article: Article }) {
   return (
     <section className="mb-8" data-testid="section-hero">
-      <ArticleCard article={article} featured featuredHeadlineOnly />
+      <ArticleCard article={article} featured featuredHeadlineOnly priorityCover />
     </section>
   );
 }
@@ -244,7 +244,7 @@ function ForYouSection({
         </div>
         <Link href="/news?myTeams=true">
           <Button variant="ghost" size="sm" className="gap-1" data-testid="link-more-for-you">
-            More <ChevronRight className="h-4 w-4" />
+            More for you <ChevronRight className="h-4 w-4" />
           </Button>
         </Link>
       </div>
@@ -273,7 +273,7 @@ function TrendingSection({ articles }: { articles: Article[] }) {
         </div>
         <Link href="/news?sort=trending">
           <Button variant="ghost" size="sm" className="gap-1" data-testid="link-more-trending">
-            More <ChevronRight className="h-4 w-4" />
+            More trending <ChevronRight className="h-4 w-4" />
           </Button>
         </Link>
       </div>
@@ -303,7 +303,7 @@ function LatestNewsSection({ articles, isLoading }: { articles: Article[]; isLoa
         </div>
         <Link href="/news">
           <Button variant="ghost" size="sm" className="gap-1" data-testid="link-more-news">
-            More <ChevronRight className="h-4 w-4" />
+            More News <ChevronRight className="h-4 w-4" />
           </Button>
         </Link>
       </div>
