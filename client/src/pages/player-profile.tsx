@@ -10,8 +10,9 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
 import { EntityAvatar } from "@/components/entity-media";
-import { teamHub } from "@/lib/urls";
+import { teamHub, playerProfile } from "@/lib/urls";
 import type { Team, Article } from "@shared/schema";
+import { usePageSeo, shouldBlockIndexingFromClient } from "@/lib/seo";
 
 type CareerSeasonRow = {
   season?: string | number | null;
@@ -50,6 +51,7 @@ type PlayerApiResponse = {
   age?: number | null;
   imageUrl?: string | null;
   team?: Team | null;
+  mvpIndexable?: boolean;
   // Future-proof optional fields if backend adds them.
   country?: string | null;
   height?: string | null;
@@ -281,6 +283,15 @@ export default function PlayerProfilePage() {
       setArchiveLoadingMore(false);
     }
   };
+
+  usePageSeo({
+    title: player ? `${player.name} | Football Mad` : "Player | Football Mad",
+    description: player
+      ? `Player profile and news for ${player.name} on Football Mad.`
+      : "Football Mad player profile.",
+    canonicalPath: slug ? playerProfile(slug) : "/players",
+    noIndex: shouldBlockIndexingFromClient() || (player != null && player.mvpIndexable === false),
+  });
 
   if (isLoading) {
     return (

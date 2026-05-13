@@ -4,7 +4,7 @@ import type { Server } from "http";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
-import { storage } from "./storage";
+import { storage, type NewsArchiveResponse } from "./storage";
 
 // Webhook audit logger - writes to ./logs/webhooks.log
 const WEBHOOK_LOG_DIR = "./logs";
@@ -97,6 +97,7 @@ import {
   resolveAuthorIdentityForRequestSlug,
 } from "./lib/author-identity-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
+import { computeMvpIndexable } from "./lib/mvp-indexing";
 import { normalizePaTagForAliasLookup } from "./lib/article-entity-sync";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
@@ -121,6 +122,21 @@ const shareClickSchema = z.object({
   articleId: z.string(),
   platform: z.enum(["whatsapp", "twitter", "facebook", "copy", "native"]),
 });
+
+async function withArchiveMvpIndexable(
+  result: NewsArchiveResponse,
+): Promise<NewsArchiveResponse & { mvpIndexable: boolean }> {
+  const boundary = new MvpGraphBoundary();
+  const et = result.appliedContext.entityType;
+  const mvpIndexable =
+    et === "team" || et === "competition" || et === "player" || et === "manager"
+      ? await computeMvpIndexable(boundary, {
+          entityType: et,
+          entityId: result.appliedContext.entityId,
+        })
+      : false;
+  return { ...result, mvpIndexable };
+}
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
   registerSitemapRoute(app);
@@ -505,7 +521,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!team) {
         return res.status(404).json({ error: "Team not found" });
       }
-      res.json(team);
+      const boundary = new MvpGraphBoundary();
+      const mvpIndexable = await boundary.isMvpTeam(team.id);
+      res.json({ ...team, mvpIndexable });
     } catch (error) {
       console.error("Error fetching team:", error);
       res.status(500).json({ error: "Failed to fetch team" });
@@ -618,7 +636,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!player) {
         return res.status(404).json({ error: "Player not found" });
       }
-      res.json(player);
+      const boundary = new MvpGraphBoundary();
+      const mvpIndexable = (await boundary.filterPlayerIds([player.id])).has(player.id);
+      res.json({ ...player, mvpIndexable });
     } catch (error) {
       console.error("Error fetching player:", error);
       res.status(500).json({ error: "Failed to fetch player" });
@@ -648,7 +668,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!manager) {
         return res.status(404).json({ error: "Manager not found" });
       }
-      res.json(manager);
+      const boundary = new MvpGraphBoundary();
+      const mvpIndexable = (await boundary.filterManagerIds([manager.id])).has(manager.id);
+      res.json({ ...manager, mvpIndexable });
     } catch (error) {
       console.error("Error fetching manager:", error);
       res.status(500).json({ error: "Failed to fetch manager" });
@@ -888,12 +910,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const limitParam = parseInt(req.query.limit as string, 10) || 15;
       const limit = Math.min(Math.max(1, limitParam), 50);
       const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
+      const raw = await storage.getNewsArchiveByEntity({
         entityType: "competition",
         entitySlug: req.params.slug,
         limit,
         cursor,
       });
+      const result = await withArchiveMvpIndexable(raw);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
@@ -910,12 +933,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const limitParam = parseInt(req.query.limit as string, 10) || 15;
       const limit = Math.min(Math.max(1, limitParam), 50);
       const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
+      const raw = await storage.getNewsArchiveByEntity({
         entityType: "team",
         entitySlug: req.params.slug,
         limit,
         cursor,
       });
+      const result = await withArchiveMvpIndexable(raw);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
@@ -932,12 +956,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const limitParam = parseInt(req.query.limit as string, 10) || 15;
       const limit = Math.min(Math.max(1, limitParam), 50);
       const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
+      const raw = await storage.getNewsArchiveByEntity({
         entityType: "player",
         entitySlug: req.params.slug,
         limit,
         cursor,
       });
+      const result = await withArchiveMvpIndexable(raw);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
@@ -954,12 +979,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const limitParam = parseInt(req.query.limit as string, 10) || 15;
       const limit = Math.min(Math.max(1, limitParam), 50);
       const cursor = req.query.cursor as string | undefined;
-      const result = await storage.getNewsArchiveByEntity({
+      const raw = await storage.getNewsArchiveByEntity({
         entityType: "manager",
         entitySlug: req.params.slug,
         limit,
         cursor,
       });
+      const result = await withArchiveMvpIndexable(raw);
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");

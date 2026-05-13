@@ -23,7 +23,7 @@ import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
 import { getClubBranding } from "@/lib/club-branding";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { absoluteSeoUrl, useJsonLd } from "@/lib/seo";
+import { absoluteSeoUrl, useJsonLd, shouldBlockIndexingFromClient } from "@/lib/seo";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -83,7 +83,7 @@ function getBaseUrl(): string {
   return import.meta.env.VITE_SITE_URL || "https://football-mad.replit.app";
 }
 
-function useDocumentMeta(title: string, description: string, canonicalPath: string) {
+function useDocumentMeta(title: string, description: string, canonicalPath: string, noIndex = false) {
   useEffect(() => {
     const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
     
@@ -118,7 +118,25 @@ function useDocumentMeta(title: string, description: string, canonicalPath: stri
     setMetaTag('meta[name="twitter:card"]', "twitter:card", "summary_large_image");
     setMetaTag('meta[name="twitter:title"]', "twitter:title", title);
     setMetaTag('meta[name="twitter:description"]', "twitter:description", description);
-  }, [title, description, canonicalPath]);
+
+    const robotsId = "football-mad-entity-robots";
+    if (noIndex) {
+      let robots = document.getElementById(robotsId) as HTMLMetaElement | null;
+      if (!robots) {
+        robots = document.createElement("meta");
+        robots.id = robotsId;
+        robots.setAttribute("name", "robots");
+        document.head.appendChild(robots);
+      }
+      robots.setAttribute("content", "noindex,follow");
+    } else {
+      document.getElementById(robotsId)?.remove();
+    }
+
+    return () => {
+      document.getElementById(robotsId)?.remove();
+    };
+  }, [title, description, canonicalPath, noIndex]);
 }
 
 function trackTabClick(teamSlug: string, tabName: string) {
@@ -2444,6 +2462,8 @@ function parseTabFromPath(pathname: string): { slug: string; tab: TabValue } {
   return { slug, tab: "latest" };
 }
 
+type TeamWithIndexing = Team & { mvpIndexable?: boolean };
+
 export default function TeamHubPage() {
   const [pathname, navigate] = useLocation();
 
@@ -2455,7 +2475,7 @@ export default function TeamHubPage() {
     }
   }, [pathname, slug, navigate]);
 
-  const { data: team, isLoading: teamLoading } = useQuery<Team>({
+  const { data: team, isLoading: teamLoading } = useQuery<TeamWithIndexing>({
     queryKey: ["/api/teams", slug],
     queryFn: async () => {
       const res = await fetch(`/api/teams/${slug}`);
@@ -2634,7 +2654,12 @@ export default function TeamHubPage() {
   }, [team, activeTab, tabTitle]);
   const canonicalPath = `/teams/${slug}${activeTab !== "latest" ? `/${activeTab}` : ""}`;
 
-  useDocumentMeta(pageTitle, pageDescription, canonicalPath);
+  useDocumentMeta(
+    pageTitle,
+    pageDescription,
+    canonicalPath,
+    shouldBlockIndexingFromClient() || (team != null && team.mvpIndexable === false),
+  );
 
   const sportsTeamJsonLd = useMemo(() => {
     if (!team) return null;

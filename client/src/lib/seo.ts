@@ -7,6 +7,22 @@ export function getSeoBaseUrl(): string {
   return import.meta.env.VITE_SITE_URL || "https://football-mad.replit.app";
 }
 
+/**
+ * Client-side staging / dev indexing block (aligns with server `shouldBlockSearchIndexing` host heuristics).
+ * When true, entity pages should use noindex in addition to server X-Robots-Tag / shell meta.
+ */
+export function shouldBlockIndexingFromClient(): boolean {
+  if (import.meta.env.DEV) return true;
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname.toLowerCase();
+  if (!h) return false;
+  if (h.startsWith("staging.")) return true;
+  if (h.includes(".staging.")) return true;
+  if (h.includes("-staging.onrender.com")) return true;
+  if (h.includes("staging--")) return true;
+  return false;
+}
+
 export function absoluteSeoUrl(pathOrUrl: string): string {
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
   const baseUrl = getSeoBaseUrl().replace(/\/$/, "");

@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MainLayout } from "@/components/layout/main-layout";
-import { teamHub } from "@/lib/urls";
+import { teamHub, managerProfile } from "@/lib/urls";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
 import { EntityAvatar } from "@/components/entity-media";
 import type { Article } from "@shared/schema";
 import { useEffect, useState } from "react";
+import { usePageSeo, shouldBlockIndexingFromClient } from "@/lib/seo";
 
 type ManagerApiResponse = {
   id: string;
@@ -18,6 +19,7 @@ type ManagerApiResponse = {
   slug: string;
   nationality?: string | null;
   currentTeamId?: string | null;
+  mvpIndexable?: boolean;
   team?: {
     id: string;
     name: string;
@@ -29,6 +31,7 @@ type ManagerArchiveResponse = {
   articles: Article[];
   nextCursor: string | null;
   hasMore: boolean;
+  mvpIndexable?: boolean;
   appliedContext: {
     entityType: "manager";
     entitySlug: string;
@@ -86,6 +89,15 @@ export default function ManagerProfilePage() {
       setArchiveLoadingMore(false);
     }
   };
+
+  usePageSeo({
+    title: manager ? `${manager.name} | Football Mad` : "Manager | Football Mad",
+    description: manager
+      ? `Manager profile and news for ${manager.name} on Football Mad.`
+      : "Football Mad manager profile.",
+    canonicalPath: slug ? managerProfile(slug) : "/managers",
+    noIndex: shouldBlockIndexingFromClient() || (manager != null && manager.mvpIndexable === false),
+  });
 
   if (isLoading) {
     return (

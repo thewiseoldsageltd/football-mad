@@ -8,6 +8,7 @@ import { Newspaper } from "lucide-react";
 import type { Article } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { EntityAvatar } from "@/components/entity-media";
+import { usePageSeo, shouldBlockIndexingFromClient } from "@/lib/seo";
 
 interface NewsEntityPageProps {
   slug: string;
@@ -23,7 +24,6 @@ function formatEntityName(slug: string): string {
 
 export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps) {
   const [, navigate] = useLocation();
-  const entityName = formatEntityName(slug);
   const isTeam = entityType === "team";
   const [articles, setArticles] = useState<Article[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -40,6 +40,7 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
     articles: Article[];
     nextCursor: string | null;
     hasMore: boolean;
+    mvpIndexable?: boolean;
     appliedContext: {
       entityType: "competition" | "team";
       entitySlug: string;
@@ -53,6 +54,25 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
       return res.json();
     },
     enabled: Boolean(endpoint),
+  });
+
+  const displayName = useMemo(
+    () => formatEntityName(data?.appliedContext?.entitySlug ?? slug),
+    [data?.appliedContext?.entitySlug, slug],
+  );
+
+  const canonicalPath = useMemo(() => {
+    const publicSlug = data?.appliedContext?.entitySlug ?? slug;
+    return entityType === "competition"
+      ? `/competitions/${publicSlug}`
+      : `/teams/${publicSlug}`;
+  }, [data?.appliedContext?.entitySlug, slug, entityType]);
+
+  usePageSeo({
+    title: `${displayName} News | Football Mad`,
+    description: `Latest news and updates about ${displayName} on Football Mad.`,
+    canonicalPath,
+    noIndex: shouldBlockIndexingFromClient() || (data != null && data.mvpIndexable === false),
   });
 
   useEffect(() => {
@@ -95,15 +115,15 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
             entityType={isTeam ? "team" : "competition"}
             entityId={data?.appliedContext?.entityId ?? null}
             surface="hub_header"
-            label={entityName}
+            label={displayName}
             sizeClassName="h-8 w-8"
           />
           <div>
             <h1 className="text-4xl md:text-5xl font-bold" data-testid="text-page-title">
-              {entityName} News
+              {displayName} News
             </h1>
             <p className="text-muted-foreground text-lg" data-testid="text-page-subtitle">
-              Latest news and updates about {entityName}
+              Latest news and updates about {displayName}
             </p>
           </div>
         </div>
@@ -133,7 +153,7 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
           <div className="text-center py-12">
             <Newspaper className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
-              No articles found for {entityName}.
+              No articles found for {displayName}.
             </p>
           </div>
         )}
