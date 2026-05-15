@@ -155,7 +155,7 @@ function buildTitleOverlaySvg(headlineLines: string[]): Buffer {
 async function buildHeroBackground(photo: Buffer): Promise<Buffer> {
   return sharp(photo, { failOn: "none" })
     .rotate()
-    .resize(W, H, { fit: "cover", position: "centre" })
+    .resize(W, H, { fit: "cover", position: "north" })
     .toBuffer();
 }
 

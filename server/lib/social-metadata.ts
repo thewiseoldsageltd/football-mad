@@ -47,7 +47,7 @@ export type SocialMetaPayload = {
   description: string;
   canonicalPath: string;
   ogType?: SocialOgType;
-  /** Public article slug for `/og-image/article/<slug>-v3.jpg` (no version suffix in this field). */
+  /** Public article slug for `/og-image/article/<slug>-v4.jpg` (no version suffix in this field). */
   articleSlug?: string | null;
   imageUrl?: string | null;
   imageAlt?: string | null;
