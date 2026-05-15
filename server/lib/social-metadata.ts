@@ -1,7 +1,7 @@
 import type { Request } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq, like, or, sql } from "drizzle-orm";
 import { db } from "../db";
-import { competitions, managers, players } from "@shared/schema";
+import { articles, competitions, managers, players } from "@shared/schema";
 import type { Article } from "@shared/schema";
 import { shouldBlockSearchIndexing } from "../middleware/environment";
 import {
@@ -218,13 +218,80 @@ function isReservedRootSegment(segment: string): boolean {
 }
 
 function normalizeArticleSlug(slug: string): string {
-  return decodeURIComponent(slug).trim();
+  try {
+    return decodeURIComponent(slug).trim().toLowerCase();
+  } catch {
+    return slug.trim().toLowerCase();
+  }
 }
 
-async function fetchArticleBySlug(slug: string): Promise<Article | undefined> {
-  const normalized = normalizeArticleSlug(slug);
-  if (!normalized) return undefined;
-  return storage.getArticleBySlug(normalized);
+/** PA ingest appends `-` + 8 hex chars to headline slugs (`uniqueSlug` in ingest-pamedia). */
+const PA_MEDIA_SLUG_HASH_SUFFIX = /^(.+)-[0-9a-f]{8}$/i;
+
+function slugMatchesPublicArticlePath(dbSlug: string, requestSlug: string): boolean {
+  if (dbSlug === requestSlug) return true;
+  const m = dbSlug.match(PA_MEDIA_SLUG_HASH_SUFFIX);
+  return m?.[1] === requestSlug;
+}
+
+/**
+ * Resolve article row for a public URL slug (exact, case-insensitive, PA hash-suffix variant).
+ * Canonical URLs may omit the PA hash even when `articles.slug` includes it.
+ */
+async function fetchArticleBySlug(requestSlug: string): Promise<Article | undefined> {
+  const slug = normalizeArticleSlug(requestSlug);
+  if (!slug) return undefined;
+
+  const [exact] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
+  if (exact) return exact;
+
+  const [caseInsensitive] = await db
+    .select()
+    .from(articles)
+    .where(sql`lower(${articles.slug}) = ${slug}`)
+    .limit(1);
+  if (caseInsensitive) return caseInsensitive;
+
+  const prefixCandidates = await db
+    .select()
+    .from(articles)
+    .where(or(eq(articles.slug, slug), like(articles.slug, `${slug}-%`)))
+    .orderBy(desc(articles.publishedAt))
+    .limit(15);
+
+  for (const row of prefixCandidates) {
+    if (slugMatchesPublicArticlePath(row.slug, slug)) return row;
+  }
+
+  return undefined;
+}
+
+function resolveArticleHeadline(article: Article): string {
+  const headline = typeof article.title === "string" ? article.title.trim() : "";
+  return headline || SITE_NAME;
+}
+
+function extractFirstImageSrcFromHtml(html: string): string | null {
+  const match = html.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
+  const src = match?.[1]?.trim();
+  return src || null;
+}
+
+/** Hero/cover for OG: `cover_image` column, then first inline `<img>` in body. */
+function resolveArticleHeroImageUrl(article: Article): string {
+  const fromCover = absoluteUrl(article.coverImage);
+  if (fromCover) return fromCover;
+
+  const fromBody = absoluteUrl(extractFirstImageSrcFromHtml(article.content ?? ""));
+  if (fromBody) return fromBody;
+
+  return DEFAULT_SOCIAL_IMAGE_URL;
+}
+
+function resolveArticleDescription(article: Article): string {
+  const excerpt = typeof article.excerpt === "string" ? article.excerpt.trim() : "";
+  if (excerpt) return truncateDescription(excerpt);
+  return truncateDescription(stripHtml(article.content ?? ""));
 }
 
 function buildArticleSocialPayload(
@@ -232,19 +299,15 @@ function buildArticleSocialPayload(
   canonicalPath: string,
   robotsIndex: string,
 ): SocialMetaPayload {
-  const description = article.excerpt
-    ? truncateDescription(article.excerpt)
-    : truncateDescription(stripHtml(article.content ?? ""));
-
-  const cover = absoluteUrl(article.coverImage) ?? DEFAULT_SOCIAL_IMAGE_URL;
+  const headline = resolveArticleHeadline(article);
 
   return {
-    title: `${article.title} | Football Mad`,
-    description,
+    title: `${headline} | Football Mad`,
+    description: resolveArticleDescription(article),
     canonicalPath,
     ogType: "article",
-    imageUrl: cover,
-    imageAlt: article.title,
+    imageUrl: resolveArticleHeroImageUrl(article),
+    imageAlt: headline,
     robots: robotsIndex,
     twitterCard: "summary_large_image",
   };
