@@ -1,5 +1,6 @@
 import "./load-env";
 import express, { type Request, Response, NextFunction } from "express";
+import { registerOgImageRoute } from "./lib/og-image-route";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -100,7 +101,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Register /api/health first so it is never overridden by Vite/static/catch-all
+  // Register before Vite/static catch-all so crawlers get JPEG, not SPA HTML.
   app.get("/api/health", (_req, res) => {
     res.json({
       ok: true,
@@ -108,6 +109,7 @@ app.use((req, res, next) => {
       env: process.env.NODE_ENV || "development",
     });
   });
+  registerOgImageRoute(app);
 
   await registerRoutes(httpServer, app);
 

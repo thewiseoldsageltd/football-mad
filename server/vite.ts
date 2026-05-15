@@ -5,6 +5,7 @@ import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
+import { handleOgImage, isOgImageRequest, registerOgImageRoute } from "./lib/og-image-route";
 import { prepareSpaIndexHtml } from "./lib/spa-html";
 
 const viteLogger = createLogger();
@@ -30,9 +31,15 @@ export async function setupVite(server: Server, app: Express) {
     appType: "custom",
   });
 
+  registerOgImageRoute(app);
+
   app.use(vite.middlewares);
 
   app.use("*", async (req, res, next) => {
+    if (isOgImageRequest(req)) {
+      void handleOgImage(req, res);
+      return;
+    }
     // Never serve SPA for /api/* — let Express API routes handle them (or 404)
     if (req.path.startsWith("/api")) {
       return next();

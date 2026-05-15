@@ -82,8 +82,25 @@ export async function handleOgImage(req: Request, res: Response): Promise<void> 
   }
 }
 
+const OG_IMAGE_PATHS = ["/og-image", "/og-image/"] as const;
+
+export function isOgImageRequest(req: Pick<Request, "path">): boolean {
+  const normalized = req.path.replace(/\/+$/, "") || "/";
+  return normalized === "/og-image";
+}
+
+function bindOgImageHandlers(app: Express): void {
+  for (const routePath of OG_IMAGE_PATHS) {
+    app.get(routePath, (req, res) => {
+      void handleOgImage(req, res);
+    });
+    app.head(routePath, (req, res) => {
+      void handleOgImage(req, res);
+    });
+  }
+}
+
+/** Register before SPA/static catch-all (see server/index.ts, static.ts, vite.ts). */
 export function registerOgImageRoute(app: Express): void {
-  app.get("/og-image", (req, res) => {
-    void handleOgImage(req, res);
-  });
+  bindOgImageHandlers(app);
 }
