@@ -1,17 +1,15 @@
 import type { Express, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
-import sharp from "sharp";
 import {
   fetchArticleBySlug,
   parseArticleOgImageSlugParam,
   resolveArticleHeroImageSource,
 } from "./article-og-image";
+import { bufferToSocialOgJpeg } from "./social-og-jpeg";
 import {
   isAllowedOgImageSource,
   OG_IMAGE_DEFAULT_PATH,
-  SOCIAL_IMAGE_HEIGHT,
-  SOCIAL_IMAGE_WIDTH,
 } from "./social-image-url";
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -57,16 +55,6 @@ async function fetchImageBuffer(url: string): Promise<Buffer> {
   }
 }
 
-async function toSocialJpeg(input: Buffer): Promise<Buffer> {
-  return sharp(input)
-    .resize(SOCIAL_IMAGE_WIDTH, SOCIAL_IMAGE_HEIGHT, {
-      fit: "cover",
-      position: "attention",
-    })
-    .jpeg({ quality: 85, mozjpeg: true })
-    .toBuffer();
-}
-
 function sendSocialJpeg(res: Response, jpeg: Buffer): void {
   res.setHeader("Content-Type", "image/jpeg");
   res.setHeader("Cache-Control", "public, max-age=86400");
@@ -80,7 +68,7 @@ async function renderSocialJpegFromSource(sourceUrl: string | null): Promise<Buf
   } else {
     input = await fs.promises.readFile(defaultSourceAssetPath());
   }
-  return toSocialJpeg(input);
+  return bufferToSocialOgJpeg(input);
 }
 
 /** Legacy `/og-image?src=` proxy (kept for compatibility; not used in metadata). */
@@ -99,7 +87,7 @@ export async function handleOgImageQueryProxy(req: Request, res: Response): Prom
 export async function handleOgImageDefault(_req: Request, res: Response): Promise<void> {
   try {
     const input = await fs.promises.readFile(defaultSourceAssetPath());
-    const jpeg = await toSocialJpeg(input);
+    const jpeg = await bufferToSocialOgJpeg(input, { preferCentre: true });
     sendSocialJpeg(res, jpeg);
   } catch (err) {
     console.error("[og-image/default]", err);
