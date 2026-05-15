@@ -4,7 +4,7 @@
 set -euo pipefail
 
 BASE="${1:-https://footballmad.co.uk}"
-PATTERN='og:title|og:image|twitter:card|twitter:image|canonical|description'
+PATTERN='og:title|og:image|og:image:type|twitter:card|twitter:image|canonical|description'
 CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-10}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-30}"
 

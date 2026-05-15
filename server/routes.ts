@@ -110,6 +110,7 @@ import {
   faCupFeedMissingLaterKnockoutRounds,
   faCupDbCountsIncludeLaterKnockout,
 } from "./lib/fa-cup-cup-progress-db";
+import { registerOgImageRoute } from "./lib/og-image-route";
 import { registerSitemapRoute } from "./sitemap";
 
 const TEAMS_MVP_NAV_FILTER_SET = TEAMS_DOMESTIC_SLUG_SET;
@@ -140,6 +141,7 @@ async function withArchiveMvpIndexable(
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
+  registerOgImageRoute(app);
   registerSitemapRoute(app);
   registerLegacyGhostTagRedirects(app);
 

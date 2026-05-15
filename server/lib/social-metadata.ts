@@ -17,6 +17,7 @@ import {
   resolveManagerIdForRequestSlug,
   resolvePlayerIdForRequestSlug,
 } from "./spa-entity-noindex";
+import { resolveSocialImageForMeta } from "./social-image-url";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
 export const CANONICAL_SITE_ORIGIN = "https://footballmad.co.uk";
@@ -26,8 +27,8 @@ export const SITE_NAME = "Football Mad";
 export const DEFAULT_SITE_DESCRIPTION =
   "Football Mad — football news, fixtures, results, tables, FPL updates and fan-first football coverage.";
 
-/** TODO: replace with a dedicated 1200×630 branded social card when available. */
-export const DEFAULT_SOCIAL_IMAGE_PATH = "/assets/football-mad-fm-logo.webp";
+/** Default social card (1200×630 JPEG); logo WebP remains for on-site use. */
+export const DEFAULT_SOCIAL_IMAGE_PATH = "/assets/social-share-card.jpg";
 
 export const DEFAULT_SOCIAL_IMAGE_URL = `${CANONICAL_SITE_ORIGIN}${DEFAULT_SOCIAL_IMAGE_PATH}`;
 
@@ -113,7 +114,11 @@ async function entityNoindex(
 export function buildSocialMetaTags(meta: SocialMetaPayload): string {
   const canonicalUrl = canonicalUrlForPath(meta.canonicalPath);
   const ogType = meta.ogType ?? "website";
-  const imageUrl = absoluteUrl(meta.imageUrl) ?? DEFAULT_SOCIAL_IMAGE_URL;
+  const socialImage = resolveSocialImageForMeta(meta.imageUrl);
+  const imageUrl = socialImage.url;
+  const imageType = socialImage.mimeType;
+  const imageWidth = String(socialImage.width);
+  const imageHeight = String(socialImage.height);
   const imageAlt = meta.imageAlt?.trim() || meta.title;
   const robots = meta.robots ?? "index,follow";
   const twitterCard = meta.twitterCard ?? "summary_large_image";
@@ -131,6 +136,9 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
     `<meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     `<meta property="og:locale" content="${escapeHtml(DEFAULT_LOCALE)}" />`,
     `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
+    `<meta property="og:image:type" content="${escapeHtml(imageType)}" />`,
+    `<meta property="og:image:width" content="${imageWidth}" />`,
+    `<meta property="og:image:height" content="${imageHeight}" />`,
     `<meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />`,
     `<meta name="twitter:card" content="${escapeHtml(twitterCard)}" />`,
     `<meta name="twitter:site" content="${escapeHtml(TWITTER_SITE_HANDLE)}" />`,
