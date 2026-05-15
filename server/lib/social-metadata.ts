@@ -1,8 +1,12 @@
 import type { Request } from "express";
-import { desc, eq, like, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
-import { articles, competitions, managers, players } from "@shared/schema";
+import { competitions, managers, players } from "@shared/schema";
 import type { Article } from "@shared/schema";
+import {
+  fetchArticleBySlug,
+  normalizeArticleSlug,
+} from "./article-og-image";
 import { shouldBlockSearchIndexing } from "../middleware/environment";
 import {
   resolveCanonicalCompetitionSlug,
@@ -20,7 +24,7 @@ import {
 import { resolveSocialImageForMeta } from "./social-image-url";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
-export const CANONICAL_SITE_ORIGIN = "https://footballmad.co.uk";
+export const CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
 
 export const SITE_NAME = "Football Mad";
 
@@ -43,6 +47,8 @@ export type SocialMetaPayload = {
   description: string;
   canonicalPath: string;
   ogType?: SocialOgType;
+  /** Public article slug for `/og-image/article/<slug>.jpg` (no PA hash suffix). */
+  articleSlug?: string | null;
   imageUrl?: string | null;
   imageAlt?: string | null;
   robots?: string;
@@ -114,7 +120,10 @@ async function entityNoindex(
 export function buildSocialMetaTags(meta: SocialMetaPayload): string {
   const canonicalUrl = canonicalUrlForPath(meta.canonicalPath);
   const ogType = meta.ogType ?? "website";
-  const socialImage = resolveSocialImageForMeta(meta.imageUrl);
+  const socialImage = resolveSocialImageForMeta({
+    sourceUrl: meta.imageUrl,
+    articleSlug: meta.articleSlug,
+  });
   const imageUrl = socialImage.url;
   const imageType = socialImage.mimeType;
   const imageWidth = String(socialImage.width);
@@ -136,6 +145,7 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
     `<meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     `<meta property="og:locale" content="${escapeHtml(DEFAULT_LOCALE)}" />`,
     `<meta property="og:image" content="${escapeHtml(imageUrl)}" />`,
+    `<meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}" />`,
     `<meta property="og:image:type" content="${escapeHtml(imageType)}" />`,
     `<meta property="og:image:width" content="${imageWidth}" />`,
     `<meta property="og:image:height" content="${imageHeight}" />`,
@@ -225,75 +235,9 @@ function isReservedRootSegment(segment: string): boolean {
   return RESERVED_ROOT_SINGLE_SEGMENTS.has(segment.trim().toLowerCase());
 }
 
-function normalizeArticleSlug(slug: string): string {
-  try {
-    return decodeURIComponent(slug).trim().toLowerCase();
-  } catch {
-    return slug.trim().toLowerCase();
-  }
-}
-
-/** PA ingest appends `-` + 8 hex chars to headline slugs (`uniqueSlug` in ingest-pamedia). */
-const PA_MEDIA_SLUG_HASH_SUFFIX = /^(.+)-[0-9a-f]{8}$/i;
-
-function slugMatchesPublicArticlePath(dbSlug: string, requestSlug: string): boolean {
-  if (dbSlug === requestSlug) return true;
-  const m = dbSlug.match(PA_MEDIA_SLUG_HASH_SUFFIX);
-  return m?.[1] === requestSlug;
-}
-
-/**
- * Resolve article row for a public URL slug (exact, case-insensitive, PA hash-suffix variant).
- * Canonical URLs may omit the PA hash even when `articles.slug` includes it.
- */
-async function fetchArticleBySlug(requestSlug: string): Promise<Article | undefined> {
-  const slug = normalizeArticleSlug(requestSlug);
-  if (!slug) return undefined;
-
-  const [exact] = await db.select().from(articles).where(eq(articles.slug, slug)).limit(1);
-  if (exact) return exact;
-
-  const [caseInsensitive] = await db
-    .select()
-    .from(articles)
-    .where(sql`lower(${articles.slug}) = ${slug}`)
-    .limit(1);
-  if (caseInsensitive) return caseInsensitive;
-
-  const prefixCandidates = await db
-    .select()
-    .from(articles)
-    .where(or(eq(articles.slug, slug), like(articles.slug, `${slug}-%`)))
-    .orderBy(desc(articles.publishedAt))
-    .limit(15);
-
-  for (const row of prefixCandidates) {
-    if (slugMatchesPublicArticlePath(row.slug, slug)) return row;
-  }
-
-  return undefined;
-}
-
 function resolveArticleHeadline(article: Article): string {
   const headline = typeof article.title === "string" ? article.title.trim() : "";
   return headline || SITE_NAME;
-}
-
-function extractFirstImageSrcFromHtml(html: string): string | null {
-  const match = html.match(/<img\b[^>]*\bsrc\s*=\s*["']([^"']+)["']/i);
-  const src = match?.[1]?.trim();
-  return src || null;
-}
-
-/** Hero/cover for OG: `cover_image` column, then first inline `<img>` in body. */
-function resolveArticleHeroImageUrl(article: Article): string {
-  const fromCover = absoluteUrl(article.coverImage);
-  if (fromCover) return fromCover;
-
-  const fromBody = absoluteUrl(extractFirstImageSrcFromHtml(article.content ?? ""));
-  if (fromBody) return fromBody;
-
-  return DEFAULT_SOCIAL_IMAGE_URL;
 }
 
 function resolveArticleDescription(article: Article): string {
@@ -304,6 +248,7 @@ function resolveArticleDescription(article: Article): string {
 
 function buildArticleSocialPayload(
   article: Article,
+  publicSlug: string,
   canonicalPath: string,
   robotsIndex: string,
 ): SocialMetaPayload {
@@ -314,7 +259,7 @@ function buildArticleSocialPayload(
     description: resolveArticleDescription(article),
     canonicalPath,
     ogType: "article",
-    imageUrl: resolveArticleHeroImageUrl(article),
+    articleSlug: publicSlug,
     imageAlt: headline,
     robots: robotsIndex,
     twitterCard: "summary_large_image",
@@ -334,7 +279,7 @@ async function resolveArticlePageMetadata(
   const article = await fetchArticleBySlug(slug);
   if (!article) return null;
 
-  return buildArticleSocialPayload(article, canonicalArticlePath(slug), robotsIndex);
+  return buildArticleSocialPayload(article, slug, canonicalArticlePath(slug), robotsIndex);
 }
 
 function defaultPayload(

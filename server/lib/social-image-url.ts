@@ -1,6 +1,9 @@
 import { absoluteUrl, CANONICAL_SITE_ORIGIN } from "./social-metadata";
 
 export const OG_IMAGE_PATH = "/og-image";
+export const OG_IMAGE_ARTICLE_PREFIX = "/og-image/article";
+export const OG_IMAGE_DEFAULT_PATH = "/og-image/default.jpg";
+
 export const SOCIAL_IMAGE_WIDTH = 1200;
 export const SOCIAL_IMAGE_HEIGHT = 630;
 
@@ -12,9 +15,8 @@ export type SocialImageMeta = {
 };
 
 const CRAWLER_SAFE_EXT = /\.(jpe?g|png)(\?|#|$)/i;
-const WEBP_EXT = /\.webp(\?|#|$)/i;
 
-/** Hosts allowed as `src` for /og-image (prevents open-proxy abuse). */
+/** Hosts allowed as `src` for legacy `/og-image?src=` (prevents open-proxy abuse). */
 export const OG_IMAGE_ALLOWED_HOSTS = new Set([
   "img.footballmad.co.uk",
   "footballmad.co.uk",
@@ -41,28 +43,54 @@ function isCrawlerSafeDirectImage(url: string): boolean {
   return CRAWLER_SAFE_EXT.test(url) && isAllowedOgImageSource(url);
 }
 
-function ogImageProxyUrlForSource(sourceUrl: string): string {
+/** Clean article social card URL (no query string). */
+export function articleOgImageUrl(publicSlug: string): string {
+  const slug = publicSlug.trim().replace(/^\/+|\/+$/g, "").replace(/\.jpg$/i, "");
+  const segment = slug
+    .split("/")
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  return `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_ARTICLE_PREFIX}/${segment}.jpg`;
+}
+
+export function defaultOgImageUrl(): string {
+  return `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_DEFAULT_PATH}`;
+}
+
+/** Legacy query-string proxy (not used in metadata). */
+export function ogImageProxyUrlForSource(sourceUrl: string): string {
   return `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_PATH}?src=${encodeURIComponent(sourceUrl)}`;
 }
 
+export type ResolveSocialImageOptions = {
+  sourceUrl?: string | null;
+  articleSlug?: string | null;
+};
+
 /**
  * Resolve crawler-safe image metadata for Open Graph / Twitter tags.
- * On-site assets may remain WebP; social tags use JPEG via /og-image when needed.
+ * Articles use `/og-image/article/<slug>.jpg`; other pages use `/og-image/default.jpg` or direct JPG/PNG.
  */
 export function resolveSocialImageForMeta(
-  sourceUrl: string | null | undefined,
+  options: ResolveSocialImageOptions | string | null | undefined,
 ): SocialImageMeta {
-  const abs = absoluteUrl(sourceUrl);
-  if (!abs) {
+  const opts: ResolveSocialImageOptions =
+    typeof options === "string" || options == null
+      ? { sourceUrl: options ?? null }
+      : options;
+
+  if (opts.articleSlug?.trim()) {
     return {
-      url: `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_PATH}`,
+      url: articleOgImageUrl(opts.articleSlug),
       mimeType: "image/jpeg",
       width: SOCIAL_IMAGE_WIDTH,
       height: SOCIAL_IMAGE_HEIGHT,
     };
   }
 
-  if (isCrawlerSafeDirectImage(abs)) {
+  const abs = absoluteUrl(opts.sourceUrl);
+  if (abs && isCrawlerSafeDirectImage(abs)) {
     return {
       url: abs,
       mimeType: mimeTypeForImageUrl(abs),
@@ -71,26 +99,8 @@ export function resolveSocialImageForMeta(
     };
   }
 
-  if (WEBP_EXT.test(abs) && isAllowedOgImageSource(abs)) {
-    return {
-      url: ogImageProxyUrlForSource(abs),
-      mimeType: "image/jpeg",
-      width: SOCIAL_IMAGE_WIDTH,
-      height: SOCIAL_IMAGE_HEIGHT,
-    };
-  }
-
-  if (isAllowedOgImageSource(abs)) {
-    return {
-      url: ogImageProxyUrlForSource(abs),
-      mimeType: "image/jpeg",
-      width: SOCIAL_IMAGE_WIDTH,
-      height: SOCIAL_IMAGE_HEIGHT,
-    };
-  }
-
   return {
-    url: `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_PATH}`,
+    url: defaultOgImageUrl(),
     mimeType: "image/jpeg",
     width: SOCIAL_IMAGE_WIDTH,
     height: SOCIAL_IMAGE_HEIGHT,

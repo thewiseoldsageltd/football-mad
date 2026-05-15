@@ -3,7 +3,13 @@ import fs from "fs";
 import path from "path";
 import sharp from "sharp";
 import {
+  fetchArticleBySlug,
+  parseArticleOgImageSlugParam,
+  resolveArticleHeroImageSource,
+} from "./article-og-image";
+import {
   isAllowedOgImageSource,
+  OG_IMAGE_DEFAULT_PATH,
   SOCIAL_IMAGE_HEIGHT,
   SOCIAL_IMAGE_WIDTH,
 } from "./social-image-url";
@@ -61,46 +67,135 @@ async function toSocialJpeg(input: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
-export async function handleOgImage(req: Request, res: Response): Promise<void> {
+function sendSocialJpeg(res: Response, jpeg: Buffer): void {
+  res.setHeader("Content-Type", "image/jpeg");
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.send(jpeg);
+}
+
+async function renderSocialJpegFromSource(sourceUrl: string | null): Promise<Buffer> {
+  let input: Buffer;
+  if (sourceUrl && isAllowedOgImageSource(sourceUrl)) {
+    input = await fetchImageBuffer(sourceUrl);
+  } else {
+    input = await fs.promises.readFile(defaultSourceAssetPath());
+  }
+  return toSocialJpeg(input);
+}
+
+/** Legacy `/og-image?src=` proxy (kept for compatibility; not used in metadata). */
+export async function handleOgImageQueryProxy(req: Request, res: Response): Promise<void> {
   try {
     const rawSrc = typeof req.query.src === "string" ? req.query.src.trim() : "";
-    let input: Buffer;
-
-    if (rawSrc && isAllowedOgImageSource(rawSrc)) {
-      input = await fetchImageBuffer(rawSrc);
-    } else {
-      input = await fs.promises.readFile(defaultSourceAssetPath());
-    }
-
-    const jpeg = await toSocialJpeg(input);
-    res.setHeader("Content-Type", "image/jpeg");
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.send(jpeg);
+    const sourceUrl = rawSrc && isAllowedOgImageSource(rawSrc) ? rawSrc : null;
+    const jpeg = await renderSocialJpegFromSource(sourceUrl);
+    sendSocialJpeg(res, jpeg);
   } catch (err) {
     console.error("[og-image]", err);
     res.status(502).type("text/plain").send("Bad Gateway");
   }
 }
 
-const OG_IMAGE_PATHS = ["/og-image", "/og-image/"] as const;
+export async function handleOgImageDefault(_req: Request, res: Response): Promise<void> {
+  try {
+    const input = await fs.promises.readFile(defaultSourceAssetPath());
+    const jpeg = await toSocialJpeg(input);
+    sendSocialJpeg(res, jpeg);
+  } catch (err) {
+    console.error("[og-image/default]", err);
+    res.status(502).type("text/plain").send("Bad Gateway");
+  }
+}
+
+export async function handleOgImageArticle(
+  _req: Request,
+  res: Response,
+  rawSlugParam: string,
+): Promise<void> {
+  try {
+    const requestSlug = parseArticleOgImageSlugParam(rawSlugParam);
+    if (!requestSlug) {
+      res.status(404).type("text/plain").send("Not Found");
+      return;
+    }
+
+    const article = await fetchArticleBySlug(requestSlug);
+    if (!article) {
+      res.status(404).type("text/plain").send("Not Found");
+      return;
+    }
+
+    const sourceUrl = resolveArticleHeroImageSource(article);
+    const jpeg = await renderSocialJpegFromSource(sourceUrl);
+    sendSocialJpeg(res, jpeg);
+  } catch (err) {
+    console.error("[og-image/article]", err);
+    res.status(502).type("text/plain").send("Bad Gateway");
+  }
+}
+
+/** Dispatch any `/og-image` path (used by SPA catch-all guards). */
+export async function handleOgImageRequest(req: Request, res: Response): Promise<void> {
+  const normalized = req.path.replace(/\/+$/, "") || "/";
+
+  if (normalized === OG_IMAGE_DEFAULT_PATH) {
+    await handleOgImageDefault(req, res);
+    return;
+  }
+
+  const articlePrefix = "/og-image/article/";
+  if (normalized.startsWith(articlePrefix)) {
+    const slugParam = normalized.slice(articlePrefix.length);
+    if (!slugParam) {
+      res.status(404).type("text/plain").send("Not Found");
+      return;
+    }
+    await handleOgImageArticle(req, res, slugParam);
+    return;
+  }
+
+  if (normalized === "/og-image") {
+    await handleOgImageQueryProxy(req, res);
+    return;
+  }
+
+  res.status(404).type("text/plain").send("Not Found");
+}
 
 export function isOgImageRequest(req: Pick<Request, "path">): boolean {
   const normalized = req.path.replace(/\/+$/, "") || "/";
-  return normalized === "/og-image";
+  return normalized === "/og-image" || normalized.startsWith("/og-image/");
 }
 
-function bindOgImageHandlers(app: Express): void {
-  for (const routePath of OG_IMAGE_PATHS) {
-    app.get(routePath, (req, res) => {
-      void handleOgImage(req, res);
-    });
-    app.head(routePath, (req, res) => {
-      void handleOgImage(req, res);
-    });
-  }
+function bindHandler(
+  app: Express,
+  method: "get" | "head",
+  routePath: string,
+  handler: (req: Request, res: Response) => void | Promise<void>,
+): void {
+  app[method](routePath, (req, res) => {
+    void handler(req, res);
+  });
+}
+
+/** Express treats `.jpg` as a format suffix on `:slug` routes; use a regex instead. */
+const ARTICLE_OG_IMAGE_PATH_RE = /^\/og-image\/article\/([^/]+)\.jpg\/?$/i;
+
+function bindArticleOgImage(app: Express, method: "get" | "head"): void {
+  app[method](ARTICLE_OG_IMAGE_PATH_RE, (req, res) => {
+    const slugParam = String(req.params[0] ?? "");
+    void handleOgImageArticle(req, res, slugParam);
+  });
 }
 
 /** Register before SPA/static catch-all (see server/index.ts, static.ts, vite.ts). */
 export function registerOgImageRoute(app: Express): void {
-  bindOgImageHandlers(app);
+  bindHandler(app, "get", "/og-image", handleOgImageQueryProxy);
+  bindHandler(app, "head", "/og-image", handleOgImageQueryProxy);
+
+  bindHandler(app, "get", OG_IMAGE_DEFAULT_PATH, handleOgImageDefault);
+  bindHandler(app, "head", OG_IMAGE_DEFAULT_PATH, handleOgImageDefault);
+
+  bindArticleOgImage(app, "get");
+  bindArticleOgImage(app, "head");
 }
