@@ -15,6 +15,7 @@ import { db } from "../db";
 import { articles } from "@shared/schema";
 import { eq, and, desc, ilike, not } from "drizzle-orm";
 import * as cheerio from "cheerio";
+import type { Element } from "domhandler";
 import { uploadImageVariantsToR2, seoSlugFromText, shortStableHash } from "../lib/r2";
 import { startJobRun, finishJobRun, jobFetch } from "../lib/job-observability";
 import { runWithJobContext } from "../lib/job-context";
@@ -78,7 +79,7 @@ function getFirstUrlFromSrcset(srcset: string): string | null {
   return url?.trim() || null;
 }
 
-function getInlineImgCandidateUrl($img: cheerio.Cheerio<cheerio.Element>, $: cheerio.CheerioAPI): string | null {
+function getInlineImgCandidateUrl($img: cheerio.Cheerio<Element>, $: cheerio.CheerioAPI): string | null {
   const src = $img.attr("src")?.trim();
   if (src) return src;
   const dataSrc = $img.attr("data-src")?.trim();
@@ -149,11 +150,11 @@ export async function runBackfillPaMediaInlineImages(): Promise<{
       processed++;
       try {
         let content = row.content ?? "";
-        const $ = cheerio.load(content, { decodeEntities: true });
+        const $ = cheerio.load(content);
 
-        type InlineCandidate = { el: cheerio.Element; url: string };
+        type InlineCandidate = { el: Element; url: string };
         const candidates: InlineCandidate[] = [];
-        $("img").each((_: number, el: cheerio.Element) => {
+        $("img").each((_: number, el: Element) => {
           const $img = $(el);
           const raw = getInlineImgCandidateUrl($img, $);
           if (!raw) return;

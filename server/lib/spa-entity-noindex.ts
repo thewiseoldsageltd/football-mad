@@ -9,7 +9,7 @@ import { storage } from "../storage";
 
 const X_ROBOTS_NON_MVP = "noindex, follow";
 
-async function resolveCompetitionIdForRequestSlug(norm: string): Promise<string | null> {
+export async function resolveCompetitionIdForRequestSlug(norm: string): Promise<string | null> {
   const rows = await db
     .select({ id: competitions.id })
     .from(competitions)
@@ -34,7 +34,7 @@ async function resolveCompetitionIdForRequestSlug(norm: string): Promise<string 
   return aliasRows[0].id;
 }
 
-async function resolvePlayerIdForRequestSlug(norm: string): Promise<string | null> {
+export async function resolvePlayerIdForRequestSlug(norm: string): Promise<string | null> {
   const rows = await db
     .select({ id: players.id })
     .from(players)
@@ -58,7 +58,7 @@ async function resolvePlayerIdForRequestSlug(norm: string): Promise<string | nul
   return aliasRows[0].entityId;
 }
 
-async function resolveManagerIdForRequestSlug(norm: string): Promise<string | null> {
+export async function resolveManagerIdForRequestSlug(norm: string): Promise<string | null> {
   const rows = await db
     .select({ id: managers.id })
     .from(managers)

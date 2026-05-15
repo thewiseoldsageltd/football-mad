@@ -4,7 +4,7 @@ export function getSeoBaseUrl(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin;
   }
-  return import.meta.env.VITE_SITE_URL || "https://football-mad.replit.app";
+  return import.meta.env.VITE_SITE_URL || "https://footballmad.co.uk";
 }
 
 /**
@@ -77,7 +77,9 @@ export function usePageSeo({
       "page-seo-og-url",
       "page-seo-og-type",
       "page-seo-og-site-name",
+      "page-seo-og-locale",
       "page-seo-og-image",
+      "page-seo-twitter-site",
       "page-seo-twitter-card",
       "page-seo-twitter-title",
       "page-seo-twitter-description",
@@ -101,17 +103,15 @@ export function usePageSeo({
     upsertMeta("page-seo-og-url", "property", "og:url", canonicalUrl);
     upsertMeta("page-seo-og-type", "property", "og:type", ogType);
     upsertMeta("page-seo-og-site-name", "property", "og:site_name", "Football Mad");
+    upsertMeta("page-seo-og-locale", "property", "og:locale", "en_GB");
     upsertMeta("page-seo-twitter-card", "name", "twitter:card", imageUrl ? "summary_large_image" : "summary");
+    upsertMeta("page-seo-twitter-site", "name", "twitter:site", "@FootballMadUK");
     upsertMeta("page-seo-twitter-title", "name", "twitter:title", title);
     upsertMeta("page-seo-twitter-description", "name", "twitter:description", description);
 
-    if (imageUrl) {
-      upsertMeta("page-seo-og-image", "property", "og:image", imageUrl);
-      upsertMeta("page-seo-twitter-image", "name", "twitter:image", imageUrl);
-    } else {
-      removeById("page-seo-og-image");
-      removeById("page-seo-twitter-image");
-    }
+    const resolvedImage = imageUrl ?? absoluteSeoUrl("/assets/football-mad-fm-logo.webp");
+    upsertMeta("page-seo-og-image", "property", "og:image", resolvedImage);
+    upsertMeta("page-seo-twitter-image", "name", "twitter:image", resolvedImage);
 
     if (noIndex) {
       upsertMeta("page-seo-robots", "name", "robots", "noindex,follow");

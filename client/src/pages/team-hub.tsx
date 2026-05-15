@@ -17,6 +17,7 @@ import { MatchCard } from "@/components/cards/match-card";
 import { InjuryCard } from "@/components/cards/injury-card";
 import { PostCard } from "@/components/cards/post-card";
 import { TransferCard } from "@/components/cards/transfer-card";
+import type { BlendedTransferItem } from "@/data/transfers-dummy";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
@@ -811,6 +812,43 @@ const MOCK_TRANSFER_DATA: Record<string, {
   },
 };
 
+function tierFromReliability(tier: string | null): "Tier A" | "Tier B" | "Tier C" | undefined {
+  const t = (tier ?? "C").toUpperCase();
+  if (t === "A") return "Tier A";
+  if (t === "B") return "Tier B";
+  return "Tier C";
+}
+
+function apiTransferToBlended(transfer: Transfer): BlendedTransferItem {
+  const fromClub = transfer.fromTeamName?.trim() || "Unknown";
+  const toClub = transfer.toTeamName?.trim() || "Unknown";
+  const updatedAt = (transfer.updatedAt ?? transfer.createdAt ?? new Date()).toISOString();
+  if (transfer.status === "confirmed") {
+    return {
+      kind: "confirmed",
+      id: transfer.id,
+      playerName: transfer.playerName,
+      fromClub,
+      toClub,
+      moveType: "Permanent",
+      feeText: transfer.fee ?? undefined,
+      confirmedAt: updatedAt,
+      sourceType: "Official",
+    };
+  }
+  return {
+    kind: "rumour",
+    id: transfer.id,
+    playerName: transfer.playerName,
+    fromClub,
+    toClub,
+    feeText: transfer.fee ?? undefined,
+    updatedAt,
+    tier: tierFromReliability(transfer.reliabilityTier),
+    sourceLabel: transfer.sourceName ?? undefined,
+  };
+}
+
 function getPlayerInitials(name: string): string {
   const parts = name.split(" ").filter(p => p.length > 0);
   if (parts.length >= 2) {
@@ -1050,7 +1088,7 @@ function TransfersTabContent({
               <h3 className="text-lg font-bold mb-4">Rumours & Links</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 {apiRumours.map((transfer) => (
-                  <TransferCard key={transfer.id} transfer={transfer} />
+                  <TransferCard key={transfer.id} transfer={apiTransferToBlended(transfer)} />
                 ))}
                 {rumours.map((rumour) => (
                   <RumourCard key={rumour.id} rumour={rumour} teamName={teamName} />
@@ -1071,7 +1109,7 @@ function TransfersTabContent({
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4">
                     {confirmedIn.map((transfer) => (
-                      <TransferCard key={transfer.id} transfer={transfer} />
+                      <TransferCard key={transfer.id} transfer={apiTransferToBlended(transfer as Transfer)} />
                     ))}
                   </div>
                 </div>
@@ -1085,7 +1123,7 @@ function TransfersTabContent({
                   </div>
                   <div className="grid sm:grid-cols-2 gap-4">
                     {confirmedOut.map((transfer) => (
-                      <TransferCard key={transfer.id} transfer={transfer} />
+                      <TransferCard key={transfer.id} transfer={apiTransferToBlended(transfer as Transfer)} />
                     ))}
                   </div>
                 </div>
@@ -2669,7 +2707,7 @@ export default function TeamHubPage() {
       name: team.name,
       sport: "Soccer",
       url: absoluteSeoUrl(canonicalPath),
-      logo: team.imageUrl ? absoluteSeoUrl(team.imageUrl) : absoluteSeoUrl("/assets/football-mad-fm-logo.webp"),
+      logo: team.logoUrl ? absoluteSeoUrl(team.logoUrl) : absoluteSeoUrl("/assets/football-mad-fm-logo.webp"),
       coach: currentManager
         ? {
             "@type": "Person",
@@ -2724,7 +2762,7 @@ export default function TeamHubPage() {
       <TeamHubHeader
         teamName={team.name}
         teamSlug={team.slug}
-        teamCrestUrl={team.imageUrl ?? null}
+        teamCrestUrl={team.logoUrl ?? null}
         managerName={currentManager?.name ?? null}
         clubPrimaryColor={resolvedPrimary}
         clubSecondaryColor={branding.secondary}

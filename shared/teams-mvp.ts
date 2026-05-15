@@ -98,7 +98,7 @@ const LEGACY_UEFA_COMP_URL_SLUGS = new Set([
 
 /** Domestic cups / European comps — invalid Teams tab `?comp=` (fall back to All). */
 const TEAMS_PAGE_INVALID_URL_SLUGS = new Set([
-  ...LEGACY_UEFA_COMP_URL_SLUGS,
+  ...Array.from(LEGACY_UEFA_COMP_URL_SLUGS),
   "fa-cup",
   "efl-cup",
   "carabao-cup",

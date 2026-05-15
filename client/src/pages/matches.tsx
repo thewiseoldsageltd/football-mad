@@ -506,7 +506,7 @@ function CompetitionOption({
 }) {
   const parsed = parseCompetitionLabel(competition);
   const country = parsed.country || getCompetitionCountryById(competitionId);
-  const flagUrl = getCountryFlagUrl(country);
+  const flagUrl = getCountryFlagUrl(country ?? undefined);
   // Use provided displayName (may include disambiguation) or fallback to parsed name
   const label = displayName || parsed.name;
 

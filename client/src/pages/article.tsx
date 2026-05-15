@@ -164,9 +164,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string, auth
   const [articleUrl, setArticleUrl] = useState("");
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setArticleUrl(`${window.location.origin}${newsArticle(canonicalSlug)}`);
-    }
+    setArticleUrl(absoluteSeoUrl(newsArticle(canonicalSlug)));
   }, [canonicalSlug]);
 
   useEffect(() => {
@@ -210,15 +208,16 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string, auth
     setMeta("property", "og:type", "article");
     setMeta("property", "og:url", articleUrl);
     setMeta("property", "og:site_name", "Football Mad");
-    if (article.coverImage) {
-      setMeta("property", "og:image", article.coverImage);
-    }
+    setMeta("property", "og:locale", "en_GB");
+    const imageUrl = absoluteSeoUrl(article.coverImage || "/assets/football-mad-fm-logo.webp");
+    setMeta("property", "og:image", imageUrl);
+    setMeta("property", "og:image:alt", article.title);
     setMeta("name", "twitter:card", "summary_large_image");
+    setMeta("name", "twitter:site", "@FootballMadUK");
     setMeta("name", "twitter:title", article.title);
     setMeta("name", "twitter:description", description);
-    if (article.coverImage) {
-      setMeta("name", "twitter:image", article.coverImage);
-    }
+    setMeta("name", "twitter:image", imageUrl);
+    setMeta("name", "twitter:image:alt", article.title);
 
     let jsonLd = document.getElementById("article-jsonld") as HTMLScriptElement | null;
     if (!jsonLd) {

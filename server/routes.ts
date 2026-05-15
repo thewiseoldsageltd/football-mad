@@ -1548,8 +1548,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
 
-    for (const bucket of [...rowsByStaticId.values(), ...rowsByComposite.values()]) {
-      bucket.sort((a, b) => toMs(a.kickoffTime) - toMs(b.kickoffTime));
+    for (const bucket of [
+      ...Array.from(rowsByStaticId.values()),
+      ...Array.from(rowsByComposite.values()),
+    ]) {
+      bucket.sort((a: { kickoffTime?: unknown }, b: { kickoffTime?: unknown }) =>
+        toMs(a.kickoffTime) - toMs(b.kickoffTime),
+      );
     }
 
     return matchRows.filter((row) => {
@@ -6254,7 +6259,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const targetRounds = new Set(["Fifth Round", "Quarter-finals", "Semi-finals", "Final"]);
         const preserved = cupRounds.filter((r) => !targetRounds.has(r.name));
         const supplemented: CupRound[] = [];
-        for (const [name, list] of faCupSupplementMap.entries()) {
+        for (const [name, list] of Array.from(faCupSupplementMap.entries())) {
           if (list.length === 0) continue;
           supplemented.push({
             name,

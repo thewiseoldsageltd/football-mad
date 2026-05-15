@@ -251,11 +251,11 @@ function finalizeDebug(
   debugLines.push(`[CupProgressTree] Total raw refs (before dedupe): ${refs.length}`);
   debugLines.push(`[CupProgressTree] Distinct stage names: ${debugState.stages.size}`);
   if (debugState.stages.size > 0) {
-    debugLines.push(`[CupProgressTree] Stages: ${[...debugState.stages].slice(0, 40).join(", ")}${debugState.stages.size > 40 ? "…" : ""}`);
+    debugLines.push(`[CupProgressTree] Stages: ${Array.from(debugState.stages).slice(0, 40).join(", ")}${debugState.stages.size > 40 ? "…" : ""}`);
   }
-  debugLines.push(`[CupProgressTree] Sample week/round labels: ${[...debugState.weekLabels, ...debugState.roundLabels].slice(0, 30).join(" | ")}`);
+  debugLines.push(`[CupProgressTree] Sample week/round labels: ${[...Array.from(debugState.weekLabels), ...Array.from(debugState.roundLabels)].slice(0, 30).join(" | ")}`);
 
-  const sortedBranches = [...debugState.branchCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const sortedBranches = Array.from(debugState.branchCounts.entries()).sort((a, b) => b[1] - a[1]);
   for (const [key, n] of sortedBranches.slice(0, 80)) {
     debugLines.push(`[CupProgressTree] branch ${key} → ${n} matches`);
   }

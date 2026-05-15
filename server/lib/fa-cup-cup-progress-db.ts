@@ -82,7 +82,7 @@ export function seasonKeyCandidates(seasonParam: string | undefined): string[] |
     out.add(`${y1}/${y2}`);
     out.add(`${y1}-${y2.slice(2)}`);
   }
-  return [...out];
+  return Array.from(out);
 }
 
 export type DbRoundCountRow = { roundLabel: string | null; count: number };
@@ -381,7 +381,7 @@ export function mergeFaCupDbFallback(
     byName.set(r.name, { ...r, matches: [...r.matches] });
   }
 
-  for (const [canonical, dbMatches] of dbByCanonical) {
+  for (const [canonical, dbMatches] of Array.from(dbByCanonical.entries())) {
     const order = FA_CUP_ORDER_BY_NAME[canonical] ?? 99;
     const existing = byName.get(canonical);
     const seen = new Set<string>();
@@ -466,7 +466,7 @@ export function mergeFaCupDbFallback(
     }
   }
 
-  const out = [...byName.values()];
+  const out = Array.from(byName.values());
   out.sort((a, b) => a.order - b.order);
   const rounds = out.map((r) => ({
     ...r,

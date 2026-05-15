@@ -8,6 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "validate:social-meta": "bash script/validate-social-meta.sh",
     "db:push": "drizzle-kit push",
     "db:generate": "tsx script/db-generate.ts",
     "db:baseline": "tsx script/db-baseline.ts",

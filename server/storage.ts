@@ -407,7 +407,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     const out = new Map<string, string[]>();
-    for (const [key, set] of map.entries()) out.set(key, Array.from(set));
+    for (const [key, set] of Array.from(map.entries())) out.set(key, Array.from(set));
     return out;
   }
 
@@ -1220,7 +1220,7 @@ export class DatabaseStorage implements IStorage {
           tagCounts.set(t, (tagCounts.get(t) ?? 0) + 1);
         }
       }
-      const sortedTags = [...tagCounts.entries()].sort(
+      const sortedTags = Array.from(tagCounts.entries()).sort(
         (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
       );
       inferredPrimaryBeat =
@@ -1256,15 +1256,23 @@ export class DatabaseStorage implements IStorage {
 
   /** Harden list row for /api/news and /api/news/updates so null fields (e.g. PA Media tags) don't break the UI. */
   normalizeArticleListRow<T extends Record<string, unknown>>(row: T): T & { excerpt: string; tags: unknown[]; competition: string | null; contentType: string; coverImage: string | null; authorName: string; openingText: string } {
+    const excerpt = typeof row.excerpt === "string" ? row.excerpt : "";
+    const tags = Array.isArray(row.tags) ? row.tags : [];
+    const competition = typeof row.competition === "string" ? row.competition : null;
+    const contentType = typeof row.contentType === "string" ? row.contentType : "story";
+    const coverImage = typeof row.coverImage === "string" ? row.coverImage : null;
+    const authorName = typeof row.authorName === "string" ? row.authorName : "PA Media";
+    const rawOpening = (row as { openingText?: unknown }).openingText;
+    const openingText = typeof rawOpening === "string" ? rawOpening : "";
     return {
       ...row,
-      excerpt: row.excerpt ?? "",
-      tags: row.tags ?? [],
-      competition: row.competition ?? null,
-      contentType: row.contentType ?? "story",
-      coverImage: row.coverImage ?? null,
-      authorName: row.authorName ?? "PA Media",
-      openingText: (row as { openingText?: string | null }).openingText ?? "",
+      excerpt,
+      tags,
+      competition,
+      contentType,
+      coverImage,
+      authorName,
+      openingText,
     };
   }
 
@@ -2092,38 +2100,51 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Matches
+  private async lookupTeamById(teamId: string | null | undefined): Promise<Team | undefined> {
+    if (!teamId) return undefined;
+    const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
+    return team;
+  }
+
   async getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
     const results = await db.select().from(matches).orderBy(matches.kickoffTime);
-    const enriched = await Promise.all(results.map(async (match) => {
-      const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
-      const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
-      return { ...match, homeTeam, awayTeam };
-    }));
+    const enriched = await Promise.all(
+      results.map(async (match) => ({
+        ...match,
+        homeTeam: await this.lookupTeamById(match.homeTeamId),
+        awayTeam: await this.lookupTeamById(match.awayTeamId),
+      })),
+    );
     return enriched;
   }
 
   async getMatchBySlug(slug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team }) | undefined> {
     const [match] = await db.select().from(matches).where(eq(matches.slug, slug));
     if (!match) return undefined;
-    const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
-    const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
-    return { ...match, homeTeam, awayTeam };
+    return {
+      ...match,
+      homeTeam: await this.lookupTeamById(match.homeTeamId),
+      awayTeam: await this.lookupTeamById(match.awayTeamId),
+    };
   }
 
   async getMatchesByTeam(teamSlug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
     const team = await this.getTeamBySlug(teamSlug);
     if (!team) return [];
-    
-    const results = await db.select().from(matches)
+
+    const results = await db
+      .select()
+      .from(matches)
       .where(or(eq(matches.homeTeamId, team.id), eq(matches.awayTeamId, team.id)))
       .orderBy(matches.kickoffTime);
-    
-    const enriched = await Promise.all(results.map(async (match) => {
-      const [homeTeam] = await db.select().from(teams).where(eq(teams.id, match.homeTeamId));
-      const [awayTeam] = await db.select().from(teams).where(eq(teams.id, match.awayTeamId));
-      return { ...match, homeTeam, awayTeam };
-    }));
-    return enriched;
+
+    return Promise.all(
+      results.map(async (match) => ({
+        ...match,
+        homeTeam: await this.lookupTeamById(match.homeTeamId),
+        awayTeam: await this.lookupTeamById(match.awayTeamId),
+      })),
+    );
   }
 
   async createMatch(data: InsertMatch): Promise<Match> {

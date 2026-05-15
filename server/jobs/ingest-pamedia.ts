@@ -10,6 +10,7 @@ import { db, pool } from "../db";
 import { articles } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import * as cheerio from "cheerio";
+import type { Element } from "domhandler";
 import {
   uploadImageVariantsToR2,
   uploadHeroToR2,
@@ -161,7 +162,7 @@ function getFirstUrlFromSrcset(srcset: string): string | null {
 }
 
 /** Get candidate fetch URL from img: src, data-src, data-original, data-lazy-src, or first from srcset. */
-function getInlineImgCandidateUrl($img: cheerio.Cheerio<cheerio.Element>, $: cheerio.CheerioAPI): string | null {
+function getInlineImgCandidateUrl($img: cheerio.Cheerio<Element>, $: cheerio.CheerioAPI): string | null {
   const src = $img.attr("src")?.trim();
   if (src) return src;
   const dataSrc = $img.attr("data-src")?.trim();
@@ -328,7 +329,11 @@ export async function runPaMediaIngest(): Promise<{
       [PAMEDIA_JOB_STATE_KEY]
     );
     if (!lockResult.rows[0]?.acquired) {
-      await finishJobRun(runId, { status: "success", counters: { skippedReason: "locked" } });
+      await finishJobRun(runId, {
+        status: "success",
+        stoppedReason: "locked",
+        counters: { skippedLocked: 1 },
+      });
       return { ok: true, processed: 0, skippedReason: "locked" };
     }
 
@@ -464,7 +469,7 @@ export async function runPaMediaIngest(): Promise<{
       }
 
       // --- Inline: <figure id="embedded..."> and plain <img src="//image.assets..."> ---
-      const $ = cheerio.load(content, { decodeEntities: true });
+      const $ = cheerio.load(content);
 
       if (DEBUG_PAMEDIA_IMAGES) {
         const assocKeys = Object.keys(item.associations);
@@ -475,12 +480,12 @@ export async function runPaMediaIngest(): Promise<{
         };
         const bodyHasPaAssets = item.content.includes("image.assets.pressassociation.io");
         const imgCount = $("img").length;
-        const imgPaCount = $("img").filter((_: number, el: cheerio.Element) => {
+        const imgPaCount = $("img").filter((_: number, el: Element) => {
           const src = $(el).attr("src") ?? "";
           const srcset = $(el).attr("srcset") ?? "";
           return src.includes("image.assets.pressassociation.io") || srcset.includes("image.assets.pressassociation.io");
         }).length;
-        const embeddedFigureCount = $('figure[id^="embedded"]').filter((_: number, el: cheerio.Element) => /^embedded\d+$/.test($(el).attr("id") ?? "")).length;
+        const embeddedFigureCount = $('figure[id^="embedded"]').filter((_: number, el: Element) => /^embedded\d+$/.test($(el).attr("id") ?? "")).length;
         console.log(
           `[ingest-pamedia DEBUG] uri=${item.id} headline=${item.headline.slice(0, 60)} | assocKeys=${assocKeys.length} feature=${JSON.stringify(hasFeature)} | bodyHasPaAssets=${bodyHasPaAssets} | imgCount=${imgCount} imgPaCount=${imgPaCount} embeddedFigureCount=${embeddedFigureCount}`
         );
@@ -489,9 +494,9 @@ export async function runPaMediaIngest(): Promise<{
       const defaultSizes = "(max-width: 767px) 89vw, (max-width: 1000px) 54vw, 580px";
 
       // Inline: any <img> (in figure or standalone) with http(s) URL not already on our CDN
-      type InlineCandidate = { el: cheerio.Element; url: string };
+      type InlineCandidate = { el: Element; url: string };
       const candidates: InlineCandidate[] = [];
-      $("img").each((_: number, el: cheerio.Element) => {
+      $("img").each((_: number, el: Element) => {
         const $img = $(el);
         const raw = getInlineImgCandidateUrl($img, $);
         if (!raw) return;
