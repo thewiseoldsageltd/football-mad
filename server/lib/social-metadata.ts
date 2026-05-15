@@ -1,6 +1,8 @@
+import type { Request } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { competitions, managers, players } from "@shared/schema";
+import type { Article } from "@shared/schema";
 import { shouldBlockSearchIndexing } from "../middleware/environment";
 import {
   resolveCanonicalCompetitionSlug,
@@ -168,6 +170,102 @@ export function injectSocialMetadata(html: string, meta: SocialMetaPayload): str
   return cleaned;
 }
 
+/** Public article URLs in the React app (see `newsArticle()` in client). */
+export const ARTICLE_PUBLIC_PATH_PREFIX = "/news";
+
+/**
+ * Pathname for metadata resolution. Prefer `originalUrl` — `req.path` is often "/" in SPA fallthrough.
+ */
+export function requestPathname(req: Request): string {
+  const raw = req.originalUrl || req.url || req.path || "/";
+  return normalizeRequestPath(raw);
+}
+
+export function normalizeRequestPath(requestPath: string): string {
+  const pathOnly = requestPath.split("?")[0].split("#")[0] || "/";
+  const normalized = pathOnly.replace(/\/+$/, "") || "/";
+  return normalized;
+}
+
+export function canonicalArticlePath(slug: string): string {
+  const clean = slug.trim();
+  return `${ARTICLE_PUBLIC_PATH_PREFIX}/${clean}`;
+}
+
+/**
+ * Top-level SPA routes (single path segment) that must not be treated as legacy `/:slug` articles.
+ */
+const RESERVED_ROOT_SINGLE_SEGMENTS = new Set([
+  "news",
+  "teams",
+  "matches",
+  "tables",
+  "players",
+  "managers",
+  "competitions",
+  "authors",
+  "transfers",
+  "injuries",
+  "fpl",
+  "community",
+  "shop",
+  "account",
+  "admin",
+]);
+
+function isReservedRootSegment(segment: string): boolean {
+  return RESERVED_ROOT_SINGLE_SEGMENTS.has(segment.trim().toLowerCase());
+}
+
+function normalizeArticleSlug(slug: string): string {
+  return decodeURIComponent(slug).trim();
+}
+
+async function fetchArticleBySlug(slug: string): Promise<Article | undefined> {
+  const normalized = normalizeArticleSlug(slug);
+  if (!normalized) return undefined;
+  return storage.getArticleBySlug(normalized);
+}
+
+function buildArticleSocialPayload(
+  article: Article,
+  canonicalPath: string,
+  robotsIndex: string,
+): SocialMetaPayload {
+  const description = article.excerpt
+    ? truncateDescription(article.excerpt)
+    : truncateDescription(stripHtml(article.content ?? ""));
+
+  const cover = absoluteUrl(article.coverImage) ?? DEFAULT_SOCIAL_IMAGE_URL;
+
+  return {
+    title: `${article.title} | Football Mad`,
+    description,
+    canonicalPath,
+    ogType: "article",
+    imageUrl: cover,
+    imageAlt: article.title,
+    robots: robotsIndex,
+    twitterCard: "summary_large_image",
+  };
+}
+
+/**
+ * Resolve article metadata when `articles.slug` matches. Canonical path is always `/news/:slug`.
+ */
+async function resolveArticlePageMetadata(
+  rawSlug: string,
+  robotsIndex: string,
+): Promise<SocialMetaPayload | null> {
+  const slug = normalizeArticleSlug(rawSlug);
+  if (!slug) return null;
+
+  const article = await fetchArticleBySlug(slug);
+  if (!article) return null;
+
+  return buildArticleSocialPayload(article, canonicalArticlePath(slug), robotsIndex);
+}
+
 function defaultPayload(
   overrides: Partial<SocialMetaPayload> & Pick<SocialMetaPayload, "title" | "canonicalPath">,
 ): SocialMetaPayload {
@@ -190,7 +288,7 @@ export async function resolvePageMetadata(
   requestPath: string,
   host: string,
 ): Promise<SocialMetaPayload> {
-  const path = (requestPath.split("?")[0] || "/").replace(/\/+$/, "") || "/";
+  const path = normalizeRequestPath(requestPath);
   const stagingBlock = shouldBlockSearchIndexing(host);
   const robotsIndex = stagingBlock ? "noindex,nofollow,noarchive" : "index,follow";
   const robotsNoindexFollow = stagingBlock ? "noindex,nofollow,noarchive" : "noindex,follow";
@@ -223,35 +321,18 @@ export async function resolvePageMetadata(
 
   const newsArticleMatch = path.match(/^\/news\/([^/]+)$/);
   if (newsArticleMatch) {
-    const slug = decodeURIComponent(newsArticleMatch[1]);
-    const article = await storage.getArticleBySlug(slug);
-    const canonicalPath = `/news/${slug}`;
-
-    if (!article) {
-      return withRobots(
-        defaultPayload({
-          title: "Football Mad",
-          canonicalPath,
-        }),
-      );
+    const slug = newsArticleMatch[1];
+    const canonicalPath = canonicalArticlePath(slug);
+    const articleMeta = await resolveArticlePageMetadata(slug, robotsIndex);
+    if (articleMeta) {
+      return withRobots(articleMeta);
     }
-
-    const description = article.excerpt
-      ? truncateDescription(article.excerpt)
-      : truncateDescription(stripHtml(article.content ?? ""));
-
-    const cover = absoluteUrl(article.coverImage) ?? DEFAULT_SOCIAL_IMAGE_URL;
-
-    return withRobots({
-      title: `${article.title} | Football Mad`,
-      description,
-      canonicalPath,
-      ogType: "article",
-      imageUrl: cover,
-      imageAlt: article.title,
-      robots: robotsIndex,
-      twitterCard: "summary_large_image",
-    });
+    return withRobots(
+      defaultPayload({
+        title: "Football Mad",
+        canonicalPath,
+      }),
+    );
   }
 
   if (path === "/matches" || path.startsWith("/matches/")) {
@@ -418,6 +499,18 @@ export async function resolvePageMetadata(
       imageAlt: name,
       robots: noindex ? robotsNoindexFollow : robotsIndex,
     });
+  }
+
+  // Legacy Ghost / root-level article URLs: /:slug → canonical /news/:slug when slug exists in articles.
+  const legacyArticleMatch = path.match(/^\/([^/]+)$/);
+  if (legacyArticleMatch) {
+    const segment = legacyArticleMatch[1];
+    if (!isReservedRootSegment(segment)) {
+      const articleMeta = await resolveArticlePageMetadata(segment, robotsIndex);
+      if (articleMeta) {
+        return withRobots(articleMeta);
+      }
+    }
   }
 
   return withRobots(
