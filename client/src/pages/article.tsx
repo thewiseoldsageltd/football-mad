@@ -17,6 +17,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { absoluteSeoUrl } from "@/lib/seo";
+import {
+  articleCanonicalShareUrl,
+  buildFacebookShareUrl,
+  buildWhatsAppShareUrl,
+  buildXShareUrl,
+} from "@/lib/share-urls";
 import { effectiveAuthorProfileSlug } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
 import { buildPillsForFooter, buildPillsForHeader, type PillSourceArticle } from "@/lib/entity-utils";
@@ -164,7 +170,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string, auth
   const [articleUrl, setArticleUrl] = useState("");
 
   useEffect(() => {
-    setArticleUrl(absoluteSeoUrl(newsArticle(canonicalSlug)));
+    setArticleUrl(articleCanonicalShareUrl(canonicalSlug));
   }, [canonicalSlug]);
 
   useEffect(() => {
@@ -285,9 +291,6 @@ function ShareButtonsInline({
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
-  const encodedText = encodeURIComponent(`${title} - Football Mad`);
-  const encodedUrl = encodeURIComponent(url);
-
   const handleCopy = async () => {
     await navigator.clipboard.writeText(url);
     setCopied(true);
@@ -300,7 +303,7 @@ function ShareButtonsInline({
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => window.open(`https://wa.me/?text=${encodedText}%20${encodedUrl}`, "_blank")}
+        onClick={() => window.open(buildWhatsAppShareUrl(title, url), "_blank")}
         data-testid="button-share-whatsapp"
       >
         <SiWhatsapp className="h-4 w-4 text-[#25D366]" />
@@ -308,7 +311,7 @@ function ShareButtonsInline({
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`, "_blank")}
+        onClick={() => window.open(buildXShareUrl(title, url), "_blank")}
         data-testid="button-share-x"
       >
         <SiX className="h-4 w-4" />
@@ -316,7 +319,7 @@ function ShareButtonsInline({
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, "_blank")}
+        onClick={() => window.open(buildFacebookShareUrl(url), "_blank")}
         data-testid="button-share-facebook"
       >
         <SiFacebook className="h-4 w-4 text-[#1877F2]" />

@@ -3,6 +3,11 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  buildFacebookShareUrl,
+  buildWhatsAppShareUrl,
+  buildXShareUrl,
+} from "@/lib/share-urls";
 import { Check, Copy, Share2 } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 
@@ -15,7 +20,7 @@ interface ShareButtonsProps {
   description?: string;
 }
 
-export function ShareButtons({ articleId, title, url, description }: ShareButtonsProps) {
+export function ShareButtons({ articleId, title, url }: ShareButtonsProps) {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
 
@@ -28,35 +33,18 @@ export function ShareButtons({ articleId, title, url, description }: ShareButton
     },
   });
 
-  const shareText = `${title} - Football Mad`;
-  const encodedTitle = encodeURIComponent(title);
-  const encodedText = encodeURIComponent(shareText);
-  const encodedUrl = encodeURIComponent(url);
-
   const handleShare = async (platform: SharePlatform) => {
     trackShareMutation.mutate(platform);
 
     switch (platform) {
       case "whatsapp":
-        window.open(
-          `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
-          "_blank",
-          "noopener,noreferrer"
-        );
+        window.open(buildWhatsAppShareUrl(title, url), "_blank", "noopener,noreferrer");
         break;
       case "twitter":
-        window.open(
-          `https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`,
-          "_blank",
-          "noopener,noreferrer"
-        );
+        window.open(buildXShareUrl(title, url), "_blank", "noopener,noreferrer");
         break;
       case "facebook":
-        window.open(
-          `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
-          "_blank",
-          "noopener,noreferrer"
-        );
+        window.open(buildFacebookShareUrl(url), "_blank", "noopener,noreferrer");
         break;
       case "copy":
         await navigator.clipboard.writeText(url);
@@ -127,7 +115,7 @@ interface MobileStickyShareProps {
   description?: string;
 }
 
-export function MobileStickyShare({ articleId, title, url, description }: MobileStickyShareProps) {
+export function MobileStickyShare({ articleId, title, url }: MobileStickyShareProps) {
   const { toast } = useToast();
   const [hasNativeShare, setHasNativeShare] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -149,19 +137,16 @@ export function MobileStickyShare({ articleId, title, url, description }: Mobile
     if (hasNativeShare) {
       try {
         trackShareMutation.mutate("native");
-        await navigator.share({
-          title,
-          text: title,
-          url,
-        });
+        await navigator.share({ title, url });
+        return;
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           fallbackCopy();
         }
+        return;
       }
-    } else {
-      fallbackCopy();
     }
+    fallbackCopy();
   };
 
   const fallbackCopy = async () => {
@@ -180,11 +165,7 @@ export function MobileStickyShare({ articleId, title, url, description }: Mobile
         className="rounded-full shadow-lg gap-2"
         data-testid="button-mobile-share"
       >
-        {copied ? (
-          <Check className="h-5 w-5" />
-        ) : (
-          <Share2 className="h-5 w-5" />
-        )}
+        {copied ? <Check className="h-5 w-5" /> : <Share2 className="h-5 w-5" />}
         Share
       </Button>
     </div>

@@ -5,6 +5,11 @@ import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import {
+  buildFacebookShareUrl,
+  buildWhatsAppShareUrl,
+  buildXShareUrl,
+} from "@/lib/share-urls";
 
 const BOOKMARKS_KEY = "footballmad:bookmarks";
 
@@ -81,9 +86,6 @@ export function ArticleMetaBar({
     }
   };
 
-  const encodedText = encodeURIComponent(`${shareTitle} - Football Mad`);
-  const encodedUrl = encodeURIComponent(shareUrl);
-
   return (
     <div className="flex items-center justify-between pb-4 border-b">
       <div className="flex items-center gap-3">
@@ -133,7 +135,7 @@ export function ArticleMetaBar({
           variant="ghost"
           size="icon"
           className="h-9 w-9 rounded-full hover:bg-muted"
-          onClick={() => window.open(`https://wa.me/?text=${encodedText}%20${encodedUrl}`, "_blank")}
+          onClick={() => window.open(buildWhatsAppShareUrl(shareTitle, shareUrl), "_blank")}
           data-testid="button-meta-share-whatsapp"
         >
           <SiWhatsapp className="h-4 w-4 text-[#25D366]" />
@@ -142,7 +144,7 @@ export function ArticleMetaBar({
           variant="ghost"
           size="icon"
           className="h-9 w-9 rounded-full hover:bg-muted"
-          onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`, "_blank")}
+          onClick={() => window.open(buildXShareUrl(shareTitle, shareUrl), "_blank")}
           data-testid="button-meta-share-x"
         >
           <SiX className="h-4 w-4" />
@@ -151,7 +153,7 @@ export function ArticleMetaBar({
           variant="ghost"
           size="icon"
           className="h-9 w-9 rounded-full hover:bg-muted"
-          onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`, "_blank")}
+          onClick={() => window.open(buildFacebookShareUrl(shareUrl), "_blank")}
           data-testid="button-meta-share-facebook"
         >
           <SiFacebook className="h-4 w-4 text-[#1877F2]" />
