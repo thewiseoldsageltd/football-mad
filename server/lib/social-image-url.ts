@@ -3,8 +3,6 @@ import { absoluteUrl, CANONICAL_SITE_ORIGIN } from "./social-metadata";
 export const OG_IMAGE_PATH = "/og-image";
 export const OG_IMAGE_ARTICLE_PREFIX = "/og-image/article";
 export const OG_IMAGE_DEFAULT_PATH = "/og-image/default.jpg";
-/** Bump when social card art/layout changes (cache bust for X/Facebook). */
-export const ARTICLE_OG_IMAGE_VERSION = "v4";
 
 export const SOCIAL_IMAGE_WIDTH = 1200;
 export const SOCIAL_IMAGE_HEIGHT = 630;
@@ -45,7 +43,7 @@ function isCrawlerSafeDirectImage(url: string): boolean {
   return CRAWLER_SAFE_EXT.test(url) && isAllowedOgImageSource(url);
 }
 
-/** Clean versioned article social card URL (no query string), e.g. `…/slug-v4.jpg`. */
+/** Clean article JPEG proxy URL (no query string), e.g. `…/og-image/article/<slug>.jpg`. */
 export function articleOgImageUrl(publicSlug: string): string {
   const slug = publicSlug.trim().replace(/^\/+|\/+$/g, "").replace(/\.jpg$/i, "");
   const segment = slug
@@ -53,7 +51,7 @@ export function articleOgImageUrl(publicSlug: string): string {
     .filter(Boolean)
     .map((part) => encodeURIComponent(part))
     .join("/");
-  return `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_ARTICLE_PREFIX}/${segment}-${ARTICLE_OG_IMAGE_VERSION}.jpg`;
+  return `${CANONICAL_SITE_ORIGIN}${OG_IMAGE_ARTICLE_PREFIX}/${segment}.jpg`;
 }
 
 export function defaultOgImageUrl(): string {
@@ -72,7 +70,7 @@ export type ResolveSocialImageOptions = {
 
 /**
  * Resolve crawler-safe image metadata for Open Graph / Twitter tags.
- * Articles use `/og-image/article/<slug>-v4.jpg`; other pages use `/og-image/default.jpg` or direct JPG/PNG.
+ * Articles use `/og-image/article/<slug>.jpg`; other pages use `/og-image/default.jpg` or direct JPG/PNG.
  */
 export function resolveSocialImageForMeta(
   options: ResolveSocialImageOptions | string | null | undefined,

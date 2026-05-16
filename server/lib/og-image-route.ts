@@ -1,7 +1,6 @@
 import type { Express, Request, Response } from "express";
 import fs from "fs";
 import path from "path";
-import { renderArticleBrandedOgCard } from "./article-branded-og-card";
 import {
   fetchArticleBySlug,
   parseArticleOgImageSlugParam,
@@ -66,7 +65,7 @@ export async function handleOgImageQueryProxy(req: Request, res: Response): Prom
 export async function handleOgImageDefault(_req: Request, res: Response): Promise<void> {
   try {
     const input = await fs.promises.readFile(defaultSourceAssetPath());
-    const jpeg = await bufferToSocialOgJpeg(input, { preferCentre: true });
+    const jpeg = await bufferToSocialOgJpeg(input);
     sendSocialJpeg(res, jpeg);
   } catch (err) {
     console.error("[og-image/default]", err);
@@ -93,11 +92,7 @@ export async function handleOgImageArticle(
     }
 
     const sourceUrl = resolveArticleHeroImageSource(article);
-    let photoBuffer: Buffer | null = null;
-    if (sourceUrl && isAllowedOgImageSource(sourceUrl)) {
-      photoBuffer = await fetchImageBuffer(sourceUrl);
-    }
-    const jpeg = await renderArticleBrandedOgCard(article, photoBuffer);
+    const jpeg = await renderSocialJpegFromSource(sourceUrl);
     sendSocialJpeg(res, jpeg);
   } catch (err) {
     console.error("[og-image/article]", err);
