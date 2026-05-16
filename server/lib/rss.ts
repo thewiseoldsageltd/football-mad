@@ -3,11 +3,16 @@
  * Structured for future feeds: /rss/teams/:slug.xml, /rss/fpl.xml, etc.
  */
 
-import { CANONICAL_SITE_ORIGIN } from "./social-metadata";
+/** Inlined to avoid circular import: rss → social-metadata → storage → rss. */
+export const RSS_CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
+
+function rssCanonicalOrigin(): string {
+  return RSS_CANONICAL_SITE_ORIGIN.replace(/\/$/, "");
+}
 
 export const RSS_NEWS_FEED_PATH = "/rss.xml";
-export const RSS_NEWS_CHANNEL_LINK = `${CANONICAL_SITE_ORIGIN}/news`;
-export const RSS_NEWS_FEED_URL = `${CANONICAL_SITE_ORIGIN}${RSS_NEWS_FEED_PATH}`;
+export const RSS_NEWS_CHANNEL_LINK = `${rssCanonicalOrigin()}/news`;
+export const RSS_NEWS_FEED_URL = `${rssCanonicalOrigin()}${RSS_NEWS_FEED_PATH}`;
 export const RSS_NEWS_LIMIT = 50;
 export const RSS_CACHE_MAX_AGE_SEC = 300;
 
@@ -71,7 +76,7 @@ export function articleCanonicalUrl(slug: string): string {
     .filter(Boolean)
     .map((part) => encodeURIComponent(part))
     .join("/");
-  return `${CANONICAL_SITE_ORIGIN}/news/${segment}`;
+  return `${rssCanonicalOrigin()}/news/${segment}`;
 }
 
 /** RFC 822 date in GMT for RSS pubDate / lastBuildDate. */
