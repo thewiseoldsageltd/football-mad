@@ -71,6 +71,7 @@ import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/u
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
 import { backfillStandings } from "./jobs/backfill-standings";
+import { runRefreshGoalserveStandings } from "./jobs/refresh-goalserve-standings";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
@@ -3994,7 +3995,56 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
-  // ========== REFRESH PRIORITY STANDINGS (cron-friendly alias) ==========
+  // ========== REFRESH STANDINGS (bounded batch — production cron) ==========
+  // curl -sS -X POST "$BASE/api/jobs/refresh-standings?limit=3" -H "x-sync-secret: $GOALSERVE_SYNC_SECRET"
+  app.post(
+    "/api/jobs/refresh-standings",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      try {
+        const limitParam = parseInt(String(req.query.limit ?? ""), 10);
+        const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined;
+        const competitionIds = String(req.query.competitionIds ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const slugs = String(req.query.slugs ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const season = (req.query.season as string | undefined)?.trim() || null;
+        const dryRun =
+          req.query.dryRun === "1" ||
+          req.query.dryRun === "true" ||
+          req.body?.dryRun === true;
+        const force =
+          req.query.force === "1" ||
+          req.query.force === "true" ||
+          req.body?.force === true;
+
+        const result = await runRefreshGoalserveStandings({
+          limit,
+          competitionIds: competitionIds.length ? competitionIds : undefined,
+          slugs: slugs.length ? slugs : undefined,
+          season,
+          dryRun,
+          force,
+        });
+
+        const status = result.fatal ? 500 : 200;
+        res.status(status).json(result);
+      } catch (error) {
+        console.error("[refresh-standings] route error:", error);
+        res.status(500).json({
+          ok: false,
+          fatal: true,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    },
+  );
+
+  // ========== REFRESH PRIORITY STANDINGS (legacy monolithic — prefer refresh-standings) ==========
   app.post(
     "/api/jobs/refresh-priority-standings",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
