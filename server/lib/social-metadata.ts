@@ -128,6 +128,7 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
   const socialImage = resolveSocialImageForMeta({
     sourceUrl: meta.imageUrl,
     articleSlug: meta.articleSlug,
+    socialImageUrl: meta.socialImageUrl,
   });
   const imageUrl = socialImage.url;
   const imageType = socialImage.mimeType;
@@ -269,7 +270,7 @@ function buildArticleSocialPayload(
     description: resolveArticleDescription(article),
     canonicalPath,
     ogType: "article",
-    articleSlug: socialImageUrl ? null : publicSlug,
+    articleSlug: publicSlug,
     socialImageUrl: socialImageUrl || null,
     imageAlt: headline,
     robots: robotsIndex,
