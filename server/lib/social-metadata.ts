@@ -43,7 +43,10 @@ export const DEFAULT_LOCALE = "en_GB";
 export type SocialOgType = "website" | "article";
 
 export type SocialMetaPayload = {
+  /** Browser `<title>` (may include site suffix). */
   title: string;
+  /** Open Graph / Twitter title when different from `title` (e.g. article headline only). */
+  socialTitle?: string | null;
   description: string;
   canonicalPath: string;
   ogType?: SocialOgType;
@@ -128,7 +131,8 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
   const imageType = socialImage.mimeType;
   const imageWidth = String(socialImage.width);
   const imageHeight = String(socialImage.height);
-  const imageAlt = meta.imageAlt?.trim() || meta.title;
+  const socialTitle = meta.socialTitle?.trim() || meta.title;
+  const imageAlt = meta.imageAlt?.trim() || socialTitle;
   const robots = meta.robots ?? "index,follow";
   const twitterCard = meta.twitterCard ?? "summary_large_image";
 
@@ -140,7 +144,7 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
     `<meta name="robots" content="${escapeHtml(robots)}" />`,
     `<meta property="og:type" content="${escapeHtml(ogType)}" />`,
     `<meta property="og:site_name" content="${escapeHtml(SITE_NAME)}" />`,
-    `<meta property="og:title" content="${escapeHtml(meta.title)}" />`,
+    `<meta property="og:title" content="${escapeHtml(socialTitle)}" />`,
     `<meta property="og:description" content="${escapeHtml(meta.description)}" />`,
     `<meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`,
     `<meta property="og:locale" content="${escapeHtml(DEFAULT_LOCALE)}" />`,
@@ -152,7 +156,7 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
     `<meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />`,
     `<meta name="twitter:card" content="${escapeHtml(twitterCard)}" />`,
     `<meta name="twitter:site" content="${escapeHtml(TWITTER_SITE_HANDLE)}" />`,
-    `<meta name="twitter:title" content="${escapeHtml(meta.title)}" />`,
+    `<meta name="twitter:title" content="${escapeHtml(socialTitle)}" />`,
     `<meta name="twitter:description" content="${escapeHtml(meta.description)}" />`,
     `<meta name="twitter:image" content="${escapeHtml(imageUrl)}" />`,
     `<meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />`,
@@ -256,6 +260,7 @@ function buildArticleSocialPayload(
 
   return {
     title: `${headline} | Football Mad`,
+    socialTitle: headline,
     description: resolveArticleDescription(article),
     canonicalPath,
     ogType: "article",

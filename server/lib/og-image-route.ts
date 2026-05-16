@@ -33,9 +33,15 @@ function defaultSourceAssetPath(): string {
   throw new Error("No default social image asset found");
 }
 
-function sendSocialJpeg(res: Response, jpeg: Buffer): void {
+function sendSocialJpeg(req: Request, res: Response, jpeg: Buffer): void {
+  res.status(200);
   res.setHeader("Content-Type", "image/jpeg");
   res.setHeader("Cache-Control", "public, max-age=86400");
+  res.setHeader("Content-Length", String(jpeg.length));
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
   res.send(jpeg);
 }
 
@@ -55,18 +61,18 @@ export async function handleOgImageQueryProxy(req: Request, res: Response): Prom
     const rawSrc = typeof req.query.src === "string" ? req.query.src.trim() : "";
     const sourceUrl = rawSrc && isAllowedOgImageSource(rawSrc) ? rawSrc : null;
     const jpeg = await renderSocialJpegFromSource(sourceUrl);
-    sendSocialJpeg(res, jpeg);
+    sendSocialJpeg(req, res, jpeg);
   } catch (err) {
     console.error("[og-image]", err);
     res.status(502).type("text/plain").send("Bad Gateway");
   }
 }
 
-export async function handleOgImageDefault(_req: Request, res: Response): Promise<void> {
+export async function handleOgImageDefault(req: Request, res: Response): Promise<void> {
   try {
     const input = await fs.promises.readFile(defaultSourceAssetPath());
     const jpeg = await bufferToSocialOgJpeg(input);
-    sendSocialJpeg(res, jpeg);
+    sendSocialJpeg(req, res, jpeg);
   } catch (err) {
     console.error("[og-image/default]", err);
     res.status(502).type("text/plain").send("Bad Gateway");
@@ -74,7 +80,7 @@ export async function handleOgImageDefault(_req: Request, res: Response): Promis
 }
 
 export async function handleOgImageArticle(
-  _req: Request,
+  req: Request,
   res: Response,
   rawSlugParam: string,
 ): Promise<void> {
@@ -93,7 +99,7 @@ export async function handleOgImageArticle(
 
     const sourceUrl = resolveArticleHeroImageSource(article);
     const jpeg = await renderSocialJpegFromSource(sourceUrl);
-    sendSocialJpeg(res, jpeg);
+    sendSocialJpeg(req, res, jpeg);
   } catch (err) {
     console.error("[og-image/article]", err);
     res.status(502).type("text/plain").send("Bad Gateway");
