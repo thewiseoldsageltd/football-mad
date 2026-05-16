@@ -13,20 +13,21 @@ function rssCanonicalOrigin(): string {
 export const RSS_NEWS_FEED_PATH = "/rss.xml";
 export const RSS_NEWS_CHANNEL_LINK = `${rssCanonicalOrigin()}/news`;
 export const RSS_NEWS_FEED_URL = `${rssCanonicalOrigin()}${RSS_NEWS_FEED_PATH}`;
-export const RSS_NEWS_LIMIT = 50;
+export const RSS_NEWS_LIMIT = 20;
 export const RSS_CACHE_MAX_AGE_SEC = 300;
 
 /** Feed identifiers for future specialised feeds (not implemented yet). */
 export type RssFeedKind = "news" | "team" | "competition" | "fpl" | "transfers";
 
 export type RssNewsArticle = {
+  id: string;
   slug: string;
   title: string;
   excerpt: string | null;
-  summaryText: string;
   authorName: string | null;
   publishedAt: Date | null;
   createdAt: Date | null;
+  updatedAt: Date | null;
   competition: string | null;
   contentType: string | null;
   tags: string[] | null;
@@ -96,10 +97,8 @@ function resolvePublishedDate(article: RssNewsArticle): Date {
 
 export function resolveRssItemDescription(article: RssNewsArticle): string {
   const excerpt = article.excerpt?.trim();
-  if (excerpt) return stripHtml(excerpt);
-  const summary = article.summaryText?.trim();
-  if (summary) return stripHtml(summary);
-  return "";
+  if (!excerpt) return "";
+  return stripHtml(excerpt);
 }
 
 export function resolveRssItemImageUrl(article: RssNewsArticle): string | null {

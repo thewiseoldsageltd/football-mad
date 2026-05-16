@@ -900,13 +900,14 @@ export class DatabaseStorage implements IStorage {
     const capped = Math.min(Math.max(1, limit), RSS_NEWS_LIMIT);
     const rows = await db
       .select({
+        id: articles.id,
         slug: articles.slug,
         title: articles.title,
         excerpt: articles.excerpt,
-        summaryText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 500)`,
         authorName: articles.authorName,
         publishedAt: articles.publishedAt,
         createdAt: articles.createdAt,
+        updatedAt: articles.updatedAt,
         competition: articles.competition,
         contentType: articles.contentType,
         tags: articles.tags,
@@ -921,20 +922,18 @@ export class DatabaseStorage implements IStorage {
           or(eq(articles.category, "news"), isNull(articles.category)),
         ),
       )
-      .orderBy(
-        desc(sql`coalesce(${articles.publishedAt}, ${articles.createdAt})`),
-        desc(articles.id),
-      )
+      .orderBy(desc(articles.sortAt), desc(articles.id))
       .limit(capped);
 
     return rows.map((row) => ({
+      id: row.id,
       slug: row.slug,
       title: row.title,
       excerpt: row.excerpt ?? null,
-      summaryText: row.summaryText ?? "",
       authorName: row.authorName ?? null,
       publishedAt: row.publishedAt instanceof Date ? row.publishedAt : row.publishedAt ? new Date(row.publishedAt) : null,
       createdAt: row.createdAt instanceof Date ? row.createdAt : row.createdAt ? new Date(row.createdAt) : null,
+      updatedAt: row.updatedAt instanceof Date ? row.updatedAt : row.updatedAt ? new Date(row.updatedAt) : null,
       competition: row.competition ?? null,
       contentType: row.contentType ?? null,
       tags: Array.isArray(row.tags) ? row.tags : null,
