@@ -7,6 +7,7 @@ import {
   isOgImageRequest,
   registerOgImageRoute,
 } from "./lib/og-image-route";
+import { handleRssFeed, isRssFeedRequest, registerRssRoute } from "./lib/rss-route";
 import { prepareSpaIndexHtml } from "./lib/spa-html";
 
 export function serveStatic(app: Express) {
@@ -43,6 +44,10 @@ export function serveStatic(app: Express) {
   app.use("*", (req, res) => {
     if (isOgImageRequest(req)) {
       void handleOgImageRequest(req, res);
+      return;
+    }
+    if (isRssFeedRequest(req)) {
+      void handleRssFeed(req, res);
       return;
     }
     void sendSpaIndex(req, res);

@@ -1,6 +1,7 @@
 import "./load-env";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerOgImageRoute } from "./lib/og-image-route";
+import { registerRssRoute } from "./lib/rss-route";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -110,6 +111,7 @@ app.use((req, res, next) => {
     });
   });
   registerOgImageRoute(app);
+  registerRssRoute(app);
 
   await registerRoutes(httpServer, app);
 

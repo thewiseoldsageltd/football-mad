@@ -27,6 +27,8 @@ import {
 import { EntityPresentationResolver, resolveCompetitionDisplayName } from "./lib/entity-presentation-resolver";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./lib/sources";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
+import type { RssNewsArticle } from "./lib/rss";
+import { RSS_NEWS_LIMIT } from "./lib/rss";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import type { AuthorArticleSummary, AuthorPageApiResponse } from "@shared/author-slug";
 import { buildAuthorPageEnrichment } from "./lib/author-enrichment";
@@ -154,6 +156,7 @@ export interface IStorage {
   getNewsUpdates(params: NewsUpdatesParams): Promise<NewsUpdatesResponse>;
   getNewsArchiveByEntity(params: NewsArchiveParams): Promise<NewsArchiveResponse>;
   getAuthorPage(params: { slug: string; limit?: number; cursor?: string | null }): Promise<AuthorPageApiResponse>;
+  getLatestNewsArticlesForRss(limit?: number): Promise<RssNewsArticle[]>;
   
   // Matches
   getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
@@ -890,6 +893,55 @@ export class DatabaseStorage implements IStorage {
   async getArticleBySlug(slug: string): Promise<Article | undefined> {
     const [article] = await db.select().from(articles).where(eq(articles.slug, slug));
     return article;
+  }
+
+  /** Latest /news articles for RSS syndication (newest first). */
+  async getLatestNewsArticlesForRss(limit = RSS_NEWS_LIMIT): Promise<RssNewsArticle[]> {
+    const capped = Math.min(Math.max(1, limit), RSS_NEWS_LIMIT);
+    const rows = await db
+      .select({
+        slug: articles.slug,
+        title: articles.title,
+        excerpt: articles.excerpt,
+        summaryText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 500)`,
+        authorName: articles.authorName,
+        publishedAt: articles.publishedAt,
+        createdAt: articles.createdAt,
+        competition: articles.competition,
+        contentType: articles.contentType,
+        tags: articles.tags,
+        coverImage: articles.coverImage,
+        heroImageUrl: articles.heroImageUrl,
+        socialImageUrl: articles.socialImageUrl,
+      })
+      .from(articles)
+      .where(
+        and(
+          isNotNull(articles.slug),
+          or(eq(articles.category, "news"), isNull(articles.category)),
+        ),
+      )
+      .orderBy(
+        desc(sql`coalesce(${articles.publishedAt}, ${articles.createdAt})`),
+        desc(articles.id),
+      )
+      .limit(capped);
+
+    return rows.map((row) => ({
+      slug: row.slug,
+      title: row.title,
+      excerpt: row.excerpt ?? null,
+      summaryText: row.summaryText ?? "",
+      authorName: row.authorName ?? null,
+      publishedAt: row.publishedAt instanceof Date ? row.publishedAt : row.publishedAt ? new Date(row.publishedAt) : null,
+      createdAt: row.createdAt instanceof Date ? row.createdAt : row.createdAt ? new Date(row.createdAt) : null,
+      competition: row.competition ?? null,
+      contentType: row.contentType ?? null,
+      tags: Array.isArray(row.tags) ? row.tags : null,
+      coverImage: row.coverImage ?? null,
+      heroImageUrl: row.heroImageUrl ?? null,
+      socialImageUrl: row.socialImageUrl ?? null,
+    }));
   }
 
   async getArticleWithEntities(slug: string): Promise<ArticleWithEntities | undefined> {
