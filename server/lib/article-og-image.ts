@@ -71,7 +71,7 @@ export function resolveArticleHeroImageSource(article: Article): string | null {
 }
 
 /**
- * Slug segment from `/og-image/article/:slug.jpg` — strips `.jpg` and legacy `-vN` suffix if present.
+ * Slug segment from `/og-image/article/:slug-v5.jpg` — strips `.jpg` and `-vN` suffix before lookup.
  * Example: `derek-mcinnes-…-5c0c0264-v2` → `derek-mcinnes-…-5c0c0264`
  */
 export function parseArticleOgImageSlugParam(raw: string): string {

@@ -29,6 +29,7 @@ export function ShareButtons({ articleId, title, url, description }: ShareButton
   });
 
   const shareText = `${title} - Football Mad`;
+  const encodedTitle = encodeURIComponent(title);
   const encodedText = encodeURIComponent(shareText);
   const encodedUrl = encodeURIComponent(url);
 
@@ -45,7 +46,7 @@ export function ShareButtons({ articleId, title, url, description }: ShareButton
         break;
       case "twitter":
         window.open(
-          `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+          `https://twitter.com/intent/tweet?text=${encodedTitle}&url=${encodedUrl}`,
           "_blank",
           "noopener,noreferrer"
         );
@@ -149,9 +150,9 @@ export function MobileStickyShare({ articleId, title, url, description }: Mobile
       try {
         trackShareMutation.mutate("native");
         await navigator.share({
-          title: title,
-          text: `${title} - Football Mad`,
-          url: url,
+          title,
+          text: title,
+          url,
         });
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
