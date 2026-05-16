@@ -12,8 +12,8 @@ import { eq, and } from "drizzle-orm";
 import * as cheerio from "cheerio";
 import type { Element } from "domhandler";
 import {
+  uploadArticleCoverDerivatives,
   uploadImageVariantsToR2,
-  uploadHeroToR2,
   seoSlugFromText,
   shortStableHash,
 } from "../lib/r2";
@@ -438,6 +438,8 @@ export async function runPaMediaIngest(): Promise<{
       }
 
       let coverImage: string | null = null;
+      let heroImageUrl: string | null = null;
+      let socialImageUrl: string | null = null;
       let heroImageCredit: string | null = null;
       let content = item.content;
 
@@ -459,6 +461,15 @@ export async function runPaMediaIngest(): Promise<{
           });
           coverImage = result.original;
           imagesUploaded += IMAGE_WIDTHS.length;
+          const derivatives = await uploadArticleCoverDerivatives({
+            buffer: buf,
+            source: "pa_media",
+            articleId: item.id,
+            baseName,
+          });
+          heroImageUrl = derivatives.heroImageUrl;
+          socialImageUrl = derivatives.socialImageUrl;
+          imagesUploaded += 2;
           const credit = featureAssoc?.description_credit ?? featureAssoc?.credit;
           if (credit && typeof credit === "string") heroImageCredit = credit;
         } catch (e) {
@@ -563,6 +574,8 @@ export async function runPaMediaIngest(): Promise<{
             title: item.headline,
             content,
             ...(coverImage != null && { coverImage }),
+            ...(heroImageUrl != null && { heroImageUrl }),
+            ...(socialImageUrl != null && { socialImageUrl }),
             ...(heroImageCredit != null && { heroImageCredit }),
             publishedAt,
             updatedAt,
@@ -588,6 +601,8 @@ export async function runPaMediaIngest(): Promise<{
           slug: finalSlug,
           content,
           coverImage,
+          heroImageUrl,
+          socialImageUrl,
           heroImageCredit,
           authorName: item.byline ?? "PA Media",
           source: PA_SOURCE,

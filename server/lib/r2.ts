@@ -4,6 +4,7 @@
 
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import sharp from "sharp";
+import { ARTICLE_IMAGE_CROP_POSITION } from "./article-image-crop";
 
 // Throttle sharp globally to reduce memory pressure (Render exit 134).
 const PAMEDIA_SHARP_CONCURRENCY = Math.max(1, parseInt(process.env.PAMEDIA_SHARP_CONCURRENCY ?? "1", 10));
@@ -86,12 +87,23 @@ export function shortStableHash(input: string): string {
   return Math.abs(h).toString(16).slice(0, 8);
 }
 
+const HERO_DISPLAY_WIDTH = 1280;
+const SOCIAL_JPEG_WIDTH = 1200;
+const SOCIAL_JPEG_HEIGHT = 630;
+const JPEG_QUALITY = 85;
+
 export interface BuildImageKeyOpts {
   source: "pa_media";
   articleId: string;
   kind: "hero" | "inline";
   baseName: string;
   width: number;
+}
+
+export interface BuildSocialImageKeyOpts {
+  source: "pa_media";
+  articleId: string;
+  baseName: string;
 }
 
 /**
@@ -105,6 +117,15 @@ export function buildImageKey(opts: BuildImageKeyOpts): string {
   return `${source}/${safeId}/${kind}/${safeName}-${hash}-${width}.webp`;
 }
 
+/** R2 key: pa_media/{articleId}/social/{baseName}-{hash}-1200.jpg */
+export function buildSocialImageKey(opts: BuildSocialImageKeyOpts): string {
+  const { source, articleId, baseName } = opts;
+  const safeId = slugifySegment(articleId) || shortStableHash(articleId);
+  const safeName = slugifySegment(baseName) || "image";
+  const hash = shortStableHash(`${articleId}-social-${baseName}`);
+  return `${source}/${safeId}/social/${safeName}-${hash}-${SOCIAL_JPEG_WIDTH}.jpg`;
+}
+
 /**
  * Resize buffer to width (keep aspect ratio), encode as WEBP.
  */
@@ -115,8 +136,31 @@ async function resizeToWebp(buffer: Buffer, width: number): Promise<Buffer> {
     .toBuffer();
 }
 
-/** 16:9 smart crop (for hero). Tries Sharp "attention" strategy, falls back to "centre". */
-async function resizeToWebpHero(buffer: Buffer, width: number): Promise<{ buf: Buffer; crop: "attention" | "centre" }> {
+/** 16:9 top-anchored crop for article hero display (1280×720 WebP). */
+export async function resizeToHeroDisplayWebp(buffer: Buffer, width: number = HERO_DISPLAY_WIDTH): Promise<Buffer> {
+  const height = Math.round((width * 9) / 16);
+  return sharp(buffer, { failOn: "none" })
+    .rotate()
+    .resize(width, height, { fit: "cover", position: ARTICLE_IMAGE_CROP_POSITION })
+    .webp({ quality: WEBP_QUALITY })
+    .toBuffer();
+}
+
+/** 1200×630 JPEG for social cards (same crop anchor as hero display). */
+export async function resizeToSocialJpeg(buffer: Buffer): Promise<Buffer> {
+  return sharp(buffer, { failOn: "none" })
+    .rotate()
+    .resize(SOCIAL_JPEG_WIDTH, SOCIAL_JPEG_HEIGHT, {
+      fit: "cover",
+      position: ARTICLE_IMAGE_CROP_POSITION,
+      withoutEnlargement: false,
+    })
+    .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+    .toBuffer();
+}
+
+/** @deprecated Legacy hero backfill; uses attention crop. Prefer {@link resizeToHeroDisplayWebp}. */
+async function resizeToWebpHeroLegacy(buffer: Buffer, width: number): Promise<{ buf: Buffer; crop: "attention" | "centre" }> {
   const height = Math.round((width * 9) / 16);
   try {
     const buf = await sharp(buffer)
@@ -133,9 +177,68 @@ async function resizeToWebpHero(buffer: Buffer, width: number): Promise<{ buf: B
   }
 }
 
-/** Single 1280x720 hero WEBP (for backfill overwrite). Returns buffer + crop mode used. */
+/** Single 1280x720 hero WEBP (legacy backfill overwrite). */
 export async function resizeToHero1280x720Webp(buffer: Buffer): Promise<{ buf: Buffer; crop: "attention" | "centre" }> {
-  return resizeToWebpHero(buffer, 1280);
+  return resizeToWebpHeroLegacy(buffer, 1280);
+}
+
+export interface UploadArticleCoverDerivativesOpts {
+  buffer: Buffer;
+  source: "pa_media";
+  articleId: string;
+  baseName: string;
+}
+
+export interface UploadArticleCoverDerivativesResult {
+  heroImageUrl: string;
+  socialImageUrl: string;
+}
+
+/** Upload 16:9 hero WebP + 1200×630 social JPEG derived from the same source buffer. */
+export async function uploadArticleCoverDerivatives(
+  opts: UploadArticleCoverDerivativesOpts,
+): Promise<UploadArticleCoverDerivativesResult> {
+  const { buffer, source, articleId, baseName } = opts;
+  const client = getR2Client();
+  const base = R2_PUBLIC_BASE_URL.replace(/\/$/, "");
+
+  const [heroBuf, socialBuf] = await Promise.all([
+    resizeToHeroDisplayWebp(buffer),
+    resizeToSocialJpeg(buffer),
+  ]);
+
+  const heroKey = buildImageKey({
+    source,
+    articleId,
+    kind: "hero",
+    baseName,
+    width: HERO_DISPLAY_WIDTH,
+  });
+  const socialKey = buildSocialImageKey({ source, articleId, baseName });
+
+  await Promise.all([
+    client.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: heroKey,
+        Body: heroBuf,
+        ContentType: "image/webp",
+      }),
+    ),
+    client.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: socialKey,
+        Body: socialBuf,
+        ContentType: "image/jpeg",
+      }),
+    ),
+  ]);
+
+  return {
+    heroImageUrl: `${base}/${heroKey}`,
+    socialImageUrl: `${base}/${socialKey}`,
+  };
 }
 
 export interface UploadImageVariantsToR2Opts {
@@ -165,7 +268,9 @@ export async function uploadImageVariantsToR2(opts: UploadImageVariantsToR2Opts)
   const isHero = kind === "hero";
 
   for (const w of IMAGE_WIDTHS) {
-    const webpBuf = isHero ? (await resizeToWebpHero(buffer, w)).buf : await resizeToWebp(buffer, w);
+    const webpBuf = isHero
+      ? await resizeToHeroDisplayWebp(buffer, w)
+      : await resizeToWebp(buffer, w);
     const key = buildImageKey({ source, articleId, kind, baseName, width: w });
     await client.send(
       new PutObjectCommand({

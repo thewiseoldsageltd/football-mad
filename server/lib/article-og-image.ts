@@ -59,8 +59,11 @@ function extractFirstImageSrcFromHtml(html: string): string | null {
   return src || null;
 }
 
-/** Cover or first inline image URL for social JPEG generation (no site default). */
+/** Display hero, cover, or first inline image for social JPEG generation (no site default). */
 export function resolveArticleHeroImageSource(article: Article): string | null {
+  const fromHero = absoluteUrl(article.heroImageUrl);
+  if (fromHero) return fromHero;
+
   const fromCover = absoluteUrl(article.coverImage);
   if (fromCover) return fromCover;
 

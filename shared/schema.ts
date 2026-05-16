@@ -73,6 +73,10 @@ export const articles = pgTable("articles", {
   excerpt: text("excerpt"),
   content: text("content").notNull(),
   coverImage: text("cover_image"),
+  /** 16:9 top-anchored WebP for article hero and listing cards. */
+  heroImageUrl: text("hero_image_url"),
+  /** 1200×630 JPEG for Open Graph / Twitter / Facebook / WhatsApp. */
+  socialImageUrl: text("social_image_url"),
   heroImageCredit: text("hero_image_credit"),
   authorId: varchar("author_id"),
   authorName: text("author_name").default("Football Mad"),

@@ -32,6 +32,7 @@ export interface AuthorArticleSummary {
   excerpt: string | null;
   openingText: string;
   coverImage: string | null;
+  heroImageUrl?: string | null;
   authorName: string;
   /** Canonical author slug when identity engine matches slugify(authorName); omit for legacy clients. */
   authorProfileSlug?: string;

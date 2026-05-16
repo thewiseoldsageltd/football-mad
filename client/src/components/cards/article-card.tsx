@@ -9,6 +9,7 @@ import { PillsRow } from "@/components/pills-row";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
+import { articleDisplayImageUrl } from "@/lib/article-images";
 import { buildPillsForCard, type PillSourceArticle } from "@/lib/entity-utils";
 
 interface ArticleCardProps {
@@ -80,9 +81,9 @@ export function ArticleCard({
           data-testid={`link-article-featured-${article.id}`}
         />
         <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5 [contain:layout]">
-          {article.coverImage ? (
+          {articleDisplayImageUrl(article) ? (
             <img
-              src={article.coverImage}
+              src={articleDisplayImageUrl(article)!}
               alt={article.title}
               width={1280}
               height={720}
@@ -166,9 +167,9 @@ export function ArticleCard({
         data-testid={`link-article-${article.id}`}
       />
       <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5 [contain:layout]">
-        {article.coverImage ? (
+        {articleDisplayImageUrl(article) ? (
           <img
-            src={article.coverImage}
+            src={articleDisplayImageUrl(article)!}
             alt={article.title}
             width={640}
             height={360}

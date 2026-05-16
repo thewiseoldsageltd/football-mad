@@ -862,7 +862,7 @@ export class DatabaseStorage implements IStorage {
   async getArticles(category?: string): Promise<Article[]> {
     const lightweight = {
       id: articles.id, slug: articles.slug, title: articles.title,
-      excerpt: articles.excerpt, coverImage: articles.coverImage,
+      excerpt: articles.excerpt, coverImage: articles.coverImage, heroImageUrl: articles.heroImageUrl,
       publishedAt: articles.publishedAt, authorName: articles.authorName,
       competition: articles.competition, contentType: articles.contentType,
       tags: articles.tags, isBreaking: articles.isBreaking,
@@ -1045,7 +1045,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .select({
         id: articles.id, slug: articles.slug, title: articles.title,
-        excerpt: articles.excerpt, coverImage: articles.coverImage,
+        excerpt: articles.excerpt, coverImage: articles.coverImage, heroImageUrl: articles.heroImageUrl,
         publishedAt: articles.publishedAt, authorName: articles.authorName,
         competition: articles.competition, contentType: articles.contentType,
         tags: articles.tags, isBreaking: articles.isBreaking,
@@ -1122,6 +1122,7 @@ export class DatabaseStorage implements IStorage {
       excerpt: articles.excerpt,
       openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
+      heroImageUrl: articles.heroImageUrl,
       authorName: articles.authorName,
       publishedAt: articles.publishedAt,
       updatedAt: articles.updatedAt,
@@ -1181,6 +1182,7 @@ export class DatabaseStorage implements IStorage {
         excerpt: row.excerpt ?? null,
         openingText: row.openingText ?? "",
         coverImage: row.coverImage ?? null,
+        heroImageUrl: row.heroImageUrl ?? null,
         authorName: row.authorName ?? "PA Media",
         publishedAt: published ? published.toISOString() : null,
         updatedAt: updated ? updated.toISOString() : null,
@@ -1637,6 +1639,7 @@ export class DatabaseStorage implements IStorage {
       excerpt: articles.excerpt,
       openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
+      heroImageUrl: articles.heroImageUrl,
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
       publishedAt: articles.publishedAt,
@@ -1770,6 +1773,7 @@ export class DatabaseStorage implements IStorage {
       excerpt: articles.excerpt,
       openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
+      heroImageUrl: articles.heroImageUrl,
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
       publishedAt: articles.publishedAt,
@@ -1861,6 +1865,7 @@ export class DatabaseStorage implements IStorage {
       excerpt: articles.excerpt,
       openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
       coverImage: articles.coverImage,
+      heroImageUrl: articles.heroImageUrl,
       heroImageCredit: articles.heroImageCredit,
       authorName: articles.authorName,
       publishedAt: articles.publishedAt,

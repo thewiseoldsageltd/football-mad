@@ -99,6 +99,13 @@
       "when": 1774200000000,
       "tag": "0013_article_author_name_slug",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1774300000000,
+      "tag": "0014_article_hero_social_images",
+      "breakpoints": true
     }
   ]
 }

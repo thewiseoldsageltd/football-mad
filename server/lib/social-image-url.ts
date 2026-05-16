@@ -68,6 +68,8 @@ export function ogImageProxyUrlForSource(sourceUrl: string): string {
 export type ResolveSocialImageOptions = {
   sourceUrl?: string | null;
   articleSlug?: string | null;
+  /** Stored 1200×630 JPEG on CDN; preferred over dynamic `/og-image/article/…` proxy. */
+  socialImageUrl?: string | null;
 };
 
 /**
@@ -81,6 +83,16 @@ export function resolveSocialImageForMeta(
     typeof options === "string" || options == null
       ? { sourceUrl: options ?? null }
       : options;
+
+  const storedSocial = absoluteUrl(opts.socialImageUrl);
+  if (storedSocial && isCrawlerSafeDirectImage(storedSocial)) {
+    return {
+      url: storedSocial,
+      mimeType: mimeTypeForImageUrl(storedSocial),
+      width: SOCIAL_IMAGE_WIDTH,
+      height: SOCIAL_IMAGE_HEIGHT,
+    };
+  }
 
   if (opts.articleSlug?.trim()) {
     return {

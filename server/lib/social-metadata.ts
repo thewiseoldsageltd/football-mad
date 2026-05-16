@@ -50,8 +50,10 @@ export type SocialMetaPayload = {
   description: string;
   canonicalPath: string;
   ogType?: SocialOgType;
-  /** Public article slug for `/og-image/article/<slug>-v5.jpg` (no version suffix in this field). */
+  /** Public article slug for `/og-image/article/<slug>-v5.jpg` fallback (no version suffix). */
   articleSlug?: string | null;
+  /** Stored 1200×630 JPEG; preferred for og:image when set. */
+  socialImageUrl?: string | null;
   imageUrl?: string | null;
   imageAlt?: string | null;
   robots?: string;
@@ -258,13 +260,17 @@ function buildArticleSocialPayload(
 ): SocialMetaPayload {
   const headline = resolveArticleHeadline(article);
 
+  const socialImageUrl =
+    typeof article.socialImageUrl === "string" ? article.socialImageUrl.trim() : "";
+
   return {
     title: `${headline} | Football Mad`,
     socialTitle: headline,
     description: resolveArticleDescription(article),
     canonicalPath,
     ogType: "article",
-    articleSlug: publicSlug,
+    articleSlug: socialImageUrl ? null : publicSlug,
+    socialImageUrl: socialImageUrl || null,
     imageAlt: headline,
     robots: robotsIndex,
     twitterCard: "summary_large_image",

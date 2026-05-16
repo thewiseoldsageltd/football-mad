@@ -74,6 +74,7 @@ import { backfillStandings } from "./jobs/backfill-standings";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
+import { runBackfillArticleImageVariants } from "./jobs/backfill-article-image-variants";
 import { runBackfillPaMediaEntities } from "./jobs/backfill-pamedia-entities";
 import { enrichPendingArticles } from "./jobs/enrich-articles";
 import {
@@ -2678,6 +2679,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         imagesUploaded: 0,
         inlineRewritten: 0,
         skipped: 0,
+        error: (err as Error).message,
+      });
+    }
+  });
+
+  app.post("/api/jobs/backfill-article-image-variants", requireJobSecret("PAMEDIA_INGEST_SECRET"), async (req, res) => {
+    try {
+      const limitParam = parseInt(String(req.query.limit ?? req.body?.limit ?? ""), 10);
+      const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined;
+      const dryRun =
+        req.query.dryRun === "1" ||
+        req.query.dryRun === "true" ||
+        req.body?.dryRun === true ||
+        req.body?.dryRun === "1";
+      const force =
+        req.query.force === "1" ||
+        req.query.force === "true" ||
+        req.body?.force === true ||
+        req.body?.force === "1";
+      const result = await runBackfillArticleImageVariants({ limit, dryRun, force });
+      const payload = {
+        ok: result.ok,
+        dryRun: result.dryRun,
+        force: result.force,
+        processed: result.processed,
+        updated: result.updated,
+        skipped: result.skipped,
+        imagesUploaded: result.imagesUploaded,
+        ...(result.error && { error: result.error }),
+      };
+      if (result.ok) res.status(200).json(payload);
+      else res.status(500).json(payload);
+    } catch (err) {
+      console.error("[backfill-article-image-variants] Job error:", err);
+      res.status(500).json({
+        ok: false,
+        dryRun: false,
+        force: false,
+        processed: 0,
+        updated: 0,
+        skipped: 0,
+        imagesUploaded: 0,
         error: (err as Error).message,
       });
     }

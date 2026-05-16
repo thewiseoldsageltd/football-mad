@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
+import { articleDisplayImageUrl, articleSeoImageUrl } from "@/lib/article-images";
 import { absoluteSeoUrl } from "@/lib/seo";
 import {
   articleCanonicalShareUrl,
@@ -215,7 +216,7 @@ function useArticleSEO(article: Article | undefined, canonicalSlug: string, auth
     setMeta("property", "og:url", articleUrl);
     setMeta("property", "og:site_name", "Football Mad");
     setMeta("property", "og:locale", "en_GB");
-    const imageUrl = absoluteSeoUrl(article.coverImage || "/assets/football-mad-fm-logo.webp");
+    const imageUrl = absoluteSeoUrl(articleSeoImageUrl(article, canonicalSlug));
     setMeta("property", "og:image", imageUrl);
     setMeta("property", "og:image:alt", article.title);
     setMeta("name", "twitter:card", "summary_large_image");
@@ -411,8 +412,8 @@ function RightRail({
                   <Link key={a.id} href={newsArticle(a.slug)}>
                     <div className="group flex gap-3 hover-elevate rounded p-1 -m-1 cursor-pointer" data-testid={`link-related-${a.id}`}>
                       <div className="w-16 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
-                        {a.coverImage ? (
-                          <img src={a.coverImage} alt="" className="w-full h-full object-cover" />
+                        {articleDisplayImageUrl(a) ? (
+                          <img src={articleDisplayImageUrl(a)!} alt="" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/20">
                             <span className="text-lg font-bold text-primary/30">F</span>
@@ -763,10 +764,10 @@ export default function ArticlePage() {
               />
             </header>
 
-            {article.coverImage ? (
+            {articleDisplayImageUrl(article) ? (
               <figure className="my-8 relative aspect-video w-full overflow-hidden rounded-lg bg-black/5">
                 <img
-                  src={article.coverImage}
+                  src={articleDisplayImageUrl(article)!}
                   alt={article.title}
                   className="h-full w-full object-cover object-[center_top]"
                 />
