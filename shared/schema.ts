@@ -258,6 +258,8 @@ export const competitions = pgTable("competitions", {
   isPriority: boolean("is_priority").default(false),
   canonicalSlug: text("canonical_slug"),
   canonicalName: text("canonical_name"),
+  /** Updated when automated standings refresh completes (including hash-match skip). */
+  standingsLastAttemptedAt: timestamp("standings_last_attempted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

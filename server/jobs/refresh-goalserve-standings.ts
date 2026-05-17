@@ -12,7 +12,7 @@
 
 import { db } from "../db";
 import { competitions, standingsSnapshots } from "@shared/schema";
-import { and, desc, eq, inArray, isNotNull, max, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, max, or } from "drizzle-orm";
 import { runWithJobContext } from "../lib/job-context";
 import { finishJobRun, startJobRun } from "../lib/job-observability";
 import { upsertGoalserveStandings } from "./upsert-goalserve-standings";
@@ -66,8 +66,33 @@ type StandingsTarget = {
   leagueId: string;
   canonicalSlug: string | null;
   competitionName: string | null;
+  lastAttemptedAt: Date | null;
   lastAsOf: Date | null;
 };
+
+function compareStandingsRotation(a: StandingsTarget, b: StandingsTarget): number {
+  if (!a.lastAttemptedAt && !b.lastAttemptedAt) {
+    // both never attempted — fall through
+  } else if (!a.lastAttemptedAt) return -1;
+  else if (!b.lastAttemptedAt) return 1;
+  else {
+    const attemptDiff = a.lastAttemptedAt.getTime() - b.lastAttemptedAt.getTime();
+    if (attemptDiff !== 0) return attemptDiff;
+  }
+
+  const aAsOf = a.lastAsOf?.getTime() ?? 0;
+  const bAsOf = b.lastAsOf?.getTime() ?? 0;
+  if (aAsOf !== bAsOf) return aAsOf - bAsOf;
+
+  return (a.canonicalSlug ?? a.leagueId).localeCompare(b.canonicalSlug ?? b.leagueId);
+}
+
+async function markStandingsRefreshAttempted(leagueId: string): Promise<void> {
+  await db
+    .update(competitions)
+    .set({ standingsLastAttemptedAt: new Date() })
+    .where(eq(competitions.goalserveCompetitionId, leagueId));
+}
 
 function parseBool(value: unknown): boolean {
   if (value === true || value === 1) return true;
@@ -157,6 +182,7 @@ async function resolveTargets(
         slug: competitions.slug,
         canonicalSlug: competitions.canonicalSlug,
         name: competitions.name,
+        lastAttemptedAt: competitions.standingsLastAttemptedAt,
       })
       .from(competitions)
       .where(and(isNotNull(competitions.goalserveCompetitionId), matchFilter));
@@ -169,6 +195,12 @@ async function resolveTargets(
         leagueId,
         canonicalSlug: row.canonicalSlug ?? row.slug,
         competitionName: row.name,
+        lastAttemptedAt:
+          row.lastAttemptedAt instanceof Date
+            ? row.lastAttemptedAt
+            : row.lastAttemptedAt
+              ? new Date(row.lastAttemptedAt)
+              : null,
         lastAsOf: freshness.get(leagueId) ?? null,
       });
     }
@@ -176,6 +208,8 @@ async function resolveTargets(
     if (competitionIds?.length) {
       const order = new Map(competitionIds.map((id, i) => [id, i]));
       targets.sort((a, b) => (order.get(a.leagueId) ?? 999) - (order.get(b.leagueId) ?? 999));
+    } else {
+      targets.sort(compareStandingsRotation);
     }
 
     return targets.slice(0, limit);
@@ -187,6 +221,7 @@ async function resolveTargets(
       slug: competitions.slug,
       canonicalSlug: competitions.canonicalSlug,
       name: competitions.name,
+      lastAttemptedAt: competitions.standingsLastAttemptedAt,
     })
     .from(competitions)
     .where(
@@ -195,8 +230,7 @@ async function resolveTargets(
         eq(competitions.isCup, false),
         isNotNull(competitions.goalserveCompetitionId),
       ),
-    )
-    .orderBy(desc(competitions.name));
+    );
 
   const targets: StandingsTarget[] = rows
     .map((row) => {
@@ -205,15 +239,16 @@ async function resolveTargets(
         leagueId,
         canonicalSlug: row.canonicalSlug ?? row.slug,
         competitionName: row.name,
+        lastAttemptedAt:
+          row.lastAttemptedAt instanceof Date
+            ? row.lastAttemptedAt
+            : row.lastAttemptedAt
+              ? new Date(row.lastAttemptedAt)
+              : null,
         lastAsOf: freshness.get(leagueId) ?? null,
       };
     })
-    .sort((a, b) => {
-      const aTs = a.lastAsOf?.getTime() ?? 0;
-      const bTs = b.lastAsOf?.getTime() ?? 0;
-      if (aTs !== bTs) return aTs - bTs;
-      return (a.canonicalSlug ?? "").localeCompare(b.canonicalSlug ?? "");
-    });
+    .sort(compareStandingsRotation);
 
   return targets.slice(0, limit);
 }
@@ -323,7 +358,7 @@ export async function runRefreshGoalserveStandings(
         const compStarted = Date.now();
         const label = target.canonicalSlug ?? target.leagueId;
         console.log(
-          `[refresh-standings] competition start leagueId=${target.leagueId} slug=${label} lastAsOf=${target.lastAsOf?.toISOString() ?? "never"}`,
+          `[refresh-standings] competition start leagueId=${target.leagueId} slug=${label} lastAttemptedAt=${target.lastAttemptedAt?.toISOString() ?? "never"} lastAsOf=${target.lastAsOf?.toISOString() ?? "never"}`,
         );
 
         if (dryRun) {
@@ -373,6 +408,10 @@ export async function runRefreshGoalserveStandings(
           if (compOk) refreshed++;
           else if (compSkipped) skipped++;
           else failed++;
+
+          if (upsertResult.ok) {
+            await markStandingsRefreshAttempted(target.leagueId);
+          }
 
           console.log(
             `[refresh-standings] competition end leagueId=${target.leagueId} ok=${upsertResult.ok} skipped=${compSkipped} rows=${upsertResult.insertedRowsCount} durationMs=${durationMs}${upsertResult.error ? ` error=${upsertResult.error}` : ""}`,
