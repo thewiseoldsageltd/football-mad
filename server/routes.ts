@@ -2024,6 +2024,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const effectiveDate = (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) 
         ? dateStr 
         : new Date().toISOString().split("T")[0];
+      const todayUtcYmd = new Date().toISOString().slice(0, 10);
 
       // Parse date range: start of day to start of next day (exclusive upper bound)
       const start = new Date(`${effectiveDate}T00:00:00.000Z`);
@@ -2067,32 +2068,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .orderBy(asc(matches.kickoffTime))
         .limit(limit);
 
-      const staleScanEnd = new Date(nextDate);
-      staleScanEnd.setUTCDate(staleScanEnd.getUTCDate() + 7);
-      const staleScanRows = await db
-        .select(matchListFields)
-        .from(matches)
-        .where(
-          and(
-            gte(matches.kickoffTime, start),
-            drizzleSql`${matches.kickoffTime} < ${staleScanEnd}`,
-            inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
-          ),
-        )
-        .orderBy(asc(matches.kickoffTime))
-        .limit(2000);
-      const suppressedIds = new Set(
-        staleScanRows
-          .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
-          .map((row) => row.id),
-      );
-      const keptRows = filterSupersededMovedFixtures(staleScanRows);
-      const keptIds = new Set(
-        keptRows
-          .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
-          .map((row) => row.id),
-      );
-      results = results.filter((row) => !suppressedIds.has(row.id) || keptIds.has(row.id));
+      // Past dates only: hide stale scheduled rows superseded by a newer kickoff within 7 days.
+      // Today/future: return DB day window as-is so scheduled fixtures are not dropped.
+      if (effectiveDate < todayUtcYmd) {
+        const staleScanEnd = new Date(nextDate);
+        staleScanEnd.setUTCDate(staleScanEnd.getUTCDate() + 7);
+        const staleScanRows = await db
+          .select(matchListFields)
+          .from(matches)
+          .where(
+            and(
+              gte(matches.kickoffTime, start),
+              drizzleSql`${matches.kickoffTime} < ${staleScanEnd}`,
+              inArray(matches.goalserveCompetitionId, priorityCompetitionIds),
+            ),
+          )
+          .orderBy(asc(matches.kickoffTime))
+          .limit(2000);
+        const suppressedIds = new Set(
+          staleScanRows
+            .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
+            .map((row) => row.id),
+        );
+        const keptRows = filterSupersededMovedFixtures(staleScanRows);
+        const keptIds = new Set(
+          keptRows
+            .filter((row) => row.kickoffTime >= start && row.kickoffTime < nextDate)
+            .map((row) => row.id),
+        );
+        results = results.filter((row) => !suppressedIds.has(row.id) || keptIds.has(row.id));
+      }
 
       const teamMaps = await fetchTeamMaps(results);
       const formatted = results.map((m) => formatMatchResponse(m, teamMaps));
