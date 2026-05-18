@@ -18,7 +18,12 @@
     "audit:entity-images": "tsx script/entity-image-coverage.ts",
     "seed:author-identities": "tsx script/seed-author-identities.ts",
     "backfill:article-images": "tsx script/backfill-article-image-variants.ts",
-    "refresh:standings": "tsx script/refresh-standings.ts"
+    "refresh:standings": "tsx script/refresh-standings.ts",
+    "refresh:matches-live": "tsx script/refresh-matches-live.ts",
+    "refresh:matches-today": "tsx script/refresh-matches-today.ts",
+    "refresh:matches-near-future": "tsx script/refresh-matches-near-future.ts",
+    "refresh:matches-week-ahead": "tsx script/refresh-matches-week-ahead.ts",
+    "refresh:priority-fixtures": "tsx script/refresh-priority-fixtures.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",

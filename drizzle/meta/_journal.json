@@ -113,6 +113,13 @@
       "when": 1774400000000,
       "tag": "0015_competitions_standings_last_attempted",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1774500000000,
+      "tag": "0016_competitions_fixtures_last_attempted",
+      "breakpoints": true
     }
   ]
 }

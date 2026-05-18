@@ -260,6 +260,8 @@ export const competitions = pgTable("competitions", {
   canonicalName: text("canonical_name"),
   /** Updated when automated standings refresh completes (including hash-match skip). */
   standingsLastAttemptedAt: timestamp("standings_last_attempted_at"),
+  /** Updated when automated full-season fixtures sync completes (including 0 row changes). */
+  fixturesLastAttemptedAt: timestamp("fixtures_last_attempted_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
