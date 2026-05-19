@@ -1,3 +1,5 @@
+import { isFifaWorldCupCompSlug } from "./world-cup-nav";
+
 const TABLES_ORDER_SLUGS = [
   "premier-league",
   "championship",
@@ -39,10 +41,31 @@ function toTablesOrderSlug(slug: string): string {
   return ORDER_ALIAS_BY_SLUG[slug] ?? slug;
 }
 
+/** Pin FIFA World Cup first (after "All" in news nav). */
+export function pinFifaWorldCupFirst<T extends { value: string }>(items: T[]): T[] {
+  const fifaIndex = items.findIndex((item) => item.value === "fifa-world-cup");
+  const legacyIndex = items.findIndex((item) => item.value === "world-cup");
+  const pickIndex = fifaIndex >= 0 ? fifaIndex : legacyIndex;
+  if (pickIndex <= 0) return items;
+  const next = [...items];
+  const [worldCup] = next.splice(pickIndex, 1);
+  return [worldCup, ...next];
+}
+
 export function sortCompetitionItemsLikeTables<T extends { value: string; label: string }>(items: T[]): T[] {
-  return items
+  const sorted = items
     .map((item, index) => ({ item, index }))
     .sort((a, b) => {
+      const aWorldCup = isFifaWorldCupCompSlug(a.item.value);
+      const bWorldCup = isFifaWorldCupCompSlug(b.item.value);
+      if (aWorldCup && !bWorldCup) return -1;
+      if (!aWorldCup && bWorldCup) return 1;
+      if (aWorldCup && bWorldCup) {
+        if (a.item.value === "fifa-world-cup") return -1;
+        if (b.item.value === "fifa-world-cup") return 1;
+        return 0;
+      }
+
       const aOrder = TABLES_ORDER_INDEX.get(toTablesOrderSlug(a.item.value));
       const bOrder = TABLES_ORDER_INDEX.get(toTablesOrderSlug(b.item.value));
       const aKnown = typeof aOrder === "number";
@@ -53,4 +76,6 @@ export function sortCompetitionItemsLikeTables<T extends { value: string; label:
       return a.index - b.index;
     })
     .map((entry) => entry.item);
+
+  return pinFifaWorldCupFirst(sorted);
 }
