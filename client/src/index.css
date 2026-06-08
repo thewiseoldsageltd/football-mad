@@ -313,3 +313,15 @@
     transform: translateY(-2px);
   }
 }
+
+/* Instagram embeds in articles: prose blockquote styles and inline margin break centreing */
+.article-body-content blockquote.instagram-media {
+  border-inline-start-width: 0;
+  padding-inline-start: 0;
+  font-style: normal;
+  quotes: none;
+  margin-inline: auto !important;
+  margin-block: 1.5rem;
+  max-width: 100%;
+  box-sizing: border-box;
+}
