@@ -691,6 +691,62 @@ export default function ArticlePage() {
     document.body.appendChild(script);
   }, [processedContent]);
 
+  useEffect(() => {
+    if (!processedContent || typeof window === "undefined") return;
+    if (!processedContent.includes("instagram-media")) return;
+
+    const INSTAGRAM_EMBED_SCRIPT = "https://www.instagram.com/embed.js";
+
+    const processInstagramEmbeds = () => {
+      try {
+        const w = window as Window & { instgrm?: { Embeds?: { process: () => void } } };
+        w.instgrm?.Embeds?.process();
+      } catch (err) {
+        console.warn("[article] Instagram embed process failed:", err);
+      }
+    };
+
+    const scheduleProcess = () => {
+      requestAnimationFrame(processInstagramEmbeds);
+    };
+
+    const w = window as Window & { instgrm?: { Embeds?: { process: () => void } } };
+    if (w.instgrm?.Embeds?.process) {
+      scheduleProcess();
+      return;
+    }
+
+    const existing = document.querySelector(
+      `script[src="${INSTAGRAM_EMBED_SCRIPT}"]`,
+    ) as HTMLScriptElement | null;
+
+    if (existing) {
+      existing.addEventListener("load", scheduleProcess, { once: true });
+      let attempts = 0;
+      const retry = () => {
+        if ((window as Window & { instgrm?: { Embeds?: { process: () => void } } }).instgrm?.Embeds?.process) {
+          scheduleProcess();
+          return;
+        }
+        if (attempts < 20) {
+          attempts += 1;
+          window.setTimeout(retry, 100);
+        }
+      };
+      retry();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = INSTAGRAM_EMBED_SCRIPT;
+    script.async = true;
+    script.onload = scheduleProcess;
+    script.onerror = () => {
+      console.warn("[article] Instagram embed script failed to load");
+    };
+    document.body.appendChild(script);
+  }, [processedContent, slug]);
+
   // Display-only pills in hierarchy order: competition -> teams -> players -> managers
   const { headerPills, footerPills, articleTeams } = useMemo(() => {
     const empty = { headerPills: [], footerPills: [], articleTeams: [] as Team[] };
