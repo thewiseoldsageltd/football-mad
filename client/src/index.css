@@ -314,28 +314,19 @@
   }
 }
 
-/* Instagram embeds in articles: blockquote is full-width; hydrated iframe is narrower and left-aligned inside */
-.article-body-content blockquote.instagram-media {
+/* Instagram embeds: centre via pre-render wrapper; leave blockquote/iframe sizing to Instagram */
+.article-body-content .instagram-embed-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  margin: 1.5rem 0;
+  overflow-x: hidden;
+}
+
+.article-body-content .instagram-embed-wrapper blockquote.instagram-media {
   border-inline-start-width: 0;
   padding-inline-start: 0;
   font-style: normal;
   quotes: none;
-  display: flex !important;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-inline: auto !important;
-  margin-block: 1.5rem;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-/* Instagram injects wrapper div(s) + iframe after embed.js; centre those, not just the blockquote */
-.article-body-content blockquote.instagram-media > div,
-.article-body-content blockquote.instagram-media iframe {
-  display: block;
-  margin-inline: auto !important;
-  max-width: 100% !important;
+  margin: 0;
 }

@@ -164,6 +164,15 @@ function prepareArticleHtmlForRender(rawHtml: string): string {
     p.replaceWith(blockquote);
   });
 
+  // 5) Wrap Instagram embeds so layout can centre without overriding Instagram-injected DOM.
+  doc.querySelectorAll("blockquote.instagram-media").forEach((blockquote) => {
+    if (blockquote.parentElement?.classList.contains("instagram-embed-wrapper")) return;
+    const wrapper = doc.createElement("div");
+    wrapper.className = "instagram-embed-wrapper";
+    blockquote.parentNode?.insertBefore(wrapper, blockquote);
+    wrapper.appendChild(blockquote);
+  });
+
   return doc.body.innerHTML;
 }
 
