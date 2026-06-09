@@ -1,6 +1,11 @@
 import { db } from "../db";
 import { matches, teams, competitions } from "@shared/schema";
+import {
+  FIFA_WORLD_CUP_CANONICAL_SLUG,
+  FIFA_WORLD_CUP_GOALSERVE_COMPETITION_ID,
+} from "@shared/world-cup";
 import { goalserveFetch } from "../integrations/goalserve/client";
+import { ensureGoalserveTeam } from "../lib/ensure-goalserve-team";
 import { eq } from "drizzle-orm";
 
 function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
@@ -196,14 +201,23 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       .select({
         id: competitions.id,
         goalserveCompetitionId: competitions.goalserveCompetitionId,
+        canonicalSlug: competitions.canonicalSlug,
+        isPriority: competitions.isPriority,
         name: competitions.name,
       })
       .from(competitions);
 
     const competitionsMap = new Map<string, { id: string; name: string }>();
+    const priorityCompetitionIds = new Set<string>();
     for (const comp of dbCompetitions) {
       if (comp.goalserveCompetitionId) {
         competitionsMap.set(comp.goalserveCompetitionId, { id: comp.id, name: comp.name });
+      }
+      if (comp.isPriority) {
+        if (comp.goalserveCompetitionId) priorityCompetitionIds.add(comp.goalserveCompetitionId);
+        if (comp.canonicalSlug === FIFA_WORLD_CUP_CANONICAL_SLUG) {
+          priorityCompetitionIds.add(FIFA_WORLD_CUP_GOALSERVE_COMPETITION_ID);
+        }
       }
     }
 
@@ -263,8 +277,31 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         const homeScore = extractScore(match, localTeam, "home");
         const awayScore = extractScore(match, visitorTeam, "away");
 
-        const homeTeamId = teamByGoalserveId.get(homeGsId) || null;
-        const awayTeamId = teamByGoalserveId.get(awayGsId) || null;
+        let homeTeamId = homeGsId ? teamByGoalserveId.get(homeGsId) ?? null : null;
+        let awayTeamId = awayGsId ? teamByGoalserveId.get(awayGsId) ?? null : null;
+
+        if (priorityCompetitionIds.has(competitionId)) {
+          if (!homeTeamId && homeGsId) {
+            const homeName = String(localTeam["@name"] ?? localTeam.name ?? "").trim();
+            try {
+              const ensured = await ensureGoalserveTeam(homeGsId, homeName || `Team ${homeGsId}`);
+              homeTeamId = ensured.id;
+              teamByGoalserveId.set(homeGsId, ensured.id);
+            } catch {
+              // keep null — match still stored with goalserve ids in timeline
+            }
+          }
+          if (!awayTeamId && awayGsId) {
+            const awayName = String(visitorTeam["@name"] ?? visitorTeam.name ?? "").trim();
+            try {
+              const ensured = await ensureGoalserveTeam(awayGsId, awayName || `Team ${awayGsId}`);
+              awayTeamId = ensured.id;
+              teamByGoalserveId.set(awayGsId, ensured.id);
+            } catch {
+              // keep null
+            }
+          }
+        }
 
         if (homeTeamId && awayTeamId) {
           mappedTeams++;

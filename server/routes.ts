@@ -1333,6 +1333,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     maps: {
       byCanonicalId: Map<string, { id: string; name: string; slug: string }>;
       byGoalserveId: Map<string, { id: string; name: string; slug: string }>;
+      teamLogoById: Map<string, string>;
+      teamLogoByGoalserveId: Map<string, string>;
       competitionById: Map<string, string>;
       competitionByGoalserveId: Map<string, string>;
       competitionLogoById: Map<string, string>;
@@ -1382,11 +1384,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       goalserveMatchId: match.goalserveMatchId,
       goalserveRound: match.goalserveRound || null,
       homeTeam: homeTeamData
-        ? { id: homeTeamData.id, name: homeTeamData.name, slug: homeTeamData.slug }
-        : { goalserveTeamId: match.homeGoalserveTeamId, nameFromRaw: rawHomeName || "Unknown" },
+        ? {
+            id: homeTeamData.id,
+            name: homeTeamData.name,
+            slug: homeTeamData.slug,
+            logoUrl: maps.teamLogoById.get(homeTeamData.id) ?? null,
+          }
+        : {
+            goalserveTeamId: match.homeGoalserveTeamId,
+            nameFromRaw: rawHomeName || "Unknown",
+            logoUrl: match.homeGoalserveTeamId
+              ? maps.teamLogoByGoalserveId.get(match.homeGoalserveTeamId) ?? null
+              : null,
+          },
       awayTeam: awayTeamData
-        ? { id: awayTeamData.id, name: awayTeamData.name, slug: awayTeamData.slug }
-        : { goalserveTeamId: match.awayGoalserveTeamId, nameFromRaw: rawAwayName || "Unknown" },
+        ? {
+            id: awayTeamData.id,
+            name: awayTeamData.name,
+            slug: awayTeamData.slug,
+            logoUrl: maps.teamLogoById.get(awayTeamData.id) ?? null,
+          }
+        : {
+            goalserveTeamId: match.awayGoalserveTeamId,
+            nameFromRaw: rawAwayName || "Unknown",
+            logoUrl: match.awayGoalserveTeamId
+              ? maps.teamLogoByGoalserveId.get(match.awayGoalserveTeamId) ?? null
+              : null,
+          },
     };
   }
 
@@ -1514,12 +1538,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .map((row) => [row.entityId, row.cdnOriginalUrl as string]),
     );
 
+    const teamIdsForLogoLookup = Array.from(
+      new Set(
+        [
+          ...Array.from(canonicalTeamIds),
+          ...goalserveTeams.map((t) => t.id).filter((id): id is string => typeof id === "string" && id.length > 0),
+        ].filter((id): id is string => typeof id === "string" && id.length > 0),
+      ),
+    );
+
+    const teamCrests = teamIdsForLogoLookup.length > 0
+      ? await db
+          .select({
+            entityId: entityMedia.entityId,
+            cdnOriginalUrl: entityMedia.cdnOriginalUrl,
+          })
+          .from(entityMedia)
+          .where(
+            and(
+              eq(entityMedia.entityType, "team"),
+              eq(entityMedia.mediaRole, "crest"),
+              eq(entityMedia.isPrimary, true),
+              eq(entityMedia.status, "active"),
+              inArray(entityMedia.entityId, teamIdsForLogoLookup),
+            ),
+          )
+      : [];
+
+    const teamLogoById = new Map(
+      teamCrests
+        .filter((row) => Boolean(row.entityId && row.cdnOriginalUrl))
+        .map((row) => [row.entityId, row.cdnOriginalUrl as string]),
+    );
+
     return {
       byCanonicalId: new Map(canonicalTeams.map((t) => [t.id, t])),
       byGoalserveId: new Map(
         goalserveTeams
           .filter((t) => Boolean(t.goalserveTeamId))
           .map((t) => [t.goalserveTeamId as string, { id: t.id, name: t.name, slug: t.slug }]),
+      ),
+      teamLogoById,
+      teamLogoByGoalserveId: new Map(
+        goalserveTeams
+          .filter((t) => Boolean(t.goalserveTeamId) && Boolean(teamLogoById.get(t.id)))
+          .map((t) => [t.goalserveTeamId as string, teamLogoById.get(t.id)!]),
       ),
       competitionById: new Map(canonicalCompetitions.map((c) => [c.id, c.name])),
       competitionByGoalserveId: new Map(

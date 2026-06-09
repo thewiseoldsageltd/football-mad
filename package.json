@@ -15,6 +15,7 @@
     "db:migrate": "tsx script/db-migrate.ts",
     "ingest:squads": "tsx script/sync-squads.ts",
     "ingest:competition-logo": "tsx script/import-competition-logo.ts",
+    "ingest:world-cup-team-crests": "tsx script/ensure-world-cup-team-crests.ts",
     "audit:entity-images": "tsx script/entity-image-coverage.ts",
     "seed:author-identities": "tsx script/seed-author-identities.ts",
     "backfill:article-images": "tsx script/backfill-article-image-variants.ts",

@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Globe, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { EntityAvatar } from "@/components/entity-media";
+import { useEntityMedia } from "@/hooks/use-entity-media";
 import { getCompetitionCountryById, getPublicCompetitionDisplayName } from "./competition-priority";
 
 interface EnhancedMatchCardProps {
@@ -88,23 +89,38 @@ function CompetitionBadge({
   );
 }
 
+function getInitials(label: string): string {
+  const words = label.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+  return label.slice(0, 2).toUpperCase();
+}
+
 function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
   const sizeClasses = size === "sm" ? "w-14 h-14 md:w-16 md:h-16" : "w-16 h-16";
+  const [imgError, setImgError] = useState(false);
+  const directLogoUrl = team.logoUrl?.trim() || null;
+  const { url: entityMediaUrl, hasMedia } = useEntityMedia("team", team.id || null, "hub_header");
+  const crestUrl = directLogoUrl || (hasMedia && entityMediaUrl ? entityMediaUrl : null);
+  const countryFlagUrl = !crestUrl ? getCountryFlagUrl(team.name) : null;
+  const imageUrl = crestUrl || countryFlagUrl;
+  const showImage = Boolean(imageUrl && !imgError);
 
   return (
     <div
       className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm`}
     >
-      <EntityAvatar
-        entityType="team"
-        entityId={team.id}
-        label={team.name}
-        surface="hub_header"
-        sizeClassName="h-full w-full"
-        shape="square"
-        objectFit="contain"
-        className="rounded-lg"
-      />
+      {showImage ? (
+        <img
+          src={imageUrl!}
+          alt={team.name}
+          className={`h-full w-full rounded-lg ${countryFlagUrl && !crestUrl ? "object-cover" : "object-contain"}`}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className="h-full w-full rounded-lg flex items-center justify-center bg-muted text-muted-foreground font-medium text-sm">
+          {getInitials(team.name || "?")}
+        </div>
+      )}
     </div>
   );
 }

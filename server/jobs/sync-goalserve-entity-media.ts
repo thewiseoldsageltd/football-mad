@@ -6,6 +6,7 @@ import { ingestEntityMediaFromBuffer, ingestEntityMediaFromUrl } from "../lib/en
 import { jobFetch } from "../lib/job-observability";
 import { getJobRunId } from "../lib/job-context";
 import { MvpGraphBoundary } from "../lib/mvp-graph-boundary";
+import { ensureGoalserveTeam } from "../lib/ensure-goalserve-team";
 
 const GOALSERVE_ASSET_HOST = "https://www.goalserve.com";
 const GOALSERVE_LOGOTIPS_BASE =
@@ -693,6 +694,56 @@ export async function syncGoalserveTeamMediaForMvpSet(): Promise<GoalserveTeamMe
         continue;
       }
       scopedTeams.push({ entityId: t.id, goalserveTeamId: String(t.goalserveTeamId) });
+    }
+
+    await ingestTeamMediaForScope(scopedTeams, result);
+  } catch (err) {
+    result.ok = false;
+    result.errors.push(err instanceof Error ? err.message : String(err));
+  }
+
+  return result;
+}
+
+/** Ensure DB teams exist and ingest crests from Goalserve logotips / soccerstats (batched). */
+export async function syncGoalserveTeamMediaByGoalserveIds(
+  entries: Array<{ goalserveTeamId: string; name?: string | null }>,
+): Promise<GoalserveTeamMediaSyncResult> {
+  const result: GoalserveTeamMediaSyncResult = {
+    ok: true,
+    leagueId: "by-goalserve-id",
+    scanned: 0,
+    ingested: 0,
+    ingestedFromLogotips: 0,
+    ingestedFromLogotipsBase64: 0,
+    ingestedFromLogotipsUrl: 0,
+    ingestedFromTeamProfile: 0,
+    unchanged: 0,
+    failed: 0,
+    skippedMissingTeam: 0,
+    skippedMissingImage: 0,
+    errors: [],
+  };
+
+  const seen = new Set<string>();
+  const scopedTeams: Array<{ entityId: string; goalserveTeamId: string }> = [];
+
+  try {
+    for (const entry of entries) {
+      const gsId = String(entry.goalserveTeamId ?? "").trim();
+      if (!gsId || seen.has(gsId)) continue;
+      seen.add(gsId);
+      result.scanned++;
+
+      try {
+        const team = await ensureGoalserveTeam(gsId, entry.name?.trim() || `Team ${gsId}`);
+        scopedTeams.push({ entityId: team.id, goalserveTeamId: gsId });
+      } catch (err) {
+        result.skippedMissingTeam++;
+        result.errors.push(
+          `team ${gsId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     await ingestTeamMediaForScope(scopedTeams, result);
