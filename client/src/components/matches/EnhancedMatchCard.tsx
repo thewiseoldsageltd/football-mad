@@ -95,34 +95,89 @@ function getInitials(label: string): string {
   return label.slice(0, 2).toUpperCase();
 }
 
-function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
-  const sizeClasses = size === "sm" ? "w-14 h-14 md:w-16 md:h-16" : "w-16 h-16";
+const MATCH_CARD_FLAG_WIDTH = 160 as const;
+
+function TeamInitialsFallback({ name, sizeClasses }: { name: string; sizeClasses: string }) {
+  return (
+    <div
+      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-muted`}
+    >
+      <span className="text-sm font-medium text-muted-foreground leading-none">{getInitials(name || "?")}</span>
+    </div>
+  );
+}
+
+/** National-team flag — separate from crest tile (no wash/blur from crest styling or tiny upscale). */
+function TeamCountryFlag({ name, sizeClasses }: { name: string; sizeClasses: string }) {
   const [imgError, setImgError] = useState(false);
-  const directLogoUrl = team.logoUrl?.trim() || null;
-  const { url: entityMediaUrl, hasMedia } = useEntityMedia("team", team.id || null, "hub_header");
-  const crestUrl = directLogoUrl || (hasMedia && entityMediaUrl ? entityMediaUrl : null);
-  const countryFlagUrl = !crestUrl ? getCountryFlagUrl(team.name) : null;
-  const imageUrl = crestUrl || countryFlagUrl;
-  const showImage = Boolean(imageUrl && !imgError);
+  const flagUrl = getCountryFlagUrl(name, MATCH_CARD_FLAG_WIDTH);
+
+  if (!flagUrl || imgError) {
+    return <TeamInitialsFallback name={name} sizeClasses={sizeClasses} />;
+  }
+
+  return (
+    <div className={`${sizeClasses} flex items-center justify-center flex-shrink-0`}>
+      <img
+        src={flagUrl}
+        alt={name}
+        width={MATCH_CARD_FLAG_WIDTH}
+        height={120}
+        decoding="async"
+        loading="lazy"
+        className="max-h-full max-w-full object-contain rounded-[2px]"
+        onError={() => setImgError(true)}
+      />
+    </div>
+  );
+}
+
+/** Club / ingested crest — unchanged tile treatment. */
+function TeamCrestImage({
+  name,
+  crestUrl,
+  sizeClasses,
+}: {
+  name: string;
+  crestUrl: string;
+  sizeClasses: string;
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  if (imgError) {
+    return <TeamInitialsFallback name={name} sizeClasses={sizeClasses} />;
+  }
 
   return (
     <div
       className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm`}
     >
-      {showImage ? (
-        <img
-          src={imageUrl!}
-          alt={team.name}
-          className={`h-full w-full rounded-lg ${countryFlagUrl && !crestUrl ? "object-cover" : "object-contain"}`}
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <div className="h-full w-full rounded-lg flex items-center justify-center bg-muted text-muted-foreground font-medium text-sm">
-          {getInitials(team.name || "?")}
-        </div>
-      )}
+      <img
+        src={crestUrl}
+        alt={name}
+        className="h-full w-full rounded-lg object-contain"
+        onError={() => setImgError(true)}
+      />
     </div>
   );
+}
+
+function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
+  const sizeClasses = size === "sm" ? "w-14 h-14 md:w-16 md:h-16" : "w-16 h-16";
+  const directLogoUrl = team.logoUrl?.trim() || null;
+  const { url: entityMediaUrl, hasMedia } = useEntityMedia("team", team.id || null, "hub_header");
+  const crestUrl = directLogoUrl || (hasMedia && entityMediaUrl ? entityMediaUrl : null);
+
+  if (crestUrl) {
+    return <TeamCrestImage name={team.name} crestUrl={crestUrl} sizeClasses={sizeClasses} />;
+  }
+
+  const countryFlagUrl = getCountryFlagUrl(team.name, MATCH_CARD_FLAG_WIDTH);
+  if (countryFlagUrl) {
+    return <TeamCountryFlag name={team.name} sizeClasses={sizeClasses} />;
+  }
+
+  return <TeamInitialsFallback name={team.name} sizeClasses={sizeClasses} />;
 }
 
 function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?: number }) {

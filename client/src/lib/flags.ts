@@ -108,12 +108,19 @@ export function getCountryISO2(countryName: string | undefined): string | null {
   return countryToISO2[countryName] || null;
 }
 
-export function getFlagUrl(iso2: string): string {
-  return `https://flagcdn.com/w20/${iso2}.png`;
+/** flagcdn width tokens — use a size >= display px (×2 for retina) to avoid upscale blur. */
+export type FlagImageWidth = 20 | 40 | 80 | 160 | 320;
+
+export function getFlagUrl(iso2: string, width: FlagImageWidth = 20): string {
+  return `https://flagcdn.com/w${width}/${iso2}.png`;
 }
 
-export function getCountryFlagUrl(countryName: string | undefined): string | null {
+/** @param width Badge-sized default is 20px; pass 160 for ~64px match-card tiles. */
+export function getCountryFlagUrl(
+  countryName: string | undefined,
+  width: FlagImageWidth = 20,
+): string | null {
   const iso2 = getCountryISO2(countryName);
   if (!iso2) return null;
-  return getFlagUrl(iso2);
+  return getFlagUrl(iso2, width);
 }
