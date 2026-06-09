@@ -761,6 +761,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ========== SEARCH (article titles / excerpts) ==========
+  app.get("/api/search", async (req, res) => {
+    try {
+      const q = String(req.query.q ?? "").trim();
+      const limitParam = parseInt(req.query.limit as string, 10) || 15;
+      const limit = Math.min(Math.max(1, limitParam), 50);
+      const cursor = req.query.cursor as string | undefined;
+
+      const result = await storage.searchArticles({ q, limit, cursor });
+      res.setHeader("Cache-Control", "no-store");
+      res.json(result);
+    } catch (error) {
+      console.error("Error searching articles:", error);
+      res.status(500).json({ error: "Failed to search articles" });
+    }
+  });
+
   // ========== NEWS (with URL-driven filters) ==========
   app.get("/api/news", async (req: any, res) => {
     try {

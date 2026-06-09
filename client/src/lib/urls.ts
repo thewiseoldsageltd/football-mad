@@ -114,6 +114,10 @@ export function newsArticle(slug: string): string {
   return `/news/${slug}`;
 }
 
+export function searchResults(query: string): string {
+  return `/search?q=${encodeURIComponent(query.trim())}`;
+}
+
 /** Author profile URL segment; prefer API `authorProfileSlug` (canonical) when present. */
 export function authorProfile(authorSlug: string): string {
   return `/authors/${encodeURIComponent(authorSlug)}`;

@@ -1,8 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Menu, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { searchResults } from "@/lib/urls";
 
 /** MVP: News, Matches, Tables, Teams — hidden routes remain reachable by URL for v2. */
 const mvpNavItems = [
@@ -15,7 +24,10 @@ const mvpNavItems = [
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [location] = useLocation();
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [location, navigate] = useLocation();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,6 +36,20 @@ export function Header() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (!isSearchOpen) return;
+    const timer = window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [isSearchOpen]);
+
+  const submitSearch = () => {
+    const q = searchQuery.trim();
+    if (q.length < 2) return;
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    navigate(searchResults(q));
+  };
 
   return (
     <header
@@ -70,9 +96,9 @@ export function Header() {
             <Button
               variant="ghost"
               size="icon"
-              className="hidden sm:flex"
               type="button"
               aria-label="Search"
+              onClick={() => setIsSearchOpen(true)}
               data-testid="button-search"
             >
               <Search className="h-5 w-5" />
@@ -118,6 +144,43 @@ export function Header() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={isSearchOpen}
+        onOpenChange={(open) => {
+          setIsSearchOpen(open);
+          if (!open) setSearchQuery("");
+        }}
+      >
+        <DialogContent className="sm:max-w-md" data-testid="dialog-search">
+          <DialogHeader>
+            <DialogTitle>Search Football Mad</DialogTitle>
+            <DialogDescription>
+              Search article titles and excerpts. Press Enter to view results.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitSearch();
+            }}
+          >
+            <Input
+              ref={searchInputRef}
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search news and articles…"
+              aria-label="Search news and articles"
+              data-testid="input-search-dialog"
+            />
+            <Button type="submit" disabled={searchQuery.trim().length < 2} data-testid="button-search-submit">
+              Search
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

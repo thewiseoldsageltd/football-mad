@@ -27,6 +27,7 @@ import TablesPage from "@/pages/tables";
 import CompetitionProfilePage from "@/pages/competition-profile";
 import AuthorPage from "@/pages/author";
 import AdminJobsPage from "@/pages/admin-jobs";
+import SearchPage from "@/pages/search";
 
 function seasonApiToSlug(apiSeason: string): string {
   const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
@@ -62,6 +63,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={HomePage} />
+      <Route path="/search" component={SearchPage} />
       <Route path="/news" component={NewsPage} />
       <Route path="/authors/:slug" component={AuthorPage} />
       <Route path="/news/:slug" component={NewsResolver} />

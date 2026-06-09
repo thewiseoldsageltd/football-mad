@@ -123,6 +123,19 @@ export interface NewsArchiveResponse {
   };
 }
 
+export interface SearchArticlesParams {
+  q: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface SearchArticlesResponse {
+  articles: any[];
+  query: string;
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 type EntityLite = { id: string; name: string; slug: string };
 type ArticleWithEntityArrays = {
   entityCompetitions: EntityLite[];
@@ -157,6 +170,7 @@ export interface IStorage {
   getNewsArchiveByEntity(params: NewsArchiveParams): Promise<NewsArchiveResponse>;
   getAuthorPage(params: { slug: string; limit?: number; cursor?: string | null }): Promise<AuthorPageApiResponse>;
   getLatestNewsArticlesForRss(limit?: number): Promise<RssNewsArticle[]>;
+  searchArticles(params: SearchArticlesParams): Promise<SearchArticlesResponse>;
   
   // Matches
   getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]>;
@@ -2435,6 +2449,93 @@ export class DatabaseStorage implements IStorage {
       const bDate = b.newsAdded ? new Date(b.newsAdded).getTime() : 0;
       return bDate - aDate;
     });
+  }
+
+  async searchArticles(params: SearchArticlesParams): Promise<SearchArticlesResponse> {
+    const q = params.q.trim();
+    const empty: SearchArticlesResponse = {
+      articles: [],
+      query: q,
+      nextCursor: null,
+      hasMore: false,
+    };
+    if (q.length < 2) return empty;
+
+    const limit = Math.min(Math.max(1, params.limit ?? 15), 50);
+    const pattern = `%${q.replace(/[%_\\]/g, (char) => `\\${char}`)}%`;
+
+    const listFields = {
+      id: articles.id,
+      slug: articles.slug,
+      title: articles.title,
+      excerpt: articles.excerpt,
+      openingText: sql<string>`left(trim(regexp_replace(${articles.content}, '<[^>]+>', ' ', 'g')), 220)`,
+      coverImage: articles.coverImage,
+      heroImageUrl: articles.heroImageUrl,
+      heroImageCredit: articles.heroImageCredit,
+      authorName: articles.authorName,
+      publishedAt: articles.publishedAt,
+      createdAt: articles.createdAt,
+      updatedAt: articles.updatedAt,
+      sourceUpdatedAt: articles.sourceUpdatedAt,
+      sortAt: articles.sortAt,
+      competition: articles.competition,
+      contentType: articles.contentType,
+      tags: articles.tags,
+      isFeatured: articles.isFeatured,
+      isTrending: articles.isTrending,
+      isBreaking: articles.isBreaking,
+      viewCount: articles.viewCount,
+      commentsCount: articles.commentsCount,
+    };
+
+    const conditions: any[] = [
+      or(ilike(articles.title, pattern), ilike(articles.excerpt, pattern)),
+    ];
+
+    if (params.cursor) {
+      const parts = params.cursor.split("|");
+      if (parts.length === 2) {
+        const [cursorSortAt, cursorId] = parts;
+        const cursorDate = new Date(cursorSortAt);
+        conditions.push(
+          or(
+            lt(articles.sortAt, cursorDate),
+            and(eq(articles.sortAt, cursorDate), lt(articles.id, cursorId)),
+          ),
+        );
+      }
+    }
+
+    const result = await db
+      .select(listFields)
+      .from(articles)
+      .where(and(...conditions))
+      .orderBy(desc(articles.sortAt), desc(articles.id))
+      .limit(limit + 1);
+
+    const hasMore = result.length > limit;
+    const rawSlice = hasMore ? result.slice(0, limit) : result;
+    const normalizedRows = rawSlice.map((row) => this.normalizeArticleListRow(row));
+    const withEntities = await this.attachEntityArraysToArticles(normalizedRows);
+    const articlesToReturn = await attachAuthorProfileSlugsToArticleRows(withEntities);
+
+    let nextCursor: string | null = null;
+    if (hasMore && articlesToReturn.length > 0) {
+      const lastArticle = articlesToReturn[articlesToReturn.length - 1];
+      const sortAtValue =
+        lastArticle.sortAt || lastArticle.sourceUpdatedAt || lastArticle.publishedAt || lastArticle.createdAt;
+      if (sortAtValue) {
+        nextCursor = `${new Date(sortAtValue).toISOString()}|${lastArticle.id}`;
+      }
+    }
+
+    return {
+      articles: articlesToReturn as any,
+      query: q,
+      nextCursor,
+      hasMore,
+    };
   }
 
   async getAllFplAvailability(): Promise<FplPlayerAvailability[]> {
