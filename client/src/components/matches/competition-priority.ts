@@ -1,4 +1,5 @@
 const DISPLAY_ALIAS_BY_ID = new Map<string, string>([
+  ["1056", "FIFA World Cup"],
   ["1204", "Premier League"],
   ["1205", "Championship"],
   ["1206", "League One"],
@@ -98,6 +99,7 @@ const PRIORITY_INDEX_BY_ID = new Map(PRIORITY_IDS.map((id, idx) => [id, idx]));
 
 const NAME_MATCHERS: Array<{ pattern: RegExp; rank: number }> = [
   { pattern: /fifa world cup/i, rank: 0 },
+  { pattern: /^world cup$/i, rank: 0 },
 
   { pattern: /uefa champions league/i, rank: 1 },
   { pattern: /uefa europa league/i, rank: 2 },

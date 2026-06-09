@@ -29,6 +29,10 @@ import {
   TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS,
   resolveTeamsPageNavFilterSlug,
 } from "@shared/teams-mvp";
+import {
+  FIFA_WORLD_CUP_CANONICAL_SLUG,
+  FIFA_WORLD_CUP_GOALSERVE_COMPETITION_ID,
+} from "@shared/world-cup";
 import { db, pool } from "./db";
 import {
   eq,
@@ -1388,12 +1392,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   async function getPriorityGoalserveCompetitionIds(): Promise<string[]> {
     const rows = await db
-      .select({ goalserveCompetitionId: competitions.goalserveCompetitionId })
+      .select({
+        goalserveCompetitionId: competitions.goalserveCompetitionId,
+        canonicalSlug: competitions.canonicalSlug,
+      })
       .from(competitions)
-      .where(and(eq(competitions.isPriority, true), drizzleSql`trim(coalesce(${competitions.goalserveCompetitionId}, '')) <> ''`));
-    return rows
-      .map((row) => row.goalserveCompetitionId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0);
+      .where(eq(competitions.isPriority, true));
+
+    const ids = new Set<string>();
+    for (const row of rows) {
+      const gsId = row.goalserveCompetitionId?.trim();
+      if (gsId) ids.add(gsId);
+      if (row.canonicalSlug === FIFA_WORLD_CUP_CANONICAL_SLUG) {
+        ids.add(FIFA_WORLD_CUP_GOALSERVE_COMPETITION_ID);
+      }
+    }
+    return Array.from(ids);
   }
 
   async function fetchTeamMaps(matchRows: any[]) {

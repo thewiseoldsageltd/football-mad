@@ -120,6 +120,13 @@
       "when": 1774500000000,
       "tag": "0016_competitions_fixtures_last_attempted",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1774600000000,
+      "tag": "0017_link_fifa_world_cup_goalserve",
+      "breakpoints": true
     }
   ]
 }

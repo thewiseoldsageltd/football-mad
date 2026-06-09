@@ -102,14 +102,23 @@ export async function syncGoalserveCompetitions(): Promise<{
         .limit(1);
 
       if (existing.length > 0) {
+        const row = existing[0];
+        const patch: {
+          name?: string;
+          slug?: string;
+          country?: string;
+          type?: string;
+        } = {
+          country: comp.country,
+          type: comp.type,
+        };
+        if (!row.canonicalSlug?.trim()) {
+          patch.name = displayName;
+          patch.slug = slugify(displayName);
+        }
         await db
           .update(competitions)
-          .set({
-            name: displayName,
-            slug: slugify(displayName),
-            country: comp.country,
-            type: comp.type,
-          })
+          .set(patch)
           .where(eq(competitions.goalserveCompetitionId, comp.goalserveCompetitionId));
       } else {
         await db.insert(competitions).values({
