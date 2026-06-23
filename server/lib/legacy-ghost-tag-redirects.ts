@@ -22,6 +22,43 @@ function normalizeGhostTagSlug(raw: string | undefined): string | null {
   return t;
 }
 
+/** Ghost URL slug → normalized tag name (`inter-milan` → `inter milan`). */
+function normalizedTagNameFromSlug(norm: string): string {
+  return norm.replace(/-/g, " ");
+}
+
+/** One entity_id when all alias rows agree; null if ambiguous or empty. */
+function uniqueEntityIdFromAliasMatches(rows: { entityId: string }[]): string | null {
+  const ids = Array.from(new Set(rows.map((r) => r.entityId.trim()).filter(Boolean)));
+  if (ids.length === 1) return ids[0];
+  return null;
+}
+
+async function findAliasEntityId(
+  norm: string,
+  entityTypes: ["competition", "competitions"] | ["team", "teams"] | ["player", "players"] | ["manager", "managers"],
+): Promise<string | null> {
+  const baseWhere = and(
+    eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+    inArray(paEntityAliasMap.entityType, entityTypes),
+  );
+
+  const byPublicSlug = await db
+    .select({ entityId: paEntityAliasMap.entityId })
+    .from(paEntityAliasMap)
+    .where(and(baseWhere, eq(paEntityAliasMap.publicSlug, norm)));
+
+  const fromPublicSlug = uniqueEntityIdFromAliasMatches(byPublicSlug);
+  if (fromPublicSlug) return fromPublicSlug;
+
+  const byNormalizedName = await db
+    .select({ entityId: paEntityAliasMap.entityId })
+    .from(paEntityAliasMap)
+    .where(and(baseWhere, eq(paEntityAliasMap.paTagNameNormalized, normalizedTagNameFromSlug(norm))));
+
+  return uniqueEntityIdFromAliasMatches(byNormalizedName);
+}
+
 async function findCompetitionIdForLegacyTag(norm: string): Promise<string | null> {
   const rows = await db
     .select({ id: competitions.id })
@@ -31,20 +68,15 @@ async function findCompetitionIdForLegacyTag(norm: string): Promise<string | nul
   if (rows.length === 1) return rows[0].id;
   if (rows.length > 1) return null;
 
-  const aliasRows = await db
+  const entityId = await findAliasEntityId(norm, ["competition", "competitions"]);
+  if (!entityId) return null;
+
+  const [competition] = await db
     .select({ id: competitions.id })
-    .from(paEntityAliasMap)
-    .innerJoin(competitions, eq(paEntityAliasMap.entityId, competitions.id))
-    .where(
-      and(
-        eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-        inArray(paEntityAliasMap.entityType, ["competition", "competitions"]),
-        eq(paEntityAliasMap.publicSlug, norm),
-      ),
-    )
-    .limit(2);
-  if (aliasRows.length !== 1) return null;
-  return aliasRows[0].id;
+    .from(competitions)
+    .where(eq(competitions.id, entityId))
+    .limit(1);
+  return competition?.id ?? null;
 }
 
 async function findTeamIdForLegacyTag(norm: string): Promise<string | null> {
@@ -56,19 +88,7 @@ async function findTeamIdForLegacyTag(norm: string): Promise<string | null> {
   if (internalRows.length === 1) return internalRows[0].id;
   if (internalRows.length > 1) return null;
 
-  const aliasRows = await db
-    .select({ entityId: paEntityAliasMap.entityId })
-    .from(paEntityAliasMap)
-    .where(
-      and(
-        eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-        inArray(paEntityAliasMap.entityType, ["team", "teams"]),
-        eq(paEntityAliasMap.publicSlug, norm),
-      ),
-    )
-    .limit(2);
-  if (aliasRows.length !== 1) return null;
-  return aliasRows[0].entityId;
+  return findAliasEntityId(norm, ["team", "teams"]);
 }
 
 async function findPlayerForLegacyTag(norm: string): Promise<{ id: string; urlSlug: string } | null> {
@@ -84,22 +104,13 @@ async function findPlayerForLegacyTag(norm: string): Promise<{ id: string; urlSl
   }
   if (bySlug.length > 1) return null;
 
-  const aliasRows = await db
-    .select({ entityId: paEntityAliasMap.entityId })
-    .from(paEntityAliasMap)
-    .where(
-      and(
-        eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-        inArray(paEntityAliasMap.entityType, ["player", "players"]),
-        eq(paEntityAliasMap.publicSlug, norm),
-      ),
-    )
-    .limit(2);
-  if (aliasRows.length !== 1) return null;
+  const entityId = await findAliasEntityId(norm, ["player", "players"]);
+  if (!entityId) return null;
+
   const [p] = await db
     .select({ id: players.id, slug: players.slug })
     .from(players)
-    .where(eq(players.id, aliasRows[0].entityId))
+    .where(eq(players.id, entityId))
     .limit(1);
   const s = p?.slug?.trim();
   if (!p || !s) return null;
@@ -119,22 +130,13 @@ async function findManagerForLegacyTag(norm: string): Promise<{ id: string; urlS
   }
   if (bySlug.length > 1) return null;
 
-  const aliasRows = await db
-    .select({ entityId: paEntityAliasMap.entityId })
-    .from(paEntityAliasMap)
-    .where(
-      and(
-        eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
-        inArray(paEntityAliasMap.entityType, ["manager", "managers"]),
-        eq(paEntityAliasMap.publicSlug, norm),
-      ),
-    )
-    .limit(2);
-  if (aliasRows.length !== 1) return null;
+  const entityId = await findAliasEntityId(norm, ["manager", "managers"]);
+  if (!entityId) return null;
+
   const [m] = await db
     .select({ id: managers.id, slug: managers.slug })
     .from(managers)
-    .where(eq(managers.id, aliasRows[0].entityId))
+    .where(eq(managers.id, entityId))
     .limit(1);
   const s = m?.slug?.trim();
   if (!m || !s) return null;
