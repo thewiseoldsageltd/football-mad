@@ -106,6 +106,8 @@ import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { computeMvpIndexable } from "./lib/mvp-indexing";
 import { resolveCanonicalCompetitionSlug, resolveCanonicalTeamPublicSlug } from "./lib/canonical-entity-slugs";
 import { registerLegacyGhostTagRedirects } from "./lib/legacy-ghost-tag-redirects";
+import { registerLegacyGhostArticleRedirects } from "./lib/legacy-ghost-article-redirects";
+import { legacyGhostArticleRedirectsEnabled } from "./middleware/environment";
 import { maybeApplyNonMvpEntityNoindexHeader } from "./lib/spa-entity-noindex";
 import { linkArticleHtmlFirstMentions, type InlineLinkEntity } from "./lib/inline-entity-linker";
 import { getEntityDisplayMedia } from "./lib/entity-media-resolver";
@@ -9090,6 +9092,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
   app.get("/managers/:slug", managerEntitySpaSeo);
   app.head("/managers/:slug", managerEntitySpaSeo);
+
+  // Legacy Ghost root article URLs → /news/:slug (301). Staging/local only until production opt-in.
+  if (legacyGhostArticleRedirectsEnabled()) {
+    registerLegacyGhostArticleRedirects(app);
+  }
 
   // State for PA Media ingest runner
   let paRunnerRunning = false;

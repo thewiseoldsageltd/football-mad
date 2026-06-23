@@ -21,6 +21,7 @@ import {
   resolveManagerIdForRequestSlug,
   resolvePlayerIdForRequestSlug,
 } from "./spa-entity-noindex";
+import { isReservedRootSegment } from "./reserved-root-segments";
 import { resolveSocialImageForMeta } from "./social-image-url";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
@@ -219,28 +220,9 @@ export function canonicalArticlePath(slug: string): string {
 
 /**
  * Top-level SPA routes (single path segment) that must not be treated as legacy `/:slug` articles.
+ * @deprecated Import from ./reserved-root-segments — kept as re-export for existing imports.
  */
-const RESERVED_ROOT_SINGLE_SEGMENTS = new Set([
-  "news",
-  "teams",
-  "matches",
-  "tables",
-  "players",
-  "managers",
-  "competitions",
-  "authors",
-  "transfers",
-  "injuries",
-  "fpl",
-  "community",
-  "shop",
-  "account",
-  "admin",
-]);
-
-function isReservedRootSegment(segment: string): boolean {
-  return RESERVED_ROOT_SINGLE_SEGMENTS.has(segment.trim().toLowerCase());
-}
+export { isReservedRootSegment } from "./reserved-root-segments";
 
 function resolveArticleHeadline(article: Article): string {
   const headline = typeof article.title === "string" ? article.title.trim() : "";

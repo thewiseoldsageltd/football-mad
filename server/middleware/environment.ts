@@ -26,6 +26,23 @@ function hostLooksLikeStaging(host: string): boolean {
   return false;
 }
 
+/**
+ * Legacy Ghost `/:slug` → `/news/:slug` 301 redirects.
+ * Enabled on staging (and local dev) until validated; production requires explicit opt-in.
+ */
+export function legacyGhostArticleRedirectsEnabled(): boolean {
+  const flag = process.env.LEGACY_GHOST_ARTICLE_REDIRECTS_ENABLED?.toLowerCase().trim();
+  if (flag === "true") return true;
+  if (flag === "false") return false;
+
+  const deploy = process.env.DEPLOYMENT_ENV?.toLowerCase().trim();
+  if (deploy === "staging") return true;
+  if (deploy === "production") return false;
+
+  // Local / non-production: enabled for QA (same rollout as staging).
+  return process.env.NODE_ENV !== "production";
+}
+
 /** True when responses should send noindex and staging robots rules apply. */
 export function shouldBlockSearchIndexing(host?: string): boolean {
   const indexing = process.env.SEO_INDEXING?.toLowerCase().trim();

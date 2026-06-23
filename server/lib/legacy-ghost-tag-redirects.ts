@@ -7,21 +7,7 @@ import { MvpGraphBoundary } from "./mvp-graph-boundary";
 import { computeMvpIndexable } from "./mvp-indexing";
 import { resolveCanonicalCompetitionSlug, resolveCanonicalTeamPublicSlug } from "./canonical-entity-slugs";
 
-/** Allowlist for query strings preserved on 301 from legacy Ghost tag URLs. */
-function harmlessQuerySuffix(originalUrl: string): string {
-  const qIndex = originalUrl.indexOf("?");
-  if (qIndex < 0) return "";
-  const params = new URLSearchParams(originalUrl.slice(qIndex + 1));
-  const out = new URLSearchParams();
-  for (const [key, value] of Array.from(params.entries())) {
-    const kl = key.toLowerCase();
-    if (kl.startsWith("utm_") || kl === "gclid" || kl === "fbclid") {
-      out.set(key, value);
-    }
-  }
-  const s = out.toString();
-  return s ? `?${s}` : "";
-}
+import { harmlessRedirectQuerySuffix } from "./harmless-redirect-query";
 
 function normalizeGhostTagSlug(raw: string | undefined): string | null {
   if (raw == null) return null;
@@ -162,7 +148,7 @@ async function handleLegacyGhostTag(req: Request, res: Response): Promise<void> 
     return;
   }
 
-  const qs = harmlessQuerySuffix(req.originalUrl || "");
+  const qs = harmlessRedirectQuerySuffix(req.originalUrl || "");
   const boundary = new MvpGraphBoundary();
 
   const competitionId = await findCompetitionIdForLegacyTag(norm);
