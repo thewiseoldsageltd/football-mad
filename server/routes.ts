@@ -106,6 +106,7 @@ import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { computeMvpIndexable } from "./lib/mvp-indexing";
 import { resolveCanonicalCompetitionSlug, resolveCanonicalTeamPublicSlug } from "./lib/canonical-entity-slugs";
 import { registerLegacyGhostTagRedirects } from "./lib/legacy-ghost-tag-redirects";
+import { registerLegacyGoalserveMatchRedirects } from "./lib/legacy-goalserve-match-redirects";
 import { registerLegacyGhostArticleRedirects } from "./lib/legacy-ghost-article-redirects";
 import { legacyGhostArticleRedirectsEnabled } from "./middleware/environment";
 import { maybeApplyNonMvpEntityNoindexHeader } from "./lib/spa-entity-noindex";
@@ -150,6 +151,7 @@ async function withArchiveMvpIndexable(
 export async function registerRoutes(httpServer: Server, app: Express): Promise<void> {
   registerSitemapRoute(app);
   registerLegacyGhostTagRedirects(app);
+  registerLegacyGoalserveMatchRedirects(app);
 
   // ========== DEBUG ROUTER (mounted first to avoid SPA catch-all) ==========
   const debugRouter = Router();

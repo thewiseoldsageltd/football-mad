@@ -14,6 +14,7 @@ import { compareCompetitionsByPriority, getCompetitionCountryById, getCompetitio
 import { getCountryFlagUrl } from "@/lib/flags";
 import { usePageSeo } from "@/lib/seo";
 import type { Article, Team } from "@shared/schema";
+import { matchListingHrefForSlug } from "@shared/match-slug";
 import { format } from "date-fns";
 
 function useSEO() {
@@ -160,7 +161,7 @@ function TodaysMatchesStrip({
           const competitionFlagUrl = getCompetitionFlagUrl(match.goalserveCompetitionId);
           const statusText = getMatchStatusText(match);
           return (
-            <Link key={match.id} href={`/matches/${match.slug}`}>
+            <Link key={match.id} href={matchListingHrefForSlug(match.slug)}>
               <Card 
                 className={`flex-shrink-0 w-[240px] hover-elevate cursor-pointer ${isLive ? "border-red-200/70 dark:border-red-900/40" : ""}`}
                 data-testid={`card-todays-match-${match.id}`}

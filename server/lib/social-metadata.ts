@@ -21,6 +21,7 @@ import {
   resolveManagerIdForRequestSlug,
   resolvePlayerIdForRequestSlug,
 } from "./spa-entity-noindex";
+import { isInternalGoalserveMatchSlug } from "@shared/match-slug";
 import { isReservedRootSegment } from "./reserved-root-segments";
 import { resolveSocialImageForMeta } from "./social-image-url";
 
@@ -346,11 +347,14 @@ export async function resolvePageMetadata(
   }
 
   if (path === "/matches" || path.startsWith("/matches/")) {
+    const segment = path.slice("/matches/".length).replace(/\/$/, "");
+    const canonicalPath =
+      segment && !isInternalGoalserveMatchSlug(segment) ? path.replace(/\/$/, "") || "/matches" : "/matches";
     return withRobots(
       defaultPayload({
         title: "Matches | Football Mad",
         description: "Live scores, fixtures and results from Football Mad's priority competitions.",
-        canonicalPath: path.startsWith("/matches/") ? path : "/matches",
+        canonicalPath,
       }),
     );
   }
