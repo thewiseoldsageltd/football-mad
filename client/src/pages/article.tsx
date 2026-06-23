@@ -16,7 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
-import { articleDisplayImageUrl, articleSeoImageUrl } from "@/lib/article-images";
+import { ArticleCoverImage } from "@/components/article-cover-image";
+import { articleSeoImageUrl } from "@/lib/article-images";
 import { absoluteSeoUrl } from "@/lib/seo";
 import {
   articleCanonicalShareUrl,
@@ -421,13 +422,7 @@ function RightRail({
                   <Link key={a.id} href={newsArticle(a.slug)}>
                     <div className="group flex gap-3 hover-elevate rounded p-1 -m-1 cursor-pointer" data-testid={`link-related-${a.id}`}>
                       <div className="w-16 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
-                        {articleDisplayImageUrl(a) ? (
-                          <img src={articleDisplayImageUrl(a)!} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/10 to-primary/20">
-                            <span className="text-lg font-bold text-primary/30">F</span>
-                          </div>
-                        )}
+                        <ArticleCoverImage article={a} variant="thumb" alt="" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
@@ -829,19 +824,7 @@ export default function ArticlePage() {
               />
             </header>
 
-            {articleDisplayImageUrl(article) ? (
-              <figure className="my-8 relative aspect-video w-full overflow-hidden rounded-lg bg-black/5">
-                <img
-                  src={articleDisplayImageUrl(article)!}
-                  alt={article.title}
-                  className="h-full w-full object-cover object-[center_top]"
-                />
-              </figure>
-            ) : (
-              <div className="my-8 aspect-[16/9] w-full rounded-lg bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-                <span className="text-8xl font-bold text-primary/30">F</span>
-              </div>
-            )}
+            <ArticleCoverImage article={article} variant="hero" alt={article.title} />
 
             {showExcerpt && (
               <>

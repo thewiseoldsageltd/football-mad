@@ -9,7 +9,7 @@ import { PillsRow } from "@/components/pills-row";
 import { newsArticle } from "@/lib/urls";
 import type { Article, Team } from "@shared/schema";
 import { formatDistanceToNow } from "date-fns";
-import { articleDisplayImageUrl } from "@/lib/article-images";
+import { ArticleCoverImage } from "@/components/article-cover-image";
 import { buildPillsForCard, type PillSourceArticle } from "@/lib/entity-utils";
 
 interface ArticleCardProps {
@@ -81,23 +81,12 @@ export function ArticleCard({
           data-testid={`link-article-featured-${article.id}`}
         />
         <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5 [contain:layout]">
-          {articleDisplayImageUrl(article) ? (
-            <img
-              src={articleDisplayImageUrl(article)!}
-              alt={article.title}
-              width={1280}
-              height={720}
-              sizes="(max-width: 1280px) 100vw, 1216px"
-              decoding="async"
-              fetchPriority={priorityCover ? "high" : undefined}
-              loading={priorityCover ? "eager" : "lazy"}
-              className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <div className="h-full w-full bg-gradient-to-br from-primary/20 to-primary/40 flex items-center justify-center">
-              <span className="text-6xl font-bold text-primary/30">F</span>
-            </div>
-          )}
+          <ArticleCoverImage
+            article={article}
+            variant="card-featured"
+            alt={article.title}
+            priorityCover={priorityCover}
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
           <div className={`absolute bottom-0 left-0 right-0 ${featuredHeadlineOnly ? "p-5 md:p-6" : "p-6"}`}>
             {!featuredHeadlineOnly && (
@@ -167,22 +156,7 @@ export function ArticleCard({
         data-testid={`link-article-${article.id}`}
       />
       <div className="relative aspect-video overflow-hidden rounded-t-xl bg-black/5 [contain:layout]">
-        {articleDisplayImageUrl(article) ? (
-          <img
-            src={articleDisplayImageUrl(article)!}
-            alt={article.title}
-            width={640}
-            height={360}
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            decoding="async"
-            loading="lazy"
-            className="h-full w-full object-cover object-[center_top] transition-transform duration-300 group-hover:scale-105"
-          />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-            <span className="text-4xl font-bold text-muted-foreground/30">F</span>
-          </div>
-        )}
+        <ArticleCoverImage article={article} variant="card" alt={article.title} />
         {teamBadge && (
           <div className="absolute top-3 right-3">
             <img src={teamBadge} alt="Team" className="h-8 w-8 drop-shadow-lg" />

@@ -1,6 +1,22 @@
 const CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
 const ARTICLE_OG_IMAGE_VERSION = "v5";
 
+/** Legacy Ghost self-hosted paths that now return SPA HTML instead of image bytes. */
+export function isLegacyGhostArticleImageUrl(url: string | null | undefined): boolean {
+  const raw = url?.trim();
+  if (!raw) return false;
+  try {
+    const parsed = new URL(raw.startsWith("//") ? `https:${raw}` : raw);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "footballmad.co.uk" && host !== "www.footballmad.co.uk") {
+      return false;
+    }
+    return parsed.pathname.toLowerCase().startsWith("/content/images/");
+  } catch {
+    return /footballmad\.co\.uk\/content\/images\//i.test(raw);
+  }
+}
+
 /** Article hero / card image (16:9 WebP), falling back to legacy cover. */
 export function articleDisplayImageUrl(article: {
   heroImageUrl?: string | null;
