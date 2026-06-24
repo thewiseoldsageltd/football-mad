@@ -20,6 +20,7 @@ import { ArticleCoverImage } from "@/components/article-cover-image";
 import { articleSeoImageUrl, articleDisplayImageUrl, isLegacyGhostArticleImageUrl } from "@/lib/article-images";
 import {
   articleReadTimeMinutes,
+  collapseArticleShellSpacer,
   hasMatchingArticlePrerenderShell,
   scheduleArticleShellRemoval,
 } from "@/lib/article-bootstrap";
@@ -722,6 +723,8 @@ export default function ArticlePage() {
       onRemoved: () => setHeroHandoffComplete(true),
     });
   }, [article, slug, heroHandoffComplete, heroImgEl, articleHasVisibleHero]);
+
+  useEffect(() => () => collapseArticleShellSpacer(), []);
 
   useEffect(() => {
     if (!processedContent || typeof window === "undefined") return;

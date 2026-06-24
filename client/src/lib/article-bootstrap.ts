@@ -132,26 +132,100 @@ export function hasMatchingArticlePrerenderShell(expectedSlug: string | undefine
   return shell.dataset.articleSlug === expectedSlug;
 }
 
-function removeArticlePrerenderShell(expectedSlug: string | undefined): void {
-  if (!expectedSlug) return;
+const SHELL_SPACER_ID = "fm-article-shell-spacer";
+const SHELL_COMPENSATE_ATTR = "fmShellHandoffHeight";
+/** Ms after handoff before collapsing spacer (LCP window + layout settle). */
+const SPACER_COLLAPSE_DELAY_MS = 2500;
+
+function getArticleRootElement(): HTMLElement | null {
+  return document.getElementById("root");
+}
+
+/**
+ * Swap shell for a height-matched spacer and pull #root up with negative margin so
+ * React content paints in the same viewport position without a layout jump.
+ */
+function handoffArticlePrerenderShell(expectedSlug: string | undefined): boolean {
+  if (!expectedSlug) return false;
   const shell = document.getElementById("fm-article-shell");
-  if (!shell) return;
-  if (shell.dataset.articleSlug !== expectedSlug) return;
-  shell.remove();
+  if (!shell || shell.dataset.articleSlug !== expectedSlug) return false;
+
+  const height = shell.offsetHeight;
+  const root = getArticleRootElement();
+
+  const spacer = document.createElement("div");
+  spacer.id = SHELL_SPACER_ID;
+  spacer.setAttribute("aria-hidden", "true");
+  spacer.style.height = `${height}px`;
+  spacer.style.width = "100%";
+  spacer.style.pointerEvents = "none";
+
+  if (root && height > 0) {
+    root.style.marginTop = `-${height}px`;
+    root.dataset[SHELL_COMPENSATE_ATTR] = String(height);
+  }
+
+  shell.replaceWith(spacer);
   document.getElementById("fm-article-shell-styles")?.remove();
+  return true;
+}
+
+let spacerCollapseTimer: number | null = null;
+
+/**
+ * Remove spacer and clear #root compensation in one frame so flow changes cancel out.
+ * Spacer removal pulls content up; clearing negative margin pulls content down — net ~0 CLS.
+ */
+export function collapseArticleShellSpacer(): void {
+  if (spacerCollapseTimer != null) {
+    window.clearTimeout(spacerCollapseTimer);
+    spacerCollapseTimer = null;
+  }
+
+  const spacer = document.getElementById(SHELL_SPACER_ID);
+  const root = getArticleRootElement();
+  if (!spacer && !root?.dataset[SHELL_COMPENSATE_ATTR]) return;
+
+  requestAnimationFrame(() => {
+    document.getElementById(SHELL_SPACER_ID)?.remove();
+    if (root?.dataset[SHELL_COMPENSATE_ATTR]) {
+      root.style.marginTop = "";
+      delete root.dataset[SHELL_COMPENSATE_ATTR];
+    }
+  });
+}
+
+function scheduleShellSpacerCollapse(): void {
+  if (spacerCollapseTimer != null) {
+    window.clearTimeout(spacerCollapseTimer);
+  }
+
+  const onScroll = () => {
+    if (window.scrollY < 48) return;
+    window.removeEventListener("scroll", onScroll);
+    collapseArticleShellSpacer();
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  spacerCollapseTimer = window.setTimeout(() => {
+    spacerCollapseTimer = null;
+    window.removeEventListener("scroll", onScroll);
+    collapseArticleShellSpacer();
+  }, SPACER_COLLAPSE_DELAY_MS);
 }
 
 export type ScheduleArticleShellRemovalOptions = {
   /** React hero img; handoff waits for load/complete when set. */
   heroImg?: HTMLImageElement | null;
-  /** Ms after rAF before removing shell so LCP can settle on prerender hero. */
+  /** Ms after rAF before handoff so LCP can settle on prerender hero. */
   safetyDelayMs?: number;
   onRemoved?: () => void;
 };
 
 /**
- * Delay prerender shell removal until the React hero is ready to paint.
+ * Delay prerender shell handoff until the React hero is ready to paint.
  * Lighthouse can switch LCP to the later React hero if the shell is removed too early.
+ * Handoff preserves document height via spacer + #root margin compensation to avoid CLS.
  */
 export function scheduleArticleShellRemoval(
   expectedSlug: string | undefined,
@@ -171,8 +245,12 @@ export function scheduleArticleShellRemoval(
       if (cancelled) return;
       window.setTimeout(() => {
         if (cancelled) return;
-        removeArticlePrerenderShell(expectedSlug);
-        onRemoved?.();
+        if (handoffArticlePrerenderShell(expectedSlug)) {
+          onRemoved?.();
+          scheduleShellSpacerCollapse();
+        } else {
+          onRemoved?.();
+        }
       }, safetyDelayMs);
     });
   };
@@ -203,5 +281,9 @@ export function scheduleArticleShellRemoval(
     cancelled = true;
     heroImg.removeEventListener("load", onDone);
     heroImg.removeEventListener("error", onDone);
+    if (spacerCollapseTimer != null) {
+      window.clearTimeout(spacerCollapseTimer);
+      spacerCollapseTimer = null;
+    }
   };
 }
