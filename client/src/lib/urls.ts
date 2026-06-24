@@ -3,72 +3,15 @@
  * All routes should use these helpers instead of hardcoded strings
  */
 
-// Entity slugs for news resolution (teams)
-export const TEAM_SLUGS = new Set([
-  "arsenal",
-  "aston-villa",
-  "bournemouth",
-  "brentford",
-  "brighton",
-  "chelsea",
-  "crystal-palace",
-  "everton",
-  "fulham",
-  "ipswich-town",
-  "leeds",
-  "leicester-city",
-  "liverpool",
-  "manchester-city",
-  "manchester-united",
-  "man-city",
-  "man-utd",
-  "newcastle",
-  "newcastle-united",
-  "nottingham-forest",
-  "southampton",
-  "tottenham",
-  "tottenham-hotspur",
-  "west-ham",
-  "west-ham-united",
-  "wolves",
-  "wolverhampton-wanderers",
-  "burnley",
-  "sunderland",
-  "luton-town",
-  "sheffield-united",
-]);
+import {
+  COMPETITION_SLUGS,
+  TEAM_SLUGS,
+  isCompetitionSlug,
+  isTeamSlug,
+  parseMatchSlug,
+} from "@shared/news-article-slug";
 
-// Entity slugs for competitions
-export const COMPETITION_SLUGS = new Set([
-  "premier-league",
-  "championship",
-  "league-one",
-  "league-two",
-  "national-league",
-  "scottish-premiership",
-  "scottish-championship",
-  "scottish-league-one",
-  "scottish-league-two",
-  "fa-cup",
-  "efl-cup",
-  "scottish-cup",
-  "scottish-league-cup",
-  "copa-del-rey",
-  "coppa-italia",
-  "dfb-pokal",
-  "coupe-de-france",
-  "bundesliga",
-  "la-liga",
-  "serie-a",
-  "ligue-1",
-  "uefa-champions-league",
-  "uefa-europa-league",
-  "uefa-conference-league",
-  // Legacy aliases
-  "champions-league",
-  "europa-league",
-  "conference-league",
-]);
+export { COMPETITION_SLUGS, TEAM_SLUGS, isCompetitionSlug, isTeamSlug, parseMatchSlug };
 
 // Reserved slugs that cannot be used for articles
 export const RESERVED_SLUGS = new Set([
@@ -88,18 +31,11 @@ export const RESERVED_SLUGS = new Set([
   "featured",
 ]);
 
-// Check if a slug is an entity (team or competition)
 export function isEntitySlug(slug: string): boolean {
   return TEAM_SLUGS.has(slug) || COMPETITION_SLUGS.has(slug);
 }
 
-export function isTeamSlug(slug: string): boolean {
-  return TEAM_SLUGS.has(slug);
-}
-
-export function isCompetitionSlug(slug: string): boolean {
-  return COMPETITION_SLUGS.has(slug);
-}
+// Check if a slug is an entity (team or competition) — re-exported helpers above.
 
 // NEWS
 export function newsIndex(): string {
@@ -194,18 +130,6 @@ export function matchesCompetition(competitionSlug: string): string {
 export function matchDetail(homeSlug: string, awaySlug: string, dateISO: string): string {
   const date = dateISO.split("T")[0]; // Extract YYYY-MM-DD
   return `/matches/${homeSlug}-vs-${awaySlug}-${date}`;
-}
-
-export function parseMatchSlug(matchSlug: string): { homeSlug: string; awaySlug: string; date: string } | null {
-  const vsMatch = matchSlug.match(/^(.+)-vs-(.+)-(\d{4}-\d{2}-\d{2})$/);
-  if (vsMatch) {
-    return {
-      homeSlug: vsMatch[1],
-      awaySlug: vsMatch[2],
-      date: vsMatch[3],
-    };
-  }
-  return null;
 }
 
 // GLOBAL HUBS

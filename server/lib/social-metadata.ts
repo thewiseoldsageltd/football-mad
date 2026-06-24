@@ -25,6 +25,8 @@ import { isInternalGoalserveMatchSlug } from "@shared/match-slug";
 import { isReservedRootSegment } from "./reserved-root-segments";
 import { resolveSocialImageForMeta } from "./social-image-url";
 import { articleHeroPreloadImageUrl } from "@shared/article-display-image";
+import type { ArticlePrerenderContext } from "./article-prerender-context";
+import { resolveArticlePrerenderContext } from "./article-prerender-context";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
 export const CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
@@ -63,6 +65,11 @@ export type SocialMetaPayload = {
   twitterCard?: "summary" | "summary_large_image";
   /** Display hero WebP for LCP preload (article pages only). */
   lcpImagePreloadUrl?: string | null;
+};
+
+export type SpaPageContext = {
+  meta: SocialMetaPayload;
+  prerender?: ArticlePrerenderContext;
 };
 
 export function escapeHtml(value: string): string {
@@ -277,11 +284,12 @@ function buildArticleSocialPayload(
 async function resolveArticlePageMetadata(
   rawSlug: string,
   robotsIndex: string,
+  preloadedArticle?: Article,
 ): Promise<SocialMetaPayload | null> {
   const slug = normalizeArticleSlug(rawSlug);
   if (!slug) return null;
 
-  const article = await fetchArticleBySlug(slug);
+  const article = preloadedArticle ?? (await fetchArticleBySlug(slug));
   if (!article) return null;
 
   return buildArticleSocialPayload(article, slug, canonicalArticlePath(slug), robotsIndex);
@@ -305,9 +313,19 @@ function defaultPayload(
  * Resolve social/SEO metadata for a public SPA path (no query string).
  * Uses canonical footballmad.co.uk URLs regardless of request host.
  */
+export async function resolveSpaPageContext(
+  requestPath: string,
+  host: string,
+): Promise<SpaPageContext> {
+  const prerender = await resolveArticlePrerenderContext(requestPath);
+  const meta = await resolvePageMetadata(requestPath, host, prerender ?? undefined);
+  return { meta, prerender: prerender ?? undefined };
+}
+
 export async function resolvePageMetadata(
   requestPath: string,
   host: string,
+  prerender?: ArticlePrerenderContext,
 ): Promise<SocialMetaPayload> {
   const path = normalizeRequestPath(requestPath);
   const stagingBlock = shouldBlockSearchIndexing(host);
@@ -344,7 +362,11 @@ export async function resolvePageMetadata(
   if (newsArticleMatch) {
     const slug = newsArticleMatch[1];
     const canonicalPath = canonicalArticlePath(slug);
-    const articleMeta = await resolveArticlePageMetadata(slug, robotsIndex);
+    const preloaded =
+      prerender && normalizeArticleSlug(prerender.publicSlug) === normalizeArticleSlug(slug)
+        ? prerender.article
+        : undefined;
+    const articleMeta = await resolveArticlePageMetadata(slug, robotsIndex, preloaded);
     if (articleMeta) {
       return withRobots(articleMeta);
     }
@@ -530,7 +552,11 @@ export async function resolvePageMetadata(
   if (legacyArticleMatch) {
     const segment = legacyArticleMatch[1];
     if (!isReservedRootSegment(segment)) {
-      const articleMeta = await resolveArticlePageMetadata(segment, robotsIndex);
+      const preloaded =
+        prerender && normalizeArticleSlug(prerender.publicSlug) === normalizeArticleSlug(segment)
+          ? prerender.article
+          : undefined;
+      const articleMeta = await resolveArticlePageMetadata(segment, robotsIndex, preloaded);
       if (articleMeta) {
         return withRobots(articleMeta);
       }

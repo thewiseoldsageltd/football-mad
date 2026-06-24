@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useLayoutEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
@@ -18,6 +18,10 @@ import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { ArticleCoverImage } from "@/components/article-cover-image";
 import { articleSeoImageUrl } from "@/lib/article-images";
+import {
+  articleReadTimeMinutes,
+  removeArticlePrerenderShell,
+} from "@/lib/article-bootstrap";
 import { absoluteSeoUrl } from "@/lib/seo";
 import {
   articleCanonicalShareUrl,
@@ -566,6 +570,18 @@ function ArticleNotFound({ popularArticles }: { popularArticles: Article[] }) {
   );
 }
 
+function ArticleBodySkeleton() {
+  return (
+    <div className="space-y-4 mb-12" aria-busy="true" aria-label="Loading article body">
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-5/6" />
+    </div>
+  );
+}
+
 function ArticleSkeleton() {
   return (
     <MainLayout>
@@ -673,6 +689,11 @@ export default function ArticlePage() {
     [article?.content],
   );
 
+  useLayoutEffect(() => {
+    if (!article || !slug) return;
+    removeArticlePrerenderShell(slug);
+  }, [article, slug]);
+
   useEffect(() => {
     if (!processedContent || typeof window === "undefined") return;
     const hasTwitterEmbeds = processedContent.includes("twitter-tweet");
@@ -773,7 +794,7 @@ export default function ArticlePage() {
   }, [article]);
 
   // Early returns AFTER all hooks
-  if (isLoading) {
+  if (isLoading && !article) {
     return <ArticleSkeleton />;
   }
 
@@ -782,7 +803,8 @@ export default function ArticlePage() {
   }
 
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
-  const readingTime = calculateReadingTime(article.content);
+  const readingTime = articleReadTimeMinutes(article);
+  const bodyReady = Boolean(article.content?.trim());
   
   // Check if excerpt should be shown (not empty and not duplicate of body start)
   const showExcerpt = article.excerpt?.trim() && !isExcerptDuplicate(article.excerpt, article.content);
@@ -835,10 +857,14 @@ export default function ArticlePage() {
               </>
             )}
 
-            <div
-              className="article-body-content prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:block [&_img]:w-full [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:w-full [&_figure]:max-w-full [&_figure]:mx-0 [&_figure]:my-6 [&_figure_img]:w-full [&_figure_img]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-sm [&_figcaption]:text-muted-foreground [&_figcaption]:mt-2 [&_figcaption]:mb-6 [&_iframe]:block [&_iframe]:mx-auto [&_iframe]:max-w-full [&_blockquote:not(.instagram-media)]:block [&_blockquote:not(.instagram-media)]:mx-auto [&_blockquote:not(.instagram-media)]:max-w-full [&_.twitter-tweet]:my-6 [&_.twitter-tweet]:mx-auto"
-              dangerouslySetInnerHTML={{ __html: processedContent }}
-            />
+            {bodyReady ? (
+              <div
+                className="article-body-content prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:block [&_img]:w-full [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:w-full [&_figure]:max-w-full [&_figure]:mx-0 [&_figure]:my-6 [&_figure_img]:w-full [&_figure_img]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-sm [&_figcaption]:text-muted-foreground [&_figcaption]:mt-2 [&_figcaption]:mb-6 [&_iframe]:block [&_iframe]:mx-auto [&_iframe]:max-w-full [&_blockquote:not(.instagram-media)]:block [&_blockquote:not(.instagram-media)]:mx-auto [&_blockquote:not(.instagram-media)]:max-w-full [&_.twitter-tweet]:my-6 [&_.twitter-tweet]:mx-auto"
+                dangerouslySetInnerHTML={{ __html: processedContent }}
+              />
+            ) : (
+              <ArticleBodySkeleton />
+            )}
 
             {SHOW_PILLS && footerPills.length > 0 && (
               <section className="mb-8 py-6 border-t" data-testid="in-this-article-section">
