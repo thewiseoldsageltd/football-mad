@@ -125,11 +125,83 @@ export function articleReadTimeMinutes(article: Article): number {
   return 1;
 }
 
-export function removeArticlePrerenderShell(expectedSlug: string | undefined): void {
+export function hasMatchingArticlePrerenderShell(expectedSlug: string | undefined): boolean {
+  if (!expectedSlug) return false;
+  const shell = document.getElementById("fm-article-shell");
+  if (!shell) return false;
+  return shell.dataset.articleSlug === expectedSlug;
+}
+
+function removeArticlePrerenderShell(expectedSlug: string | undefined): void {
   if (!expectedSlug) return;
   const shell = document.getElementById("fm-article-shell");
   if (!shell) return;
   if (shell.dataset.articleSlug !== expectedSlug) return;
   shell.remove();
   document.getElementById("fm-article-shell-styles")?.remove();
+}
+
+export type ScheduleArticleShellRemovalOptions = {
+  /** React hero img; handoff waits for load/complete when set. */
+  heroImg?: HTMLImageElement | null;
+  /** Ms after rAF before removing shell so LCP can settle on prerender hero. */
+  safetyDelayMs?: number;
+  onRemoved?: () => void;
+};
+
+/**
+ * Delay prerender shell removal until the React hero is ready to paint.
+ * Lighthouse can switch LCP to the later React hero if the shell is removed too early.
+ */
+export function scheduleArticleShellRemoval(
+  expectedSlug: string | undefined,
+  options: ScheduleArticleShellRemovalOptions = {},
+): () => void {
+  if (!expectedSlug || !hasMatchingArticlePrerenderShell(expectedSlug)) {
+    options.onRemoved?.();
+    return () => {};
+  }
+
+  const { heroImg, safetyDelayMs = 150, onRemoved } = options;
+  let cancelled = false;
+
+  const finalize = () => {
+    if (cancelled) return;
+    requestAnimationFrame(() => {
+      if (cancelled) return;
+      window.setTimeout(() => {
+        if (cancelled) return;
+        removeArticlePrerenderShell(expectedSlug);
+        onRemoved?.();
+      }, safetyDelayMs);
+    });
+  };
+
+  if (!heroImg) {
+    finalize();
+    return () => {
+      cancelled = true;
+    };
+  }
+
+  if (heroImg.complete && heroImg.naturalWidth > 0) {
+    finalize();
+    return () => {
+      cancelled = true;
+    };
+  }
+
+  const onDone = () => {
+    heroImg.removeEventListener("load", onDone);
+    heroImg.removeEventListener("error", onDone);
+    finalize();
+  };
+  heroImg.addEventListener("load", onDone);
+  heroImg.addEventListener("error", onDone);
+
+  return () => {
+    cancelled = true;
+    heroImg.removeEventListener("load", onDone);
+    heroImg.removeEventListener("error", onDone);
+  };
 }
