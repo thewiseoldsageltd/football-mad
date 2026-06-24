@@ -94,6 +94,11 @@ export function ArticleCoverImage({
         <img
           src={initialUrl!}
           alt={alt}
+          width={1280}
+          height={720}
+          decoding="async"
+          fetchPriority="high"
+          loading="eager"
           className={imgClassName ?? "h-full w-full object-cover object-[center_top]"}
           onError={handleError}
         />

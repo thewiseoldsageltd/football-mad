@@ -970,6 +970,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     title: articles.title,
     excerpt: articles.excerpt,
     coverImage: articles.coverImage,
+    heroImageUrl: articles.heroImageUrl,
     publishedAt: articles.publishedAt,
     authorName: articles.authorName,
     competition: articles.competition,
