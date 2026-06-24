@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
-import { EntityAvatar } from "@/components/entity-media";
+import { MatchTeamBadge } from "@/components/matches/match-team-badge";
 import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn } from "@/lib/queryClient";
 import { compareCompetitionsByPriority, getCompetitionCountryById, getCompetitionDisplayRank, getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
@@ -48,12 +48,14 @@ type HomeApiMatch = {
     name?: string;
     shortName?: string;
     nameFromRaw?: string;
+    logoUrl?: string | null;
   };
   awayTeam: {
     id?: string;
     name?: string;
     shortName?: string;
     nameFromRaw?: string;
+    logoUrl?: string | null;
   };
 };
 
@@ -170,18 +172,14 @@ function TodaysMatchesStrip({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
-                          <EntityAvatar
-                            entityType="team"
-                            entityId={match.homeTeam.id}
-                            label={homeName}
-                            surface="hub_header"
-                            sizeClassName="h-full w-full"
-                            shape="square"
-                            objectFit="contain"
-                            className="rounded-md"
-                          />
-                        </div>
+                        <MatchTeamBadge
+                          team={{
+                            id: match.homeTeam.id,
+                            name: homeName,
+                            logoUrl: match.homeTeam.logoUrl,
+                          }}
+                          size="xs"
+                        />
                         <span className="text-sm font-medium truncate">{homeName}</span>
                       </div>
                       <span
@@ -194,18 +192,14 @@ function TodaysMatchesStrip({
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2 w-full">
                         <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm">
-                            <EntityAvatar
-                              entityType="team"
-                              entityId={match.awayTeam.id}
-                              label={awayName}
-                              surface="hub_header"
-                              sizeClassName="h-full w-full"
-                              shape="square"
-                              objectFit="contain"
-                              className="rounded-md"
-                            />
-                          </div>
+                          <MatchTeamBadge
+                            team={{
+                              id: match.awayTeam.id,
+                              name: awayName,
+                              logoUrl: match.awayTeam.logoUrl,
+                            }}
+                            size="xs"
+                          />
                           <span className="text-sm font-medium truncate">{awayName}</span>
                         </div>
                         <span

@@ -1,11 +1,10 @@
-import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Globe, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { useEntityMedia } from "@/hooks/use-entity-media";
+import { MatchTeamBadge } from "./match-team-badge";
 import { getCompetitionCountryById, getPublicCompetitionDisplayName } from "./competition-priority";
 
 interface EnhancedMatchCardProps {
@@ -89,97 +88,6 @@ function CompetitionBadge({
   );
 }
 
-function getInitials(label: string): string {
-  const words = label.split(/\s+/).filter(Boolean);
-  if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
-  return label.slice(0, 2).toUpperCase();
-}
-
-const MATCH_CARD_FLAG_WIDTH = 160 as const;
-
-function TeamInitialsFallback({ name, sizeClasses }: { name: string; sizeClasses: string }) {
-  return (
-    <div
-      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-muted`}
-    >
-      <span className="text-sm font-medium text-muted-foreground leading-none">{getInitials(name || "?")}</span>
-    </div>
-  );
-}
-
-/** National-team flag — separate from crest tile (no wash/blur from crest styling or tiny upscale). */
-function TeamCountryFlag({ name, sizeClasses }: { name: string; sizeClasses: string }) {
-  const [imgError, setImgError] = useState(false);
-  const flagUrl = getCountryFlagUrl(name, MATCH_CARD_FLAG_WIDTH);
-
-  if (!flagUrl || imgError) {
-    return <TeamInitialsFallback name={name} sizeClasses={sizeClasses} />;
-  }
-
-  return (
-    <div className={`${sizeClasses} flex items-center justify-center flex-shrink-0`}>
-      <img
-        src={flagUrl}
-        alt={name}
-        width={MATCH_CARD_FLAG_WIDTH}
-        height={120}
-        decoding="async"
-        loading="lazy"
-        className="max-h-full max-w-full object-contain rounded-[2px]"
-        onError={() => setImgError(true)}
-      />
-    </div>
-  );
-}
-
-/** Club / ingested crest — unchanged tile treatment. */
-function TeamCrestImage({
-  name,
-  crestUrl,
-  sizeClasses,
-}: {
-  name: string;
-  crestUrl: string;
-  sizeClasses: string;
-}) {
-  const [imgError, setImgError] = useState(false);
-
-  if (imgError) {
-    return <TeamInitialsFallback name={name} sizeClasses={sizeClasses} />;
-  }
-
-  return (
-    <div
-      className={`${sizeClasses} rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 bg-white/95 dark:bg-background/95 p-0.5 shadow-sm`}
-    >
-      <img
-        src={crestUrl}
-        alt={name}
-        className="h-full w-full rounded-lg object-contain"
-        onError={() => setImgError(true)}
-      />
-    </div>
-  );
-}
-
-function TeamLogo({ team, size = "md" }: { team: MockMatch["homeTeam"]; size?: "sm" | "md" }) {
-  const sizeClasses = size === "sm" ? "w-14 h-14 md:w-16 md:h-16" : "w-16 h-16";
-  const directLogoUrl = team.logoUrl?.trim() || null;
-  const { url: entityMediaUrl, hasMedia } = useEntityMedia("team", team.id || null, "hub_header");
-  const crestUrl = directLogoUrl || (hasMedia && entityMediaUrl ? entityMediaUrl : null);
-
-  if (crestUrl) {
-    return <TeamCrestImage name={team.name} crestUrl={crestUrl} sizeClasses={sizeClasses} />;
-  }
-
-  const countryFlagUrl = getCountryFlagUrl(team.name, MATCH_CARD_FLAG_WIDTH);
-  if (countryFlagUrl) {
-    return <TeamCountryFlag name={team.name} sizeClasses={sizeClasses} />;
-  }
-
-  return <TeamInitialsFallback name={team.name} sizeClasses={sizeClasses} />;
-}
-
 function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?: number }) {
   switch (status) {
     case "live":
@@ -250,7 +158,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
           <div className="grid grid-cols-[56px_minmax(0,1fr)_88px_minmax(0,1fr)_56px] md:grid-cols-[64px_minmax(0,1fr)_116px_minmax(0,1fr)_64px] gap-x-2 md:gap-x-3 items-center">
             {/* Home crest */}
             <div className="h-14 md:h-16 flex items-center justify-center">
-              <TeamLogo team={match.homeTeam} size="sm" />
+              <MatchTeamBadge team={match.homeTeam} size="sm" />
             </div>
 
             {/* Home name - right aligned toward center */}
@@ -294,7 +202,7 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
 
             {/* Away crest */}
             <div className="h-14 md:h-16 flex items-center justify-center">
-              <TeamLogo team={match.awayTeam} size="sm" />
+              <MatchTeamBadge team={match.awayTeam} size="sm" />
             </div>
           </div>
 
