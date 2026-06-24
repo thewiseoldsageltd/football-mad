@@ -22,6 +22,13 @@ const FLAG_WIDTH_BY_SIZE: Record<MatchTeamBadgeSize, FlagImageWidth> = {
   md: 160,
 };
 
+/** Fixed 7:5 frame — uniform footprint; object-cover normalises varying source aspect ratios. */
+const FLAG_FRAME_CLASSES: Record<MatchTeamBadgeSize, string> = {
+  xs: "w-7 h-5",
+  sm: "w-12 h-8",
+  md: "w-12 h-8",
+};
+
 function getInitials(label: string): string {
   const words = label.split(/\s+/).filter((word) => word && word !== "&");
   if (words.length >= 2) return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
@@ -38,18 +45,21 @@ function TeamInitialsFallback({ name, sizeClasses }: { name: string; sizeClasses
   );
 }
 
-/** National-team flag — separate from crest tile (no wash/blur from crest styling or tiny upscale). */
+/** National-team flag — fixed frame; crest tiles use square sizeClasses unchanged. */
 function TeamCountryFlag({
   name,
+  size,
   sizeClasses,
   flagWidth,
 }: {
   name: string;
+  size: MatchTeamBadgeSize;
   sizeClasses: string;
   flagWidth: FlagImageWidth;
 }) {
   const [imgError, setImgError] = useState(false);
   const flagUrl = getCountryFlagUrl(name, flagWidth);
+  const frameClasses = FLAG_FRAME_CLASSES[size];
 
   if (!flagUrl || imgError) {
     return <TeamInitialsFallback name={name} sizeClasses={sizeClasses} />;
@@ -57,16 +67,20 @@ function TeamCountryFlag({
 
   return (
     <div className={`${sizeClasses} flex items-center justify-center flex-shrink-0`}>
-      <img
-        src={flagUrl}
-        alt={name}
-        width={flagWidth}
-        height={Math.round(flagWidth * 0.75)}
-        decoding="async"
-        loading="lazy"
-        className="max-h-full max-w-full object-contain rounded-[2px]"
-        onError={() => setImgError(true)}
-      />
+      <div
+        className={`${frameClasses} overflow-hidden rounded-sm border border-border/50 bg-muted/30 flex-shrink-0`}
+      >
+        <img
+          src={flagUrl}
+          alt={name}
+          width={flagWidth}
+          height={Math.round(flagWidth * 0.714)}
+          decoding="async"
+          loading="lazy"
+          className="h-full w-full object-cover object-center"
+          onError={() => setImgError(true)}
+        />
+      </div>
     </div>
   );
 }
@@ -126,7 +140,14 @@ export function MatchTeamBadge({
 
   const countryFlagUrl = getCountryFlagUrl(team.name, flagWidth);
   if (countryFlagUrl) {
-    return <TeamCountryFlag name={team.name} sizeClasses={sizeClasses} flagWidth={flagWidth} />;
+    return (
+      <TeamCountryFlag
+        name={team.name}
+        size={size}
+        sizeClasses={sizeClasses}
+        flagWidth={flagWidth}
+      />
+    );
   }
 
   return <TeamInitialsFallback name={team.name} sizeClasses={sizeClasses} />;
