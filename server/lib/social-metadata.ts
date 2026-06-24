@@ -24,6 +24,7 @@ import {
 import { isInternalGoalserveMatchSlug } from "@shared/match-slug";
 import { isReservedRootSegment } from "./reserved-root-segments";
 import { resolveSocialImageForMeta } from "./social-image-url";
+import { articleHeroPreloadImageUrl } from "@shared/article-display-image";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
 export const CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
@@ -60,6 +61,8 @@ export type SocialMetaPayload = {
   imageAlt?: string | null;
   robots?: string;
   twitterCard?: "summary" | "summary_large_image";
+  /** Display hero WebP for LCP preload (article pages only). */
+  lcpImagePreloadUrl?: string | null;
 };
 
 export function escapeHtml(value: string): string {
@@ -141,11 +144,17 @@ export function buildSocialMetaTags(meta: SocialMetaPayload): string {
   const robots = meta.robots ?? "index,follow";
   const twitterCard = meta.twitterCard ?? "summary_large_image";
 
+  const lcpPreload = meta.lcpImagePreloadUrl?.trim() || "";
   const lines = [
     "<!-- fm-social-meta:start -->",
     `<title>${escapeHtml(meta.title)}</title>`,
     `<meta name="description" content="${escapeHtml(meta.description)}" />`,
     `<link rel="canonical" href="${escapeHtml(canonicalUrl)}" />`,
+    ...(lcpPreload
+      ? [
+          `<link rel="preload" as="image" href="${escapeHtml(lcpPreload)}" fetchpriority="high" />`,
+        ]
+      : []),
     `<meta name="robots" content="${escapeHtml(robots)}" />`,
     `<meta property="og:type" content="${escapeHtml(ogType)}" />`,
     `<meta property="og:site_name" content="${escapeHtml(SITE_NAME)}" />`,
@@ -258,6 +267,7 @@ function buildArticleSocialPayload(
     imageAlt: headline,
     robots: robotsIndex,
     twitterCard: "summary_large_image",
+    lcpImagePreloadUrl: articleHeroPreloadImageUrl(article),
   };
 }
 
