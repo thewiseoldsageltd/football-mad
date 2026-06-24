@@ -3,7 +3,7 @@ import type { ArticleBootstrapPayload } from "@shared/article-bootstrap";
 import { calculateArticleReadTimeMinutes } from "@shared/article-reading-time";
 import { effectiveAuthorProfileSlug } from "@shared/author-slug";
 import { formatAuthorForUi } from "@shared/author-display";
-import { articleHeroPreloadImageUrl } from "@shared/article-display-image";
+import { articleHeroPreloadImageUrl, isLegacyGhostArticleImageUrl } from "@shared/article-display-image";
 import { escapeHtml } from "./social-metadata";
 
 export type ArticlePrerenderInput = {
@@ -102,6 +102,12 @@ export function buildArticlePrerenderShell(input: ArticlePrerenderInput): string
     <!-- fm-article-shell:end -->`;
 }
 
+function sanitizeBootstrapImageUrl(url: string | null | undefined): string | null {
+  const raw = url?.trim();
+  if (!raw || isLegacyGhostArticleImageUrl(raw)) return null;
+  return raw;
+}
+
 export function buildArticleBootstrapPayload(input: ArticlePrerenderInput): ArticleBootstrapPayload {
   const { article, publicSlug } = input;
   const authorProfileSlug = effectiveAuthorProfileSlug(article) || null;
@@ -117,8 +123,8 @@ export function buildArticleBootstrapPayload(input: ArticlePrerenderInput): Arti
     publishedAt: article.publishedAt ? new Date(article.publishedAt).toISOString() : null,
     readTimeMinutes,
     viewCount: article.viewCount ?? null,
-    heroImageUrl: typeof article.heroImageUrl === "string" ? article.heroImageUrl.trim() || null : null,
-    coverImage: typeof article.coverImage === "string" ? article.coverImage.trim() || null : null,
+    heroImageUrl: sanitizeBootstrapImageUrl(article.heroImageUrl),
+    coverImage: sanitizeBootstrapImageUrl(article.coverImage),
   };
 }
 
