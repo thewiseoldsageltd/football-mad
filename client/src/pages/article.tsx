@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
@@ -17,12 +17,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { ArticleCoverImage } from "@/components/article-cover-image";
-import { articleSeoImageUrl, articleDisplayImageUrl, isLegacyGhostArticleImageUrl } from "@/lib/article-images";
-import {
-  articleReadTimeMinutes,
-  hasMatchingArticlePrerenderShell,
-  scheduleArticleShellRemoval,
-} from "@/lib/article-bootstrap";
+import { articleSeoImageUrl } from "@/lib/article-images";
+import { articleReadTimeMinutes } from "@/lib/article-bootstrap";
 import { absoluteSeoUrl } from "@/lib/seo";
 import {
   articleCanonicalShareUrl,
@@ -626,16 +622,6 @@ export default function ArticlePage() {
   const { isAuthenticated } = useAuth();
   const { toast } = useToast();
 
-  const heroImgRef = useRef<HTMLImageElement | null>(null);
-  const [heroImgEl, setHeroImgEl] = useState<HTMLImageElement | null>(null);
-  const setHeroImgRef = useCallback((node: HTMLImageElement | null) => {
-    heroImgRef.current = node;
-    setHeroImgEl(node);
-  }, []);
-  const [heroHandoffComplete, setHeroHandoffComplete] = useState(
-    () => !slug || !hasMatchingArticlePrerenderShell(slug),
-  );
-
   const { data: article, isLoading, isPending: articlePending } = useQuery<ArticleWithEntities>({
     queryKey: ["/api/articles", slug],
   });
@@ -699,29 +685,6 @@ export default function ArticlePage() {
     () => (article?.content ? prepareArticleHtmlForRender(article.content) : ""),
     [article?.content],
   );
-
-  const suppressReactHero =
-    Boolean(slug && article && hasMatchingArticlePrerenderShell(slug) && !heroHandoffComplete);
-
-  const articleHasVisibleHero = useMemo(() => {
-    if (!article) return false;
-    const url = articleDisplayImageUrl(article);
-    return Boolean(url && !isLegacyGhostArticleImageUrl(url));
-  }, [article]);
-
-  useEffect(() => {
-    if (!article || !slug || heroHandoffComplete) return;
-    if (!hasMatchingArticlePrerenderShell(slug)) {
-      setHeroHandoffComplete(true);
-      return;
-    }
-    // Wait for hidden React hero img to mount before scheduling handoff.
-    if (articleHasVisibleHero && !heroImgEl) return;
-    return scheduleArticleShellRemoval(slug, {
-      heroImg: heroImgEl,
-      onRemoved: () => setHeroHandoffComplete(true),
-    });
-  }, [article, slug, heroHandoffComplete, heroImgEl, articleHasVisibleHero]);
 
   useEffect(() => {
     if (!processedContent || typeof window === "undefined") return;
@@ -879,8 +842,6 @@ export default function ArticlePage() {
               article={article}
               variant="hero"
               alt={article.title}
-              heroImgRef={setHeroImgRef}
-              suppressHeroVisibility={suppressReactHero}
             />
 
             {showExcerpt && (

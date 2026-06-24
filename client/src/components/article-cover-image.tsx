@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type Ref } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   articleDisplayImageUrl,
   isLegacyGhostArticleImageUrl,
@@ -15,10 +15,6 @@ type ArticleCoverImageProps = {
   alt?: string;
   priorityCover?: boolean;
   imgClassName?: string;
-  /** Hero only: ref for shell handoff load detection. */
-  heroImgRef?: Ref<HTMLImageElement>;
-  /** Hero only: keep layout space but hide img while prerender shell is visible. */
-  suppressHeroVisibility?: boolean;
 };
 
 function ArticleCoverFallback({ variant }: { variant: ArticleCoverImageVariant }) {
@@ -73,8 +69,6 @@ export function ArticleCoverImage({
   alt = "",
   priorityCover = false,
   imgClassName,
-  heroImgRef,
-  suppressHeroVisibility = false,
 }: ArticleCoverImageProps) {
   const rawUrl = articleDisplayImageUrl(article);
   const initialUrl =
@@ -95,27 +89,9 @@ export function ArticleCoverImage({
     if (!showImage) {
       return <ArticleCoverFallback variant="hero" />;
     }
-    if (suppressHeroVisibility) {
-      return (
-        <div className="my-8 aspect-video w-full" aria-hidden>
-          <img
-            ref={heroImgRef}
-            src={initialUrl!}
-            alt=""
-            width={1280}
-            height={720}
-            decoding="async"
-            loading="eager"
-            className="absolute w-px h-px opacity-0 pointer-events-none"
-            onError={handleError}
-          />
-        </div>
-      );
-    }
     return (
       <figure className="my-8 relative aspect-video w-full overflow-hidden rounded-lg bg-black/5">
         <img
-          ref={heroImgRef}
           src={initialUrl!}
           alt={alt}
           width={1280}

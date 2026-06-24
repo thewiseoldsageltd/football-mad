@@ -3,8 +3,7 @@ import { injectSocialMetadata, requestPathname, resolveSpaPageContext } from "./
 import {
   buildArticleBootstrapPayload,
   buildArticleBootstrapScript,
-  buildArticlePrerenderShell,
-  injectArticlePrerender,
+  injectArticleBootstrap,
   stripArticlePrerender,
 } from "./article-prerender";
 
@@ -23,9 +22,8 @@ export async function prepareSpaIndexHtml(req: Request, html: string): Promise<s
 
   if (prerender) {
     const input = { article: prerender.article, publicSlug: prerender.publicSlug };
-    const shell = buildArticlePrerenderShell(input);
     const bootstrap = buildArticleBootstrapScript(buildArticleBootstrapPayload(input));
-    page = injectArticlePrerender(page, shell, bootstrap);
+    page = injectArticleBootstrap(page, bootstrap);
   }
 
   return page;
