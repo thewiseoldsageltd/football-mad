@@ -412,8 +412,24 @@ export default function NewsPage() {
 
   const currentCompetition = competitionTabsForRender.find((c) => c.value === filters.comp) ?? competitionTabsForRender[0];
 
+  const newsSeoTitle = useMemo(() => {
+    if (filters.comp === "all") {
+      return NEWS_HUB_SEO_TITLE;
+    }
+    const label = currentCompetition?.label;
+    const displayName =
+      typeof label === "string" && label.trim()
+        ? label.trim()
+        : filters.comp
+            .split("-")
+            .filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(" ");
+    return `${displayName} News | Football Mad`;
+  }, [filters.comp, currentCompetition?.label]);
+
   usePageSeo({
-    title: NEWS_HUB_SEO_TITLE,
+    title: newsSeoTitle,
     description: NEWS_HUB_SEO_DESCRIPTION,
     canonicalPath: canonicalUrl,
     imagePath: "/assets/football-mad-fm-logo.webp",
