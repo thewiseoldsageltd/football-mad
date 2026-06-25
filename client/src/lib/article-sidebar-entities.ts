@@ -1,6 +1,6 @@
-import { competitionHub, managerProfile, playerProfile, teamHub } from "@/lib/urls";
+import { competitionHub, teamHub } from "@/lib/urls";
 
-export type SidebarEntityType = "team" | "competition" | "player" | "manager";
+export type SidebarEntityType = "team" | "competition";
 
 export interface SidebarEntity {
   type: SidebarEntityType;
@@ -13,11 +13,11 @@ export interface SidebarEntity {
 export interface ArticleEntitySource {
   entityTeams?: { id: string; name: string; slug: string; salienceScore?: number }[];
   entityCompetitions?: { id: string; name: string; slug: string; salienceScore?: number }[];
-  entityPlayers?: { id: string; name: string; slug: string; salienceScore?: number }[];
-  entityManagers?: { id: string; name: string; slug: string; salienceScore?: number }[];
 }
 
 const MAX_ENTITY_MODULES = 3;
+const MAX_COMPETITION_MODULES = 1;
+const MAX_TEAM_MODULES = 2;
 const ARTICLES_PER_MODULE = 3;
 const ARCHIVE_FETCH_LIMIT = 12;
 
@@ -41,51 +41,42 @@ function toSidebarEntity(
   };
 }
 
-/** Pick up to 3 entities: all teams, then competitions, players, managers (salience within tier). */
+/**
+ * Pill-aligned sidebar entities: primary competition, primary team, secondary team.
+ * Max 1 competition + max 2 teams, hard cap 3 modules. Players/managers excluded.
+ */
 export function selectSidebarEntities(article: ArticleEntitySource): SidebarEntity[] {
+  const primaryCompetition = sortBySalience(article.entityCompetitions ?? [])
+    .map((c) => toSidebarEntity("competition", c))
+    .find((e): e is SidebarEntity => e !== null);
+
   const teams = sortBySalience(article.entityTeams ?? [])
     .map((t) => toSidebarEntity("team", t))
-    .filter((e): e is SidebarEntity => e !== null);
-  const competitions = sortBySalience(article.entityCompetitions ?? [])
-    .map((c) => toSidebarEntity("competition", c))
-    .filter((e): e is SidebarEntity => e !== null);
-  const players = sortBySalience(article.entityPlayers ?? [])
-    .map((p) => toSidebarEntity("player", p))
-    .filter((e): e is SidebarEntity => e !== null);
-  const managers = sortBySalience(article.entityManagers ?? [])
-    .map((m) => toSidebarEntity("manager", m))
-    .filter((e): e is SidebarEntity => e !== null);
+    .filter((e): e is SidebarEntity => e !== null)
+    .slice(0, MAX_TEAM_MODULES);
 
-  const ordered = [...teams, ...competitions, ...players, ...managers];
-  const seen = new Set<string>();
   const selected: SidebarEntity[] = [];
-
-  for (const entity of ordered) {
-    const key = `${entity.type}:${entity.slug}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    selected.push(entity);
+  if (primaryCompetition) selected.push(primaryCompetition);
+  for (const team of teams) {
     if (selected.length >= MAX_ENTITY_MODULES) break;
+    selected.push(team);
   }
 
   return selected;
 }
 
 export function entityHubHref(type: SidebarEntityType, slug: string): string {
-  switch (type) {
-    case "team":
-      return teamHub(slug);
-    case "competition":
-      return competitionHub(slug);
-    case "player":
-      return playerProfile(slug);
-    case "manager":
-      return managerProfile(slug);
-  }
+  return type === "team" ? teamHub(slug) : competitionHub(slug);
 }
 
 export function entityArchiveUrl(type: SidebarEntityType, slug: string): string {
   return `/api/news/archive/${type}/${encodeURIComponent(slug)}?limit=${ARCHIVE_FETCH_LIMIT}`;
 }
 
-export { ARTICLES_PER_MODULE, ARCHIVE_FETCH_LIMIT, MAX_ENTITY_MODULES };
+export {
+  ARTICLES_PER_MODULE,
+  ARCHIVE_FETCH_LIMIT,
+  MAX_COMPETITION_MODULES,
+  MAX_ENTITY_MODULES,
+  MAX_TEAM_MODULES,
+};

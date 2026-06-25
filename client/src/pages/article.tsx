@@ -743,7 +743,7 @@ export default function ArticlePage() {
             )}
           </article>
 
-          <ArticleRightRail entityModules={entityModules} relatedArticles={relatedArticles} />
+          <ArticleRightRail entityModules={entityModules} />
         </div>
       </div>
 
