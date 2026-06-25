@@ -21,6 +21,7 @@ import {
   resolveManagerIdForRequestSlug,
   resolvePlayerIdForRequestSlug,
 } from "./spa-entity-noindex";
+import { formatAuthorForUi } from "@shared/author-display";
 import { isInternalGoalserveMatchSlug } from "@shared/match-slug";
 import { isReservedRootSegment } from "./reserved-root-segments";
 import { resolveSocialImageForMeta } from "./social-image-url";
@@ -312,6 +313,48 @@ function defaultPayload(
   };
 }
 
+function notFoundPayload(canonicalPath: string): SocialMetaPayload {
+  return defaultPayload({
+    title: "Page Not Found | Football Mad",
+    description: "The page you're looking for doesn't exist or has been moved.",
+    canonicalPath,
+    robots: "noindex,follow",
+  });
+}
+
+/** Public SPA paths that intentionally use generic site metadata (not 404). */
+function isKnownSpaRoute(path: string): boolean {
+  if (
+    path === "/" ||
+    path === "/search" ||
+    path === "/news" ||
+    path === "/teams" ||
+    path === "/matches" ||
+    path === "/tables" ||
+    path === "/transfers" ||
+    path === "/injuries" ||
+    path === "/fpl" ||
+    path === "/community" ||
+    path === "/shop" ||
+    path === "/account" ||
+    path === "/shop/cart" ||
+    path === "/admin/jobs"
+  ) {
+    return true;
+  }
+  if (/^\/news\/[^/]+$/.test(path)) return true;
+  if (/^\/authors\/[^/]+$/.test(path)) return true;
+  if (/^\/teams\/league\/[^/]+$/.test(path)) return true;
+  if (/^\/teams\/[^/]+(\/[^/]+)?$/.test(path)) return true;
+  if (/^\/competitions\/[^/]+$/.test(path)) return true;
+  if (path === "/matches" || path.startsWith("/matches/")) return true;
+  if (path.startsWith("/tables/")) return true;
+  if (/^\/players\/[^/]+$/.test(path)) return true;
+  if (/^\/managers\/[^/]+$/.test(path)) return true;
+  if (/^\/shop\/[^/]+$/.test(path)) return true;
+  return false;
+}
+
 /**
  * Resolve social/SEO metadata for a public SPA path (no query string).
  * Uses canonical footballmad.co.uk URLs regardless of request host.
@@ -566,6 +609,40 @@ export async function resolvePageMetadata(
     });
   }
 
+  const authorMatch = path.match(/^\/authors\/([^/]+)$/);
+  if (authorMatch) {
+    const slug = decodeURIComponent(authorMatch[1]).trim().toLowerCase();
+    const authorPage = await storage.getAuthorPage({ slug, limit: 1 });
+    if (!authorPage.found || !authorPage.displayName.trim()) {
+      return withRobots(notFoundPayload(path));
+    }
+
+    const canonicalSlug = (authorPage.canonicalAuthorSlug ?? authorPage.slug).trim().toLowerCase();
+    const canonicalPath = `/authors/${canonicalSlug}`;
+    const displayName =
+      formatAuthorForUi(authorPage.displayName) || authorPage.displayName.trim();
+    const title = `${displayName} | Football Mad`;
+    const description =
+      authorPage.articleCount > 0
+        ? `${displayName} — ${authorPage.articleCount} articles on Football Mad.`
+        : `${displayName} articles and football coverage on Football Mad.`;
+
+    let imageUrl = DEFAULT_SOCIAL_IMAGE_URL;
+    const headshot = authorPage.headshotUrl?.trim();
+    if (headshot) {
+      imageUrl = absoluteUrl(headshot) ?? DEFAULT_SOCIAL_IMAGE_URL;
+    }
+
+    return withRobots({
+      title,
+      description,
+      canonicalPath,
+      imageUrl,
+      imageAlt: displayName,
+      robots: robotsIndex,
+    });
+  }
+
   // Legacy Ghost / root-level article URLs: /:slug → canonical /news/:slug when slug exists in articles.
   const legacyArticleMatch = path.match(/^\/([^/]+)$/);
   if (legacyArticleMatch) {
@@ -579,13 +656,18 @@ export async function resolvePageMetadata(
       if (articleMeta) {
         return withRobots(articleMeta);
       }
+      return withRobots(notFoundPayload(path));
     }
   }
 
-  return withRobots(
-    defaultPayload({
-      title: SITE_NAME,
-      canonicalPath: path,
-    }),
-  );
+  if (isKnownSpaRoute(path)) {
+    return withRobots(
+      defaultPayload({
+        title: SITE_NAME,
+        canonicalPath: path,
+      }),
+    );
+  }
+
+  return withRobots(notFoundPayload(path));
 }
