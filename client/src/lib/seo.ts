@@ -67,6 +67,7 @@ export function usePageSeo({
   ogType = "website",
   imagePath,
   noIndex = false,
+  refreshKey,
 }: {
   title: string;
   description: string;
@@ -74,12 +75,18 @@ export function usePageSeo({
   ogType?: "website" | "article";
   imagePath?: string;
   noIndex?: boolean;
+  /** When set, re-applies metadata when this value changes (e.g. URL search on /news). */
+  refreshKey?: string;
 }) {
   useEffect(() => {
     const canonicalUrl = canonicalPublicUrl(canonicalPath);
     const imageUrl = imagePath ? absoluteSeoUrl(imagePath) : null;
 
     document.title = title;
+    const titleEl = document.querySelector("title");
+    if (titleEl) {
+      titleEl.textContent = title;
+    }
 
     const managedIds = [
       "page-seo-description",
@@ -134,7 +141,7 @@ export function usePageSeo({
     return () => {
       managedIds.forEach(removeById);
     };
-  }, [title, description, canonicalPath, ogType, imagePath, noIndex]);
+  }, [title, description, canonicalPath, ogType, imagePath, noIndex, refreshKey]);
 }
 
 export function useJsonLd(

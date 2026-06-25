@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
@@ -22,6 +22,10 @@ import { GroupedCompetitionNav } from "@/components/navigation/grouped-competiti
 import { sortCompetitionItemsLikeTables } from "@/lib/competition-nav-order";
 import { CompetitionFlagLabel } from "@/lib/competition-nav-flag-label";
 import { usePageSeo } from "@/lib/seo";
+
+const NEWS_HUB_SEO_TITLE = "Football News | Football Mad";
+const NEWS_HUB_SEO_DESCRIPTION =
+  "Latest football news, transfer rumours, match reports and analysis from the Premier League and competitions covered by Football Mad.";
 
 interface NavTeam { id: string; name: string; slug: string; shortName: string | null }
 interface NavCompetition {
@@ -68,6 +72,7 @@ const FLYOUT_LEAGUE_ORDER_INDEX = new Map<string, number>(
 
 export default function NewsPage() {
   const [location] = useLocation();
+  const search = useSearch();
   const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuth();
   const { 
@@ -408,12 +413,12 @@ export default function NewsPage() {
   const currentCompetition = competitionTabsForRender.find((c) => c.value === filters.comp) ?? competitionTabsForRender[0];
 
   usePageSeo({
-    title: "Football News | Football Mad",
-    description:
-      "Latest football news, transfer rumours, match reports and analysis from the Premier League and competitions covered by Football Mad.",
+    title: NEWS_HUB_SEO_TITLE,
+    description: NEWS_HUB_SEO_DESCRIPTION,
     canonicalPath: canonicalUrl,
     imagePath: "/assets/football-mad-fm-logo.webp",
     noIndex: shouldNoIndex,
+    refreshKey: search,
   });
 
   const handleCompetitionChange = (value: string) => {
