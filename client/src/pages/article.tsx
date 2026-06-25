@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, Heart, Copy, Check, Share2, ChevronRight } from "lucide-react";
+import { ArrowLeft, Copy, Check, Share2, ChevronRight } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,8 +13,6 @@ import { ArticleCard } from "@/components/cards/article-card";
 import { PillsRow } from "@/components/pills-row";
 import { ArticleMetaBar } from "@/components/article-meta-bar";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
-import { getQueryFn, apiRequest, queryClient } from "@/lib/queryClient";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { ArticleCoverImage } from "@/components/article-cover-image";
 import { articleSeoImageUrl } from "@/lib/article-images";
@@ -348,99 +346,38 @@ function ShareButtonsInline({
   );
 }
 
-function RightRail({
-  article,
-  articleTeams,
-  relatedArticles,
-  articleUrl,
-  followedTeamIds,
-  onFollow,
-  isFollowing,
-  isAuthenticated,
-}: {
-  article: Article;
-  articleTeams: Team[];
-  relatedArticles: Article[];
-  articleUrl: string;
-  followedTeamIds: string[];
-  onFollow: (teamId: string) => void;
-  isFollowing: boolean;
-  isAuthenticated: boolean;
-}) {
-  const primaryTeam = articleTeams[0];
-  const isFollowed = primaryTeam ? followedTeamIds.includes(primaryTeam.id) : false;
+function RightRail({ relatedArticles }: { relatedArticles: Article[] }) {
+  if (relatedArticles.length === 0) return null;
 
   return (
     <aside className="hidden lg:block w-80 flex-shrink-0">
       <div className="sticky top-24 space-y-4">
-        {primaryTeam && !isFollowed && (
-          <Card data-testid="card-follow-team">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div 
-                  className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden"
-                  style={{ backgroundColor: primaryTeam.primaryColor || "#333" }}
-                >
-                  <img 
-                    src={`/crests/teams/${primaryTeam.slug}.svg`} 
-                    alt={primaryTeam.name}
-                    className="w-6 h-6 object-contain"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = "none";
-                    }}
-                  />
-                  <span className="text-white font-bold text-sm">
-                    {primaryTeam.shortName?.[0] || primaryTeam.name[0]}
-                  </span>
-                </div>
-                <div>
-                  <p className="font-semibold">{primaryTeam.name}</p>
-                  <p className="text-xs text-muted-foreground">Get team updates</p>
-                </div>
-              </div>
-              <Button 
-                className="w-full gap-2"
-                onClick={() => onFollow(primaryTeam.id)}
-                disabled={isFollowing || !isAuthenticated}
-                data-testid="button-follow-team-rail"
-              >
-                <Heart className="h-4 w-4" />
-                {isAuthenticated ? `Follow ${primaryTeam.shortName || primaryTeam.name}` : "Log in to follow"}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {relatedArticles.length > 0 && (
-          <Card data-testid="card-more-like-this">
-            <CardHeader className="pb-2 px-4 pt-4">
-              <CardTitle className="text-sm font-semibold">More like this</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <div className="space-y-3">
-                {relatedArticles.slice(0, 3).map((a) => (
-                  <Link key={a.id} href={newsArticle(a.slug)}>
-                    <div className="group flex gap-3 hover-elevate rounded p-1 -m-1 cursor-pointer" data-testid={`link-related-${a.id}`}>
-                      <div className="w-16 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
-                        <ArticleCoverImage article={a} variant="thumb" alt="" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
-                          {a.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatDistanceToNow(new Date(a.publishedAt || new Date()), { addSuffix: true })}
-                        </p>
-                      </div>
+        <Card data-testid="card-more-like-this">
+          <CardHeader className="pb-2 px-4 pt-4">
+            <CardTitle className="text-sm font-semibold">More like this</CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 pt-0">
+            <div className="space-y-3">
+              {relatedArticles.slice(0, 3).map((a) => (
+                <Link key={a.id} href={newsArticle(a.slug)}>
+                  <div className="group flex gap-3 hover-elevate rounded p-1 -m-1 cursor-pointer" data-testid={`link-related-${a.id}`}>
+                    <div className="w-16 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
+                      <ArticleCoverImage article={a} variant="thumb" alt="" />
                     </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
+                        {a.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatDistanceToNow(new Date(a.publishedAt || new Date()), { addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </aside>
   );
@@ -448,20 +385,10 @@ function RightRail({
 
 function MobileBottomBar({
   article,
-  articleTeams,
   articleUrl,
-  followedTeamIds,
-  onFollow,
-  isFollowing,
-  isAuthenticated,
 }: {
   article: Article;
-  articleTeams: Team[];
   articleUrl: string;
-  followedTeamIds: string[];
-  onFollow: (teamId: string) => void;
-  isFollowing: boolean;
-  isAuthenticated: boolean;
 }) {
   const { toast } = useToast();
   const [shareCopied, setShareCopied] = useState(false);
@@ -471,9 +398,6 @@ function MobileBottomBar({
   useEffect(() => {
     setHasNativeShare(typeof navigator !== "undefined" && !!navigator.share);
   }, []);
-
-  const primaryTeam = articleTeams[0];
-  const isFollowed = primaryTeam ? followedTeamIds.includes(primaryTeam.id) : false;
 
   const handleShare = async () => {
     if (hasNativeShare) {
@@ -510,19 +434,6 @@ function MobileBottomBar({
           {shareCopied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
           Share
         </Button>
-        {primaryTeam && !isFollowed && isAuthenticated && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2 flex-1"
-            onClick={() => onFollow(primaryTeam.id)}
-            disabled={isFollowing}
-            data-testid="button-mobile-follow"
-          >
-            <Heart className="h-4 w-4" />
-            Follow
-          </Button>
-        )}
         <Button
           variant="ghost"
           size="icon"
@@ -606,8 +517,6 @@ function ArticleSkeleton() {
             </div>
           </div>
           <div className="hidden lg:block w-80">
-            <Skeleton className="h-40 w-full mb-4 rounded-lg" />
-            <Skeleton className="h-32 w-full mb-4 rounded-lg" />
             <Skeleton className="h-48 w-full rounded-lg" />
           </div>
         </div>
@@ -619,8 +528,6 @@ function ArticleSkeleton() {
 
 export default function ArticlePage() {
   const { slug } = useParams<{ slug: string }>();
-  const { isAuthenticated } = useAuth();
-  const { toast } = useToast();
 
   const { data: article, isLoading, isPending: articlePending } = useQuery<ArticleWithEntities>({
     queryKey: ["/api/articles", slug],
@@ -645,29 +552,6 @@ export default function ArticlePage() {
       return res.json();
     },
     enabled: Boolean(slug) && !articlePending && !article,
-  });
-
-  const { data: followedTeamIdsRaw } = useQuery<string[] | null>({
-    queryKey: ["/api/follows"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
-    enabled: isAuthenticated,
-  });
-  
-  const followedTeamIds = followedTeamIdsRaw ?? [];
-
-  const followMutation = useMutation({
-    mutationFn: async (teamId: string) => {
-      return apiRequest("POST", "/api/follows", { teamId });
-    },
-    onSuccess: () => {
-      if (isAuthenticated) {
-        queryClient.invalidateQueries({ queryKey: ["/api/follows"] });
-      }
-      toast({ description: "Team followed!" });
-    },
-    onError: () => {
-      toast({ title: "Error", description: "Please log in to follow teams", variant: "destructive" });
-    },
   });
 
   const authorSlug = useMemo(() => {
@@ -765,8 +649,8 @@ export default function ArticlePage() {
   }, [processedContent, slug]);
 
   // Display-only pills in hierarchy order: competition -> teams -> players -> managers
-  const { headerPills, footerPills, articleTeams } = useMemo(() => {
-    const empty = { headerPills: [], footerPills: [], articleTeams: [] as Team[] };
+  const { headerPills, footerPills } = useMemo(() => {
+    const empty = { headerPills: [], footerPills: [] };
     if (!article) return empty;
     const derivedTeams =
       article.entityTeams?.map((t) => ({
@@ -781,7 +665,6 @@ export default function ArticlePage() {
     return {
       headerPills: buildPillsForHeader(article as PillSourceArticle, derivedTeams),
       footerPills: buildPillsForFooter(article as PillSourceArticle, derivedTeams),
-      articleTeams: derivedTeams,
     };
   }, [article]);
 
@@ -869,47 +752,6 @@ export default function ArticlePage() {
               </section>
             )}
 
-            {articleTeams.length > 0 && !followedTeamIds.includes(articleTeams[0].id) && isAuthenticated && (
-              <section className="mb-12 lg:hidden">
-                <Card className="bg-gradient-to-r from-primary/10 to-transparent">
-                  <CardContent className="p-6 flex items-center justify-between flex-wrap gap-4">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden"
-                        style={{ backgroundColor: articleTeams[0].primaryColor || "#333" }}
-                      >
-                        <img 
-                          src={`/crests/teams/${articleTeams[0].slug}.svg`}
-                          alt={articleTeams[0].name}
-                          className="w-8 h-8 object-contain"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                          }}
-                        />
-                        <span className="text-white font-bold">
-                          {articleTeams[0].shortName?.[0] || articleTeams[0].name[0]}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-semibold">Follow {articleTeams[0].name}</p>
-                        <p className="text-sm text-muted-foreground">Get more updates</p>
-                      </div>
-                    </div>
-                    <Button 
-                      className="gap-2"
-                      onClick={() => followMutation.mutate(articleTeams[0].id)}
-                      disabled={followMutation.isPending}
-                      data-testid="button-follow-team-inline"
-                    >
-                      <Heart className="h-4 w-4" />
-                      Follow
-                    </Button>
-                  </CardContent>
-                </Card>
-              </section>
-            )}
-
             {relatedArticles.length > 0 && (
               <section className="mb-24 lg:mb-12">
                 <div className="flex items-center justify-between mb-6">
@@ -929,28 +771,11 @@ export default function ArticlePage() {
             )}
           </article>
 
-          <RightRail
-            article={article}
-            articleTeams={articleTeams}
-            relatedArticles={relatedArticles}
-            articleUrl={articleUrl}
-            followedTeamIds={followedTeamIds}
-            onFollow={(teamId) => followMutation.mutate(teamId)}
-            isFollowing={followMutation.isPending}
-            isAuthenticated={isAuthenticated}
-          />
+          <RightRail relatedArticles={relatedArticles} />
         </div>
       </div>
 
-      <MobileBottomBar
-        article={article}
-        articleTeams={articleTeams}
-        articleUrl={articleUrl}
-        followedTeamIds={followedTeamIds}
-        onFollow={(teamId) => followMutation.mutate(teamId)}
-        isFollowing={followMutation.isPending}
-        isAuthenticated={isAuthenticated}
-      />
+      <MobileBottomBar article={article} articleUrl={articleUrl} />
     </MainLayout>
   );
 }
