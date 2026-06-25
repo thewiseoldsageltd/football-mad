@@ -5,14 +5,15 @@ import { formatDistanceToNow } from "date-fns";
 import { ArrowLeft, Copy, Check, Share2, ChevronRight } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { PillsRow } from "@/components/pills-row";
 import { ArticleMetaBar } from "@/components/article-meta-bar";
+import { ArticleMobileEntityModules, ArticleRightRail } from "@/components/article/article-sidebar-content";
 import { useToast } from "@/hooks/use-toast";
+import { useArticleEntityModules } from "@/hooks/use-article-entity-modules";
+import { selectSidebarEntities } from "@/lib/article-sidebar-entities";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { ArticleCoverImage } from "@/components/article-cover-image";
 import { articleSeoImageUrl } from "@/lib/article-images";
@@ -346,43 +347,6 @@ function ShareButtonsInline({
   );
 }
 
-function RightRail({ relatedArticles }: { relatedArticles: Article[] }) {
-  if (relatedArticles.length === 0) return null;
-
-  return (
-    <aside className="hidden lg:block w-80 flex-shrink-0">
-      <div className="sticky top-24 space-y-4">
-        <Card data-testid="card-more-like-this">
-          <CardHeader className="pb-2 px-4 pt-4">
-            <CardTitle className="text-sm font-semibold">More like this</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            <div className="space-y-3">
-              {relatedArticles.slice(0, 3).map((a) => (
-                <Link key={a.id} href={newsArticle(a.slug)}>
-                  <div className="group flex gap-3 hover-elevate rounded p-1 -m-1 cursor-pointer" data-testid={`link-related-${a.id}`}>
-                    <div className="w-16 h-12 rounded bg-muted flex-shrink-0 overflow-hidden">
-                      <ArticleCoverImage article={a} variant="thumb" alt="" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors">
-                        {a.title}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDistanceToNow(new Date(a.publishedAt || new Date()), { addSuffix: true })}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </aside>
-  );
-}
-
 function MobileBottomBar({
   article,
   articleUrl,
@@ -668,6 +632,12 @@ export default function ArticlePage() {
     };
   }, [article]);
 
+  const sidebarEntities = useMemo(
+    () => (article ? selectSidebarEntities(article) : []),
+    [article],
+  );
+  const { modules: entityModules } = useArticleEntityModules(sidebarEntities, article?.id);
+
   // Early returns AFTER all hooks
   if (isLoading && !article) {
     return <ArticleSkeleton />;
@@ -752,6 +722,8 @@ export default function ArticlePage() {
               </section>
             )}
 
+            <ArticleMobileEntityModules entityModules={entityModules} />
+
             {relatedArticles.length > 0 && (
               <section className="mb-24 lg:mb-12">
                 <div className="flex items-center justify-between mb-6">
@@ -771,7 +743,7 @@ export default function ArticlePage() {
             )}
           </article>
 
-          <RightRail relatedArticles={relatedArticles} />
+          <ArticleRightRail entityModules={entityModules} relatedArticles={relatedArticles} />
         </div>
       </div>
 
