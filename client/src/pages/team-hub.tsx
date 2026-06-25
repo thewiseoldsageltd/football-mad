@@ -24,7 +24,14 @@ import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
 import { getClubBranding } from "@/lib/club-branding";
 import { getCountryFlagUrl } from "@/lib/flags";
-import { absoluteSeoUrl, useJsonLd, shouldBlockIndexingFromClient } from "@/lib/seo";
+import { useEntityMedia } from "@/hooks/use-entity-media";
+import {
+  absoluteSeoUrl,
+  DEFAULT_SOCIAL_IMAGE_PATH,
+  useJsonLd,
+  usePageSeo,
+  shouldBlockIndexingFromClient,
+} from "@/lib/seo";
 
 type Classification = "MEDICAL" | "SUSPENSION" | "LOAN_OR_TRANSFER";
 type AvailabilityBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT" | "SUSPENDED" | "LEFT_CLUB";
@@ -75,69 +82,6 @@ function EmptyState({ icon: Icon, title, description }: { icon: typeof Inbox; ti
       </CardContent>
     </Card>
   );
-}
-
-function getBaseUrl(): string {
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return window.location.origin;
-  }
-  return import.meta.env.VITE_SITE_URL || "https://football-mad.replit.app";
-}
-
-function useDocumentMeta(title: string, description: string, canonicalPath: string, noIndex = false) {
-  useEffect(() => {
-    const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
-    
-    document.title = title;
-    
-    const setMetaTag = (selector: string, attr: string, value: string, attrType: "name" | "property" = "name") => {
-      let tag = document.querySelector(selector);
-      if (!tag) {
-        tag = document.createElement("meta");
-        tag.setAttribute(attrType, attr);
-        document.head.appendChild(tag);
-      }
-      tag.setAttribute("content", value);
-    };
-
-    setMetaTag('meta[name="description"]', "description", description);
-
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.setAttribute("rel", "canonical");
-      document.head.appendChild(canonical);
-    }
-    canonical.setAttribute("href", canonicalUrl);
-
-    setMetaTag('meta[property="og:title"]', "og:title", title, "property");
-    setMetaTag('meta[property="og:description"]', "og:description", description, "property");
-    setMetaTag('meta[property="og:url"]', "og:url", canonicalUrl, "property");
-    setMetaTag('meta[property="og:type"]', "og:type", "website", "property");
-    setMetaTag('meta[property="og:site_name"]', "og:site_name", "Football Mad", "property");
-    
-    setMetaTag('meta[name="twitter:card"]', "twitter:card", "summary_large_image");
-    setMetaTag('meta[name="twitter:title"]', "twitter:title", title);
-    setMetaTag('meta[name="twitter:description"]', "twitter:description", description);
-
-    const robotsId = "football-mad-entity-robots";
-    if (noIndex) {
-      let robots = document.getElementById(robotsId) as HTMLMetaElement | null;
-      if (!robots) {
-        robots = document.createElement("meta");
-        robots.id = robotsId;
-        robots.setAttribute("name", "robots");
-        document.head.appendChild(robots);
-      }
-      robots.setAttribute("content", "noindex,follow");
-    } else {
-      document.getElementById(robotsId)?.remove();
-    }
-
-    return () => {
-      document.getElementById(robotsId)?.remove();
-    };
-  }, [title, description, canonicalPath, noIndex]);
 }
 
 function trackTabClick(teamSlug: string, tabName: string) {
@@ -2522,6 +2466,8 @@ export default function TeamHubPage() {
     },
   });
 
+  const { url: teamHubMediaUrl } = useEntityMedia("team", team?.id, "hub_header");
+
   useEffect(() => {
     if (!team?.slug || !slug) return;
     if (team.slug === slug) return;
@@ -2674,35 +2620,33 @@ export default function TeamHubPage() {
     }).slice(0, 6);
   }, [articles]);
 
-  const tabTitle = TAB_META[activeTab].title;
-  const pageTitle = useMemo(() => {
-    if (!team) return "Team | Football Mad";
-    if (activeTab === "injuries") {
-      return `${team.name} Injuries | Football Mad`;
-    }
-    return `${team.name} ${tabTitle} | Football Mad`;
-  }, [team, activeTab, tabTitle]);
-  
-  const pageDescription = useMemo(() => {
-    if (!team) return "Team hub page on Football Mad";
-    if (activeTab === "injuries") {
-      return `Latest ${team.name} injury news and squad availability updates — return dates, status and confidence.`;
-    }
-    return `${tabTitle} for ${team.name}. Stay updated with the latest ${tabTitle.toLowerCase()} from your favourite Premier League club.`;
-  }, [team, activeTab, tabTitle]);
   const canonicalSlug = team?.slug ?? slug;
   const canonicalPath = `/teams/${canonicalSlug}`;
+  const teamSeoName = team?.name ?? slug
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  const pageTitle = team
+    ? `${teamSeoName} News, Fixtures, Results & Team Updates | Football Mad`
+    : "Team | Football Mad";
+  const pageDescription = team
+    ? `Latest ${team.name} news, fixtures, results, squad updates and team coverage on Football Mad.`
+    : "Team hub page on Football Mad";
+  const teamSeoImage =
+    teamHubMediaUrl ?? team?.logoUrl ?? DEFAULT_SOCIAL_IMAGE_PATH;
   const shouldNoIndex =
     activeTab !== "latest" ||
     shouldBlockIndexingFromClient() ||
     (team != null && team.mvpIndexable === false);
 
-  useDocumentMeta(
-    pageTitle,
-    pageDescription,
+  usePageSeo({
+    title: pageTitle,
+    description: pageDescription,
     canonicalPath,
-    shouldNoIndex,
-  );
+    imagePath: teamSeoImage,
+    noIndex: shouldNoIndex,
+  });
 
   const sportsTeamJsonLd = useMemo(() => {
     if (!team) return null;

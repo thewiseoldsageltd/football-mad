@@ -1,10 +1,22 @@
 import { useEffect } from "react";
 
+/** Public canonical origin for link rel=canonical and og:url (matches server metadata). */
+export const CANONICAL_PUBLIC_ORIGIN = "https://www.footballmad.co.uk";
+
+/** Default social card (1200×630); aligns with server `DEFAULT_SOCIAL_IMAGE_PATH`. */
+export const DEFAULT_SOCIAL_IMAGE_PATH = "/assets/social-share-card.jpg";
+
 export function getSeoBaseUrl(): string {
   if (typeof window !== "undefined" && window.location?.origin) {
     return window.location.origin;
   }
-  return import.meta.env.VITE_SITE_URL || "https://footballmad.co.uk";
+  return import.meta.env.VITE_SITE_URL || CANONICAL_PUBLIC_ORIGIN;
+}
+
+export function canonicalPublicUrl(path: string): string {
+  const base = CANONICAL_PUBLIC_ORIGIN.replace(/\/$/, "");
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${base}${normalized}`;
 }
 
 /**
@@ -64,7 +76,7 @@ export function usePageSeo({
   noIndex?: boolean;
 }) {
   useEffect(() => {
-    const canonicalUrl = absoluteSeoUrl(canonicalPath);
+    const canonicalUrl = canonicalPublicUrl(canonicalPath);
     const imageUrl = imagePath ? absoluteSeoUrl(imagePath) : null;
 
     document.title = title;
@@ -104,12 +116,12 @@ export function usePageSeo({
     upsertMeta("page-seo-og-type", "property", "og:type", ogType);
     upsertMeta("page-seo-og-site-name", "property", "og:site_name", "Football Mad");
     upsertMeta("page-seo-og-locale", "property", "og:locale", "en_GB");
-    upsertMeta("page-seo-twitter-card", "name", "twitter:card", imageUrl ? "summary_large_image" : "summary");
+    upsertMeta("page-seo-twitter-card", "name", "twitter:card", "summary_large_image");
     upsertMeta("page-seo-twitter-site", "name", "twitter:site", "@FootballMadUK");
     upsertMeta("page-seo-twitter-title", "name", "twitter:title", title);
     upsertMeta("page-seo-twitter-description", "name", "twitter:description", description);
 
-    const resolvedImage = imageUrl ?? absoluteSeoUrl("/assets/football-mad-fm-logo.webp");
+    const resolvedImage = imageUrl ?? canonicalPublicUrl(DEFAULT_SOCIAL_IMAGE_PATH);
     upsertMeta("page-seo-og-image", "property", "og:image", resolvedImage);
     upsertMeta("page-seo-twitter-image", "name", "twitter:image", resolvedImage);
 

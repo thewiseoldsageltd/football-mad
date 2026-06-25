@@ -8,7 +8,9 @@ import { Newspaper } from "lucide-react";
 import type { Article } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { EntityAvatar } from "@/components/entity-media";
-import { usePageSeo, shouldBlockIndexingFromClient } from "@/lib/seo";
+import { useEntityMedia } from "@/hooks/use-entity-media";
+import { getLeagueBySlug } from "@/lib/league-config";
+import { usePageSeo, DEFAULT_SOCIAL_IMAGE_PATH, shouldBlockIndexingFromClient } from "@/lib/seo";
 
 interface NewsEntityPageProps {
   slug: string;
@@ -56,10 +58,13 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
     enabled: Boolean(endpoint),
   });
 
-  const displayName = useMemo(
-    () => formatEntityName(data?.appliedContext?.entitySlug ?? slug),
-    [data?.appliedContext?.entitySlug, slug],
-  );
+  const displayName = useMemo(() => {
+    const publicSlug = data?.appliedContext?.entitySlug ?? slug;
+    if (entityType === "competition") {
+      return getLeagueBySlug(publicSlug)?.name ?? formatEntityName(publicSlug);
+    }
+    return formatEntityName(publicSlug);
+  }, [data?.appliedContext?.entitySlug, slug, entityType]);
 
   const canonicalPath = useMemo(() => {
     const publicSlug = data?.appliedContext?.entitySlug ?? slug;
@@ -68,10 +73,26 @@ export default function NewsEntityPage({ slug, entityType }: NewsEntityPageProps
       : `/teams/${publicSlug}`;
   }, [data?.appliedContext?.entitySlug, slug, entityType]);
 
+  const { url: entityMediaUrl } = useEntityMedia(
+    entityType === "competition" ? "competition" : "team",
+    data?.appliedContext?.entityId,
+    "hub_header",
+  );
+
+  const seoTitle =
+    entityType === "competition"
+      ? `${displayName} Table, Fixtures & News | Football Mad`
+      : `${displayName} News, Fixtures, Results & Team Updates | Football Mad`;
+  const seoDescription =
+    entityType === "competition"
+      ? `${displayName} table, fixtures, results and news on Football Mad.`
+      : `Latest ${displayName} news, fixtures, results, squad updates and team coverage on Football Mad.`;
+
   usePageSeo({
-    title: `${displayName} News | Football Mad`,
-    description: `Latest news and updates about ${displayName} on Football Mad.`,
+    title: seoTitle,
+    description: seoDescription,
     canonicalPath,
+    imagePath: entityMediaUrl ?? DEFAULT_SOCIAL_IMAGE_PATH,
     noIndex: shouldBlockIndexingFromClient() || (data != null && data.mvpIndexable === false),
   });
 

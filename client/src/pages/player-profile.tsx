@@ -12,7 +12,8 @@ import { ArticleCardSkeleton } from "@/components/skeletons";
 import { EntityAvatar } from "@/components/entity-media";
 import { teamHub, playerProfile } from "@/lib/urls";
 import type { Team, Article } from "@shared/schema";
-import { usePageSeo, shouldBlockIndexingFromClient } from "@/lib/seo";
+import { usePageSeo, DEFAULT_SOCIAL_IMAGE_PATH, shouldBlockIndexingFromClient } from "@/lib/seo";
+import { useEntityMedia } from "@/hooks/use-entity-media";
 
 type CareerSeasonRow = {
   season?: string | number | null;
@@ -248,6 +249,7 @@ export default function PlayerProfilePage() {
     },
     enabled: Boolean(slug),
   });
+  const { url: playerMediaUrl } = useEntityMedia("player", player?.id, "hub_header");
   const { data: archiveData, isLoading: archiveLoading } = useQuery<PlayerArchiveResponse>({
     queryKey: ["/api/news/archive/player", slug],
     queryFn: async () => {
@@ -285,11 +287,14 @@ export default function PlayerProfilePage() {
   };
 
   usePageSeo({
-    title: player ? `${player.name} | Football Mad` : "Player | Football Mad",
+    title: player
+      ? `${player.name} News, Profile & Updates | Football Mad`
+      : "Player | Football Mad",
     description: player
       ? `Player profile and news for ${player.name} on Football Mad.`
       : "Football Mad player profile.",
     canonicalPath: slug ? playerProfile(slug) : "/players",
+    imagePath: playerMediaUrl ?? player?.imageUrl ?? DEFAULT_SOCIAL_IMAGE_PATH,
     noIndex: shouldBlockIndexingFromClient() || (player != null && player.mvpIndexable === false),
   });
 

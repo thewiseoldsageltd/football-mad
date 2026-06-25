@@ -11,7 +11,8 @@ import { ArticleCardSkeleton } from "@/components/skeletons";
 import { EntityAvatar } from "@/components/entity-media";
 import type { Article } from "@shared/schema";
 import { useEffect, useState } from "react";
-import { usePageSeo, shouldBlockIndexingFromClient } from "@/lib/seo";
+import { usePageSeo, DEFAULT_SOCIAL_IMAGE_PATH, shouldBlockIndexingFromClient } from "@/lib/seo";
+import { useEntityMedia } from "@/hooks/use-entity-media";
 
 type ManagerApiResponse = {
   id: string;
@@ -54,6 +55,7 @@ export default function ManagerProfilePage() {
     },
     enabled: Boolean(slug),
   });
+  const { url: managerMediaUrl } = useEntityMedia("manager", manager?.id, "hub_header");
   const { data: archiveData, isLoading: archiveLoading } = useQuery<ManagerArchiveResponse>({
     queryKey: ["/api/news/archive/manager", slug],
     queryFn: async () => {
@@ -91,11 +93,14 @@ export default function ManagerProfilePage() {
   };
 
   usePageSeo({
-    title: manager ? `${manager.name} | Football Mad` : "Manager | Football Mad",
+    title: manager
+      ? `${manager.name} News, Profile & Updates | Football Mad`
+      : "Manager | Football Mad",
     description: manager
       ? `Manager profile and news for ${manager.name} on Football Mad.`
       : "Football Mad manager profile.",
     canonicalPath: slug ? managerProfile(slug) : "/managers",
+    imagePath: managerMediaUrl ?? DEFAULT_SOCIAL_IMAGE_PATH,
     noIndex: shouldBlockIndexingFromClient() || (manager != null && manager.mvpIndexable === false),
   });
 
