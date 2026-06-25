@@ -221,7 +221,10 @@ export const ARTICLE_PUBLIC_PATH_PREFIX = "/news";
  */
 export function requestPathname(req: Request): string {
   const raw = req.originalUrl || req.url || req.path || "/";
-  return normalizeRequestPath(raw);
+  const withoutHash = raw.split("#")[0] || "/";
+  const [pathOnly, queryString] = withoutHash.split("?");
+  const normalizedPath = (pathOnly || "/").replace(/\/+$/, "") || "/";
+  return queryString ? `${normalizedPath}?${queryString}` : normalizedPath;
 }
 
 export function normalizeRequestPath(requestPath: string): string {
@@ -317,7 +320,7 @@ export async function resolveSpaPageContext(
   requestPath: string,
   host: string,
 ): Promise<SpaPageContext> {
-  const prerender = await resolveArticlePrerenderContext(requestPath);
+  const prerender = await resolveArticlePrerenderContext(normalizeRequestPath(requestPath));
   const meta = await resolvePageMetadata(requestPath, host, prerender ?? undefined);
   return { meta, prerender: prerender ?? undefined };
 }
@@ -328,6 +331,9 @@ export async function resolvePageMetadata(
   prerender?: ArticlePrerenderContext,
 ): Promise<SocialMetaPayload> {
   const path = normalizeRequestPath(requestPath);
+  const rawQuery = requestPath.split("?")[1] ?? "";
+  const queryParams = new URLSearchParams(rawQuery);
+  const hasQueryParams = Array.from(queryParams.keys()).length > 0;
   const stagingBlock = shouldBlockSearchIndexing(host);
   const robotsIndex = stagingBlock ? "noindex,nofollow,noarchive" : "index,follow";
   const robotsNoindexFollow = stagingBlock ? "noindex,nofollow,noarchive" : "noindex,follow";
@@ -354,6 +360,7 @@ export async function resolvePageMetadata(
         title: "Football News | Football Mad",
         description: "Latest football news, analysis and breaking stories from Football Mad.",
         canonicalPath: "/news",
+        robots: hasQueryParams ? robotsNoindexFollow : robotsIndex,
       }),
     );
   }
@@ -380,13 +387,24 @@ export async function resolvePageMetadata(
 
   if (path === "/matches" || path.startsWith("/matches/")) {
     const segment = path.slice("/matches/".length).replace(/\/$/, "");
-    const canonicalPath =
-      segment && !isInternalGoalserveMatchSlug(segment) ? path.replace(/\/$/, "") || "/matches" : "/matches";
+    const isMatchesSubroute = Boolean(segment && !isInternalGoalserveMatchSlug(segment));
     return withRobots(
       defaultPayload({
         title: "Matches | Football Mad",
         description: "Live scores, fixtures and results from Football Mad's priority competitions.",
-        canonicalPath,
+        canonicalPath: "/matches",
+        robots: isMatchesSubroute ? robotsNoindexFollow : robotsIndex,
+      }),
+    );
+  }
+
+  if (path === "/search") {
+    return withRobots(
+      defaultPayload({
+        title: "Search | Football Mad",
+        description: "Search Football Mad news and articles.",
+        canonicalPath: "/search",
+        robots: robotsNoindexFollow,
       }),
     );
   }
@@ -427,6 +445,7 @@ export async function resolvePageMetadata(
   const teamMatch = path.match(/^\/teams\/([^/]+)(?:\/([^/]+))?$/);
   if (teamMatch && teamMatch[1] !== "league") {
     const slug = decodeURIComponent(teamMatch[1]);
+    const tab = teamMatch[2] ? decodeURIComponent(teamMatch[2]).trim().toLowerCase() : "";
     const team = await storage.getTeamBySlug(slug);
     const canonicalSlug = (await resolveCanonicalTeamPublicSlug(slug)) ?? slug;
     const canonicalPath = `/teams/${canonicalSlug}`;
@@ -446,7 +465,7 @@ export async function resolvePageMetadata(
       canonicalPath,
       imageUrl,
       imageAlt: `${name} crest`,
-      robots: noindex ? robotsNoindexFollow : robotsIndex,
+      robots: tab ? robotsNoindexFollow : noindex ? robotsNoindexFollow : robotsIndex,
     });
   }
 

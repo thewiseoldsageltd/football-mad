@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
 import { Calendar, Loader2, Globe, ChevronLeft, ChevronRight } from "lucide-react";
 import { format, startOfDay, isSameDay, addDays, subDays } from "date-fns";
@@ -166,11 +167,15 @@ function formatDateLabel(date: Date, isToday: boolean): string {
 }
 
 export default function MatchesPage() {
+  const [location] = useLocation();
+  const isMatchesSubroute = location !== "/matches";
+
   usePageSeo({
     title: "Matches | Football Mad",
     description: "Live scores, fixtures and results from Football Mad's priority competitions.",
     canonicalPath: "/matches",
     imagePath: "/assets/football-mad-fm-logo.webp",
+    noIndex: isMatchesSubroute,
   });
 
   const [activeTab, setActiveTab] = useState<MatchTab>("all");

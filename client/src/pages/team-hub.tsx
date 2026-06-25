@@ -2690,13 +2690,18 @@ export default function TeamHubPage() {
     }
     return `${tabTitle} for ${team.name}. Stay updated with the latest ${tabTitle.toLowerCase()} from your favourite Premier League club.`;
   }, [team, activeTab, tabTitle]);
-  const canonicalPath = `/teams/${slug}${activeTab !== "latest" ? `/${activeTab}` : ""}`;
+  const canonicalSlug = team?.slug ?? slug;
+  const canonicalPath = `/teams/${canonicalSlug}`;
+  const shouldNoIndex =
+    activeTab !== "latest" ||
+    shouldBlockIndexingFromClient() ||
+    (team != null && team.mvpIndexable === false);
 
   useDocumentMeta(
     pageTitle,
     pageDescription,
     canonicalPath,
-    shouldBlockIndexingFromClient() || (team != null && team.mvpIndexable === false),
+    shouldNoIndex,
   );
 
   const sportsTeamJsonLd = useMemo(() => {

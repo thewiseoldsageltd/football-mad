@@ -61,7 +61,7 @@ export default function SearchPage() {
     description: query
       ? `Search results for "${query}" on Football Mad.`
       : "Search Football Mad news and articles.",
-    canonicalPath: query ? searchResults(query) : "/search",
+    canonicalPath: "/search",
     noIndex: true,
   });
 

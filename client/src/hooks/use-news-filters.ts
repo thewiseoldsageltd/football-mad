@@ -129,6 +129,10 @@ export function useNewsFilters(): UseNewsFiltersReturn {
   const [, setLocation] = useLocation();
   
   const filters = useMemo(() => parseSearchParams(search), [search]);
+  const hasQueryParams = useMemo(() => {
+    const trimmed = search.startsWith("?") ? search.slice(1) : search;
+    return trimmed.trim().length > 0;
+  }, [search]);
   
   const updateUrl = useCallback((newFilters: NewsFiltersState) => {
     const queryString = buildSearchString(newFilters);
@@ -251,29 +255,12 @@ export function useNewsFilters(): UseNewsFiltersReturn {
   }, [filters]);
   
   const shouldNoIndex = useMemo(() => {
-    return (
-      filters.type.length > 0 ||
-      filters.teams.length > 0 ||
-      filters.myTeams ||
-      filters.sort !== "latest" ||
-      filters.range !== "all" ||
-      filters.group !== "all"
-    );
-  }, [filters]);
+    return hasQueryParams;
+  }, [hasQueryParams]);
   
   const canonicalUrl = useMemo(() => {
-    const base = "/news";
-    if (filters.group !== "all" && filters.comp === "all") {
-      return `${base}?group=${filters.group}`;
-    }
-    if (filters.group !== "all" && filters.comp !== "all") {
-      return `${base}?group=${filters.group}&comp=${filters.comp}`;
-    }
-    if (filters.comp !== "all") {
-      return `${base}?comp=${filters.comp}`;
-    }
-    return base;
-  }, [filters.comp]);
+    return "/news";
+  }, []);
   
   const buildQueryString = useCallback((overrides?: Partial<NewsFiltersState>) => {
     const merged = { ...filters, ...overrides };
