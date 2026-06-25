@@ -100,10 +100,10 @@ export default function TeamsPage() {
 
   const teamsSeoName = selectedComp === "all" ? null : SEO_TEAM_COMPETITION_NAME_BY_SLUG[selectedComp] ?? null;
   usePageSeo({
-    title: teamsSeoName ? `${teamsSeoName} Teams | Football Mad` : "Teams | Football Mad",
+    title: teamsSeoName ? `${teamsSeoName} Teams | Football Mad` : "Football Teams & Club Hubs | Football Mad",
     description: teamsSeoName
       ? `Browse clubs from ${teamsSeoName} on Football Mad.`
-      : "Browse clubs from Football Mad's supported domestic leagues.",
+      : "Browse football club hubs featuring team news, fixtures, results, squads and league standings.",
     canonicalPath: selectedComp === "all" ? "/teams" : `/teams/league/${selectedComp}`,
     imagePath: "/assets/football-mad-fm-logo.webp",
   });

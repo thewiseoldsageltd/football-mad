@@ -171,8 +171,9 @@ export default function MatchesPage() {
   const isMatchesSubroute = location !== "/matches";
 
   usePageSeo({
-    title: "Matches | Football Mad",
-    description: "Live scores, fixtures and results from Football Mad's priority competitions.",
+    title: "Live Football Scores, Fixtures & Results | Football Mad",
+    description:
+      "Live football scores, today's fixtures and latest results from domestic and European competitions.",
     canonicalPath: "/matches",
     imagePath: "/assets/football-mad-fm-logo.webp",
     noIndex: isMatchesSubroute,

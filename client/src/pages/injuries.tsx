@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, AlertTriangle, CheckCircle, Clock, Activity } from "lucide-react";
 import type { Team, FplPlayerAvailability } from "@shared/schema";
+import { usePageSeo } from "@/lib/seo";
 
 type MedicalBucket = "RETURNING_SOON" | "COIN_FLIP" | "DOUBTFUL" | "OUT";
 
@@ -364,6 +365,14 @@ function sortPlayers(
 }
 
 export default function InjuriesPage() {
+  usePageSeo({
+    title: "Football Injury News & Team Updates | Football Mad",
+    description:
+      "Football injury news, return dates, suspensions and squad availability updates from leading competitions.",
+    canonicalPath: "/injuries",
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
+
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [statusTab, setStatusTab] = useState<StatusTab>("all");
   const [sortOption, setSortOption] = useState<SortOption>("closest_return");

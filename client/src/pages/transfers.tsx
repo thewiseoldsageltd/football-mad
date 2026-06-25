@@ -13,6 +13,7 @@ import {
   dummyConfirmedTransfers,
   type BlendedTransferItem,
 } from "@/data/transfers-dummy";
+import { usePageSeo } from "@/lib/seo";
 
 function TransferCardSkeleton() {
   return (
@@ -45,6 +46,14 @@ function TransferCardSkeleton() {
 }
 
 export default function TransfersPage() {
+  usePageSeo({
+    title: "Football Transfer News & Rumours | Football Mad",
+    description:
+      "Latest football transfer news, rumours, confirmed deals and deadline day updates from the Premier League and across Europe.",
+    canonicalPath: "/transfers",
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
+
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   

@@ -9,6 +9,7 @@ import { Timer, TrendingUp, AlertCircle, Lightbulb } from "lucide-react";
 import { differenceInDays, differenceInHours, differenceInMinutes, format } from "date-fns";
 import { useState, useEffect } from "react";
 import type { Article, Injury } from "@shared/schema";
+import { usePageSeo } from "@/lib/seo";
 
 function DeadlineCountdown({ deadline }: { deadline: Date }) {
   const [now, setNow] = useState(new Date());
@@ -52,6 +53,14 @@ function DeadlineCountdown({ deadline }: { deadline: Date }) {
 }
 
 export default function FPLPage() {
+  usePageSeo({
+    title: "Fantasy Premier League (FPL) News & Tips | Football Mad",
+    description:
+      "Fantasy Premier League news, injury updates, player analysis and gameweek tips for FPL managers.",
+    canonicalPath: "/fpl",
+    imagePath: "/assets/football-mad-fm-logo.webp",
+  });
+
   const nextDeadline = new Date();
   nextDeadline.setDate(nextDeadline.getDate() + 3);
   nextDeadline.setHours(11, 30, 0, 0);

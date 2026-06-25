@@ -28,6 +28,7 @@ import { resolveSocialImageForMeta } from "./social-image-url";
 import { articleHeroPreloadImageUrl } from "@shared/article-display-image";
 import type { ArticlePrerenderContext } from "./article-prerender-context";
 import { resolveArticlePrerenderContext } from "./article-prerender-context";
+import { resolveTablesPageMetadata } from "./tables-page-metadata";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
 export const CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
@@ -401,7 +402,8 @@ export async function resolvePageMetadata(
     return withRobots(
       defaultPayload({
         title: "Football News | Football Mad",
-        description: "Latest football news, analysis and breaking stories from Football Mad.",
+        description:
+          "Latest football news, transfer rumours, match reports and analysis from the Premier League and competitions covered by Football Mad.",
         canonicalPath: "/news",
         robots: hasQueryParams ? robotsNoindexFollow : robotsIndex,
       }),
@@ -433,8 +435,9 @@ export async function resolvePageMetadata(
     const isMatchesSubroute = Boolean(segment && !isInternalGoalserveMatchSlug(segment));
     return withRobots(
       defaultPayload({
-        title: "Matches | Football Mad",
-        description: "Live scores, fixtures and results from Football Mad's priority competitions.",
+        title: "Live Football Scores, Fixtures & Results | Football Mad",
+        description:
+          "Live football scores, today's fixtures and latest results from domestic and European competitions.",
         canonicalPath: "/matches",
         robots: isMatchesSubroute ? robotsNoindexFollow : robotsIndex,
       }),
@@ -453,11 +456,45 @@ export async function resolvePageMetadata(
   }
 
   if (path === "/tables" || path.startsWith("/tables/")) {
+    const tablesMeta = await resolveTablesPageMetadata(path);
     return withRobots(
       defaultPayload({
-        title: "Tables | Football Mad",
-        description: "League tables and tournament progress on Football Mad.",
-        canonicalPath: path === "/tables" ? "/tables" : path,
+        title: tablesMeta.title,
+        description: tablesMeta.description,
+        canonicalPath: tablesMeta.canonicalPath,
+      }),
+    );
+  }
+
+  if (path === "/transfers") {
+    return withRobots(
+      defaultPayload({
+        title: "Football Transfer News & Rumours | Football Mad",
+        description:
+          "Latest football transfer news, rumours, confirmed deals and deadline day updates from the Premier League and across Europe.",
+        canonicalPath: "/transfers",
+      }),
+    );
+  }
+
+  if (path === "/injuries") {
+    return withRobots(
+      defaultPayload({
+        title: "Football Injury News & Team Updates | Football Mad",
+        description:
+          "Football injury news, return dates, suspensions and squad availability updates from leading competitions.",
+        canonicalPath: "/injuries",
+      }),
+    );
+  }
+
+  if (path === "/fpl") {
+    return withRobots(
+      defaultPayload({
+        title: "Fantasy Premier League (FPL) News & Tips | Football Mad",
+        description:
+          "Fantasy Premier League news, injury updates, player analysis and gameweek tips for FPL managers.",
+        canonicalPath: "/fpl",
       }),
     );
   }
@@ -465,8 +502,9 @@ export async function resolvePageMetadata(
   if (path === "/teams") {
     return withRobots(
       defaultPayload({
-        title: "Teams | Football Mad",
-        description: "Browse clubs from Football Mad's supported domestic leagues.",
+        title: "Football Teams & Club Hubs | Football Mad",
+        description:
+          "Browse football club hubs featuring team news, fixtures, results, squads and league standings.",
         canonicalPath: "/teams",
       }),
     );

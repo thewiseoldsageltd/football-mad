@@ -220,9 +220,22 @@ export default function TablesPage() {
         ? cupCompetitions.find((comp) => comp.id === cupSlug)?.name ?? "Cups"
         : europeCompetitions.find((comp) => comp.id === europeSlug)?.name ?? "Europe";
 
+  const seasonDisplay = useMemo(() => {
+    const short = seasonSlug.match(/^(\d{4})-(\d{2})$/);
+    if (short) return `${short[1]}/${short[2]}`;
+    return seasonSlug.replace("-", "/");
+  }, [seasonSlug]);
+
+  const tablesSeoTitle = seasonDisplay
+    ? `${selectedCompetitionLabel} Table & Standings ${seasonDisplay} | Football Mad`
+    : `${selectedCompetitionLabel} Table & Standings | Football Mad`;
+  const tablesSeoDescription = seasonDisplay
+    ? `${selectedCompetitionLabel} league table, standings, form and points for the ${seasonDisplay} season on Football Mad.`
+    : `${selectedCompetitionLabel} league table, standings, form and points on Football Mad.`;
+
   usePageSeo({
-    title: `${selectedCompetitionLabel} Tables | Football Mad`,
-    description: `League tables and tournament progress for ${selectedCompetitionLabel} on Football Mad.`,
+    title: tablesSeoTitle,
+    description: tablesSeoDescription,
     canonicalPath: location,
     imagePath: "/assets/football-mad-fm-logo.webp",
   });

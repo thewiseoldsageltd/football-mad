@@ -414,7 +414,7 @@ export default function NewsPage() {
   const newsSeoDescription =
     currentCompetition?.value && currentCompetition.value !== "all"
       ? `Latest ${currentCompetition.label} news, analysis and breaking stories from Football Mad.`
-      : "Latest football news, analysis and breaking stories from Football Mad.";
+      : "Latest football news, transfer rumours, match reports and analysis from the Premier League and competitions covered by Football Mad.";
 
   usePageSeo({
     title: newsSeoTitle,
