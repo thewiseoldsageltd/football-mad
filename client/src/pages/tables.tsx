@@ -230,8 +230,8 @@ export default function TablesPage() {
     ? `${selectedCompetitionLabel} Table & Standings ${seasonDisplay} | Football Mad`
     : `${selectedCompetitionLabel} Table & Standings | Football Mad`;
   const tablesSeoDescription = seasonDisplay
-    ? `${selectedCompetitionLabel} league table, standings, form and points for the ${seasonDisplay} season on Football Mad.`
-    : `${selectedCompetitionLabel} league table, standings, form and points on Football Mad.`;
+    ? `${selectedCompetitionLabel} table, standings, form and points for the ${seasonDisplay} season on Football Mad.`
+    : `${selectedCompetitionLabel} table, standings, form and points on Football Mad.`;
 
   usePageSeo({
     title: tablesSeoTitle,

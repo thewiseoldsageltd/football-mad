@@ -83,8 +83,8 @@ function buildTablesCompetitionMeta(
     ? `${competition} Table & Standings ${seasonDisplay} | Football Mad`
     : `${competition} Table & Standings | Football Mad`;
   const description = seasonDisplay
-    ? `${competition} league table, standings, form and points for the ${seasonDisplay} season on Football Mad.`
-    : `${competition} league table, standings, form and points on Football Mad.`;
+    ? `${competition} table, standings, form and points for the ${seasonDisplay} season on Football Mad.`
+    : `${competition} table, standings, form and points on Football Mad.`;
   return { title, description, canonicalPath };
 }
 
