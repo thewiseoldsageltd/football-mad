@@ -407,18 +407,10 @@ export default function NewsPage() {
 
   const currentCompetition = competitionTabsForRender.find((c) => c.value === filters.comp) ?? competitionTabsForRender[0];
 
-  const newsSeoTitle =
-    currentCompetition?.value && currentCompetition.value !== "all"
-      ? `${currentCompetition.label} News | Football Mad`
-      : "News | Football Mad";
-  const newsSeoDescription =
-    currentCompetition?.value && currentCompetition.value !== "all"
-      ? `Latest ${currentCompetition.label} news, analysis and breaking stories from Football Mad.`
-      : "Latest football news, transfer rumours, match reports and analysis from the Premier League and competitions covered by Football Mad.";
-
   usePageSeo({
-    title: newsSeoTitle,
-    description: newsSeoDescription,
+    title: "Football News | Football Mad",
+    description:
+      "Latest football news, transfer rumours, match reports and analysis from the Premier League and competitions covered by Football Mad.",
     canonicalPath: canonicalUrl,
     imagePath: "/assets/football-mad-fm-logo.webp",
     noIndex: shouldNoIndex,
