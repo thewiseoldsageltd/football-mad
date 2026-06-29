@@ -17,7 +17,7 @@ import { selectSidebarEntities } from "@/lib/article-sidebar-entities";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { ArticleCoverImage } from "@/components/article-cover-image";
 import { articleSeoImageUrl } from "@/lib/article-images";
-import { articleReadTimeMinutes } from "@/lib/article-bootstrap";
+import { articleReadTimeMinutes, isBootstrapPartialArticle } from "@/lib/article-bootstrap";
 import { absoluteSeoUrl } from "@/lib/seo";
 import {
   articleCanonicalShareUrl,
@@ -493,8 +493,13 @@ function ArticleSkeleton() {
 export default function ArticlePage() {
   const { slug } = useParams<{ slug: string }>();
 
-  const { data: article, isLoading, isPending: articlePending } = useQuery<ArticleWithEntities>({
+  const { data: article, isLoading, isPending: articlePending, isError, error, refetch, isFetching } = useQuery<ArticleWithEntities>({
     queryKey: ["/api/articles", slug],
+    enabled: Boolean(slug),
+    refetchOnMount: (query) =>
+      isBootstrapPartialArticle(query.state.data as ArticleWithEntities | undefined)
+        ? "always"
+        : true,
   });
 
   const { data: relatedArticles = [] } = useQuery<Article[]>({
@@ -649,7 +654,9 @@ export default function ArticlePage() {
 
   const publishedAt = article.publishedAt ? new Date(article.publishedAt) : new Date();
   const readingTime = articleReadTimeMinutes(article);
-  const bodyReady = Boolean(article.content?.trim());
+  const isPartialArticle = Boolean((article as { __bootstrapPartial?: boolean }).__bootstrapPartial);
+  const bodyReady = !isPartialArticle && Boolean(article.content?.trim());
+  const bodyLoadFailed = isPartialArticle && isError && !isFetching;
   
   // Check if excerpt should be shown (not empty and not duplicate of body start)
   const showExcerpt = article.excerpt?.trim() && !isExcerptDuplicate(article.excerpt, article.content);
@@ -711,6 +718,16 @@ export default function ArticlePage() {
                 className="article-body-content prose prose-lg dark:prose-invert max-w-none mb-12 prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 [&_img]:block [&_img]:w-full [&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_figure]:w-full [&_figure]:max-w-full [&_figure]:mx-0 [&_figure]:my-6 [&_figure_img]:w-full [&_figure_img]:max-w-full [&_figcaption]:text-center [&_figcaption]:text-sm [&_figcaption]:text-muted-foreground [&_figcaption]:mt-2 [&_figcaption]:mb-6 [&_iframe]:block [&_iframe]:mx-auto [&_iframe]:max-w-full [&_blockquote:not(.instagram-media)]:block [&_blockquote:not(.instagram-media)]:mx-auto [&_blockquote:not(.instagram-media)]:max-w-full [&_.twitter-tweet]:my-6 [&_.twitter-tweet]:mx-auto"
                 dangerouslySetInnerHTML={{ __html: processedContent }}
               />
+            ) : bodyLoadFailed ? (
+              <div className="mb-12 rounded-lg border border-destructive/20 bg-destructive/10 p-6 text-center" data-testid="article-body-error">
+                <p className="text-destructive font-medium mb-2">Failed to load article body</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {error instanceof Error ? error.message : "An unexpected error occurred"}
+                </p>
+                <Button variant="outline" size="sm" onClick={() => refetch()} data-testid="button-retry-article-body">
+                  Try again
+                </Button>
+              </div>
             ) : (
               <ArticleBodySkeleton />
             )}

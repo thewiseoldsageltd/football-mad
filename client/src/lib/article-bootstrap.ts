@@ -102,7 +102,9 @@ export function applyArticleBootstrapToQueryClient(queryClient: QueryClient): Bo
   if (normalizedPath !== normalizedBoot) return null;
 
   const partial = bootstrapToPartialArticle(boot);
-  queryClient.setQueryData(["/api/articles", pathSlug], partial);
+  const queryKey = ["/api/articles", pathSlug] as const;
+  queryClient.setQueryData(queryKey, partial);
+  void queryClient.invalidateQueries({ queryKey: [...queryKey] });
   return partial;
 }
 
