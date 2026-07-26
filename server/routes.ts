@@ -69,6 +69,7 @@ import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { syncGoalserveMatches } from "./jobs/sync-goalserve-matches";
 import { syncGoalserveClubFriendliesForKnownTeams, syncGoalserveEnglandSuperCup } from "./jobs/sync-goalserve-club-friendlies";
+import { syncGoalserveSpecialCompetitions } from "./jobs/sync-goalserve-special-competitions";
 import { runSyncGoalserve } from "./jobs/sync-goalserve";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
@@ -77,6 +78,7 @@ import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { runRefreshGoalserveStandings } from "./jobs/refresh-goalserve-standings";
+import { runRefreshGoalserveFixtures } from "./jobs/refresh-goalserve-fixtures";
 import { runPaMediaIngest } from "./jobs/ingest-pamedia";
 import { runBackfillPaMediaInlineImages } from "./jobs/backfill-pamedia-inline-images";
 import { runBackfillPaMediaHeroImages } from "./jobs/backfill-pamedia-hero-images";
@@ -3645,6 +3647,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // Mapping-driven special competitions (Emirates Cup, Super Cup allow-list, etc.).
+  app.post(
+    "/api/jobs/sync-goalserve-special-competitions",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (_req, res) => {
+      const result = await syncGoalserveSpecialCompetitions();
+      res.json(result);
+    }
+  );
+
   // ========== GOALSERVE MATCHES UPSERT ==========
   app.post(
     "/api/jobs/upsert-goalserve-matches",
@@ -3781,6 +3793,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // - /api/jobs/refresh-matches-near-future: every 30 minutes
   // - /api/jobs/refresh-matches-week-ahead: every 4 hours
   // - /api/jobs/refresh-priority-league-fixtures: every 6 hours
+  //   (bounded batch of is_priority leagues + gated friendlies/special comps)
+  // Dedicated supplementary routes remain available for independent schedules:
+  // - /api/jobs/sync-goalserve-club-friendlies
+  // - /api/jobs/sync-goalserve-special-competitions
+  // - /api/jobs/sync-goalserve-england-super-cup
   app.post(
     "/api/jobs/refresh-matches-live",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
@@ -3835,122 +3852,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post(
     "/api/jobs/refresh-priority-league-fixtures",
     requireJobSecret("GOALSERVE_SYNC_SECRET"),
-    async (_req, res) => {
-      const startedAt = Date.now();
-      const rows = await db
-        .select({
-          goalserveCompetitionId: competitions.goalserveCompetitionId,
-        })
-        .from(competitions)
-        .where(and(eq(competitions.isPriority, true), drizzleSql`trim(coalesce(${competitions.goalserveCompetitionId}, '')) <> ''`));
+    async (req, res) => {
+      const limitRaw = req.query.limit ?? req.query.batchLimit;
+      const timeoutRaw = req.query.timeoutMs;
+      const dryRun = String(req.query.dryRun ?? "") === "1";
+      const supplementaryRaw = String(req.query.supplementary ?? "").trim().toLowerCase();
+      const competitionIdsRaw = String(req.query.competitionIds ?? "").trim();
+      const competitionIds = competitionIdsRaw
+        ? competitionIdsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+        : undefined;
 
-      const leagueIds = rows
-        .map((row) => row.goalserveCompetitionId)
-        .filter((id): id is string => typeof id === "string" && id.length > 0);
-
-      const summary = {
-        ok: true,
-        feedsProcessed: leagueIds.length,
-        inserted: 0,
-        updated: 0,
-        skipped: 0,
-        errors: [] as string[],
-        durationMs: 0,
-        results: [] as Array<{
-          leagueId: string;
-          ok: boolean;
-          inserted: number;
-          updated: number;
-          skipped: number;
-          error?: string;
-        }>,
-      };
-
-      for (const leagueId of leagueIds) {
-        try {
-          const result = await syncGoalserveMatches(leagueId);
-          const skipped = (result.skippedNoStaticId ?? 0) + (result.skippedNoKickoff ?? 0);
-          summary.inserted += result.inserted ?? 0;
-          summary.updated += result.updated ?? 0;
-          summary.skipped += skipped;
-          if (!result.ok) {
-            summary.ok = false;
-            if (result.error) summary.errors.push(`league ${leagueId}: ${result.error}`);
-          }
-          summary.results.push({
-            leagueId,
-            ok: result.ok,
-            inserted: result.inserted ?? 0,
-            updated: result.updated ?? 0,
-            skipped,
-            error: result.error,
-          });
-          console.log(`[matches-refresh-priority] leagueId=${leagueId} ok=${result.ok} inserted=${result.inserted ?? 0} updated=${result.updated ?? 0} skipped=${skipped}`);
-        } catch (error) {
-          summary.ok = false;
-          const message = error instanceof Error ? error.message : String(error);
-          summary.errors.push(`league ${leagueId}: ${message}`);
-          summary.results.push({ leagueId, ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
-          console.error(`[matches-refresh-priority] leagueId=${leagueId} failed: ${message}`);
-        }
+      let supplementary: "auto" | "always" | "never" | undefined;
+      if (supplementaryRaw === "always" || supplementaryRaw === "1" || supplementaryRaw === "true") {
+        supplementary = "always";
+      } else if (supplementaryRaw === "never" || supplementaryRaw === "0" || supplementaryRaw === "false") {
+        supplementary = "never";
+      } else if (supplementaryRaw === "auto") {
+        supplementary = "auto";
       }
 
-      // Always refresh known-team club friendlies after priority leagues.
-      try {
-        const friendly = await syncGoalserveClubFriendliesForKnownTeams();
-        const skipped = (friendly.skippedNoStaticId ?? 0) + (friendly.skippedNoKickoff ?? 0);
-        summary.inserted += friendly.inserted ?? 0;
-        summary.updated += friendly.updated ?? 0;
-        summary.skipped += skipped;
-        summary.feedsProcessed += 1;
-        if (!friendly.ok) {
-          summary.ok = false;
-          if (friendly.error) summary.errors.push(`league 1534: ${friendly.error}`);
-        }
-        summary.results.push({
-          leagueId: "1534",
-          ok: friendly.ok,
-          inserted: friendly.inserted ?? 0,
-          updated: friendly.updated ?? 0,
-          skipped,
-          error: friendly.error,
-        });
-      } catch (error) {
-        summary.ok = false;
-        const message = error instanceof Error ? error.message : String(error);
-        summary.errors.push(`league 1534: ${message}`);
-        summary.results.push({ leagueId: "1534", ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
-      }
+      const result = await runRefreshGoalserveFixtures({
+        limit: limitRaw !== undefined ? Number(limitRaw) : undefined,
+        timeoutMs: timeoutRaw !== undefined ? Number(timeoutRaw) : undefined,
+        dryRun,
+        competitionIds,
+        supplementary,
+      });
 
-      // England Super Cup / Community Shield (Goalserve 1611) — small season feed, not always is_priority.
-      try {
-        const superCup = await syncGoalserveEnglandSuperCup();
-        const skipped = (superCup.skippedNoStaticId ?? 0) + (superCup.skippedNoKickoff ?? 0);
-        summary.inserted += superCup.inserted ?? 0;
-        summary.updated += superCup.updated ?? 0;
-        summary.skipped += skipped;
-        summary.feedsProcessed += 1;
-        if (!superCup.ok) {
-          summary.ok = false;
-          if (superCup.error) summary.errors.push(`league 1611: ${superCup.error}`);
-        }
-        summary.results.push({
-          leagueId: "1611",
-          ok: superCup.ok,
-          inserted: superCup.inserted ?? 0,
-          updated: superCup.updated ?? 0,
-          skipped,
-          error: superCup.error,
-        });
-      } catch (error) {
-        summary.ok = false;
-        const message = error instanceof Error ? error.message : String(error);
-        summary.errors.push(`league 1611: ${message}`);
-        summary.results.push({ leagueId: "1611", ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
-      }
-
-      summary.durationMs = Date.now() - startedAt;
-      res.json(summary);
+      const status = result.fatal ? 500 : 200;
+      res.status(status).json(result);
     },
   );
 

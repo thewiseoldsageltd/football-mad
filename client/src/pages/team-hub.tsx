@@ -1222,11 +1222,38 @@ interface HubMatchRow {
   awayTeam: { id?: string; name: string; shortName: string; slug: string; primaryColor: string };
   kickoffTime: Date;
   competition: string;
+  seasonKey?: string | null;
   homeScore: number | null;
   awayScore: number | null;
   status: "scheduled" | "finished" | "postponed" | "live" | "cancelled";
   venue?: string | null;
   detailHref: string | null;
+}
+
+/** Split football season label for a calendar month (Aug→May → YYYY/YYYY+1). */
+function footballSeasonLabelForMonth(month: number, year: number): string {
+  return month >= 7 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+}
+
+function matchBelongsToFootballSeason(
+  match: HubMatchRow,
+  seasonLabel: string,
+): boolean {
+  const key = (match.seasonKey || "").trim();
+  if (key) {
+    if (key === seasonLabel) return true;
+    // Calendar-year seasons (friendlies / super cups): include when year overlaps the split season.
+    if (/^\d{4}$/.test(key)) {
+      const y = Number(key);
+      const [startYear, endYear] = seasonLabel.split("/").map(Number);
+      return y === startYear || y === endYear;
+    }
+    return false;
+  }
+  return footballSeasonLabelForMonth(
+    match.kickoffTime.getMonth(),
+    match.kickoffTime.getFullYear(),
+  ) === seasonLabel;
 }
 
 function normMatchStatus(status?: string | null): HubMatchRow["status"] {
@@ -1264,6 +1291,7 @@ function apiMatchToHubRow(match: Match & { homeTeam?: Team; awayTeam?: Team }): 
     },
     kickoffTime: new Date(match.kickoffTime),
     competition: getPublicCompetitionDisplayName(match.competition, match.goalserveCompetitionId),
+    seasonKey: match.seasonKey ?? null,
     homeScore: match.homeScore,
     awayScore: match.awayScore,
     status: normMatchStatus(match.status),
@@ -1601,12 +1629,22 @@ function MatchesTabContent({
       .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
   }, [allMatches]);
 
+  const seasonLabel = useMemo(
+    () => footballSeasonLabelForMonth(selectedMonth, selectedYear),
+    [selectedMonth, selectedYear],
+  );
+
+  const seasonMatches = useMemo(
+    () => allMatches.filter((m) => matchBelongsToFootballSeason(m, seasonLabel)),
+    [allMatches, seasonLabel],
+  );
+
   const competitions = useMemo(() => {
-    const names = Array.from(new Set(allMatches.map((m) => m.competition).filter(Boolean))).sort((a, b) =>
+    const names = Array.from(new Set(seasonMatches.map((m) => m.competition).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b),
     );
     return ["all", ...names];
-  }, [allMatches]);
+  }, [seasonMatches]);
   
   // Filter matches by selected month and competition
   const filteredMatches = useMemo(() => {
@@ -1658,13 +1696,14 @@ function MatchesTabContent({
     return { completed, upcoming, total: filteredMatches.length };
   }, [filteredMatches]);
 
+  // Season-scoped competition totals (Model B) — avoids combining e.g. 2025/26 + 2026/27 into "76".
   const competitionCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const m of allMatches) {
+    for (const m of seasonMatches) {
       counts.set(m.competition, (counts.get(m.competition) ?? 0) + 1);
     }
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  }, [allMatches]);
+  }, [seasonMatches]);
 
   if (isLoading) {
     return (
@@ -1738,9 +1777,12 @@ function MatchesTabContent({
         </div>
       )}
       
-      {/* Season summary from real competitions present */}
+      {/* Season summary for the football season containing the selected month */}
       {competitionCounts.length > 0 && (
         <div className="mt-6 pt-4 border-t">
+          <p className="text-xs text-muted-foreground mb-2 px-1" data-testid="season-summary-label">
+            {seasonLabel} season
+          </p>
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             {competitionCounts.map(([name, count]) => (
               <div key={name} className="flex items-center gap-2">

@@ -2,7 +2,7 @@
  * One-shot season fixture catch-up for staging/dev:
  *  - Premier League (1204) full season from soccerfixtures
  *  - Club Friendlies (1534) filtered to known Football Mad teams
- *  - England Super Cup / Community Shield (1611)
+ *  - Special competitions (England Super Cup 1611, Emirates Cup 1759, mapping discovery)
  *
  * Note: Goalserve returns HTTP 403 for soccerfixtures/leagueid/{id}?season=…
  * on this account. The bare league feed currently publishes the live season
@@ -12,10 +12,8 @@
  * Usage: npx tsx script/sync-season-fixtures-catchup.ts
  */
 import { syncGoalserveMatches } from "../server/jobs/sync-goalserve-matches";
-import {
-  syncGoalserveClubFriendliesForKnownTeams,
-  syncGoalserveEnglandSuperCup,
-} from "../server/jobs/sync-goalserve-club-friendlies";
+import { syncGoalserveClubFriendliesForKnownTeams } from "../server/jobs/sync-goalserve-club-friendlies";
+import { syncGoalserveSpecialCompetitions } from "../server/jobs/sync-goalserve-special-competitions";
 
 async function main() {
   console.log("[catchup] syncing Premier League 1204 (bare season feed)…");
@@ -40,14 +38,21 @@ async function main() {
     error: fr.error,
   });
 
-  console.log("[catchup] syncing England Super Cup 1611…");
-  const sc = await syncGoalserveEnglandSuperCup();
-  console.log("[catchup] Super Cup", {
-    ok: sc.ok,
-    inserted: sc.inserted,
-    updated: sc.updated,
-    seasonKey: sc.seasonKey,
-    error: sc.error,
+  console.log("[catchup] syncing special competitions…");
+  const special = await syncGoalserveSpecialCompetitions();
+  console.log("[catchup] Special", {
+    ok: special.ok,
+    discovered: special.discovered,
+    synced: special.synced.map((s) => ({
+      leagueId: s.leagueId,
+      ok: s.ok,
+      inserted: s.inserted,
+      updated: s.updated,
+      seasonKey: s.seasonKey,
+      source: s.source,
+      error: s.error,
+    })),
+    errors: special.errors,
   });
 }
 

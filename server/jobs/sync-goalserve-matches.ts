@@ -20,6 +20,45 @@ export function resolveSeasonKey(
   return s.length ? s : null;
 }
 
+/**
+ * Infer a season label from kickoff.
+ * Calendar-year competitions (hint like "2026") use the kickoff calendar year;
+ * otherwise use the Aug–May football split season (month index >= 7 → YYYY/YYYY+1).
+ */
+export function inferSeasonKeyFromKickoff(
+  kickoff: Date,
+  competitionSeasonHint?: string | null,
+): string | null {
+  if (Number.isNaN(kickoff.getTime())) return null;
+  const hint = (competitionSeasonHint || "").trim();
+  const year = kickoff.getUTCFullYear();
+  const month = kickoff.getUTCMonth(); // 0–11
+  if (/^\d{4}$/.test(hint)) {
+    return String(year);
+  }
+  return month >= 7 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+}
+
+/**
+ * Day/live feeds often omit @season. Prefer an explicit feed season, then
+ * kickoff inference (so historical matches stay on the correct season after
+ * competitions.season advances), then the stored competition season.
+ */
+export function resolveDayFeedSeasonKey(opts: {
+  feedSeason?: string | null;
+  competitionSeason?: string | null;
+  kickoff: Date | null;
+}): string | null {
+  const feed = (opts.feedSeason || "").trim();
+  if (feed) return feed;
+  if (opts.kickoff) {
+    const inferred = inferSeasonKeyFromKickoff(opts.kickoff, opts.competitionSeason);
+    if (inferred) return inferred;
+  }
+  const comp = (opts.competitionSeason || "").trim();
+  return comp || null;
+}
+
 function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
   if (!formattedDate) return null;
 

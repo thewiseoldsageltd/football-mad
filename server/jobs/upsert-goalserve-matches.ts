@@ -7,6 +7,7 @@ import {
 import { buildGoalserveMatchTimeline } from "@shared/goalserve-match-detail";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ensureGoalserveTeam } from "../lib/ensure-goalserve-team";
+import { resolveDayFeedSeasonKey } from "./sync-goalserve-matches";
 import { eq } from "drizzle-orm";
 
 function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
@@ -205,14 +206,19 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         canonicalSlug: competitions.canonicalSlug,
         isPriority: competitions.isPriority,
         name: competitions.name,
+        season: competitions.season,
       })
       .from(competitions);
 
-    const competitionsMap = new Map<string, { id: string; name: string }>();
+    const competitionsMap = new Map<string, { id: string; name: string; season: string | null }>();
     const priorityCompetitionIds = new Set<string>();
     for (const comp of dbCompetitions) {
       if (comp.goalserveCompetitionId) {
-        competitionsMap.set(comp.goalserveCompetitionId, { id: comp.id, name: comp.name });
+        competitionsMap.set(comp.goalserveCompetitionId, {
+          id: comp.id,
+          name: comp.name,
+          season: comp.season ?? null,
+        });
       }
       if (comp.isPriority) {
         if (comp.goalserveCompetitionId) priorityCompetitionIds.add(comp.goalserveCompetitionId);
@@ -246,6 +252,9 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
       const mappedCompetition = competitionsMap.get(competitionId);
       const competitionName = mappedCompetition?.name || String(category?.["@name"] ?? category?.name ?? "Unknown");
       const competitionCanonicalId = mappedCompetition?.id || null;
+      const categorySeason = String(
+        category?.["@season"] ?? category?.season ?? category?.["@season_year"] ?? category?.season_year ?? "",
+      ).trim() || null;
 
       const matchData = category.matches.match;
       const matchList = Array.isArray(matchData) ? matchData : [matchData];
@@ -316,6 +325,15 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         const venue = String(match["@venue"] ?? match.venue ?? "");
         const slug = `gs-${goalserveMatchId}`;
 
+        const matchSeason = String(
+          match?.["@season"] ?? match?.season ?? match?.["@season_year"] ?? match?.season_year ?? "",
+        ).trim() || null;
+        const seasonKey = resolveDayFeedSeasonKey({
+          feedSeason: matchSeason || categorySeason,
+          competitionSeason: mappedCompetition?.season ?? null,
+          kickoff: kickoffTime,
+        });
+
         const goalserveRound = extractRound(match, category);
         if (goalserveRound) {
           withRound++;
@@ -374,6 +392,10 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           const finalHomeScore = newHomeScore !== null ? newHomeScore : existing.homeScore;
           const finalAwayScore = newAwayScore !== null ? newAwayScore : existing.awayScore;
 
+          // Fill missing season_key only — do not overwrite a season already set by
+          // league sync (authoritative for full schedules).
+          const nextSeasonKey = existing.seasonKey || seasonKey;
+
           await db
             .update(matches)
             .set({
@@ -381,6 +403,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               goalserveStaticId: goalserveStaticId || existing.goalserveStaticId,
               goalserveCompetitionId: competitionId || existing.goalserveCompetitionId,
               competitionId: competitionCanonicalId || existing.competitionId,
+              seasonKey: nextSeasonKey,
               goalserveRound,
               homeGoalserveTeamId: homeGsId || null,
               awayGoalserveTeamId: awayGsId || null,
@@ -404,6 +427,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               goalserveStaticId: goalserveStaticId || null,
               goalserveCompetitionId: competitionId || null,
               competitionId: competitionCanonicalId,
+              seasonKey,
               goalserveRound,
               homeGoalserveTeamId: homeGsId || null,
               awayGoalserveTeamId: awayGsId || null,
@@ -430,6 +454,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
                     goalserveStaticId: goalserveStaticId || bySlug.goalserveStaticId,
                     goalserveCompetitionId: competitionId || bySlug.goalserveCompetitionId,
                     competitionId: competitionCanonicalId || bySlug.competitionId,
+                    seasonKey: bySlug.seasonKey || seasonKey,
                     goalserveRound,
                     homeGoalserveTeamId: homeGsId || null,
                     awayGoalserveTeamId: awayGsId || null,
