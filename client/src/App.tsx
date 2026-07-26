@@ -74,8 +74,9 @@ function Router() {
       <Route path="/teams/:slug/:tab" component={TeamHubPage} />
       <Route path="/competitions/:slug" component={CompetitionProfilePage} />
       <Route path="/matches" component={MatchesPage} />
-      <Route path="/matches/:competitionSlug" component={MatchesPage} />
+      {/* Match detail must precede :competitionSlug so `{home}-vs-{away}-{date}` is not swallowed. */}
       <Route path="/matches/:homeSlug-vs-:awaySlug-:date" component={MatchPage} />
+      <Route path="/matches/:competitionSlug" component={MatchesPage} />
       <Route path="/players/:slug" component={PlayerProfilePage} />
       <Route path="/managers/:slug" component={ManagerProfilePage} />
       <Route path="/transfers" component={TransfersPage} />

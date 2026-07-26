@@ -2,10 +2,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, Globe, MapPin } from "lucide-react";
 import { format } from "date-fns";
+import { Link } from "wouter";
 import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
 import { MatchTeamBadge } from "./match-team-badge";
 import { getCompetitionCountryById, getPublicCompetitionDisplayName } from "./competition-priority";
+import { resolveMatchDetailHref } from "@shared/match-slug";
 
 interface EnhancedMatchCardProps {
   match: MockMatch;
@@ -131,17 +133,14 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
     idMatch ? idMatch[1] : match.goalserveCompetitionId ?? null,
   );
   const hasVenue = typeof match.venue === "string" && match.venue.trim().length > 0;
+  const detailHref = resolveMatchDetailHref({
+    slug: match.slug,
+    homeTeamSlug: match.homeTeam.slug,
+    awayTeamSlug: match.awayTeam.slug,
+    kickoffTime: match.kickOffTime,
+  });
 
-  return (
-    <div
-      tabIndex={0}
-      role="button"
-      className="relative group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
-      data-testid={`card-match-${match.id}`}
-    >
-      {isLive && (
-        <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
-      )}
+  const cardInner = (
       <Card className="hover-elevate active-elevate-2 overflow-hidden border-border/70">
         <CardContent className={`p-4 md:p-5 ${isLive ? "pl-5 md:pl-6" : ""} overflow-hidden`}>
           {/* LINE 1: Competition pill (centered) */}
@@ -221,6 +220,30 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
           </div>
         </CardContent>
       </Card>
-    </div>
+  );
+
+  if (!detailHref) {
+    return (
+      <div className="relative rounded-lg" data-testid={`card-match-${match.id}`}>
+        {isLive && (
+          <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
+        )}
+        {cardInner}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={detailHref}
+      className="relative group block cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-lg"
+      data-testid={`card-match-${match.id}`}
+      aria-label={`${homeDisplayName} vs ${awayDisplayName}`}
+    >
+      {isLive && (
+        <div className="absolute left-0 top-2 bottom-2 w-1 bg-red-500 rounded-full" aria-hidden="true" />
+      )}
+      {cardInner}
+    </Link>
   );
 }

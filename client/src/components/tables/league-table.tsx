@@ -1,10 +1,12 @@
 import { useState, useCallback, memo } from "react";
+import { Link } from "wouter";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TeamCrest } from "@/components/team-crest";
 import { FormPills } from "./form-pills";
 import { ChevronDown } from "lucide-react";
 import type { TableRow as LeagueTableRow } from "@/data/tables-mock";
 import type { StandingsZone, ZoneColor } from "@/lib/league-config";
+import { teamHub } from "@/lib/urls";
 
 interface LeagueTableProps {
   data: LeagueTableRow[];
@@ -129,7 +131,18 @@ const StandingsRow = memo(function StandingsRow({
         <TableCell>
           <div className="flex items-center gap-2 min-w-0">
             <TeamCrest teamId={row.teamId} teamName={row.teamName} size="sm" />
-            <span className="font-medium text-sm truncate">{row.teamName}</span>
+            {row.teamSlug ? (
+              <Link
+                href={teamHub(row.teamSlug)}
+                className="font-medium text-sm truncate hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 rounded-sm"
+                onClick={(e) => e.stopPropagation()}
+                data-testid={`link-table-team-${row.teamSlug}`}
+              >
+                {row.teamName}
+              </Link>
+            ) : (
+              <span className="font-medium text-sm truncate">{row.teamName}</span>
+            )}
           </div>
         </TableCell>
 

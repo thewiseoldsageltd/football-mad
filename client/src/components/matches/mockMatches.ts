@@ -4,6 +4,8 @@ export type MatchStatus = "scheduled" | "live" | "finished" | "postponed";
 
 export interface MockMatch {
   id: string;
+  /** DB / API match slug (often gs-* until public detail slug is built). */
+  slug?: string;
   competition: string;
   competitionLogoUrl?: string | null;
   rawCompetition?: string | null;
@@ -18,6 +20,7 @@ export interface MockMatch {
     shortName: string;
     primaryColor: string;
     logoUrl?: string;
+    slug?: string;
   };
   awayTeam: {
     id: string;
@@ -25,6 +28,7 @@ export interface MockMatch {
     shortName: string;
     primaryColor: string;
     logoUrl?: string;
+    slug?: string;
   };
   homeScore: number | null;
   awayScore: number | null;

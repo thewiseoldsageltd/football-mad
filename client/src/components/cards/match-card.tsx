@@ -5,7 +5,7 @@ import { Calendar, MapPin } from "lucide-react";
 import type { Match, Team } from "@shared/schema";
 import { format, isToday, isTomorrow, isPast } from "date-fns";
 import { EntityIcon } from "@/components/entity-media";
-import { matchListingHrefForSlug } from "@shared/match-slug";
+import { matchListingHrefForSlug, resolveMatchDetailHref } from "@shared/match-slug";
 
 interface MatchCardProps {
   match: Match & { homeTeam?: Team; awayTeam?: Team };
@@ -34,7 +34,16 @@ export function MatchCard({ match }: MatchCardProps) {
   };
 
   return (
-    <Link href={matchListingHrefForSlug(match.slug)}>
+    <Link
+      href={
+        resolveMatchDetailHref({
+          slug: match.slug,
+          homeTeamSlug: match.homeTeam?.slug,
+          awayTeamSlug: match.awayTeam?.slug,
+          kickoffTime: match.kickoffTime,
+        }) ?? matchListingHrefForSlug(match.slug)
+      }
+    >
       <Card className="group hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-match-${match.id}`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">

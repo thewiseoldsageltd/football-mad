@@ -132,6 +132,7 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
   
   return {
     id: match.id,
+    slug: match.slug,
     competition: competitionDisplay,
     competitionLogoUrl: match.competitionLogoUrl ?? null,
     rawCompetition: match.competition,
@@ -144,6 +145,7 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
       shortName: homeName.substring(0, 3).toUpperCase(),
       primaryColor: "#1a1a2e",
       logoUrl: match.homeTeam.logoUrl,
+      slug: match.homeTeam.slug,
     },
     awayTeam: {
       id: awayCanonicalId ?? "",
@@ -151,6 +153,7 @@ function apiMatchToMockMatch(match: ApiMatch): MockMatch {
       shortName: awayName.substring(0, 3).toUpperCase(),
       primaryColor: "#1a1a2e",
       logoUrl: match.awayTeam.logoUrl,
+      slug: match.awayTeam.slug,
     },
     homeScore: match.homeScore,
     awayScore: match.awayScore,

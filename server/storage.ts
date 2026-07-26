@@ -37,6 +37,7 @@ import {
   buildAuthorSlugSqlMatch,
   resolveAuthorIdentityForRequestSlug,
 } from "./lib/author-identity-resolver";
+import { parseMatchSlug } from "@shared/news-article-slug";
 
 /** Tags too generic to use as inferred author primary beat (exact match, case-insensitive). */
 const GENERIC_INFERRED_PRIMARY_BEAT_TAGS = new Set([
@@ -2173,29 +2174,58 @@ export class DatabaseStorage implements IStorage {
   private async lookupTeamById(teamId: string | null | undefined): Promise<Team | undefined> {
     if (!teamId) return undefined;
     const [team] = await db.select().from(teams).where(eq(teams.id, teamId)).limit(1);
-    return team;
+    if (!team) return undefined;
+    const slugMap = await this.getTeamPublicSlugMap([team.id]);
+    return { ...team, slug: slugMap.get(team.id) ?? team.slug };
   }
 
-  async getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
-    const results = await db.select().from(matches).orderBy(matches.kickoffTime);
-    const enriched = await Promise.all(
-      results.map(async (match) => ({
-        ...match,
-        homeTeam: await this.lookupTeamById(match.homeTeamId),
-        awayTeam: await this.lookupTeamById(match.awayTeamId),
-      })),
-    );
-    return enriched;
-  }
-
-  async getMatchBySlug(slug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team }) | undefined> {
-    const [match] = await db.select().from(matches).where(eq(matches.slug, slug));
-    if (!match) return undefined;
+  private async enrichMatchWithTeams(
+    match: Match,
+  ): Promise<Match & { homeTeam?: Team; awayTeam?: Team }> {
     return {
       ...match,
       homeTeam: await this.lookupTeamById(match.homeTeamId),
       awayTeam: await this.lookupTeamById(match.awayTeamId),
     };
+  }
+
+  async getMatches(): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
+    const results = await db.select().from(matches).orderBy(matches.kickoffTime);
+    return Promise.all(results.map((match) => this.enrichMatchWithTeams(match)));
+  }
+
+  async getMatchBySlug(slug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team }) | undefined> {
+    const [exact] = await db.select().from(matches).where(eq(matches.slug, slug)).limit(1);
+    if (exact) return this.enrichMatchWithTeams(exact);
+
+    // Public detail URLs: `{home}-vs-{away}-{YYYY-MM-DD}` (DB stores gs-* ingest slugs).
+    const parsed = parseMatchSlug(slug);
+    if (!parsed) return undefined;
+
+    const homeTeam = await this.getTeamBySlug(parsed.homeSlug);
+    const awayTeam = await this.getTeamBySlug(parsed.awaySlug);
+    if (!homeTeam || !awayTeam) return undefined;
+
+    const dayStart = new Date(`${parsed.date}T00:00:00.000Z`);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+    const [byTeamsAndDate] = await db
+      .select()
+      .from(matches)
+      .where(
+        and(
+          eq(matches.homeTeamId, homeTeam.id),
+          eq(matches.awayTeamId, awayTeam.id),
+          gte(matches.kickoffTime, dayStart),
+          lt(matches.kickoffTime, dayEnd),
+        ),
+      )
+      .orderBy(matches.kickoffTime)
+      .limit(1);
+
+    if (!byTeamsAndDate) return undefined;
+    return this.enrichMatchWithTeams(byTeamsAndDate);
   }
 
   async getMatchesByTeam(teamSlug: string): Promise<(Match & { homeTeam?: Team; awayTeam?: Team })[]> {
@@ -2208,13 +2238,7 @@ export class DatabaseStorage implements IStorage {
       .where(or(eq(matches.homeTeamId, team.id), eq(matches.awayTeamId, team.id)))
       .orderBy(matches.kickoffTime);
 
-    return Promise.all(
-      results.map(async (match) => ({
-        ...match,
-        homeTeam: await this.lookupTeamById(match.homeTeamId),
-        awayTeam: await this.lookupTeamById(match.awayTeamId),
-      })),
-    );
+    return Promise.all(results.map((match) => this.enrichMatchWithTeams(match)));
   }
 
   async createMatch(data: InsertMatch): Promise<Match> {

@@ -1576,6 +1576,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .map((row) => [row.entityId, row.cdnOriginalUrl as string]),
     );
 
+    // Prefer curated public slugs for match-detail URL construction.
+    const teamIdsForPublicSlug = Array.from(
+      new Set([
+        ...canonicalTeams.map((t) => t.id),
+        ...goalserveTeams.map((t) => t.id),
+      ]),
+    );
+    const publicSlugRows =
+      teamIdsForPublicSlug.length > 0
+        ? await db
+            .select({
+              entityId: paEntityAliasMap.entityId,
+              publicSlug: paEntityAliasMap.publicSlug,
+              createdAt: paEntityAliasMap.createdAt,
+            })
+            .from(paEntityAliasMap)
+            .where(
+              and(
+                eq(paEntityAliasMap.source, "pa_media"),
+                inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+                inArray(paEntityAliasMap.entityId, teamIdsForPublicSlug),
+                drizzleSql`${paEntityAliasMap.publicSlug} IS NOT NULL AND trim(${paEntityAliasMap.publicSlug}) <> ''`,
+              ),
+            )
+            .orderBy(desc(paEntityAliasMap.createdAt))
+        : [];
+    const publicSlugByTeamId = new Map<string, string>();
+    for (const row of publicSlugRows) {
+      if (!row.publicSlug || publicSlugByTeamId.has(row.entityId)) continue;
+      publicSlugByTeamId.set(row.entityId, row.publicSlug);
+    }
+    for (const t of canonicalTeams) {
+      const publicSlug = publicSlugByTeamId.get(t.id);
+      if (publicSlug) t.slug = publicSlug;
+    }
+    for (const t of goalserveTeams) {
+      const publicSlug = publicSlugByTeamId.get(t.id);
+      if (publicSlug) t.slug = publicSlug;
+    }
+
     return {
       byCanonicalId: new Map(canonicalTeams.map((t) => [t.id, t])),
       byGoalserveId: new Map(
@@ -4846,6 +4886,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           },
         };
       });
+
+      // Prefer curated public team slugs for hub links.
+      const standingsTeamIds = Array.from(
+        new Set(
+          table
+            .map((row) => row.team.id)
+            .filter((id): id is string => typeof id === "string" && id.length > 0),
+        ),
+      );
+      if (standingsTeamIds.length > 0) {
+        const publicSlugRows = await db
+          .select({
+            entityId: paEntityAliasMap.entityId,
+            publicSlug: paEntityAliasMap.publicSlug,
+            createdAt: paEntityAliasMap.createdAt,
+          })
+          .from(paEntityAliasMap)
+          .where(
+            and(
+              eq(paEntityAliasMap.source, "pa_media"),
+              inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+              inArray(paEntityAliasMap.entityId, standingsTeamIds),
+              drizzleSql`${paEntityAliasMap.publicSlug} IS NOT NULL AND trim(${paEntityAliasMap.publicSlug}) <> ''`,
+            ),
+          )
+          .orderBy(desc(paEntityAliasMap.createdAt));
+        const publicSlugByTeamId = new Map<string, string>();
+        for (const row of publicSlugRows) {
+          if (!row.publicSlug || publicSlugByTeamId.has(row.entityId)) continue;
+          publicSlugByTeamId.set(row.entityId, row.publicSlug);
+        }
+        for (const row of table) {
+          if (!row.team.id) continue;
+          const publicSlug = publicSlugByTeamId.get(row.team.id);
+          if (publicSlug) row.team.slug = publicSlug;
+        }
+      }
 
       // Fetch fixtures from Goalserve XML to get proper <week number="X"> containers
       interface RoundInfo {

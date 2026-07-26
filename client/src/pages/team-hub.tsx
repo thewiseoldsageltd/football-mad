@@ -13,12 +13,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { MainLayout } from "@/components/layout/main-layout";
 import { ArticleCard } from "@/components/cards/article-card";
 import { ArticleCardSkeleton } from "@/components/skeletons";
-import { MatchCard } from "@/components/cards/match-card";
 import { InjuryCard } from "@/components/cards/injury-card";
 import { PostCard } from "@/components/cards/post-card";
 import { TransferCard } from "@/components/cards/transfer-card";
 import type { BlendedTransferItem } from "@/data/transfers-dummy";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
+import { resolveMatchDetailHref } from "@shared/match-slug";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
@@ -1214,272 +1214,66 @@ function AvailabilitySummaryBadge({ teamSlug }: { teamSlug: string }) {
   );
 }
 
-// Dummy match data for full season simulation
-interface DummyMatch {
+interface HubMatchRow {
   id: string;
+  slug?: string | null;
   homeTeam: { id?: string; name: string; shortName: string; slug: string; primaryColor: string };
   awayTeam: { id?: string; name: string; shortName: string; slug: string; primaryColor: string };
   kickoffTime: Date;
   competition: string;
-  competitionShort: string;
-  matchweek?: number;
-  round?: string;
-  homeScore?: number;
-  awayScore?: number;
-  status: "scheduled" | "finished" | "postponed" | "live";
-  venue: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  status: "scheduled" | "finished" | "postponed" | "live" | "cancelled";
+  venue?: string | null;
+  detailHref: string | null;
 }
 
-const PL_TEAMS = [
-  { name: "Arsenal", shortName: "ARS", slug: "arsenal", primaryColor: "#EF0107" },
-  { name: "Aston Villa", shortName: "AVL", slug: "aston-villa", primaryColor: "#670E36" },
-  { name: "Bournemouth", shortName: "BOU", slug: "bournemouth", primaryColor: "#DA291C" },
-  { name: "Brentford", shortName: "BRE", slug: "brentford", primaryColor: "#E30613" },
-  { name: "Brighton", shortName: "BHA", slug: "brighton", primaryColor: "#0057B8" },
-  { name: "Chelsea", shortName: "CHE", slug: "chelsea", primaryColor: "#034694" },
-  { name: "Crystal Palace", shortName: "CRY", slug: "crystal-palace", primaryColor: "#1B458F" },
-  { name: "Everton", shortName: "EVE", slug: "everton", primaryColor: "#003399" },
-  { name: "Fulham", shortName: "FUL", slug: "fulham", primaryColor: "#000000" },
-  { name: "Ipswich Town", shortName: "IPS", slug: "ipswich-town", primaryColor: "#0044AA" },
-  { name: "Leicester City", shortName: "LEI", slug: "leicester-city", primaryColor: "#003090" },
-  { name: "Liverpool", shortName: "LIV", slug: "liverpool", primaryColor: "#C8102E" },
-  { name: "Manchester City", shortName: "MCI", slug: "manchester-city", primaryColor: "#6CABDD" },
-  { name: "Manchester United", shortName: "MUN", slug: "manchester-united", primaryColor: "#DA291C" },
-  { name: "Newcastle United", shortName: "NEW", slug: "newcastle", primaryColor: "#241F20" },
-  { name: "Nottingham Forest", shortName: "NFO", slug: "nottingham-forest", primaryColor: "#E53233" },
-  { name: "Southampton", shortName: "SOU", slug: "southampton", primaryColor: "#D71920" },
-  { name: "Tottenham", shortName: "TOT", slug: "tottenham", primaryColor: "#132257" },
-  { name: "West Ham", shortName: "WHU", slug: "west-ham", primaryColor: "#7A263A" },
-  { name: "Wolves", shortName: "WOL", slug: "wolves", primaryColor: "#FDB913" },
-];
-
-const EURO_TEAMS = [
-  { name: "Real Madrid", shortName: "RMA", slug: "real-madrid", primaryColor: "#FEBE10" },
-  { name: "Barcelona", shortName: "BAR", slug: "barcelona", primaryColor: "#A50044" },
-  { name: "Bayern Munich", shortName: "BAY", slug: "bayern-munich", primaryColor: "#DC052D" },
-  { name: "Paris Saint-Germain", shortName: "PSG", slug: "psg", primaryColor: "#004170" },
-  { name: "Inter Milan", shortName: "INT", slug: "inter-milan", primaryColor: "#010E80" },
-  { name: "AC Milan", shortName: "ACM", slug: "ac-milan", primaryColor: "#FB090B" },
-  { name: "Juventus", shortName: "JUV", slug: "juventus", primaryColor: "#000000" },
-  { name: "Borussia Dortmund", shortName: "BVB", slug: "dortmund", primaryColor: "#FDE100" },
-];
-
-function generateDummyMatches(teamSlug: string, teamIdBySlug: Map<string, string>): DummyMatch[] {
-  const team = PL_TEAMS.find(t => t.slug === teamSlug) || PL_TEAMS[0];
-  const opponents = PL_TEAMS.filter(t => t.slug !== teamSlug);
-  const matches: DummyMatch[] = [];
-  
-  const seasonStart = new Date("2025-08-16");
-  const now = new Date();
-  
-  // Generate 38 Premier League matchweeks
-  opponents.forEach((opp, idx) => {
-    const isHome = idx % 2 === 0;
-    const matchweek = idx + 1;
-    const matchDate = new Date(seasonStart);
-    matchDate.setDate(matchDate.getDate() + (matchweek - 1) * 7);
-    
-    // Saturday 3pm or varied times
-    const hours = [12, 15, 17, 20][idx % 4];
-    matchDate.setHours(hours, idx % 2 === 0 ? 30 : 0, 0, 0);
-    
-    const isPast = matchDate < now;
-    const homeTeam = isHome ? team : opp;
-    const awayTeam = isHome ? opp : team;
-    
-    matches.push({
-      id: `pl-mw${matchweek}-${team.slug}`,
-      homeTeam,
-      awayTeam,
-      kickoffTime: matchDate,
-      competition: "Premier League",
-      competitionShort: "PL",
-      matchweek,
-      homeScore: isPast ? Math.floor(Math.random() * 4) : undefined,
-      awayScore: isPast ? Math.floor(Math.random() * 3) : undefined,
-      status: isPast ? "finished" : "scheduled",
-      venue: isHome ? `${team.name} Stadium` : `${opp.name} Stadium`,
-    });
-  });
-  
-  // Return fixtures (add second half of season)
-  const reverseFixtures = opponents.map((opp, idx) => {
-    const isHome = idx % 2 !== 0; // Flip home/away
-    const matchweek = 20 + idx;
-    const matchDate = new Date(seasonStart);
-    matchDate.setDate(matchDate.getDate() + (matchweek - 1) * 7);
-    
-    const hours = [12, 15, 17, 20][idx % 4];
-    matchDate.setHours(hours, idx % 2 === 0 ? 30 : 0, 0, 0);
-    
-    const isPast = matchDate < now;
-    const homeTeam = isHome ? team : opp;
-    const awayTeam = isHome ? opp : team;
-    
-    return {
-      id: `pl-mw${matchweek}-${team.slug}`,
-      homeTeam,
-      awayTeam,
-      kickoffTime: matchDate,
-      competition: "Premier League",
-      competitionShort: "PL",
-      matchweek,
-      homeScore: isPast ? Math.floor(Math.random() * 4) : undefined,
-      awayScore: isPast ? Math.floor(Math.random() * 3) : undefined,
-      status: isPast ? "finished" as const : "scheduled" as const,
-      venue: isHome ? `${team.name} Stadium` : `${opp.name} Stadium`,
-    };
-  });
-  
-  matches.push(...reverseFixtures);
-  
-  // Add FA Cup matches
-  const faCupRounds = [
-    { round: "Third Round", date: new Date("2026-01-10"), opponent: opponents[5] },
-    { round: "Fourth Round", date: new Date("2026-01-31"), opponent: opponents[8] },
-    { round: "Fifth Round", date: new Date("2026-02-14"), opponent: opponents[12] },
-    { round: "Quarter-Final", date: new Date("2026-03-07"), opponent: opponents[3] },
-    { round: "Semi-Final", date: new Date("2026-04-18"), opponent: opponents[1] },
-    { round: "Final", date: new Date("2026-05-23"), opponent: opponents[11] },
-  ];
-  
-  faCupRounds.forEach((cup, idx) => {
-    const isHome = idx % 2 === 0;
-    const isPast = cup.date < now;
-    
-    matches.push({
-      id: `fa-${cup.round.toLowerCase().replace(/\s+/g, "-")}-${team.slug}`,
-      homeTeam: isHome ? team : cup.opponent,
-      awayTeam: isHome ? cup.opponent : team,
-      kickoffTime: cup.date,
-      competition: "FA Cup",
-      competitionShort: "FAC",
-      round: cup.round,
-      homeScore: isPast ? Math.floor(Math.random() * 3) + 1 : undefined,
-      awayScore: isPast ? Math.floor(Math.random() * 2) : undefined,
-      status: isPast ? "finished" : "scheduled",
-      venue: cup.round === "Final" ? "Wembley Stadium" : (isHome ? `${team.name} Stadium` : `${cup.opponent.name} Stadium`),
-    });
-  });
-  
-  // Add EFL Cup matches
-  const eflCupRounds = [
-    { round: "Third Round", date: new Date("2025-09-24"), opponent: opponents[14] },
-    { round: "Fourth Round", date: new Date("2025-10-29"), opponent: opponents[9] },
-    { round: "Quarter-Final", date: new Date("2025-12-17"), opponent: opponents[6] },
-    { round: "Semi-Final 1st Leg", date: new Date("2026-01-07"), opponent: opponents[2] },
-    { round: "Semi-Final 2nd Leg", date: new Date("2026-01-28"), opponent: opponents[2] },
-    { round: "Final", date: new Date("2026-02-22"), opponent: opponents[0] },
-  ];
-  
-  eflCupRounds.forEach((cup, idx) => {
-    const isHome = idx % 2 === 0 || cup.round.includes("2nd Leg");
-    const isPast = cup.date < now;
-    
-    matches.push({
-      id: `efl-${cup.round.toLowerCase().replace(/\s+/g, "-")}-${team.slug}`,
-      homeTeam: isHome ? team : cup.opponent,
-      awayTeam: isHome ? cup.opponent : team,
-      kickoffTime: cup.date,
-      competition: "EFL Cup",
-      competitionShort: "EFL",
-      round: cup.round,
-      homeScore: isPast ? Math.floor(Math.random() * 3) + 1 : undefined,
-      awayScore: isPast ? Math.floor(Math.random() * 2) : undefined,
-      status: isPast ? "finished" : "scheduled",
-      venue: cup.round === "Final" ? "Wembley Stadium" : (isHome ? `${team.name} Stadium` : `${cup.opponent.name} Stadium`),
-    });
-  });
-  
-  // Add Champions League matches (for top teams)
-  const topTeamSlugs = ["arsenal", "chelsea", "liverpool", "manchester-city", "manchester-united", "tottenham", "aston-villa", "newcastle"];
-  if (topTeamSlugs.includes(teamSlug)) {
-    const clGroupMatches = [
-      { matchday: 1, date: new Date("2025-09-17"), opponent: EURO_TEAMS[0], isHome: true },
-      { matchday: 2, date: new Date("2025-10-01"), opponent: EURO_TEAMS[1], isHome: false },
-      { matchday: 3, date: new Date("2025-10-22"), opponent: EURO_TEAMS[2], isHome: true },
-      { matchday: 4, date: new Date("2025-11-05"), opponent: EURO_TEAMS[3], isHome: false },
-      { matchday: 5, date: new Date("2025-11-26"), opponent: EURO_TEAMS[4], isHome: true },
-      { matchday: 6, date: new Date("2025-12-10"), opponent: EURO_TEAMS[5], isHome: false },
-      { matchday: 7, date: new Date("2026-01-21"), opponent: EURO_TEAMS[6], isHome: true },
-      { matchday: 8, date: new Date("2026-01-29"), opponent: EURO_TEAMS[7], isHome: false },
-    ];
-    
-    clGroupMatches.forEach((cl) => {
-      const isPast = cl.date < now;
-      
-      matches.push({
-        id: `ucl-md${cl.matchday}-${team.slug}`,
-        homeTeam: cl.isHome ? team : cl.opponent,
-        awayTeam: cl.isHome ? cl.opponent : team,
-        kickoffTime: cl.date,
-        competition: "Champions League",
-        competitionShort: "UCL",
-        round: `Matchday ${cl.matchday}`,
-        homeScore: isPast ? Math.floor(Math.random() * 4) : undefined,
-        awayScore: isPast ? Math.floor(Math.random() * 3) : undefined,
-        status: isPast ? "finished" : "scheduled",
-        venue: cl.isHome ? `${team.name} Stadium` : `${cl.opponent.name} Stadium`,
-      });
-    });
-    
-    // Add knockout rounds
-    const clKnockouts = [
-      { round: "Round of 16 - 1st Leg", date: new Date("2026-02-18"), opponent: EURO_TEAMS[2], isHome: false },
-      { round: "Round of 16 - 2nd Leg", date: new Date("2026-03-11"), opponent: EURO_TEAMS[2], isHome: true },
-      { round: "Quarter-Final - 1st Leg", date: new Date("2026-04-08"), opponent: EURO_TEAMS[0], isHome: true },
-      { round: "Quarter-Final - 2nd Leg", date: new Date("2026-04-15"), opponent: EURO_TEAMS[0], isHome: false },
-    ];
-    
-    clKnockouts.forEach((ko) => {
-      const isPast = ko.date < now;
-      
-      matches.push({
-        id: `ucl-${ko.round.toLowerCase().replace(/\s+/g, "-")}-${team.slug}`,
-        homeTeam: ko.isHome ? team : ko.opponent,
-        awayTeam: ko.isHome ? ko.opponent : team,
-        kickoffTime: ko.date,
-        competition: "Champions League",
-        competitionShort: "UCL",
-        round: ko.round,
-        homeScore: isPast ? Math.floor(Math.random() * 3) + 1 : undefined,
-        awayScore: isPast ? Math.floor(Math.random() * 2) : undefined,
-        status: isPast ? "finished" : "scheduled",
-        venue: ko.isHome ? `${team.name} Stadium` : `${ko.opponent.name} Stadium`,
-      });
-    });
+function normMatchStatus(status?: string | null): HubMatchRow["status"] {
+  const s = (status || "").toLowerCase().trim();
+  if (["finished", "ft", "full_time", "ended", "final", "aet", "pen"].includes(s)) return "finished";
+  if (["live", "inplay", "in_play", "ht", "halftime", "et", "extra_time", "penalties", "1h", "2h"].includes(s) || /^\d+$/.test(s)) {
+    return "live";
   }
-  
-  return matches
-    .map((match) => ({
-      ...match,
-      homeTeam: {
-        ...match.homeTeam,
-        id: match.homeTeam.id ?? teamIdBySlug.get(match.homeTeam.slug),
-      },
-      awayTeam: {
-        ...match.awayTeam,
-        id: match.awayTeam.id ?? teamIdBySlug.get(match.awayTeam.slug),
-      },
-    }))
-    .sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
+  if (s.includes("postpon")) return "postponed";
+  if (s.includes("cancel") || s.includes("abandon")) return "cancelled";
+  return "scheduled";
 }
 
-// Competition badge colors
-const COMPETITION_COLORS: Record<string, { bg: string; text: string }> = {
-  "Premier League": { bg: "bg-purple-600", text: "text-white" },
-  "FA Cup": { bg: "bg-red-600", text: "text-white" },
-  "EFL Cup": { bg: "bg-green-600", text: "text-white" },
-  "Champions League": { bg: "bg-blue-700", text: "text-white" },
-};
-
-function CompetitionBadge({ competition }: { competition: string }) {
-  const colors = COMPETITION_COLORS[competition] || { bg: "bg-gray-600", text: "text-white" };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${colors.bg} ${colors.text}`}>
-      {competition}
-    </span>
-  );
+function apiMatchToHubRow(match: Match & { homeTeam?: Team; awayTeam?: Team }): HubMatchRow {
+  const homeName = match.homeTeam?.name?.trim() || "Home";
+  const awayName = match.awayTeam?.name?.trim() || "Away";
+  const homeSlug = match.homeTeam?.slug?.trim() || "";
+  const awaySlug = match.awayTeam?.slug?.trim() || "";
+  return {
+    id: match.id,
+    slug: match.slug,
+    homeTeam: {
+      id: match.homeTeam?.id,
+      name: homeName,
+      shortName: match.homeTeam?.shortName || homeName.slice(0, 3).toUpperCase(),
+      slug: homeSlug,
+      primaryColor: match.homeTeam?.primaryColor || "#1a1a2e",
+    },
+    awayTeam: {
+      id: match.awayTeam?.id,
+      name: awayName,
+      shortName: match.awayTeam?.shortName || awayName.slice(0, 3).toUpperCase(),
+      slug: awaySlug,
+      primaryColor: match.awayTeam?.primaryColor || "#1a1a2e",
+    },
+    kickoffTime: new Date(match.kickoffTime),
+    competition: (match.competition || "Unknown").trim() || "Unknown",
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+    status: normMatchStatus(match.status),
+    venue: match.venue,
+    detailHref: resolveMatchDetailHref({
+      slug: match.slug,
+      homeTeamSlug: homeSlug || null,
+      awayTeamSlug: awaySlug || null,
+      kickoffTime: match.kickoffTime,
+    }),
+  };
 }
 
 function TeamCrest({
@@ -1578,18 +1372,16 @@ function MatchRow({
   match, 
   teamSlug
 }: { 
-  match: DummyMatch; 
+  match: HubMatchRow; 
   teamSlug: string;
 }) {
-  const isFinished = match.status === "finished";
+  const isFinished = match.status === "finished" || match.status === "live";
   const isPostponed = match.status === "postponed";
-  
-  return (
-    <Link 
-      href={`/matches/${match.id}`}
-      className="block"
-      data-testid={`match-row-${match.id}`}
-    >
+  const isCancelled = match.status === "cancelled";
+  const showScores =
+    isFinished && match.homeScore !== null && match.awayScore !== null;
+
+  const rowInner = (
       <div className="flex items-center gap-1.5 sm:gap-2 py-2 px-2 sm:px-3 hover-elevate rounded-md border border-border/50 bg-card/50">
         {/* Date - stacked on mobile, inline on desktop */}
         <div className="w-10 sm:w-[76px] shrink-0">
@@ -1620,7 +1412,7 @@ function MatchRow({
         
         {/* Center: Time or Score - fixed width for perfect centering */}
         <div className="w-11 sm:w-[52px] flex items-center justify-center shrink-0">
-          {isFinished ? (
+          {showScores ? (
             <div className="flex items-center justify-center">
               <span className={`text-[13px] sm:text-sm font-bold tabular-nums ${
                 match.homeTeam.slug === teamSlug && (match.homeScore ?? 0) > (match.awayScore ?? 0) 
@@ -1640,6 +1432,8 @@ function MatchRow({
             </div>
           ) : isPostponed ? (
             <span className="text-[10px] sm:text-[11px] font-semibold text-amber-600 dark:text-amber-400">TBC</span>
+          ) : isCancelled ? (
+            <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground">CANC</span>
           ) : (
             <span className="text-[11px] sm:text-[12px] font-semibold text-muted-foreground tabular-nums">
               {formatKickoffTimeShort(match.kickoffTime)}
@@ -1663,8 +1457,29 @@ function MatchRow({
         </div>
         
         {/* Arrow - desktop only */}
-        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 hidden sm:block" />
+        {match.detailHref ? (
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 hidden sm:block" />
+        ) : (
+          <span className="w-4 h-4 shrink-0 hidden sm:block" aria-hidden="true" />
+        )}
       </div>
+  );
+
+  if (!match.detailHref) {
+    return (
+      <div className="block" data-testid={`match-row-${match.id}`}>
+        {rowInner}
+      </div>
+    );
+  }
+
+  return (
+    <Link 
+      href={match.detailHref}
+      className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 rounded-md"
+      data-testid={`match-row-${match.id}`}
+    >
+      {rowInner}
     </Link>
   );
 }
@@ -1752,15 +1567,12 @@ function MonthSelector({
 }
 
 function MatchesTabContent({ 
-  teamName,
-  teamIdBySlug,
+  matches,
+  isLoading,
   teamSlug
 }: { 
-  nextMatch?: Match & { homeTeam?: Team; awayTeam?: Team };
-  recentResults?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
-  upcomingFixtures?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
-  teamName: string;
-  teamIdBySlug: Map<string, string>;
+  matches?: (Match & { homeTeam?: Team; awayTeam?: Team })[];
+  isLoading?: boolean;
   teamSlug: string;
 }) {
   const now = new Date();
@@ -1769,8 +1581,8 @@ function MatchesTabContent({
   const [competitionFilter, setCompetitionFilter] = useState<string>("all");
   
   const allMatches = useMemo(
-    () => generateDummyMatches(teamSlug, teamIdBySlug),
-    [teamSlug, teamIdBySlug],
+    () => (matches ?? []).map(apiMatchToHubRow),
+    [matches],
   );
   
   // Get available months from all matches
@@ -1787,56 +1599,86 @@ function MatchesTabContent({
       })
       .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
   }, [allMatches]);
+
+  const competitions = useMemo(() => {
+    const names = Array.from(new Set(allMatches.map((m) => m.competition).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b),
+    );
+    return ["all", ...names];
+  }, [allMatches]);
   
   // Filter matches by selected month and competition
   const filteredMatches = useMemo(() => {
-    let matches = allMatches.filter(m => 
+    let rows = allMatches.filter(m => 
       m.kickoffTime.getMonth() === selectedMonth && 
       m.kickoffTime.getFullYear() === selectedYear
     );
     
     if (competitionFilter !== "all") {
-      if (competitionFilter === "cups") {
-        matches = matches.filter(m => m.competition !== "Premier League");
-      } else {
-        matches = matches.filter(m => m.competition === competitionFilter);
-      }
+      rows = rows.filter(m => m.competition === competitionFilter);
     }
     
-    return matches.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
+    return rows.sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime());
   }, [allMatches, selectedMonth, selectedYear, competitionFilter]);
   
   
-  // Default to current month on mount
+  // Default to nearest available month when data arrives
   useEffect(() => {
-    const hasCurrentMonth = availableMonths.some(
-      m => m.month === now.getMonth() && m.year === now.getFullYear()
+    if (availableMonths.length === 0) return;
+    const hasSelectedMonth = availableMonths.some(
+      (m) => m.month === selectedMonth && m.year === selectedYear,
     );
-    if (!hasCurrentMonth && availableMonths.length > 0) {
-      // Find closest month to current date
-      const closest = availableMonths.reduce((prev, curr) => {
-        const prevDiff = Math.abs(new Date(prev.year, prev.month).getTime() - now.getTime());
-        const currDiff = Math.abs(new Date(curr.year, curr.month).getTime() - now.getTime());
-        return currDiff < prevDiff ? curr : prev;
-      });
-      setSelectedMonth(closest.month);
-      setSelectedYear(closest.year);
-    }
-  }, [availableMonths, now]);
+    if (hasSelectedMonth) return;
+    const reference = Date.now();
+    const closest = availableMonths.reduce((prev, curr) => {
+      const prevDiff = Math.abs(new Date(prev.year, prev.month).getTime() - reference);
+      const currDiff = Math.abs(new Date(curr.year, curr.month).getTime() - reference);
+      return currDiff < prevDiff ? curr : prev;
+    });
+    setSelectedMonth(closest.month);
+    setSelectedYear(closest.year);
+  }, [availableMonths, selectedMonth, selectedYear]);
   
   const handleMonthChange = (month: number, year: number) => {
     setSelectedMonth(month);
     setSelectedYear(year);
   };
   
-  const competitions = ["all", "Premier League", "Champions League", "FA Cup", "EFL Cup", "cups"];
-  
   // Stats for current month
   const monthStats = useMemo(() => {
     const completed = filteredMatches.filter(m => m.status === "finished").length;
-    const upcoming = filteredMatches.filter(m => m.status === "scheduled" || m.status === "postponed").length;
+    const upcoming = filteredMatches.filter(m => m.status === "scheduled" || m.status === "postponed" || m.status === "live").length;
     return { completed, upcoming, total: filteredMatches.length };
   }, [filteredMatches]);
+
+  const competitionCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of allMatches) {
+      counts.set(m.competition, (counts.get(m.competition) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [allMatches]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3 py-6" data-testid="team-matches-loading">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+      </div>
+    );
+  }
+
+  if (allMatches.length === 0) {
+    return (
+      <div className="text-center py-10 text-muted-foreground" data-testid="team-matches-empty">
+        <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+        <p className="font-medium text-foreground">Fixtures have not yet been published</p>
+        <p className="text-sm mt-1">Check back once this team's fixtures are available.</p>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-4">
@@ -1859,7 +1701,7 @@ function MatchesTabContent({
             className="shrink-0"
             data-testid={`filter-${comp.toLowerCase().replace(/\s+/g, "-")}`}
           >
-            {comp === "all" ? "All" : comp === "cups" ? "Cups" : comp}
+            {comp === "all" ? "All" : comp}
           </Button>
         ))}
       </div>
@@ -1875,7 +1717,11 @@ function MatchesTabContent({
       {filteredMatches.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p>No matches in {MONTH_NAMES[selectedMonth]} {selectedYear}</p>
+          <p>
+            {competitionFilter !== "all"
+              ? `No matches for ${competitionFilter} in ${MONTH_NAMES[selectedMonth]} ${selectedYear}`
+              : `No matches in ${MONTH_NAMES[selectedMonth]} ${selectedYear}`}
+          </p>
         </div>
       ) : (
         <div className="space-y-1.5">
@@ -1885,27 +1731,19 @@ function MatchesTabContent({
         </div>
       )}
       
-      {/* Season summary */}
-      <div className="mt-6 pt-4 border-t">
-        <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-600" />
-            <span>PL: {allMatches.filter(m => m.competition === "Premier League").length}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-700" />
-            <span>UCL: {allMatches.filter(m => m.competition === "Champions League").length}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-600" />
-            <span>FA Cup: {allMatches.filter(m => m.competition === "FA Cup").length}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-green-600" />
-            <span>EFL Cup: {allMatches.filter(m => m.competition === "EFL Cup").length}</span>
+      {/* Season summary from real competitions present */}
+      {competitionCounts.length > 0 && (
+        <div className="mt-6 pt-4 border-t">
+          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+            {competitionCounts.map(([name, count]) => (
+              <div key={name} className="flex items-center gap-2">
+                <CompetitionLogo competition={name} size={14} />
+                <span>{name}: {count}</span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -2513,7 +2351,7 @@ export default function TeamHubPage() {
     }
   };
 
-  const { data: matches } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
+  const { data: matches, isLoading: matchesLoading } = useQuery<(Match & { homeTeam?: Team; awayTeam?: Team })[]>({
     queryKey: ["/api/matches", "team", slug],
     queryFn: async () => {
       const res = await fetch(`/api/matches/team/${slug}`);
@@ -2522,14 +2360,6 @@ export default function TeamHubPage() {
     },
     enabled: !!team && activeTab === "matches",
   });
-  const { data: mvpTeams = [] } = useQuery<Team[]>({
-    queryKey: ["/api/teams"],
-    enabled: !!team && activeTab === "matches",
-  });
-  const teamIdBySlug = useMemo(
-    () => new Map(mvpTeams.map((t) => [t.slug, t.id])),
-    [mvpTeams],
-  );
 
   const { data: transfers } = useQuery<Transfer[]>({
     queryKey: ["/api/transfers", "team", slug],
@@ -2591,18 +2421,6 @@ export default function TeamHubPage() {
     const newPath = tab === "latest" ? `/teams/${slug}` : `/teams/${slug}/${tab}`;
     navigate(newPath, { replace: false });
   };
-
-  const now = new Date();
-  const sortedMatches = matches?.sort((a, b) => 
-    new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime()
-  );
-  const upcomingFixtures = sortedMatches?.filter((m) => 
-    new Date(m.kickoffTime) > now || m.status === "postponed"
-  );
-  const nextMatch = upcomingFixtures?.[0];
-  const recentResults = sortedMatches?.filter((m) => 
-    new Date(m.kickoffTime) <= now && m.status === "finished"
-  ).slice(-5).reverse();
 
   const articles = teamArchiveArticles;
 
@@ -2801,11 +2619,8 @@ export default function TeamHubPage() {
 
             {activeTab === "matches" && (
               <MatchesTabContent 
-                nextMatch={nextMatch}
-                recentResults={recentResults}
-                upcomingFixtures={upcomingFixtures?.slice(1)}
-                teamName={team.name}
-                teamIdBySlug={teamIdBySlug}
+                matches={matches}
+                isLoading={matchesLoading}
                 teamSlug={team.slug}
               />
             )}

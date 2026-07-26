@@ -1500,7 +1500,20 @@ function LoadingSkeleton() {
 }
 
 export default function MatchPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{
+    slug?: string;
+    homeSlug?: string;
+    awaySlug?: string;
+    date?: string;
+  }>();
+
+  const slug = useMemo(() => {
+    if (params.slug?.trim()) return params.slug.trim();
+    if (params.homeSlug && params.awaySlug && params.date) {
+      return `${params.homeSlug}-vs-${params.awaySlug}-${params.date}`;
+    }
+    return undefined;
+  }, [params.slug, params.homeSlug, params.awaySlug, params.date]);
   
   const isDummy = useMemo(() => slug ? isDummyMatchId(slug) : false, [slug]);
   
