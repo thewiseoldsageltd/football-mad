@@ -19,6 +19,7 @@ import { TransferCard } from "@/components/cards/transfer-card";
 import type { BlendedTransferItem } from "@/data/transfers-dummy";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import { resolveMatchDetailHref } from "@shared/match-slug";
+import { getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
 import { TeamHubHeader } from "@/components/team/team-hub-header";
@@ -1262,7 +1263,7 @@ function apiMatchToHubRow(match: Match & { homeTeam?: Team; awayTeam?: Team }): 
       primaryColor: match.awayTeam?.primaryColor || "#1a1a2e",
     },
     kickoffTime: new Date(match.kickoffTime),
-    competition: (match.competition || "Unknown").trim() || "Unknown",
+    competition: getPublicCompetitionDisplayName(match.competition, match.goalserveCompetitionId),
     homeScore: match.homeScore,
     awayScore: match.awayScore,
     status: normMatchStatus(match.status),
@@ -1622,22 +1623,28 @@ function MatchesTabContent({
   }, [allMatches, selectedMonth, selectedYear, competitionFilter]);
   
   
-  // Default to nearest available month when data arrives
+  // Prefer month of the next upcoming fixture; otherwise keep/restore a valid month.
   useEffect(() => {
     if (availableMonths.length === 0) return;
     const hasSelectedMonth = availableMonths.some(
       (m) => m.month === selectedMonth && m.year === selectedYear,
     );
     if (hasSelectedMonth) return;
-    const reference = Date.now();
-    const closest = availableMonths.reduce((prev, curr) => {
-      const prevDiff = Math.abs(new Date(prev.year, prev.month).getTime() - reference);
-      const currDiff = Math.abs(new Date(curr.year, curr.month).getTime() - reference);
-      return currDiff < prevDiff ? curr : prev;
-    });
-    setSelectedMonth(closest.month);
-    setSelectedYear(closest.year);
-  }, [availableMonths, selectedMonth, selectedYear]);
+
+    const nowMs = Date.now();
+    const upcoming = allMatches
+      .filter((m) => m.kickoffTime.getTime() >= nowMs)
+      .sort((a, b) => a.kickoffTime.getTime() - b.kickoffTime.getTime())[0];
+    if (upcoming) {
+      setSelectedMonth(upcoming.kickoffTime.getMonth());
+      setSelectedYear(upcoming.kickoffTime.getFullYear());
+      return;
+    }
+
+    const latest = availableMonths[availableMonths.length - 1];
+    setSelectedMonth(latest.month);
+    setSelectedYear(latest.year);
+  }, [availableMonths, selectedMonth, selectedYear, allMatches]);
   
   const handleMonthChange = (month: number, year: number) => {
     setSelectedMonth(month);

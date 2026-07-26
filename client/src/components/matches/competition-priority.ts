@@ -24,6 +24,7 @@ const DISPLAY_ALIAS_BY_ID = new Map<string, string>([
   ["1005", "UEFA Champions League"],
   ["1007", "UEFA Europa League"],
   ["18853", "UEFA Europa Conference League"],
+  ["1534", "Club Friendlies"],
 ]);
 
 const COUNTRY_BY_ID = new Map<string, string>([
@@ -137,10 +138,17 @@ function normalizeName(name: string | null | undefined): string {
   return String(name ?? "").trim();
 }
 
+function extractGoalserveIdFromName(name: string | null | undefined): string | null {
+  const match = String(name ?? "").match(/\[(\d+)\]/);
+  return match?.[1] ?? null;
+}
+
+/** Strip Goalserve presentation noise: trailing `(region)` and `[id]` markers. */
 function cleanCompetitionDisplayName(value: string): string {
   return value
-    .replace(/\s*\[\d+\]\s*$/, "")
-    .replace(/\s*\((Eurocups|England|Germany|Spain|Italy|France|Netherlands|Portugal|Scotland|Turkey|Belgium|Austria|Switzerland)\)\s*$/i, "")
+    .replace(/\s*\[\d+\]\s*/g, " ")
+    .replace(/\s*\([^)]*\)\s*$/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -148,7 +156,8 @@ export function getPublicCompetitionDisplayName(
   name: string | null | undefined,
   goalserveCompetitionId?: string | null,
 ): string {
-  const normalizedId = String(goalserveCompetitionId ?? "").trim();
+  const normalizedId =
+    String(goalserveCompetitionId ?? "").trim() || extractGoalserveIdFromName(name) || "";
   if (normalizedId && DISPLAY_ALIAS_BY_ID.has(normalizedId)) {
     return DISPLAY_ALIAS_BY_ID.get(normalizedId)!;
   }

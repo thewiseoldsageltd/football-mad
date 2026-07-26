@@ -2210,13 +2210,21 @@ export class DatabaseStorage implements IStorage {
     const dayEnd = new Date(dayStart);
     dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
+    const teamIdClause = and(eq(matches.homeTeamId, homeTeam.id), eq(matches.awayTeamId, awayTeam.id));
+    const goalserveClause =
+      homeTeam.goalserveTeamId && awayTeam.goalserveTeamId
+        ? and(
+            eq(matches.homeGoalserveTeamId, homeTeam.goalserveTeamId),
+            eq(matches.awayGoalserveTeamId, awayTeam.goalserveTeamId),
+          )
+        : null;
+
     const [byTeamsAndDate] = await db
       .select()
       .from(matches)
       .where(
         and(
-          eq(matches.homeTeamId, homeTeam.id),
-          eq(matches.awayTeamId, awayTeam.id),
+          goalserveClause ? or(teamIdClause, goalserveClause) : teamIdClause,
           gte(matches.kickoffTime, dayStart),
           lt(matches.kickoffTime, dayEnd),
         ),
@@ -2232,13 +2240,29 @@ export class DatabaseStorage implements IStorage {
     const team = await this.getTeamBySlug(teamSlug);
     if (!team) return [];
 
+    const identityFilters = [
+      eq(matches.homeTeamId, team.id),
+      eq(matches.awayTeamId, team.id),
+    ];
+    // Include Goalserve-linked rows that never received canonical team IDs.
+    if (team.goalserveTeamId) {
+      identityFilters.push(
+        eq(matches.homeGoalserveTeamId, team.goalserveTeamId),
+        eq(matches.awayGoalserveTeamId, team.goalserveTeamId),
+      );
+    }
+
     const results = await db
       .select()
       .from(matches)
-      .where(or(eq(matches.homeTeamId, team.id), eq(matches.awayTeamId, team.id)))
+      .where(or(...identityFilters))
       .orderBy(matches.kickoffTime);
 
-    return Promise.all(results.map((match) => this.enrichMatchWithTeams(match)));
+    const deduped = Array.from(new Map(results.map((row) => [row.id, row])).values()).sort(
+      (a, b) => new Date(a.kickoffTime).getTime() - new Date(b.kickoffTime).getTime(),
+    );
+
+    return Promise.all(deduped.map((match) => this.enrichMatchWithTeams(match)));
   }
 
   async createMatch(data: InsertMatch): Promise<Match> {

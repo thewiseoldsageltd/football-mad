@@ -1,4 +1,4 @@
-import { Switch, Route, Redirect, useSearch } from "wouter";
+import { Switch, Route, Redirect, useSearch, useParams } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -28,6 +28,20 @@ import CompetitionProfilePage from "@/pages/competition-profile";
 import AuthorPage from "@/pages/author";
 import AdminJobsPage from "@/pages/admin-jobs";
 import SearchPage from "@/pages/search";
+import { parseMatchSlug } from "@/lib/urls";
+
+/**
+ * regexparam does not treat `:home-vs-:away-:date` as three params with literals —
+ * it becomes one oddly named key. Use a single `:slug` and dispatch on shape.
+ */
+function MatchesSlugResolver() {
+  const params = useParams<{ slug?: string }>();
+  const slug = params.slug?.trim() ?? "";
+  if (slug && parseMatchSlug(slug)) {
+    return <MatchPage />;
+  }
+  return <MatchesPage />;
+}
 
 function seasonApiToSlug(apiSeason: string): string {
   const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
@@ -74,9 +88,7 @@ function Router() {
       <Route path="/teams/:slug/:tab" component={TeamHubPage} />
       <Route path="/competitions/:slug" component={CompetitionProfilePage} />
       <Route path="/matches" component={MatchesPage} />
-      {/* Match detail must precede :competitionSlug so `{home}-vs-{away}-{date}` is not swallowed. */}
-      <Route path="/matches/:homeSlug-vs-:awaySlug-:date" component={MatchPage} />
-      <Route path="/matches/:competitionSlug" component={MatchesPage} />
+      <Route path="/matches/:slug" component={MatchesSlugResolver} />
       <Route path="/players/:slug" component={PlayerProfilePage} />
       <Route path="/managers/:slug" component={ManagerProfilePage} />
       <Route path="/transfers" component={TransfersPage} />

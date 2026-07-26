@@ -6,6 +6,7 @@ import type { Match, Team } from "@shared/schema";
 import { format, isToday, isTomorrow, isPast } from "date-fns";
 import { EntityIcon } from "@/components/entity-media";
 import { matchListingHrefForSlug, resolveMatchDetailHref } from "@shared/match-slug";
+import { getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 
 interface MatchCardProps {
   match: Match & { homeTeam?: Team; awayTeam?: Team };
@@ -16,6 +17,10 @@ export function MatchCard({ match }: MatchCardProps) {
   const isMatchToday = isToday(kickoffTime);
   const isMatchTomorrow = isTomorrow(kickoffTime);
   const isMatchPast = isPast(kickoffTime);
+  const competitionLabel = getPublicCompetitionDisplayName(
+    match.competition,
+    match.goalserveCompetitionId,
+  );
 
   const getStatusBadge = () => {
     if (match.status === "live") {
@@ -48,7 +53,7 @@ export function MatchCard({ match }: MatchCardProps) {
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">
             <Badge variant="outline" className="text-xs">
-              {match.competition}
+              {competitionLabel}
             </Badge>
             {getStatusBadge()}
           </div>

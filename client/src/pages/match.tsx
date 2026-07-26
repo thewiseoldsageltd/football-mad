@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
 import { EntityIcon } from "@/components/entity-media";
+import { getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 import type { Match, Team } from "@shared/schema";
 
 interface MatchTeam {
@@ -175,7 +176,10 @@ function apiMatchToMatchData(match: Match & { homeTeam?: Team; awayTeam?: Team }
     primaryColor: match.awayTeam?.primaryColor || "#1a1a2e",
   };
   
-  const competition = match.competition || "Premier League";
+  const competition = getPublicCompetitionDisplayName(
+    match.competition,
+    match.goalserveCompetitionId,
+  );
   
   return {
     id: match.slug,
@@ -1500,20 +1504,19 @@ function LoadingSkeleton() {
 }
 
 export default function MatchPage() {
-  const params = useParams<{
-    slug?: string;
-    homeSlug?: string;
-    awaySlug?: string;
-    date?: string;
-  }>();
+  const params = useParams<Record<string, string | undefined>>();
 
   const slug = useMemo(() => {
-    if (params.slug?.trim()) return params.slug.trim();
+    const direct = params.slug?.trim();
+    if (direct) return direct;
+    // Legacy / mis-parsed wouter key from `:homeSlug-vs-:awaySlug-:date` patterns.
+    const legacyKey = Object.keys(params).find((key) => key.includes("-vs-"));
+    if (legacyKey && params[legacyKey]?.trim()) return params[legacyKey]!.trim();
     if (params.homeSlug && params.awaySlug && params.date) {
       return `${params.homeSlug}-vs-${params.awaySlug}-${params.date}`;
     }
     return undefined;
-  }, [params.slug, params.homeSlug, params.awaySlug, params.date]);
+  }, [params]);
   
   const isDummy = useMemo(() => slug ? isDummyMatchId(slug) : false, [slug]);
   
