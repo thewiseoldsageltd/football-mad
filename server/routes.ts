@@ -68,6 +68,7 @@ import { upsertGoalservePlayers } from "./jobs/upsert-goalserve-players";
 import { previewGoalserveMatches } from "./jobs/preview-goalserve-matches";
 import { upsertGoalserveMatches } from "./jobs/upsert-goalserve-matches";
 import { syncGoalserveMatches } from "./jobs/sync-goalserve-matches";
+import { syncGoalserveClubFriendliesForKnownTeams, syncGoalserveEnglandSuperCup } from "./jobs/sync-goalserve-club-friendlies";
 import { runSyncGoalserve } from "./jobs/sync-goalserve";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
@@ -3622,6 +3623,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   );
 
+  // Club friendlies (1534): full feed is global — upsert only matches involving known teams.
+  app.post(
+    "/api/jobs/sync-goalserve-club-friendlies",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
+      const result = await syncGoalserveClubFriendliesForKnownTeams(seasonKeyParam);
+      res.json(result);
+    }
+  );
+
+  // England Super Cup / Community Shield (1611).
+  app.post(
+    "/api/jobs/sync-goalserve-england-super-cup",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      const seasonKeyParam = (req.query.seasonKey as string | undefined)?.trim();
+      const result = await syncGoalserveEnglandSuperCup(seasonKeyParam);
+      res.json(result);
+    }
+  );
+
   // ========== GOALSERVE MATCHES UPSERT ==========
   app.post(
     "/api/jobs/upsert-goalserve-matches",
@@ -3870,6 +3893,60 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           summary.results.push({ leagueId, ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
           console.error(`[matches-refresh-priority] leagueId=${leagueId} failed: ${message}`);
         }
+      }
+
+      // Always refresh known-team club friendlies after priority leagues.
+      try {
+        const friendly = await syncGoalserveClubFriendliesForKnownTeams();
+        const skipped = (friendly.skippedNoStaticId ?? 0) + (friendly.skippedNoKickoff ?? 0);
+        summary.inserted += friendly.inserted ?? 0;
+        summary.updated += friendly.updated ?? 0;
+        summary.skipped += skipped;
+        summary.feedsProcessed += 1;
+        if (!friendly.ok) {
+          summary.ok = false;
+          if (friendly.error) summary.errors.push(`league 1534: ${friendly.error}`);
+        }
+        summary.results.push({
+          leagueId: "1534",
+          ok: friendly.ok,
+          inserted: friendly.inserted ?? 0,
+          updated: friendly.updated ?? 0,
+          skipped,
+          error: friendly.error,
+        });
+      } catch (error) {
+        summary.ok = false;
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(`league 1534: ${message}`);
+        summary.results.push({ leagueId: "1534", ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
+      }
+
+      // England Super Cup / Community Shield (Goalserve 1611) — small season feed, not always is_priority.
+      try {
+        const superCup = await syncGoalserveEnglandSuperCup();
+        const skipped = (superCup.skippedNoStaticId ?? 0) + (superCup.skippedNoKickoff ?? 0);
+        summary.inserted += superCup.inserted ?? 0;
+        summary.updated += superCup.updated ?? 0;
+        summary.skipped += skipped;
+        summary.feedsProcessed += 1;
+        if (!superCup.ok) {
+          summary.ok = false;
+          if (superCup.error) summary.errors.push(`league 1611: ${superCup.error}`);
+        }
+        summary.results.push({
+          leagueId: "1611",
+          ok: superCup.ok,
+          inserted: superCup.inserted ?? 0,
+          updated: superCup.updated ?? 0,
+          skipped,
+          error: superCup.error,
+        });
+      } catch (error) {
+        summary.ok = false;
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(`league 1611: ${message}`);
+        summary.results.push({ leagueId: "1611", ok: false, inserted: 0, updated: 0, skipped: 0, error: message });
       }
 
       summary.durationMs = Date.now() - startedAt;

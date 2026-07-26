@@ -4,6 +4,7 @@ import {
   FIFA_WORLD_CUP_CANONICAL_SLUG,
   FIFA_WORLD_CUP_GOALSERVE_COMPETITION_ID,
 } from "@shared/world-cup";
+import { buildGoalserveMatchTimeline } from "@shared/goalserve-match-detail";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ensureGoalserveTeam } from "../lib/ensure-goalserve-team";
 import { eq } from "drizzle-orm";
@@ -322,15 +323,15 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           withoutRound++;
         }
 
-        const compactRaw = {
-          id: goalserveMatchId,
-          staticId: goalserveStaticId,
-          date: formattedDate,
-          time: timeStr,
-          status: rawStatus,
+        const compactRaw = buildGoalserveMatchTimeline(match, {
+          goalserveMatchId,
+          goalserveStaticId,
+          formattedDate,
+          timeStr,
+          rawStatus,
           home: { id: homeGsId, name: localTeam["@name"] ?? localTeam.name, score: homeScore },
           away: { id: awayGsId, name: visitorTeam["@name"] ?? visitorTeam.name, score: awayScore },
-        };
+        });
 
         let existing = (await db
           .select()
@@ -343,6 +344,14 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             .select()
             .from(matches)
             .where(eq(matches.goalserveStaticId, goalserveStaticId))
+            .limit(1))[0];
+        }
+
+        if (!existing) {
+          existing = (await db
+            .select()
+            .from(matches)
+            .where(eq(matches.slug, slug))
             .limit(1))[0];
         }
 
@@ -388,26 +397,61 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             .where(eq(matches.id, existing.id));
           updated++;
         } else {
-          await db.insert(matches).values({
-            slug,
-            goalserveMatchId,
-            goalserveStaticId: goalserveStaticId || null,
-            goalserveCompetitionId: competitionId || null,
-            competitionId: competitionCanonicalId,
-            goalserveRound,
-            homeGoalserveTeamId: homeGsId || null,
-            awayGoalserveTeamId: awayGsId || null,
-            homeTeamId,
-            awayTeamId,
-            homeScore: newHomeScore,
-            awayScore: newAwayScore,
-            competition: competitionName,
-            status,
-            kickoffTime,
-            venue: venue || null,
-            timeline: compactRaw,
-          });
-          inserted++;
+          try {
+            await db.insert(matches).values({
+              slug,
+              goalserveMatchId,
+              goalserveStaticId: goalserveStaticId || null,
+              goalserveCompetitionId: competitionId || null,
+              competitionId: competitionCanonicalId,
+              goalserveRound,
+              homeGoalserveTeamId: homeGsId || null,
+              awayGoalserveTeamId: awayGsId || null,
+              homeTeamId,
+              awayTeamId,
+              homeScore: newHomeScore,
+              awayScore: newAwayScore,
+              competition: competitionName,
+              status,
+              kickoffTime,
+              venue: venue || null,
+              timeline: compactRaw,
+            });
+            inserted++;
+          } catch (e: any) {
+            // Concurrent ingest or ID remapping can race the uniqueness checks above.
+            if (e?.code === "23505") {
+              const [bySlug] = await db.select().from(matches).where(eq(matches.slug, slug)).limit(1);
+              if (bySlug) {
+                await db
+                  .update(matches)
+                  .set({
+                    goalserveMatchId: goalserveMatchId || bySlug.goalserveMatchId,
+                    goalserveStaticId: goalserveStaticId || bySlug.goalserveStaticId,
+                    goalserveCompetitionId: competitionId || bySlug.goalserveCompetitionId,
+                    competitionId: competitionCanonicalId || bySlug.competitionId,
+                    goalserveRound,
+                    homeGoalserveTeamId: homeGsId || null,
+                    awayGoalserveTeamId: awayGsId || null,
+                    homeTeamId,
+                    awayTeamId,
+                    homeScore: newHomeScore !== null ? newHomeScore : bySlug.homeScore,
+                    awayScore: newAwayScore !== null ? newAwayScore : bySlug.awayScore,
+                    competition: competitionName,
+                    status,
+                    kickoffTime,
+                    venue: venue || null,
+                    timeline: compactRaw,
+                  })
+                  .where(eq(matches.id, bySlug.id));
+                updated++;
+              } else {
+                throw e;
+              }
+            } else {
+              throw e;
+            }
+          }
         }
       }
     }

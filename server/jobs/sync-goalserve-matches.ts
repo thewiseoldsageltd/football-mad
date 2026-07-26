@@ -13,7 +13,10 @@ export function resolveSeasonKey(
   competitionSeason: string | null | undefined,
   parsedSeason: string | null | undefined
 ): string | null {
-  const s = (inputSeasonKey || competitionSeason || parsedSeason || "").trim();
+  // Prefer an explicit request, then the season published in the Goalserve feed,
+  // then the stored competition season. Feed-first prevents stale DB seasons
+  // (e.g. 2025/2026) from blocking a newly published season on the bare league feed.
+  const s = (inputSeasonKey || parsedSeason || competitionSeason || "").trim();
   return s.length ? s : null;
 }
 
@@ -276,7 +279,8 @@ interface SyncResult {
 export async function syncGoalserveMatches(
   leagueId: string,
   seasonKeyParam?: string,
-  runId?: string
+  runId?: string,
+  options?: { onlyTeamGoalserveIds?: string[] },
 ): Promise<SyncResult> {
   const emptyResult = (error?: string, extra?: Partial<SyncResult>): SyncResult => ({
     ok: !error,
@@ -294,7 +298,7 @@ export async function syncGoalserveMatches(
 
   try {
     const [competitionRow] = await db
-      .select({ id: competitions.id, season: competitions.season })
+      .select({ id: competitions.id, season: competitions.season, name: competitions.name })
       .from(competitions)
       .where(eq(competitions.goalserveCompetitionId, leagueId))
       .limit(1);
@@ -302,7 +306,12 @@ export async function syncGoalserveMatches(
     const competitionDbId = competitionRow?.id ?? null;
 
     // Pass runId so goalserveFetch logs to job_http_calls.
-    const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}`, runId);
+    // When a season key is provided, request that season explicitly so we do not
+    // silently re-ingest a stale default season from Goalserve.
+    const seasonQuery = seasonKeyParam?.trim()
+      ? `?season=${encodeURIComponent(seasonKeyParam.trim())}`
+      : "";
+    const response = await goalserveFetch(`soccerfixtures/leagueid/${leagueId}${seasonQuery}`, runId);
 
     const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
 
@@ -311,6 +320,14 @@ export async function syncGoalserveMatches(
       competitionRow?.season ? String(competitionRow.season) : undefined,
       extracted?.parsedSeason
     );
+
+    // Keep competitions.season aligned with the season we just ingested.
+    if (competitionDbId && seasonKey && seasonKey !== competitionRow?.season) {
+      await db
+        .update(competitions)
+        .set({ season: seasonKey })
+        .where(eq(competitions.id, competitionDbId));
+    }
 
     let wroteCompetitionSeason = false;
     if (competitionDbId && seasonKey) {
@@ -346,7 +363,11 @@ export async function syncGoalserveMatches(
       );
     }
 
-    const { name: competitionName, weeks, responsePath } = extracted;
+    const { name: extractedName, weeks, responsePath } = extracted;
+    const competitionName =
+      extractedName && extractedName !== "Unknown"
+        ? extractedName
+        : String(competitionRow?.name ?? "").trim() || `League ${leagueId}`;
     console.log(`[sync-goalserve-matches] leagueId=${leagueId} responsePath=${responsePath} weeks=${weeks.length}`);
 
     const dbTeams = await db
@@ -428,6 +449,15 @@ export async function syncGoalserveMatches(
 
         const homeGsId = String(localTeam["@id"] ?? localTeam.id ?? "").trim();
         const awayGsId = String(visitorTeam["@id"] ?? visitorTeam.id ?? "").trim();
+
+        const teamFilter = options?.onlyTeamGoalserveIds;
+        if (teamFilter && teamFilter.length > 0) {
+          const allowed = new Set(teamFilter.map((id) => String(id).trim()).filter(Boolean));
+          if (!allowed.has(homeGsId) && !allowed.has(awayGsId)) {
+            continue;
+          }
+        }
+
         const homeScore = extractScore(match, localTeam, "home");
         const awayScore = extractScore(match, visitorTeam, "away");
 

@@ -24,6 +24,7 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
   console.log(`[Goalserve] Fetching: ${redactedUrl}`);
 
   // All external HTTP via jobFetch so requests are logged to job_http_calls when runId is set.
+  // Large season feeds (e.g. Club Friendlies ~13MB) need a multi-minute download window.
   const effectiveRunId = runId ?? getJobRunId() ?? undefined;
   const response = await jobFetch(effectiveRunId, {
     provider: "goalserve",
@@ -31,7 +32,7 @@ export async function goalserveFetch(path: string, runId?: string): Promise<any>
     method: "GET",
     headers: DEFAULT_HEADERS,
     throwOnNon2xx: true,
-    timeoutMs: 60000,
+    timeoutMs: 300000,
   });
 
   const buffer = await response.arrayBuffer();
@@ -79,7 +80,7 @@ export async function goalserveFetchXml(path: string, runId?: string): Promise<a
     method: "GET",
     headers: DEFAULT_HEADERS,
     throwOnNon2xx: true,
-    timeoutMs: 60000,
+    timeoutMs: 300000,
   });
 
   const buffer = await response.arrayBuffer();

@@ -11,9 +11,17 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MainLayout } from "@/components/layout/main-layout";
-import { EntityIcon } from "@/components/entity-media";
+import { MatchTeamBadge } from "@/components/matches/match-team-badge";
 import { getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
-import type { Match, Team } from "@shared/schema";
+import { teamHub } from "@/lib/urls";
+import { ArticleCard } from "@/components/cards/article-card";
+import {
+  eventTypeLabel,
+  readGoalserveMatchTimeline,
+  type GoalserveMatchEvent,
+  type GoalserveMatchStat,
+} from "@shared/goalserve-match-detail";
+import type { Match, Team, Article } from "@shared/schema";
 
 interface MatchTeam {
   id?: string;
@@ -21,6 +29,7 @@ interface MatchTeam {
   shortName: string;
   slug: string;
   primaryColor: string;
+  logoUrl?: string | null;
 }
 
 interface MatchData {
@@ -35,7 +44,11 @@ interface MatchData {
   homeScore?: number;
   awayScore?: number;
   status: "scheduled" | "finished" | "postponed" | "live";
-  venue: string;
+  venue?: string;
+  referee?: string;
+  timer?: string;
+  htScore?: string;
+  rawStatus?: string;
 }
 
 interface KeyMoment {
@@ -166,6 +179,7 @@ function apiMatchToMatchData(match: Match & { homeTeam?: Team; awayTeam?: Team }
     shortName: match.homeTeam?.shortName || "HOM",
     slug: match.homeTeam?.slug || "home",
     primaryColor: match.homeTeam?.primaryColor || "#1a1a2e",
+    logoUrl: match.homeTeam?.logoUrl ?? null,
   };
   
   const awayTeam: MatchTeam = {
@@ -174,12 +188,35 @@ function apiMatchToMatchData(match: Match & { homeTeam?: Team; awayTeam?: Team }
     shortName: match.awayTeam?.shortName || "AWY",
     slug: match.awayTeam?.slug || "away",
     primaryColor: match.awayTeam?.primaryColor || "#1a1a2e",
+    logoUrl: match.awayTeam?.logoUrl ?? null,
   };
   
   const competition = getPublicCompetitionDisplayName(
     match.competition,
     match.goalserveCompetitionId,
   );
+
+  const timeline = readGoalserveMatchTimeline(match.timeline);
+  const rawStatus = String(timeline?.status || match.status || "").toLowerCase();
+  let status: MatchData["status"] = "scheduled";
+  if (["finished", "ft", "aet", "pen", "pen.", "final", "ended"].includes(rawStatus)) {
+    status = "finished";
+  } else if (
+    ["live", "ht", "1h", "2h", "et", "penalties"].includes(rawStatus) ||
+    /^\d+$/.test(rawStatus)
+  ) {
+    status = "live";
+  } else if (rawStatus.includes("postpon") || rawStatus.includes("cancel") || rawStatus.includes("abandon")) {
+    status = "postponed";
+  } else if (["scheduled", "ns", "not started"].includes(String(match.status || "").toLowerCase())) {
+    status = "scheduled";
+  } else if (String(match.status || "").toLowerCase() === "finished") {
+    status = "finished";
+  } else if (String(match.status || "").toLowerCase() === "live") {
+    status = "live";
+  } else if (String(match.status || "").toLowerCase() === "postponed") {
+    status = "postponed";
+  }
   
   return {
     id: match.slug,
@@ -188,10 +225,15 @@ function apiMatchToMatchData(match: Match & { homeTeam?: Team; awayTeam?: Team }
     kickoffTime: new Date(match.kickoffTime),
     competition,
     competitionShort: competition === "Premier League" ? "PL" : competition,
+    round: match.goalserveRound || undefined,
     homeScore: match.homeScore ?? undefined,
     awayScore: match.awayScore ?? undefined,
-    status: match.status as MatchData["status"],
-    venue: match.venue || `${homeTeam.name} Stadium`,
+    status,
+    venue: match.venue || timeline?.venue || undefined,
+    referee: timeline?.referee || undefined,
+    timer: timeline?.timer || undefined,
+    htScore: timeline?.htScore || undefined,
+    rawStatus: timeline?.status || match.status || undefined,
   };
 }
 
@@ -697,29 +739,12 @@ function generateKeyAbsences(team: MatchTeam): { player: string; reason: string;
 }
 
 function TeamCrest({ team, size = "lg" }: { team: MatchTeam; size?: "sm" | "md" | "lg" | "xl" }) {
-  const sizeClasses = {
-    sm: "w-8 h-8 text-xs",
-    md: "w-12 h-12 text-sm",
-    lg: "w-16 h-16 text-lg",
-    xl: "w-20 h-20 text-xl",
-  };
-  const iconSizes = { sm: 24, md: 32, lg: 44, xl: 56 } as const;
-  
+  const badgeSize = size === "xl" || size === "lg" ? "lg" : size === "md" ? "md" : "sm";
   return (
-    <div 
-      className={`${sizeClasses[size]} rounded-xl flex items-center justify-center font-bold shrink-0`}
-      style={{ backgroundColor: team.primaryColor, color: "#fff" }}
-      title={team.name}
-    >
-      <EntityIcon
-        entityType="team"
-        entityId={team.id}
-        size={iconSizes[size]}
-        label={team.name}
-        surface="pill"
-        className="rounded-xl"
-      />
-    </div>
+    <MatchTeamBadge
+      team={{ id: team.id, name: team.name, logoUrl: team.logoUrl }}
+      size={badgeSize}
+    />
   );
 }
 
@@ -732,10 +757,14 @@ function StatusBadge({ match }: { match: MatchData }) {
     return <Badge variant="secondary" data-testid="badge-status-ft">FT</Badge>;
   }
   if (match.status === "live") {
-    return <Badge className="bg-red-500 text-white border-0 animate-pulse" data-testid="badge-status-live">LIVE</Badge>;
+    const clock = match.timer || (match.rawStatus && /^\d+$/.test(match.rawStatus) ? `${match.rawStatus}'` : null);
+    const label = match.rawStatus?.toLowerCase() === "ht" ? "HT" : clock ? `LIVE ${clock}` : "LIVE";
+    return <Badge className="bg-red-500 text-white border-0 animate-pulse" data-testid="badge-status-live">{label}</Badge>;
   }
   if (match.status === "postponed") {
-    return <Badge variant="outline" className="border-amber-500 text-amber-600" data-testid="badge-status-ppd">Postponed</Badge>;
+    const raw = (match.rawStatus || "").toLowerCase();
+    const label = raw.includes("cancel") ? "Cancelled" : raw.includes("abandon") ? "Abandoned" : "Postponed";
+    return <Badge variant="outline" className="border-amber-500 text-amber-600" data-testid="badge-status-ppd">{label}</Badge>;
   }
   if (isToday) {
     return <Badge className="bg-green-600 text-white border-0" data-testid="badge-status-today">Today</Badge>;
@@ -745,6 +774,12 @@ function StatusBadge({ match }: { match: MatchData }) {
 
 function MatchHeader({ match }: { match: MatchData }) {
   const isFinished = match.status === "finished";
+  const isLive = match.status === "live";
+  const showScore =
+    isFinished ||
+    isLive ||
+    (match.homeScore !== undefined && match.homeScore !== null) ||
+    (match.awayScore !== undefined && match.awayScore !== null);
   const kickoff = new Date(match.kickoffTime);
   
   return (
@@ -757,7 +792,7 @@ function MatchHeader({ match }: { match: MatchData }) {
         </div>
         
         <div className="grid grid-cols-3 items-center gap-4">
-          <Link href={`/teams/${match.homeTeam.slug}`}>
+          <Link href={teamHub(match.homeTeam.slug)}>
             <div className="flex flex-col items-center group cursor-pointer h-[120px] justify-center" data-testid="home-team-link">
               <TeamCrest team={match.homeTeam} size="xl" />
               <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center line-clamp-2">
@@ -766,19 +801,31 @@ function MatchHeader({ match }: { match: MatchData }) {
             </div>
           </Link>
           
-          <div className="flex items-center justify-center h-[120px]">
-            {isFinished ? (
+          <div className="flex flex-col items-center justify-center h-[120px] gap-1">
+            {showScore ? (
               <div className="text-4xl sm:text-5xl font-bold tabular-nums" data-testid="match-score">
-                {match.homeScore ?? 0} - {match.awayScore ?? 0}
+                {match.homeScore ?? "–"} - {match.awayScore ?? "–"}
               </div>
             ) : (
               <p className="text-2xl sm:text-3xl font-semibold text-muted-foreground" data-testid="kickoff-time">
                 {format(kickoff, "HH:mm")}
               </p>
             )}
+            {isLive && (
+              <span className="text-xs font-medium text-red-600 dark:text-red-400 uppercase tracking-wide">
+                {match.timer
+                  ? match.timer
+                  : match.rawStatus?.toLowerCase() === "ht"
+                    ? "Half-time"
+                    : "Live"}
+              </span>
+            )}
+            {match.htScore && (isFinished || isLive) && (
+              <span className="text-xs text-muted-foreground">HT {match.htScore.replace(/[\[\]]/g, "")}</span>
+            )}
           </div>
           
-          <Link href={`/teams/${match.awayTeam.slug}`}>
+          <Link href={teamHub(match.awayTeam.slug)}>
             <div className="flex flex-col items-center group cursor-pointer h-[120px] justify-center" data-testid="away-team-link">
               <TeamCrest team={match.awayTeam} size="xl" />
               <p className="font-semibold mt-3 text-sm sm:text-base group-hover:text-primary transition-colors text-center line-clamp-2">
@@ -792,11 +839,22 @@ function MatchHeader({ match }: { match: MatchData }) {
           <span className="flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             {format(kickoff, "EEEE d MMMM yyyy")}
+            {!showScore && (
+              <span className="tabular-nums">{format(kickoff, "HH:mm")}</span>
+            )}
           </span>
-          <span className="flex items-center gap-2">
-            <MapPin className="h-4 w-4" />
-            {match.venue || "TBD"}
-          </span>
+          {match.venue && (
+            <span className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              {match.venue}
+            </span>
+          )}
+          {match.referee && (
+            <span className="flex items-center gap-2">
+              <User className="h-4 w-4" />
+              Referee: {match.referee}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -1503,6 +1561,186 @@ function LoadingSkeleton() {
   );
 }
 
+function RealTimelineSection({
+  events,
+  homeName,
+  awayName,
+}: {
+  events: GoalserveMatchEvent[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!events.length) return null;
+  return (
+    <Card data-testid="match-timeline">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Activity className="h-4 w-4" />
+          Timeline
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {events.map((event, idx) => {
+          const minute =
+            event.minute +
+            (event.extraMin ? `+${event.extraMin}` : "") +
+            (event.minute && !String(event.minute).includes("'") ? "'" : "");
+          const teamLabel =
+            event.team === "home" ? homeName : event.team === "away" ? awayName : "";
+          return (
+            <div
+              key={`${event.type}-${event.minute}-${event.player ?? ""}-${idx}`}
+              className="flex gap-3 text-sm"
+            >
+              <span className="w-12 shrink-0 tabular-nums text-muted-foreground">{minute || "—"}</span>
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {eventTypeLabel(event.type)}
+                  {teamLabel ? ` · ${teamLabel}` : ""}
+                </p>
+                {event.player && (
+                  <p className="text-muted-foreground">
+                    {event.player}
+                    {event.assist ? ` (assist: ${event.assist})` : ""}
+                  </p>
+                )}
+                {event.result && (
+                  <p className="text-xs text-muted-foreground">{event.result}</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RealStatsSection({
+  stats,
+  homeName,
+  awayName,
+}: {
+  stats: GoalserveMatchStat[];
+  homeName: string;
+  awayName: string;
+}) {
+  if (!stats.length) return null;
+  return (
+    <Card data-testid="match-statistics">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          Statistics
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-3 text-xs text-muted-foreground mb-1">
+          <span className="truncate">{homeName}</span>
+          <span className="text-center">Stat</span>
+          <span className="text-right truncate">{awayName}</span>
+        </div>
+        {stats.map((stat) => {
+          const total = Math.abs(stat.home) + Math.abs(stat.away);
+          const homePct = total > 0 ? (Math.abs(stat.home) / total) * 100 : 50;
+          return (
+            <div key={stat.key} className="space-y-1.5">
+              <div className="grid grid-cols-3 text-sm items-center">
+                <span className="tabular-nums font-medium">{stat.home}</span>
+                <span className="text-center text-muted-foreground text-xs">{stat.label}</span>
+                <span className="tabular-nums font-medium text-right">{stat.away}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-muted overflow-hidden flex">
+                <div className="h-full bg-foreground/80" style={{ width: `${homePct}%` }} />
+                <div className="h-full bg-muted-foreground/40" style={{ width: `${100 - homePct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RelatedNewsSection({ teamSlugs }: { teamSlugs: string[] }) {
+  const unique = Array.from(new Set(teamSlugs.filter(Boolean)));
+  const q0 = useQuery<Article[]>({
+    queryKey: ["/api/articles/team", unique[0]],
+    enabled: !!unique[0],
+  });
+  const q1 = useQuery<Article[]>({
+    queryKey: ["/api/articles/team", unique[1]],
+    enabled: !!unique[1],
+  });
+
+  const articles = useMemo(() => {
+    const map = new Map<string, Article>();
+    for (const row of [...(q0.data ?? []), ...(q1.data ?? [])]) {
+      if (row?.id) map.set(row.id, row);
+    }
+    return Array.from(map.values()).slice(0, 6);
+  }, [q0.data, q1.data]);
+
+  if (!articles.length) return null;
+
+  return (
+    <Card data-testid="match-related-news">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Related news</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2">
+        {articles.map((article) => (
+          <ArticleCard key={article.id} article={article} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RealMatchBody({
+  match,
+  apiMatch,
+}: {
+  match: MatchData;
+  apiMatch: Match & { homeTeam?: Team; awayTeam?: Team };
+}) {
+  const timeline = readGoalserveMatchTimeline(apiMatch.timeline);
+  const events = timeline?.events ?? [];
+  const stats = timeline?.stats ?? [];
+
+  return (
+    <div className="space-y-4">
+      <RealTimelineSection
+        events={events}
+        homeName={match.homeTeam.name}
+        awayName={match.awayTeam.name}
+      />
+      <RealStatsSection
+        stats={stats}
+        homeName={match.homeTeam.name}
+        awayName={match.awayTeam.name}
+      />
+      <RelatedNewsSection
+        teamSlugs={[match.homeTeam.slug, match.awayTeam.slug].filter(
+          (s) => s && s !== "home" && s !== "away",
+        )}
+      />
+    </div>
+  );
+}
+
+function isMatchLiveForPolling(match: (Match & { homeTeam?: Team; awayTeam?: Team }) | undefined): boolean {
+  if (!match) return false;
+  const timeline = readGoalserveMatchTimeline(match.timeline);
+  const raw = String(timeline?.status || match.status || "").toLowerCase();
+  if (["finished", "ft", "aet", "pen", "pen.", "final", "ended", "postponed", "cancelled", "canceled", "abandoned"].includes(raw)) {
+    return false;
+  }
+  if (["live", "ht", "1h", "2h", "et", "penalties"].includes(raw)) return true;
+  if (/^\d+$/.test(raw)) return true;
+  return String(match.status || "").toLowerCase() === "live";
+}
+
 export default function MatchPage() {
   const params = useParams<Record<string, string | undefined>>();
 
@@ -1525,6 +1763,7 @@ export default function MatchPage() {
     enabled: !!slug && !isDummy,
     retry: false,
     throwOnError: false,
+    refetchInterval: (query) => (isMatchLiveForPolling(query.state.data) ? 15_000 : false),
   });
   
   const match = useMemo(() => {
@@ -1610,27 +1849,31 @@ export default function MatchPage() {
       <MatchHeader match={match} />
       
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="space-y-4">
-          {isPreMatch && (
-            <>
-              <PreMatchNarrative match={match} />
-              <HeadToHeadSection match={match} />
-              <FormLast5 match={match} />
-              <InjuriesAndSuspensions match={match} />
-              <PredictedXI match={match} />
-            </>
-          )}
-          
-          {isPostMatch && (
-            <>
-              <PostMatchSummary match={match} />
-              <MatchStatsSection match={match} />
-              <Timeline match={match} />
-              <TopPerformers match={match} />
-              <Momentum match={match} />
-            </>
-          )}
-        </div>
+        {isDummy ? (
+          <div className="space-y-4">
+            {isPreMatch && (
+              <>
+                <PreMatchNarrative match={match} />
+                <HeadToHeadSection match={match} />
+                <FormLast5 match={match} />
+                <InjuriesAndSuspensions match={match} />
+                <PredictedXI match={match} />
+              </>
+            )}
+            
+            {isPostMatch && (
+              <>
+                <PostMatchSummary match={match} />
+                <MatchStatsSection match={match} />
+                <Timeline match={match} />
+                <TopPerformers match={match} />
+                <Momentum match={match} />
+              </>
+            )}
+          </div>
+        ) : apiMatch ? (
+          <RealMatchBody match={match} apiMatch={apiMatch} />
+        ) : null}
       </div>
     </MainLayout>
   );

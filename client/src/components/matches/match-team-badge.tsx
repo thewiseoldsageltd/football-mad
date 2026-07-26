@@ -8,18 +8,20 @@ export type MatchTeamBadgeTeam = {
   logoUrl?: string | null;
 };
 
-export type MatchTeamBadgeSize = "xs" | "sm" | "md";
+export type MatchTeamBadgeSize = "xs" | "sm" | "md" | "lg";
 
 const SIZE_CLASSES: Record<MatchTeamBadgeSize, string> = {
   xs: "w-8 h-8",
   sm: "w-14 h-14 md:w-16 md:h-16",
   md: "w-16 h-16",
+  lg: "w-20 h-20",
 };
 
 const FLAG_WIDTH_BY_SIZE: Record<MatchTeamBadgeSize, FlagImageWidth> = {
   xs: 80,
   sm: 160,
   md: 160,
+  lg: 160,
 };
 
 /** Fixed 7:5 frame — uniform footprint; object-cover normalises varying source aspect ratios. */
@@ -27,6 +29,7 @@ const FLAG_FRAME_CLASSES: Record<MatchTeamBadgeSize, string> = {
   xs: "w-7 h-5",
   sm: "w-12 h-8",
   md: "w-12 h-8",
+  lg: "w-14 h-10",
 };
 
 function getInitials(label: string): string {
