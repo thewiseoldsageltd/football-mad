@@ -1312,27 +1312,21 @@ function TeamCrest({
   team: { id?: string; name: string; shortName: string; primaryColor: string };
   size?: "sm" | "md" | "lg";
 }) {
-  const sizeClasses = {
-    sm: "w-6 h-6 text-[10px]",
-    md: "w-8 h-8 text-xs",
-    lg: "w-10 h-10 text-sm",
-  };
   const iconSizes = { sm: 20, md: 24, lg: 28 } as const;
-  
+
+  // Transparent crest tile — do not wrap in a primary-colour circle (that produced
+  // black/dark discs behind PNG crests for teams like Fulham, Newcastle, Juventus).
   return (
-    <div 
-      className={`${sizeClasses[size]} rounded-full flex items-center justify-center font-bold shrink-0`}
-      style={{ backgroundColor: team.primaryColor, color: "#fff" }}
-      title={team.name}
-    >
+    <span title={team.name} className="inline-flex shrink-0">
       <EntityIcon
         entityType="team"
         entityId={team.id}
         label={team.name}
         size={iconSizes[size]}
         surface="pill"
+        className="bg-transparent"
       />
-    </div>
+    </span>
   );
 }
 
@@ -1478,11 +1472,6 @@ function MatchRow({
           }`}>
             {match.awayTeam.name}
           </span>
-        </div>
-        
-        {/* Competition logo */}
-        <div className="shrink-0">
-          <CompetitionLogo competition={match.competition} size={18} />
         </div>
         
         {/* Arrow - desktop only */}
