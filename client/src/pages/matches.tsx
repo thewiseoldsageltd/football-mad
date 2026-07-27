@@ -202,13 +202,19 @@ export default function MatchesPage() {
           ? "scheduled"
           : "fulltime";
 
+  const liveEnabled = activeTab === "live";
+
   // Deterministic day query: URL is built from queryKey parts (prevents "same key, different URL" bugs)
   const dayQueryKey = useMemo(
     () => ["matches-day", dateStr, sortMode, selectedCompetitionId] as const,
     [dateStr, sortMode, selectedCompetitionId]
   );
 
-  const { data: dayMatches = [], isLoading, isError } = useQuery<ApiMatch[]>({
+  const {
+    data: dayMatches = [],
+    isLoading: dayLoading,
+    isError: dayError,
+  } = useQuery<ApiMatch[]>({
     queryKey: dayQueryKey,
     queryFn: async ({ queryKey }) => {
       const [, qDateStr, qSortMode, qCompetitionId] = queryKey as typeof dayQueryKey;
@@ -225,7 +231,8 @@ export default function MatchesPage() {
       if (!res.ok) throw new Error("Failed to fetch matches day");
       return res.json();
     },
-    // Day data doesn't need aggressive refetching
+    // Day tabs: no interval poll. Live tab uses /api/matches/live below.
+    // Keep day query enabled so competition filters / tab counts stay available.
     staleTime: 60_000,            // 1 min
     gcTime: 30 * 60_000,          // 30 min cache
     refetchOnWindowFocus: false,
@@ -233,22 +240,50 @@ export default function MatchesPage() {
     retry: 1,
   });
 
-  const allMatches = useMemo(() => {
-    return dayMatches.map(apiMatchToMockMatch);
-  }, [dayMatches]);
+  // Live tab only: poll dedicated live endpoint (~1 min), fed by soccernew/live cron ingest.
+  const {
+    data: liveMatches = [],
+    isLoading: liveLoading,
+    isError: liveError,
+  } = useQuery<ApiMatch[]>({
+    queryKey: ["matches-live", selectedCompetitionId] as const,
+    queryFn: async ({ queryKey }) => {
+      const [, qCompetitionId] = queryKey as readonly ["matches-live", string];
+      const params = new URLSearchParams();
+      if (qCompetitionId) params.set("competitionId", qCompetitionId);
+      const qs = params.toString();
+      const url = qs ? `/api/matches/live?${qs}` : "/api/matches/live";
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to fetch live matches");
+      return res.json();
+    },
+    enabled: liveEnabled,
+    refetchInterval: liveEnabled ? 60_000 : false,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: 1,
+  });
+
+  const isLoading = liveEnabled ? liveLoading : dayLoading;
+  const isError = liveEnabled ? liveError : dayError;
 
   const counts = useMemo(() => {
-    const live = allMatches.filter(m => m.status === "live").length;
-    const scheduled = allMatches.filter(m => m.status === "scheduled" || m.status === "postponed").length;
-    const fulltime = allMatches.filter(m => m.status === "finished").length;
+    const dayMapped = dayMatches.map(apiMatchToMockMatch);
+    const liveCount = liveEnabled
+      ? liveMatches.length
+      : dayMapped.filter((m) => m.status === "live").length;
+    const scheduled = dayMapped.filter((m) => m.status === "scheduled" || m.status === "postponed").length;
+    const fulltime = dayMapped.filter((m) => m.status === "finished").length;
 
     return {
-      all: allMatches.length,
-      live,
+      all: dayMapped.length,
+      live: liveCount,
       scheduled,
       fulltime,
     };
-  }, [allMatches]);
+  }, [dayMatches, liveMatches, liveEnabled]);
 
   const competitionOptions = useMemo(() => {
     const map = new Map<string, { id: string; label: string; rawName: string }>();
@@ -270,13 +305,11 @@ export default function MatchesPage() {
   }, [dayMatches]);
 
   const statusFiltered = useMemo(() => {
-    if (statusParam === "live") return dayMatches.filter((m) => isLiveStatus(m.status));
-
+    if (liveEnabled) return liveMatches;
     if (statusParam === "scheduled") return dayMatches.filter((m) => isScheduledStatus(m.status));
     if (statusParam === "fulltime") return dayMatches.filter((m) => isFinishedStatus(m.status));
-
     return dayMatches;
-  }, [dayMatches, statusParam]);
+  }, [dayMatches, liveMatches, liveEnabled, statusParam]);
 
   const matchesToRender = useMemo(() => {
     return statusFiltered;
@@ -493,7 +526,9 @@ export default function MatchesPage() {
               No matches found
             </h3>
             <p className="text-sm text-muted-foreground">
-              No {activeTab === "live" ? "live" : activeTab === "scheduled" ? "scheduled" : activeTab === "fulltime" ? "completed" : ""} matches for {format(selectedDate, "EEEE, d MMMM yyyy")}.
+              {activeTab === "live"
+                ? "No matches are live right now."
+                : `No ${activeTab === "scheduled" ? "scheduled" : activeTab === "fulltime" ? "completed" : ""} matches for ${format(selectedDate, "EEEE, d MMMM yyyy")}.`}
             </p>
           </div>
         ) : (

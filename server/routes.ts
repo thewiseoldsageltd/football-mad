@@ -3787,13 +3787,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   // Render Cron cadence recommendation:
-  // - /api/jobs/refresh-matches-live: every 1 minute
+  // - /api/jobs/refresh-matches-live: every 1 minute  ← required for Live tab + Match pages
   // - /api/jobs/refresh-matches-today: every 5 minutes
   // - /api/jobs/refresh-matches-recent: every 15 minutes
   // - /api/jobs/refresh-matches-near-future: every 30 minutes
   // - /api/jobs/refresh-matches-week-ahead: every 4 hours
-  // - /api/jobs/refresh-priority-league-fixtures: every 6 hours
-  //   (bounded batch of is_priority leagues + gated friendlies/special comps)
+  // - /api/jobs/refresh-priority-league-fixtures: every 6 hours (bounded batch)
   // Dedicated supplementary routes remain available for independent schedules:
   // - /api/jobs/sync-goalserve-club-friendlies
   // - /api/jobs/sync-goalserve-special-competitions

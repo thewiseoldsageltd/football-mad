@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { format } from "date-fns";
 import { 
@@ -1729,16 +1729,86 @@ function RealMatchBody({
   );
 }
 
-function isMatchLiveForPolling(match: (Match & { homeTeam?: Team; awayTeam?: Team }) | undefined): boolean {
-  if (!match) return false;
+const LIVE_POLL_MS = 15_000;
+const SCHEDULED_POLL_MS = 30_000;
+const PRE_KICKOFF_POLL_MS = 30 * 60 * 1000;
+const POST_KICKOFF_POLL_MS = 90 * 60 * 1000;
+
+function isTerminalMatchStatus(match: Match & { homeTeam?: Team; awayTeam?: Team }): boolean {
   const timeline = readGoalserveMatchTimeline(match.timeline);
   const raw = String(timeline?.status || match.status || "").toLowerCase();
-  if (["finished", "ft", "aet", "pen", "pen.", "final", "ended", "postponed", "cancelled", "canceled", "abandoned"].includes(raw)) {
-    return false;
-  }
+  const db = String(match.status || "").toLowerCase();
+
+  if (["finished", "ft", "aet", "pen", "pen.", "final", "ended"].includes(raw)) return true;
+  if (["finished", "postponed", "cancelled", "canceled", "abandoned"].includes(db)) return true;
+  if (raw.includes("postpon") || raw.includes("cancel") || raw.includes("abandon")) return true;
+  return false;
+}
+
+function isLiveMatchStatus(match: Match & { homeTeam?: Team; awayTeam?: Team }): boolean {
+  const timeline = readGoalserveMatchTimeline(match.timeline);
+  const raw = String(timeline?.status || match.status || "").toLowerCase();
+
   if (["live", "ht", "1h", "2h", "et", "penalties"].includes(raw)) return true;
   if (/^\d+$/.test(raw)) return true;
   return String(match.status || "").toLowerCase() === "live";
+}
+
+function isScheduledMatchStatus(match: Match & { homeTeam?: Team; awayTeam?: Team }): boolean {
+  if (isLiveMatchStatus(match) || isTerminalMatchStatus(match)) return false;
+
+  const timeline = readGoalserveMatchTimeline(match.timeline);
+  const raw = String(timeline?.status || match.status || "").toLowerCase();
+  const db = String(match.status || "").toLowerCase();
+
+  if (db === "scheduled") return true;
+  return ["scheduled", "ns", "not started"].includes(raw);
+}
+
+function matchRefetchIntervalMs(
+  match: (Match & { homeTeam?: Team; awayTeam?: Team }) | undefined,
+): number | false {
+  if (!match || isTerminalMatchStatus(match)) return false;
+  if (isLiveMatchStatus(match)) return LIVE_POLL_MS;
+
+  if (isScheduledMatchStatus(match) && match.kickoffTime) {
+    const kickoffMs = new Date(match.kickoffTime).getTime();
+    if (Number.isNaN(kickoffMs)) return false;
+
+    const diffMs = kickoffMs - Date.now();
+    const withinPreKickoff = diffMs > 0 && diffMs <= PRE_KICKOFF_POLL_MS;
+    const withinPostKickoff = diffMs <= 0 && -diffMs <= POST_KICKOFF_POLL_MS;
+
+    if (withinPreKickoff || withinPostKickoff) return SCHEDULED_POLL_MS;
+  }
+
+  return false;
+}
+
+/** Wake polling when a scheduled match enters the pre-kickoff window without an active interval. */
+function useKickoffPollingWakeUp(
+  slug: string | undefined,
+  match: (Match & { homeTeam?: Team; awayTeam?: Team }) | undefined,
+  enabled: boolean,
+) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled || !slug || !match?.kickoffTime || !isScheduledMatchStatus(match)) return;
+
+    const kickoffMs = new Date(match.kickoffTime).getTime();
+    if (Number.isNaN(kickoffMs)) return;
+
+    const windowStart = kickoffMs - PRE_KICKOFF_POLL_MS;
+    const now = Date.now();
+    if (now >= windowStart) return;
+
+    const timer = setTimeout(() => {
+      void queryClient.invalidateQueries({ queryKey: ["/api/matches", slug] });
+    }, windowStart - now + 100);
+
+    return () => clearTimeout(timer);
+  }, [enabled, slug, match, match?.kickoffTime, match?.status, match?.timeline, queryClient]);
 }
 
 export default function MatchPage() {
@@ -1757,14 +1827,18 @@ export default function MatchPage() {
   }, [params]);
   
   const isDummy = useMemo(() => slug ? isDummyMatchId(slug) : false, [slug]);
-  
+
   const { data: apiMatch, isLoading, isError } = useQuery<Match & { homeTeam?: Team; awayTeam?: Team }>({
     queryKey: ["/api/matches", slug],
     enabled: !!slug && !isDummy,
     retry: false,
     throwOnError: false,
-    refetchInterval: (query) => (isMatchLiveForPolling(query.state.data) ? 15_000 : false),
+    refetchInterval: (query) => matchRefetchIntervalMs(query.state.data),
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
   });
+
+  useKickoffPollingWakeUp(slug, apiMatch, !!slug && !isDummy);
   
   const match = useMemo(() => {
     if (!slug) return null;
