@@ -82,6 +82,8 @@ import {
   areSeasonKeysEquivalent,
   normalizeSeasonKey,
   seasonKeyToUiLabel,
+  comparePreseasonStandingsRows,
+  isUnplayedStandingsTable,
 } from "@shared/season";
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
@@ -5050,6 +5052,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const publicSlug = publicSlugByTeamId.get(row.team.id);
           if (publicSlug) row.team.slug = publicSlug;
         }
+      }
+
+      // Current-season preseason (all P=0): points desc, then A–Z. Allows points deductions.
+      // Historical seasons and in-progress seasons keep provider league ordering.
+      if (isCurrentSeason && isUnplayedStandingsTable(table)) {
+        table.sort(comparePreseasonStandingsRows);
+        table.forEach((row, index) => {
+          row.position = index + 1;
+        });
       }
 
       // Fetch fixtures from Goalserve XML to get proper <week number="X"> containers

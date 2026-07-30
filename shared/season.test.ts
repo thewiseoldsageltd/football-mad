@@ -5,6 +5,7 @@ import {
   buildCompetitionSeasonList,
   calendarFootballSeasonKey,
   calendarFootballSeasonKeyLocal,
+  comparePreseasonStandingsRows,
   isPreseasonMonthForSeason,
   isSeasonKeyBefore,
   isUnplayedStandingsTable,
@@ -137,21 +138,115 @@ describe("season utilities", () => {
     assert.equal(isSeasonKeyBefore("2026/2027", "2025/2026"), false);
   });
 
-  it("detects an unplayed zero-point preseason table", () => {
+  it("treats all-unplayed tables as preseason even with points deductions", () => {
+    // Premier League: all P=0, Pts=0
     assert.equal(
       isUnplayedStandingsTable([
-        { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, gd: 0, pts: 0 },
-        { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+        { played: 0, pts: 0 },
+        { played: 0, points: 0 },
+      ]),
+      true,
+    );
+    // Championship: Southampton start on -4
+    assert.equal(
+      isUnplayedStandingsTable([
+        { played: 0, pts: 0 },
+        { played: 0, pts: -4 },
       ]),
       true,
     );
     assert.equal(
       isUnplayedStandingsTable([
-        { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, pts: 0 },
-        { played: 1, won: 0, drawn: 1, lost: 0, goalsFor: 0, goalsAgainst: 0, pts: 1 },
+        { played: 0, pts: 0 },
+        { played: 1, pts: 1 },
       ]),
       false,
     );
     assert.equal(isUnplayedStandingsTable([]), false);
+  });
+
+  it("orders preseason PL all-zero tables alphabetically", () => {
+    const rows = [
+      { played: 0, pts: 0, teamName: "Wolves" },
+      { played: 0, pts: 0, teamName: "Arsenal" },
+      { played: 0, pts: 0, teamName: "Chelsea" },
+    ];
+    assert.equal(isUnplayedStandingsTable(rows), true);
+    const ordered = [...rows].sort(comparePreseasonStandingsRows);
+    assert.deepEqual(
+      ordered.map((r) => r.teamName),
+      ["Arsenal", "Chelsea", "Wolves"],
+    );
+  });
+
+  it("orders Championship preseason with a deducted team at the bottom", () => {
+    const rows = [
+      { played: 0, pts: -4, teamName: "Southampton" },
+      { played: 0, pts: 0, teamName: "Leeds" },
+      { played: 0, pts: 0, teamName: "Burnley" },
+    ];
+    assert.equal(isUnplayedStandingsTable(rows), true);
+    const ordered = [...rows]
+      .sort(comparePreseasonStandingsRows)
+      .map((row, index) => ({ ...row, pos: index + 1 }));
+    assert.deepEqual(
+      ordered.map((r) => [r.pos, r.teamName, r.pts]),
+      [
+        [1, "Burnley", 0],
+        [2, "Leeds", 0],
+        [3, "Southampton", -4],
+      ],
+    );
+  });
+
+  it("orders multiple deducted teams by points then alphabetically", () => {
+    const rows = [
+      { played: 0, points: -2, team: { name: "Team B" } },
+      { played: 0, points: -4, team: { name: "Team A" } },
+      { played: 0, points: -2, team: { name: "Team A Deducted" } },
+      { played: 0, points: 0, team: { name: "Zebra" } },
+      { played: 0, points: 0, team: { name: "Alpha" } },
+    ];
+    const ordered = [...rows].sort(comparePreseasonStandingsRows);
+    assert.deepEqual(
+      ordered.map((r) => [r.points, r.team.name]),
+      [
+        [0, "Alpha"],
+        [0, "Zebra"],
+        [-2, "Team A Deducted"],
+        [-2, "Team B"],
+        [-4, "Team A"],
+      ],
+    );
+  });
+
+  it("does not treat in-progress tables as preseason", () => {
+    const rows = [
+      { played: 1, pts: 3, teamName: "Arsenal", pos: 1 },
+      { played: 0, pts: 0, teamName: "Wolves", pos: 2 },
+    ];
+    assert.equal(isUnplayedStandingsTable(rows), false);
+    // Callers preserve provider order when not preseason.
+    assert.deepEqual(
+      rows.map((r) => r.teamName),
+      ["Arsenal", "Wolves"],
+    );
+  });
+
+  it("leaves historical-season ordering to callers (current-season gate)", () => {
+    // Helper only detects unplayed rows; Tables/API apply sort only when viewing current.
+    const historicalUnplayed = [
+      { played: 0, pts: 0, teamName: "Wolves", pos: 12 },
+      { played: 0, pts: 0, teamName: "Arsenal", pos: 1 },
+    ];
+    assert.equal(isUnplayedStandingsTable(historicalUnplayed), true);
+    const viewingHistorical = !areSeasonKeysEquivalent("2025/2026", "2026/2027");
+    const ordered = viewingHistorical
+      ? historicalUnplayed
+      : [...historicalUnplayed].sort(comparePreseasonStandingsRows);
+    assert.deepEqual(
+      ordered.map((r) => r.teamName),
+      ["Wolves", "Arsenal"],
+    );
   });
 });

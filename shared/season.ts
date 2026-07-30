@@ -191,40 +191,44 @@ export function buildCompetitionSeasonList(opts: {
   ]);
 }
 
-/** True when every club is still on zero competitive stats (preseason snapshot). */
+/**
+ * True when every club still has played === 0 (preseason / unplayed snapshot).
+ * Points deductions must not disqualify preseason handling.
+ */
 export function isUnplayedStandingsTable(
-  rows: Array<{
-    played?: number | null;
-    won?: number | null;
-    drawn?: number | null;
-    lost?: number | null;
-    goalsFor?: number | null;
-    goalsAgainst?: number | null;
-    goalDifference?: number | null;
-    points?: number | null;
-    gd?: number | null;
-    pts?: number | null;
-  }>,
+  rows: Array<{ played?: number | null }>,
 ): boolean {
   if (rows.length === 0) return false;
-  return rows.every((row) => {
-    const played = row.played ?? 0;
-    const won = row.won ?? 0;
-    const drawn = row.drawn ?? 0;
-    const lost = row.lost ?? 0;
-    const goalsFor = row.goalsFor ?? 0;
-    const goalsAgainst = row.goalsAgainst ?? 0;
-    const gd = row.goalDifference ?? row.gd ?? 0;
-    const pts = row.points ?? row.pts ?? 0;
-    return (
-      played === 0 &&
-      won === 0 &&
-      drawn === 0 &&
-      lost === 0 &&
-      goalsFor === 0 &&
-      goalsAgainst === 0 &&
-      gd === 0 &&
-      pts === 0
-    );
+  return rows.every((row) => (row.played ?? 0) === 0);
+}
+
+type PreseasonSortableRow = {
+  points?: number | null;
+  pts?: number | null;
+  teamName?: string | null;
+  name?: string | null;
+  team?: { name?: string | null } | null;
+};
+
+function preseasonPoints(row: PreseasonSortableRow): number {
+  return row.points ?? row.pts ?? 0;
+}
+
+function preseasonTeamName(row: PreseasonSortableRow): string {
+  return row.teamName ?? row.team?.name ?? row.name ?? "";
+}
+
+/**
+ * Preseason order: points descending, then team name A–Z for equal points.
+ * Callers renumber displayed positions after sorting.
+ */
+export function comparePreseasonStandingsRows(
+  a: PreseasonSortableRow,
+  b: PreseasonSortableRow,
+): number {
+  const byPoints = preseasonPoints(b) - preseasonPoints(a);
+  if (byPoints !== 0) return byPoints;
+  return preseasonTeamName(a).localeCompare(preseasonTeamName(b), "en", {
+    sensitivity: "base",
   });
 }

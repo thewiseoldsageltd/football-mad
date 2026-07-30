@@ -18,6 +18,7 @@ import { usePageSeo } from "@/lib/seo";
 import {
   areSeasonKeysEquivalent,
   calendarFootballSeasonKey,
+  comparePreseasonStandingsRows,
   isUnplayedStandingsTable,
   normalizeSeasonKey,
   seasonKeyToUiLabel,
@@ -263,15 +264,15 @@ export default function TablesPage() {
       apiSeason,
       seasonsData?.currentSeason?.key ?? currentSeason.key,
     );
-    // Current-season preseason: all clubs on zero → alphabetical. Historical/active unchanged.
+    // Current-season preseason (all P=0): points desc, then A–Z. Historical/active unchanged.
     if (!viewingCurrent || !isUnplayedStandingsTable(mapped)) return mapped;
     return [...mapped]
-      .sort((a, b) => a.teamName.localeCompare(b.teamName, "en", { sensitivity: "base" }))
+      .sort(comparePreseasonStandingsRows)
       .map((row, index) => ({ ...row, pos: index + 1 }));
   }, [standingsData, apiSeason, seasonsData?.currentSeason?.key, currentSeason.key]);
 
   const isCurrentSeasonView = areSeasonKeysEquivalent(apiSeason, currentSeason.key);
-  const isZeroPointPreseason =
+  const isPreseasonUnplayed =
     isCurrentSeasonView && !standingsLoading && isUnplayedStandingsTable(tableRows);
   const isPreseasonEmpty =
     isCurrentSeasonView &&
@@ -404,7 +405,7 @@ export default function TablesPage() {
     return (
       <Card className="h-fit">
         <CardContent className="p-4 sm:p-6">
-          {isZeroPointPreseason ? (
+          {isPreseasonUnplayed ? (
             <div className="mb-3 text-xs text-muted-foreground" data-testid="text-standings-preseason">
               Preseason — standings will update after the opening fixtures.
             </div>
@@ -415,7 +416,7 @@ export default function TablesPage() {
           ) : null}
           <LeagueTable
             data={tableRows}
-            showZones={!isZeroPointPreseason}
+            showZones={!isPreseasonUnplayed}
             zones={currentLeagueConfig?.standingsZones}
           />
         </CardContent>
