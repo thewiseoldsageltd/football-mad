@@ -51,7 +51,7 @@ function MatchesSlugResolver() {
 
 function useCurrentTablesSeasonSlug(leagueSlug: string): { slug: string | null; loading: boolean } {
   const leagueId = getGoalserveLeagueId(leagueSlug) ?? "1204";
-  const { data, isLoading } = useQuery<{ currentSeason: { slug: string } }>({
+  const { data, isPending, isFetching } = useQuery<{ currentSeason: { slug: string } }>({
     queryKey: ["/api/standings/seasons", leagueId],
     queryFn: async () => {
       const res = await fetch(`/api/standings/seasons?leagueId=${encodeURIComponent(leagueId)}`);
@@ -59,9 +59,12 @@ function useCurrentTablesSeasonSlug(leagueSlug: string): { slug: string | null; 
       return res.json();
     },
     staleTime: 60_000,
+    retry: 2,
   });
   if (data?.currentSeason?.slug) return { slug: data.currentSeason.slug, loading: false };
-  if (isLoading) return { slug: null, loading: true };
+  // Wait for the seasons API — do not calendar-fallback while in flight (July calendar
+  // is still the previous season and would send users to a stale historical URL).
+  if (isPending || isFetching) return { slug: null, loading: true };
   return { slug: seasonKeyToUrlSlug(calendarFootballSeasonKey()), loading: false };
 }
 

@@ -18,6 +18,7 @@ import { usePageSeo } from "@/lib/seo";
 import {
   areSeasonKeysEquivalent,
   calendarFootballSeasonKey,
+  isUnplayedStandingsTable,
   normalizeSeasonKey,
   seasonKeyToUiLabel,
   seasonKeyToUrlSlug,
@@ -139,7 +140,14 @@ export default function TablesPage() {
   });
 
   const seasonOptions: TablesSeasonOption[] = useMemo(() => {
-    if (topTab === "leagues" && seasonsData?.seasons?.length) return seasonsData.seasons;
+    if (topTab === "leagues") {
+      // While loading, keep options empty so the season Select shows a skeleton
+      // instead of a calendar fallback (2025/26 in July) that can clobber the
+      // API current season after redirect.
+      if (seasonsLoading) return [];
+      if (seasonsData?.seasons?.length) return seasonsData.seasons;
+      return [];
+    }
     // Cups/Europe: keep a calendar-based option until dedicated season APIs exist.
     const fb = fallbackSeasonEntry();
     if (routeSeasonSlug) {
@@ -151,9 +159,9 @@ export default function TablesPage() {
       );
     }
     return [fb];
-  }, [topTab, seasonsData, routeSeasonSlug]);
+  }, [topTab, seasonsData, seasonsLoading, routeSeasonSlug]);
 
-  const currentSeason = seasonsData?.currentSeason ?? seasonOptions[0] ?? fallbackSeasonEntry();
+  const currentSeason = seasonsData?.currentSeason ?? fallbackSeasonEntry();
 
   // Redirect league routes without a season (or with an unknown season) to current.
   useEffect(() => {
@@ -250,10 +258,21 @@ export default function TablesPage() {
 
   const tableRows = useMemo(() => {
     if (!Array.isArray(standingsData?.table)) return [];
-    return standingsData.table.map(mapApiToTableRow);
-  }, [standingsData]);
+    const mapped = standingsData.table.map(mapApiToTableRow);
+    const viewingCurrent = areSeasonKeysEquivalent(
+      apiSeason,
+      seasonsData?.currentSeason?.key ?? currentSeason.key,
+    );
+    // Current-season preseason: all clubs on zero → alphabetical. Historical/active unchanged.
+    if (!viewingCurrent || !isUnplayedStandingsTable(mapped)) return mapped;
+    return [...mapped]
+      .sort((a, b) => a.teamName.localeCompare(b.teamName, "en", { sensitivity: "base" }))
+      .map((row, index) => ({ ...row, pos: index + 1 }));
+  }, [standingsData, apiSeason, seasonsData?.currentSeason?.key, currentSeason.key]);
 
   const isCurrentSeasonView = areSeasonKeysEquivalent(apiSeason, currentSeason.key);
+  const isZeroPointPreseason =
+    isCurrentSeasonView && !standingsLoading && isUnplayedStandingsTable(tableRows);
   const isPreseasonEmpty =
     isCurrentSeasonView &&
     !standingsLoading &&
@@ -385,12 +404,20 @@ export default function TablesPage() {
     return (
       <Card className="h-fit">
         <CardContent className="p-4 sm:p-6">
-          {standingsData?.snapshot?.asOf && (
+          {isZeroPointPreseason ? (
+            <div className="mb-3 text-xs text-muted-foreground" data-testid="text-standings-preseason">
+              Preseason — standings will update after the opening fixtures.
+            </div>
+          ) : standingsData?.snapshot?.asOf ? (
             <div className="mb-3 text-xs text-muted-foreground" data-testid="text-standings-last-updated">
               Last updated: {new Date(standingsData.snapshot.asOf).toLocaleString("en-GB", { hour12: false })}
             </div>
-          )}
-          <LeagueTable data={tableRows} showZones={true} zones={currentLeagueConfig?.standingsZones} />
+          ) : null}
+          <LeagueTable
+            data={tableRows}
+            showZones={!isZeroPointPreseason}
+            zones={currentLeagueConfig?.standingsZones}
+          />
         </CardContent>
       </Card>
     );

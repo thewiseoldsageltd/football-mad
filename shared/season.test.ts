@@ -7,6 +7,7 @@ import {
   calendarFootballSeasonKeyLocal,
   isPreseasonMonthForSeason,
   isSeasonKeyBefore,
+  isUnplayedStandingsTable,
   normalizeSeasonKey,
   resolveCurrentSeasonKey,
   seasonKeyToUiLabel,
@@ -134,5 +135,23 @@ describe("season utilities", () => {
     assert.deepEqual(list, ["2026/2027", "2025/2026", "2024/2025", "2023/2024"]);
     assert.equal(isSeasonKeyBefore("2025/2026", "2026/2027"), true);
     assert.equal(isSeasonKeyBefore("2026/2027", "2025/2026"), false);
+  });
+
+  it("detects an unplayed zero-point preseason table", () => {
+    assert.equal(
+      isUnplayedStandingsTable([
+        { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, gd: 0, pts: 0 },
+        { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, goalDifference: 0, points: 0 },
+      ]),
+      true,
+    );
+    assert.equal(
+      isUnplayedStandingsTable([
+        { played: 0, won: 0, drawn: 0, lost: 0, goalsFor: 0, goalsAgainst: 0, pts: 0 },
+        { played: 1, won: 0, drawn: 1, lost: 0, goalsFor: 0, goalsAgainst: 0, pts: 1 },
+      ]),
+      false,
+    );
+    assert.equal(isUnplayedStandingsTable([]), false);
   });
 });
