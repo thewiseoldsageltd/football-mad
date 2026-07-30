@@ -190,3 +190,41 @@ export function buildCompetitionSeasonList(opts: {
     opts.currentSeason,
   ]);
 }
+
+/** True when every club is still on zero competitive stats (preseason snapshot). */
+export function isUnplayedStandingsTable(
+  rows: Array<{
+    played?: number | null;
+    won?: number | null;
+    drawn?: number | null;
+    lost?: number | null;
+    goalsFor?: number | null;
+    goalsAgainst?: number | null;
+    goalDifference?: number | null;
+    points?: number | null;
+    gd?: number | null;
+    pts?: number | null;
+  }>,
+): boolean {
+  if (rows.length === 0) return false;
+  return rows.every((row) => {
+    const played = row.played ?? 0;
+    const won = row.won ?? 0;
+    const drawn = row.drawn ?? 0;
+    const lost = row.lost ?? 0;
+    const goalsFor = row.goalsFor ?? 0;
+    const goalsAgainst = row.goalsAgainst ?? 0;
+    const gd = row.goalDifference ?? row.gd ?? 0;
+    const pts = row.points ?? row.pts ?? 0;
+    return (
+      played === 0 &&
+      won === 0 &&
+      drawn === 0 &&
+      lost === 0 &&
+      goalsFor === 0 &&
+      goalsAgainst === 0 &&
+      gd === 0 &&
+      pts === 0
+    );
+  });
+}
