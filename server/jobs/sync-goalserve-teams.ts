@@ -1,8 +1,21 @@
-import { db } from "../db";
-import { teams, competitions, competitionTeamMemberships, competitionSeasons } from "@shared/schema";
+import { db, pool } from "../db";
+import { teams, competitions } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
 import { resolveSeasonKey } from "./sync-goalserve-matches";
+import {
+  ensureCompetitionSeasonEvidence,
+  markExclusiveCompetitionSeasonCurrentOnClient,
+} from "../lib/competition-seasons";
+import { normalizeSeasonKey } from "@shared/season";
+import {
+  isExplicitHistoricalSeasonRun,
+  membershipIsCurrentForTeamSync,
+  minTeamsForLeague,
+  shouldApplyExclusiveMembershipRollover,
+} from "@shared/membership-rollover";
+
+export { minTeamsForLeague, shouldApplyMembershipRollover } from "@shared/membership-rollover";
 
 function slugify(text: string): string {
   return text
@@ -14,15 +27,15 @@ function slugify(text: string): string {
 function generateAbbreviations(name: string): string[] {
   const abbrevs: string[] = [];
   const words = name.split(/\s+/).filter(Boolean);
-  
+
   if (words.length > 1) {
-    abbrevs.push(words.map(w => w.slice(0, 1).toUpperCase()).join(""));
-    abbrevs.push(words.map(w => w.slice(0, 3).toUpperCase()).join("").slice(0, 3));
+    abbrevs.push(words.map((w) => w.slice(0, 1).toUpperCase()).join(""));
+    abbrevs.push(words.map((w) => w.slice(0, 3).toUpperCase()).join("").slice(0, 3));
   }
-  
+
   const noSpaces = name.replace(/\s+/g, "");
   abbrevs.push(noSpaces.slice(0, 3).toUpperCase());
-  
+
   return abbrevs;
 }
 
@@ -32,7 +45,13 @@ async function ensureTeam(goalserveTeamId: string, name: string): Promise<DbTeam
   const slug = slugify(safeName) || `team-${safeId}`;
 
   const [existing] = await db
-    .select({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId })
+    .select({
+      id: teams.id,
+      name: teams.name,
+      slug: teams.slug,
+      shortName: teams.shortName,
+      goalserveTeamId: teams.goalserveTeamId,
+    })
     .from(teams)
     .where(eq(teams.goalserveTeamId, safeId))
     .limit(1);
@@ -43,12 +62,24 @@ async function ensureTeam(goalserveTeamId: string, name: string): Promise<DbTeam
     .insert(teams)
     .values({ name: safeName, slug, goalserveTeamId: safeId })
     .onConflictDoNothing()
-    .returning({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId });
+    .returning({
+      id: teams.id,
+      name: teams.name,
+      slug: teams.slug,
+      shortName: teams.shortName,
+      goalserveTeamId: teams.goalserveTeamId,
+    });
 
   if (inserted) return inserted;
 
   const [found] = await db
-    .select({ id: teams.id, name: teams.name, slug: teams.slug, shortName: teams.shortName, goalserveTeamId: teams.goalserveTeamId })
+    .select({
+      id: teams.id,
+      name: teams.name,
+      slug: teams.slug,
+      shortName: teams.shortName,
+      goalserveTeamId: teams.goalserveTeamId,
+    })
     .from(teams)
     .where(eq(teams.goalserveTeamId, safeId))
     .limit(1);
@@ -72,7 +103,7 @@ interface DbTeam {
 
 export async function syncGoalserveTeams(
   leagueId: string,
-  seasonKeyParam?: string
+  seasonKeyParam?: string,
 ): Promise<{
   ok: boolean;
   leagueId: string;
@@ -83,11 +114,13 @@ export async function syncGoalserveTeams(
   unmatchedSample: { id: string; name: string }[];
   seasonKeyUsed: string | null;
   wroteCompetitionSeason: boolean;
+  membershipRolloverApplied: boolean;
+  skippedRolloverReason?: string;
   error?: string;
 }> {
   try {
     const response = await goalserveFetch(`soccerleague/${leagueId}`);
-    
+
     const teamData = response?.league?.team;
     if (!teamData) {
       return {
@@ -100,16 +133,45 @@ export async function syncGoalserveTeams(
         unmatchedSample: [],
         seasonKeyUsed: null,
         wroteCompetitionSeason: false,
+        membershipRolloverApplied: false,
+        skippedRolloverReason: "empty_feed",
         error: "No team data found in response.league.team",
       };
     }
-    
+
     const teamArray = Array.isArray(teamData) ? teamData : [teamData];
-    
-    const goalserveTeamsList: GoalserveTeam[] = teamArray.map((team: any) => ({
-      goalserveTeamId: String(team["@id"] ?? team.id ?? ""),
-      name: String(team["@name"] ?? team.name ?? ""),
-    })).filter((t: GoalserveTeam) => t.goalserveTeamId && t.name);
+
+    const goalserveTeamsList: GoalserveTeam[] = teamArray
+      .map((team: any) => ({
+        goalserveTeamId: String(team["@id"] ?? team.id ?? ""),
+        name: String(team["@name"] ?? team.name ?? ""),
+      }))
+      .filter((t: GoalserveTeam) => t.goalserveTeamId && t.name);
+
+    const minTeams = minTeamsForLeague(leagueId);
+    if (goalserveTeamsList.length < minTeams) {
+      return {
+        ok: false,
+        leagueId,
+        goalserveTeams: goalserveTeamsList.length,
+        matched: 0,
+        updated: 0,
+        membershipsUpserted: 0,
+        unmatchedSample: [],
+        seasonKeyUsed: null,
+        wroteCompetitionSeason: false,
+        membershipRolloverApplied: false,
+        skippedRolloverReason: "incomplete_feed",
+        error: `Team feed incomplete: got ${goalserveTeamsList.length}, expected at least ${minTeams}`,
+      };
+    }
+
+    const feedSeasonRaw =
+      response?.league?.["@season"] ??
+      response?.league?.season ??
+      response?.league?.["@season_year"] ??
+      response?.league?.season_year ??
+      null;
 
     const dbTeams: DbTeam[] = await db
       .select({
@@ -144,36 +206,17 @@ export async function syncGoalserveTeams(
       .limit(1);
 
     const competitionDbId = competitionRow?.id ?? null;
-    const seasonKey = resolveSeasonKey(
-      seasonKeyParam,
-      competitionRow?.season ? String(competitionRow.season) : undefined,
-      undefined
-    ) || "unknown";
-
-    let wroteCompetitionSeason = false;
-    if (competitionDbId && seasonKey !== "unknown") {
-      const isCurrent = competitionRow?.season === seasonKey;
-      await db
-        .insert(competitionSeasons)
-        .values({
-          competitionId: competitionDbId,
-          seasonKey,
-          isCurrent,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [competitionSeasons.competitionId, competitionSeasons.seasonKey],
-          set: {
-            isCurrent,
-            updatedAt: new Date(),
-          },
-        });
-      wroteCompetitionSeason = true;
-    }
+    const seasonKey =
+      normalizeSeasonKey(
+        resolveSeasonKey(
+          seasonKeyParam,
+          competitionRow?.season ? String(competitionRow.season) : undefined,
+          feedSeasonRaw ? String(feedSeasonRaw) : undefined,
+        ),
+      ) || "unknown";
 
     let matched = 0;
     let updated = 0;
-    let membershipsUpserted = 0;
     const seenTeamIds: string[] = [];
 
     for (const gsTeam of goalserveTeamsList) {
@@ -203,7 +246,7 @@ export async function syncGoalserveTeams(
 
       if (matchedDbTeam) {
         matched++;
-        
+
         if (matchedDbTeam.goalserveTeamId !== gsTeam.goalserveTeamId) {
           await db
             .update(teams)
@@ -218,43 +261,111 @@ export async function syncGoalserveTeams(
       }
 
       seenTeamIds.push(matchedDbTeam.id);
-
-      if (competitionDbId) {
-        await db
-          .insert(competitionTeamMemberships)
-          .values({
-            competitionId: competitionDbId,
-            teamId: matchedDbTeam.id,
-            seasonKey,
-            membershipType: "league",
-            isCurrent: true,
-            source: "goalserve",
-            lastSeenAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: [
-              competitionTeamMemberships.competitionId,
-              competitionTeamMemberships.teamId,
-              competitionTeamMemberships.seasonKey,
-            ],
-            set: {
-              isCurrent: true,
-              lastSeenAt: new Date(),
-            },
-          });
-        membershipsUpserted++;
-      }
     }
 
-    if (competitionDbId && seenTeamIds.length > 0) {
-      const placeholders = seenTeamIds.map((id) => `'${id}'`).join(",");
-      await db.execute(
-        `UPDATE competition_team_memberships
-         SET is_current = false
-         WHERE competition_id = '${competitionDbId}'
-           AND season_key = '${seasonKey}'
-           AND team_id NOT IN (${placeholders})`
-      );
+    let membershipsUpserted = 0;
+    let wroteCompetitionSeason = false;
+    let membershipRolloverApplied = false;
+    const isHistorical = isExplicitHistoricalSeasonRun(seasonKeyParam);
+    const membershipIsCurrent = membershipIsCurrentForTeamSync(seasonKeyParam);
+
+    if (competitionDbId && seasonKey !== "unknown" && seenTeamIds.length >= minTeams) {
+      if (isHistorical) {
+        // Historical/manual season: store memberships for that season only.
+        // Never flip competitions.season, competition_seasons.is_current, or demote current memberships.
+        await ensureCompetitionSeasonEvidence(competitionDbId, seasonKey);
+
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          for (const teamId of seenTeamIds) {
+            await client.query(
+              `
+              INSERT INTO competition_team_memberships (
+                competition_id, team_id, season_key, membership_type, is_current, source, last_seen_at
+              ) VALUES ($1, $2, $3, 'league', false, 'goalserve', NOW())
+              ON CONFLICT (competition_id, team_id, season_key)
+              DO UPDATE SET is_current = false, last_seen_at = NOW()
+              `,
+              [competitionDbId, teamId, seasonKey],
+            );
+            membershipsUpserted++;
+          }
+          await client.query("COMMIT");
+        } catch (txErr) {
+          await client.query("ROLLBACK");
+          throw txErr;
+        } finally {
+          client.release();
+        }
+      } else if (
+        shouldApplyExclusiveMembershipRollover({
+          seasonKeyParam,
+          teamCount: seenTeamIds.length,
+          leagueId,
+        })
+      ) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+
+          if (seasonKey !== competitionRow?.season) {
+            await client.query(`UPDATE competitions SET season = $1 WHERE id = $2`, [
+              seasonKey,
+              competitionDbId,
+            ]);
+          }
+
+          await markExclusiveCompetitionSeasonCurrentOnClient(client, competitionDbId, seasonKey);
+          wroteCompetitionSeason = true;
+
+          for (const teamId of seenTeamIds) {
+            await client.query(
+              `
+              INSERT INTO competition_team_memberships (
+                competition_id, team_id, season_key, membership_type, is_current, source, last_seen_at
+              ) VALUES ($1, $2, $3, 'league', $4, 'goalserve', NOW())
+              ON CONFLICT (competition_id, team_id, season_key)
+              DO UPDATE SET is_current = $4, last_seen_at = NOW()
+              `,
+              [competitionDbId, teamId, seasonKey, membershipIsCurrent],
+            );
+            membershipsUpserted++;
+          }
+
+          // Demote teams no longer in this season's roster
+          await client.query(
+            `
+            UPDATE competition_team_memberships
+            SET is_current = false
+            WHERE competition_id = $1
+              AND season_key = $2
+              AND team_id <> ALL($3::varchar[])
+            `,
+            [competitionDbId, seasonKey, seenTeamIds],
+          );
+
+          // Exclusive rollover: demote memberships for every other season of this competition
+          await client.query(
+            `
+            UPDATE competition_team_memberships
+            SET is_current = false
+            WHERE competition_id = $1
+              AND season_key <> $2
+              AND is_current = true
+            `,
+            [competitionDbId, seasonKey],
+          );
+
+          await client.query("COMMIT");
+          membershipRolloverApplied = true;
+        } catch (txErr) {
+          await client.query("ROLLBACK");
+          throw txErr;
+        } finally {
+          client.release();
+        }
+      }
     }
 
     return {
@@ -267,6 +378,7 @@ export async function syncGoalserveTeams(
       unmatchedSample: [],
       seasonKeyUsed: seasonKey,
       wroteCompetitionSeason,
+      membershipRolloverApplied,
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
@@ -280,7 +392,9 @@ export async function syncGoalserveTeams(
       unmatchedSample: [],
       seasonKeyUsed: null,
       wroteCompetitionSeason: false,
+      membershipRolloverApplied: false,
       error,
     };
   }
 }
+

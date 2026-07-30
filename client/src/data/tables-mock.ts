@@ -241,13 +241,6 @@ export const coupeDeFranceRounds: CupRound[] = [
   { id: "f", name: "Final", status: "upcoming" },
 ];
 
-export const seasons = [
-  "2025/26",
-  "2024/25",
-  "2023/24",
-  "2022/23",
-];
-
 export const tableViews = [
   { value: "overall", label: "Overall" },
   { value: "home", label: "Home" },

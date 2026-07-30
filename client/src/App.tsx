@@ -1,6 +1,6 @@
 import { Switch, Route, Redirect, useSearch, useParams } from "wouter";
+import { useQuery, QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
@@ -29,6 +29,12 @@ import AuthorPage from "@/pages/author";
 import AdminJobsPage from "@/pages/admin-jobs";
 import SearchPage from "@/pages/search";
 import { parseMatchSlug } from "@/lib/urls";
+import { getGoalserveLeagueId } from "@/lib/league-config";
+import {
+  calendarFootballSeasonKey,
+  seasonKeyToUrlSlug,
+  seasonSlugToCanonical,
+} from "@shared/season";
 
 /**
  * regexparam does not treat `:home-vs-:away-:date` as three params with literals —
@@ -43,34 +49,59 @@ function MatchesSlugResolver() {
   return <MatchesPage />;
 }
 
-function seasonApiToSlug(apiSeason: string): string {
-  const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
-  if (match) {
-    const startYear = match[1];
-    const endPart = match[2];
-    const endYear = endPart.length === 4 ? endPart.slice(2) : endPart;
-    return `${startYear}-${endYear}`;
-  }
-  return apiSeason.replace("/", "-");
+function useCurrentTablesSeasonSlug(leagueSlug: string): { slug: string | null; loading: boolean } {
+  const leagueId = getGoalserveLeagueId(leagueSlug) ?? "1204";
+  const { data, isLoading } = useQuery<{ currentSeason: { slug: string } }>({
+    queryKey: ["/api/standings/seasons", leagueId],
+    queryFn: async () => {
+      const res = await fetch(`/api/standings/seasons?leagueId=${encodeURIComponent(leagueId)}`);
+      if (!res.ok) throw new Error("Failed to load seasons");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+  if (data?.currentSeason?.slug) return { slug: data.currentSeason.slug, loading: false };
+  if (isLoading) return { slug: null, loading: true };
+  return { slug: seasonKeyToUrlSlug(calendarFootballSeasonKey()), loading: false };
 }
-
-const TABLES_DEFAULT_SEASON_SLUG = "2025-26";
 
 function TablesLegacyRedirect() {
   const searchString = useSearch();
   const params = new URLSearchParams(searchString);
   const league = params.get("league") || "premier-league";
-  const season = params.get("season") || "2025/26";
-  const seasonSlug = seasonApiToSlug(season);
-  return <Redirect to={`/tables/${league}/${seasonSlug}`} replace />;
+  const explicitSeason = params.get("season");
+  const { slug, loading } = useCurrentTablesSeasonSlug(league);
+
+  if (explicitSeason) {
+    const canonical =
+      seasonSlugToCanonical(explicitSeason.replace("/", "-")) ||
+      seasonSlugToCanonical(explicitSeason);
+    const seasonSlug = canonical
+      ? seasonKeyToUrlSlug(canonical)
+      : explicitSeason.replace("/", "-");
+    return <Redirect to={`/tables/${league}/${seasonSlug}`} replace />;
+  }
+
+  if (loading || !slug) return null;
+  return <Redirect to={`/tables/${league}/${slug}`} replace />;
 }
 
 function TablesCupsDefaultRedirect() {
-  return <Redirect to={`/tables/cups/fa-cup/${TABLES_DEFAULT_SEASON_SLUG}`} replace />;
+  const slug = seasonKeyToUrlSlug(calendarFootballSeasonKey());
+  return <Redirect to={`/tables/cups/fa-cup/${slug}`} replace />;
 }
 
 function TablesEuropeDefaultRedirect() {
-  return <Redirect to={`/tables/europe/champions-league/${TABLES_DEFAULT_SEASON_SLUG}`} replace />;
+  const slug = seasonKeyToUrlSlug(calendarFootballSeasonKey());
+  return <Redirect to={`/tables/europe/champions-league/${slug}`} replace />;
+}
+
+function TablesLeagueDefaultRedirect() {
+  const params = useParams<{ leagueSlug?: string }>();
+  const leagueSlug = params.leagueSlug || "premier-league";
+  const { slug, loading } = useCurrentTablesSeasonSlug(leagueSlug);
+  if (loading || !slug) return null;
+  return <Redirect to={`/tables/${leagueSlug}/${slug}`} replace />;
 }
 
 function Router() {
@@ -98,6 +129,7 @@ function Router() {
       <Route path="/tables/cups" component={TablesCupsDefaultRedirect} />
       <Route path="/tables/europe" component={TablesEuropeDefaultRedirect} />
       <Route path="/tables/:leagueSlug/:seasonSlug" component={TablesPage} />
+      <Route path="/tables/:leagueSlug" component={TablesLeagueDefaultRedirect} />
       <Route path="/tables" component={TablesLegacyRedirect} />
       <Route path="/fpl" component={FPLPage} />
       <Route path="/community" component={CommunityPage} />

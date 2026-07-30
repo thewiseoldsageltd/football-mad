@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useRoute } from "wouter";
 import { MainLayout } from "@/components/layout/main-layout";
@@ -8,60 +8,21 @@ import { Trophy } from "lucide-react";
 import { LeagueTable } from "@/components/tables/league-table";
 import { CupProgress } from "@/components/tables/cup-progress";
 import { EuropeProgress } from "@/components/tables/europe-progress";
-import { TablesFilters } from "@/components/tables/tables-filters";
+import { TablesFilters, type TablesSeasonOption } from "@/components/tables/tables-filters";
 import { getGoalserveLeagueId, getLeagueBySlug } from "@/lib/league-config";
 import type { TableRow } from "@/data/tables-mock";
 import { leagueCompetitions, cupCompetitions, europeCompetitions } from "@/data/tables-mock";
 import { GroupedCompetitionNav } from "@/components/navigation/grouped-competition-nav";
 import { CompetitionFlagLabel } from "@/lib/competition-nav-flag-label";
 import { usePageSeo } from "@/lib/seo";
-
-// Season slug helpers: "2025/26" <-> "2025-26"
-function seasonApiToSlug(apiSeason: string): string {
-  const match = apiSeason.match(/^(\d{4})\/(\d{2,4})$/);
-  if (match) {
-    const startYear = match[1];
-    const endPart = match[2];
-    const endYear = endPart.length === 4 ? endPart.slice(2) : endPart;
-    return `${startYear}-${endYear}`;
-  }
-  return apiSeason.replace("/", "-");
-}
-
-function seasonSlugToApi(slug: string): string {
-  const match = slug.match(/^(\d{4})-(\d{2})$/);
-  if (match) {
-    return `${match[1]}/${match[2]}`;
-  }
-  return slug.replace("-", "/");
-}
-
-/**
- * Normalizes season strings to "YYYY/YYYY" format for API compatibility.
- * - "2025/26" or "2025-26" → "2025/2026"
- * - "2025/2026" → "2025/2026" (unchanged)
- * - null/undefined → undefined
- */
-function normalizeSeason(input: string | null | undefined): string | undefined {
-  if (!input) return undefined;
-  
-  // Match "YYYY/YY" or "YYYY-YY" format
-  const shortMatch = input.match(/^(\d{4})[/\-](\d{2})$/);
-  if (shortMatch) {
-    const startYear = parseInt(shortMatch[1], 10);
-    const endYear = startYear + 1;
-    return `${startYear}/${endYear}`;
-  }
-  
-  // Already "YYYY/YYYY" format - return as-is
-  if (/^\d{4}\/\d{4}$/.test(input)) {
-    return input;
-  }
-  
-  // Return unchanged for any other format
-  return input;
-}
-
+import {
+  areSeasonKeysEquivalent,
+  calendarFootballSeasonKey,
+  normalizeSeasonKey,
+  seasonKeyToUiLabel,
+  seasonKeyToUrlSlug,
+  seasonSlugToCanonical,
+} from "@shared/season";
 
 interface StandingsApiRow {
   position: number;
@@ -84,15 +45,26 @@ interface StandingsApiRow {
   qualificationNote?: string | null;
 }
 
+interface SeasonsApiResponse {
+  leagueId: string;
+  currentSeason: TablesSeasonOption;
+  seasons: TablesSeasonOption[];
+}
+
 interface StandingsApiResponse {
   snapshot: {
     leagueId: string;
     season: string;
+    seasonLabel?: string;
     fetchedAt?: string;
     asOf?: string;
     nowUtc?: string;
+    empty?: boolean;
+    emptyReason?: string;
   };
   table: StandingsApiRow[];
+  seasons?: TablesSeasonOption[];
+  currentSeason?: TablesSeasonOption;
 }
 
 function mapApiToTableRow(row: StandingsApiRow): TableRow {
@@ -116,8 +88,12 @@ function mapApiToTableRow(row: StandingsApiRow): TableRow {
   };
 }
 
-
 type TopTab = "leagues" | "cups" | "europe";
+
+function fallbackSeasonEntry(): TablesSeasonOption {
+  const key = calendarFootballSeasonKey();
+  return { key, label: seasonKeyToUiLabel(key), slug: seasonKeyToUrlSlug(key) };
+}
 
 export default function TablesPage() {
   const [location, setLocation] = useLocation();
@@ -125,34 +101,103 @@ export default function TablesPage() {
   const [isCupRoute, cupParams] = useRoute("/tables/cups/:cupSlug/:seasonSlug");
   const [isEuropeRoute, europeParams] = useRoute("/tables/europe/:competitionSlug/:seasonSlug");
   const [isLeagueRoute, leagueParams] = useRoute("/tables/:leagueSlug/:seasonSlug");
+  const [isLeagueNoSeasonRoute, leagueNoSeasonParams] = useRoute("/tables/:leagueSlug");
 
   const topTab: TopTab = isCupRoute ? "cups" : isEuropeRoute ? "europe" : "leagues";
 
-  const seasonSlug = useMemo(() => {
-    if (isCupRoute && cupParams?.seasonSlug) return cupParams.seasonSlug;
-    if (isEuropeRoute && europeParams?.seasonSlug) return europeParams.seasonSlug;
-    if (isLeagueRoute && leagueParams?.seasonSlug) return leagueParams.seasonSlug;
-    return "2025-26";
-  }, [isCupRoute, isEuropeRoute, isLeagueRoute, cupParams, europeParams, leagueParams]);
-
-  const leagueSlug = leagueParams?.leagueSlug ?? "premier-league";
+  const leagueSlug =
+    leagueParams?.leagueSlug ??
+    leagueNoSeasonParams?.leagueSlug ??
+    "premier-league";
   const cupSlug = cupParams?.cupSlug ?? "fa-cup";
   const europeSlug = europeParams?.competitionSlug ?? "champions-league";
 
-  // Convert season slug to API format for queries
-  const season = seasonSlugToApi(seasonSlug);
+  const routeSeasonSlug = useMemo(() => {
+    if (isCupRoute && cupParams?.seasonSlug) return cupParams.seasonSlug;
+    if (isEuropeRoute && europeParams?.seasonSlug) return europeParams.seasonSlug;
+    if (isLeagueRoute && leagueParams?.seasonSlug) return leagueParams.seasonSlug;
+    return null;
+  }, [isCupRoute, isEuropeRoute, isLeagueRoute, cupParams, europeParams, leagueParams]);
+
+  const goalserveLeagueId = useMemo(
+    () => getGoalserveLeagueId(leagueSlug),
+    [leagueSlug],
+  );
+
+  const {
+    data: seasonsData,
+    isLoading: seasonsLoading,
+  } = useQuery<SeasonsApiResponse>({
+    queryKey: ["/api/standings/seasons", goalserveLeagueId],
+    queryFn: async () => {
+      const res = await fetch(`/api/standings/seasons?leagueId=${encodeURIComponent(goalserveLeagueId!)}`);
+      if (!res.ok) throw new Error("Failed to load seasons");
+      return res.json();
+    },
+    enabled: topTab === "leagues" && !!goalserveLeagueId,
+    staleTime: 60_000,
+  });
+
+  const seasonOptions: TablesSeasonOption[] = useMemo(() => {
+    if (topTab === "leagues" && seasonsData?.seasons?.length) return seasonsData.seasons;
+    // Cups/Europe: keep a calendar-based option until dedicated season APIs exist.
+    const fb = fallbackSeasonEntry();
+    if (routeSeasonSlug) {
+      const key = seasonSlugToCanonical(routeSeasonSlug) || fb.key;
+      const entry = { key, label: seasonKeyToUiLabel(key), slug: seasonKeyToUrlSlug(key) };
+      if (entry.key === fb.key) return [fb];
+      return [entry, fb].filter(
+        (s, i, arr) => arr.findIndex((x) => x.key === s.key) === i,
+      );
+    }
+    return [fb];
+  }, [topTab, seasonsData, routeSeasonSlug]);
+
+  const currentSeason = seasonsData?.currentSeason ?? seasonOptions[0] ?? fallbackSeasonEntry();
+
+  // Redirect league routes without a season (or with an unknown season) to current.
+  useEffect(() => {
+    if (topTab !== "leagues") return;
+    if (seasonsLoading) return;
+    if (!seasonsData?.currentSeason) return;
+
+    if (!routeSeasonSlug) {
+      setLocation(`/tables/${leagueSlug}/${seasonsData.currentSeason.slug}`, { replace: true });
+      return;
+    }
+
+    const requested = seasonSlugToCanonical(routeSeasonSlug);
+    const known = seasonsData.seasons.some((s) => areSeasonKeysEquivalent(s.key, requested));
+    if (requested && known) return;
+
+    // Invalid / unknown season slug → current season (do not clobber valid historical).
+    if (!requested || !known) {
+      setLocation(`/tables/${leagueSlug}/${seasonsData.currentSeason.slug}`, { replace: true });
+    }
+  }, [topTab, seasonsLoading, seasonsData, routeSeasonSlug, leagueSlug, setLocation]);
+
+  const seasonSlug = routeSeasonSlug ?? currentSeason.slug;
+  const apiSeason =
+    seasonSlugToCanonical(seasonSlug) ||
+    normalizeSeasonKey(currentSeason.key) ||
+    currentSeason.key;
+  const seasonUiLabel = seasonKeyToUiLabel(apiSeason);
 
   const handleLeagueChange = useCallback(
     (newLeague: string) => {
       if (newLeague === leagueSlug && isLeagueRoute) return;
+      // Keep the requested season slug; destination page will validate against that league.
       setLocation(`/tables/${newLeague}/${seasonSlug}`, { replace: false });
     },
     [leagueSlug, seasonSlug, setLocation, isLeagueRoute],
   );
 
   const handleSeasonChange = useCallback(
-    (newSeason: string) => {
-      const newSlug = seasonApiToSlug(newSeason);
+    (newSeasonLabel: string) => {
+      const match =
+        seasonOptions.find((s) => s.label === newSeasonLabel) ||
+        seasonOptions.find((s) => areSeasonKeysEquivalent(s.key, newSeasonLabel));
+      const newSlug = match?.slug || seasonKeyToUrlSlug(newSeasonLabel);
       if (topTab === "leagues") {
         setLocation(`/tables/${leagueSlug}/${newSlug}`, { replace: false });
       } else if (topTab === "cups") {
@@ -161,54 +206,60 @@ export default function TablesPage() {
         setLocation(`/tables/europe/${europeSlug}/${newSlug}`, { replace: false });
       }
     },
-    [topTab, leagueSlug, cupSlug, europeSlug, setLocation],
+    [topTab, leagueSlug, cupSlug, europeSlug, setLocation, seasonOptions],
   );
 
   const navigateToGroup = useCallback(
     (group: "all" | TopTab) => {
+      const slug = seasonSlug || currentSeason.slug;
       if (group === "all" || group === "leagues") {
-        setLocation(`/tables/premier-league/${seasonSlug}`, { replace: false });
+        setLocation(`/tables/premier-league/${slug}`, { replace: false });
         return;
       }
       if (group === "cups") {
-        setLocation(`/tables/cups/fa-cup/${seasonSlug}`, { replace: false });
+        setLocation(`/tables/cups/fa-cup/${slug}`, { replace: false });
         return;
       }
-      setLocation(`/tables/europe/champions-league/${seasonSlug}`, { replace: false });
+      setLocation(`/tables/europe/champions-league/${slug}`, { replace: false });
     },
-    [seasonSlug, setLocation],
+    [seasonSlug, currentSeason.slug, setLocation],
   );
-
-  const goalserveLeagueId = useMemo(
-    () => getGoalserveLeagueId(leagueSlug),
-    [leagueSlug]
-  );
-
-  const apiSeason = useMemo(() => normalizeSeason(season), [season]);
 
   const standingsUrl = useMemo(() => {
-    if (!goalserveLeagueId) return null;
+    if (!goalserveLeagueId || !apiSeason) return null;
     const params = new URLSearchParams();
     params.set("leagueId", goalserveLeagueId);
-    if (apiSeason) {
-      params.set("season", apiSeason);
-    }
+    params.set("season", apiSeason);
     params.set("tablesOnly", "1");
     return `/api/standings?${params.toString()}`;
   }, [goalserveLeagueId, apiSeason]);
 
-  const { data: standingsData, isLoading: standingsLoading, error: standingsError } = useQuery<StandingsApiResponse>({
+  const {
+    data: standingsData,
+    isLoading: standingsLoading,
+    error: standingsError,
+    isError: standingsIsError,
+  } = useQuery<StandingsApiResponse>({
     queryKey: [standingsUrl],
-    enabled: topTab === "leagues" && !!standingsUrl,
+    enabled: topTab === "leagues" && !!standingsUrl && !!routeSeasonSlug,
     staleTime: 30_000,
     refetchInterval: 60_000,
     refetchOnWindowFocus: false,
+    retry: false,
   });
 
   const tableRows = useMemo(() => {
     if (!Array.isArray(standingsData?.table)) return [];
     return standingsData.table.map(mapApiToTableRow);
   }, [standingsData]);
+
+  const isCurrentSeasonView = areSeasonKeysEquivalent(apiSeason, currentSeason.key);
+  const isPreseasonEmpty =
+    isCurrentSeasonView &&
+    !standingsLoading &&
+    (standingsData?.snapshot?.emptyReason === "preseason" ||
+      (Array.isArray(standingsData?.table) && standingsData.table.length === 0) ||
+      (standingsIsError && isCurrentSeasonView));
 
   const currentLeagueConfig = getLeagueBySlug(leagueSlug);
   const selectedCompetition =
@@ -220,17 +271,11 @@ export default function TablesPage() {
         ? cupCompetitions.find((comp) => comp.id === cupSlug)?.name ?? "Cups"
         : europeCompetitions.find((comp) => comp.id === europeSlug)?.name ?? "Europe";
 
-  const seasonDisplay = useMemo(() => {
-    const short = seasonSlug.match(/^(\d{4})-(\d{2})$/);
-    if (short) return `${short[1]}/${short[2]}`;
-    return seasonSlug.replace("-", "/");
-  }, [seasonSlug]);
-
-  const tablesSeoTitle = seasonDisplay
-    ? `${selectedCompetitionLabel} Table & Standings ${seasonDisplay} | Football Mad`
+  const tablesSeoTitle = seasonUiLabel
+    ? `${selectedCompetitionLabel} Table & Standings ${seasonUiLabel} | Football Mad`
     : `${selectedCompetitionLabel} Table & Standings | Football Mad`;
-  const tablesSeoDescription = seasonDisplay
-    ? `${selectedCompetitionLabel} table, standings, form and points for the ${seasonDisplay} season on Football Mad.`
+  const tablesSeoDescription = seasonUiLabel
+    ? `${selectedCompetitionLabel} table, standings, form and points for the ${seasonUiLabel} season on Football Mad.`
     : `${selectedCompetitionLabel} table, standings, form and points on Football Mad.`;
 
   usePageSeo({
@@ -279,6 +324,25 @@ export default function TablesPage() {
       );
     }
 
+    if (!routeSeasonSlug || seasonsLoading) {
+      return (
+        <Card className="h-fit">
+          <CardContent className="p-4 sm:p-6 space-y-3">
+            <Skeleton className="h-4 w-36" />
+            <div className="space-y-2">
+              {Array.from({ length: 12 }).map((_, idx) => (
+                <div key={idx} className="grid grid-cols-[32px_1fr_52px] items-center gap-3">
+                  <Skeleton className="h-4 w-6" />
+                  <Skeleton className="h-5 w-full" />
+                  <Skeleton className="h-5 w-10 justify-self-end" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
     if (standingsLoading) {
       return (
         <Card className="h-fit">
@@ -298,21 +362,21 @@ export default function TablesPage() {
       );
     }
 
-    if (standingsError) {
+    if (isPreseasonEmpty) {
       return (
         <Card>
-          <CardContent className="p-6 text-center text-muted-foreground">
-            Failed to load standings. Please try again later.
+          <CardContent className="p-6 text-center text-muted-foreground" data-testid="text-preseason-empty">
+            The {seasonUiLabel} table will appear when league standings data becomes available.
           </CardContent>
         </Card>
       );
     }
 
-    if (Array.isArray(standingsData?.table) && standingsData.table.length === 0) {
+    if (standingsIsError || standingsError) {
       return (
         <Card>
           <CardContent className="p-6 text-center text-muted-foreground">
-            No standings data available. Check back later.
+            Failed to load standings. Please try again later.
           </CardContent>
         </Card>
       );
@@ -333,12 +397,12 @@ export default function TablesPage() {
   };
 
   const renderEuropeContent = () => {
-    const normalizedSeason = normalizeSeason(season) || "2025/2026";
+    const normalizedSeason = apiSeason || currentSeason.key;
     return <EuropeProgress competitionSlug={europeSlug} season={normalizedSeason} />;
   };
 
   const renderCupsContent = () => {
-    const normalizedSeason = normalizeSeason(season) || "2025/2026";
+    const normalizedSeason = apiSeason || currentSeason.key;
     return <CupProgress cupSlug={cupSlug} season={normalizedSeason} />;
   };
 
@@ -352,6 +416,18 @@ export default function TablesPage() {
         return renderCupsContent();
     }
   };
+
+  // Bare /tables/:leagueSlug without season — wait for redirect effect.
+  if (isLeagueNoSeasonRoute && !isLeagueRoute && !isCupRoute && !isEuropeRoute) {
+    return (
+      <MainLayout>
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <Skeleton className="h-10 w-48 mb-6" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -378,13 +454,17 @@ export default function TablesPage() {
           competitions={visibleCompetitions}
           rightDesktopSlot={(
             <TablesFilters
-              season={season}
+              season={seasonUiLabel}
+              seasons={seasonOptions}
+              seasonsLoading={topTab === "leagues" && seasonsLoading}
               onSeasonChange={handleSeasonChange}
             />
           )}
           rightMobileSlot={(
             <TablesFilters
-              season={season}
+              season={seasonUiLabel}
+              seasons={seasonOptions}
+              seasonsLoading={topTab === "leagues" && seasonsLoading}
               onSeasonChange={handleSeasonChange}
               mobile
             />

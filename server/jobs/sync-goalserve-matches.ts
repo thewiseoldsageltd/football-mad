@@ -4,9 +4,15 @@
 // avoid duplicates and ensure stable references across feed refreshes.
 
 import { db } from "../db";
-import { matches, teams, competitions, competitionSeasons } from "@shared/schema";
+import { matches, teams, competitions } from "@shared/schema";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { eq } from "drizzle-orm";
+import {
+  ensureCompetitionSeasonEvidence,
+  setTrustedCurrentCompetitionSeason,
+} from "../lib/competition-seasons";
+import { shouldPromoteCompetitionCurrentFromFixtureSync } from "@shared/membership-rollover";
+import { normalizeSeasonKey } from "@shared/season";
 
 export function resolveSeasonKey(
   inputSeasonKey: string | undefined,
@@ -354,40 +360,16 @@ export async function syncGoalserveMatches(
 
     const extracted = extractMatchesFromGoalserveResponse(response, leagueId);
 
-    const seasonKey = resolveSeasonKey(
-      seasonKeyParam,
-      competitionRow?.season ? String(competitionRow.season) : undefined,
-      extracted?.parsedSeason
+    const isHistorical = Boolean(seasonKeyParam?.trim());
+    const seasonKey = normalizeSeasonKey(
+      resolveSeasonKey(
+        seasonKeyParam,
+        competitionRow?.season ? String(competitionRow.season) : undefined,
+        extracted?.parsedSeason,
+      ),
     );
 
-    // Keep competitions.season aligned with the season we just ingested.
-    if (competitionDbId && seasonKey && seasonKey !== competitionRow?.season) {
-      await db
-        .update(competitions)
-        .set({ season: seasonKey })
-        .where(eq(competitions.id, competitionDbId));
-    }
-
     let wroteCompetitionSeason = false;
-    if (competitionDbId && seasonKey) {
-      const isCurrent = competitionRow?.season === seasonKey;
-      await db
-        .insert(competitionSeasons)
-        .values({
-          competitionId: competitionDbId,
-          seasonKey,
-          isCurrent,
-          updatedAt: new Date(),
-        })
-        .onConflictDoUpdate({
-          target: [competitionSeasons.competitionId, competitionSeasons.seasonKey],
-          set: {
-            isCurrent,
-            updatedAt: new Date(),
-          },
-        });
-      wroteCompetitionSeason = true;
-    }
 
     if (!extracted) {
       const topKeys = Object.keys(response ?? {}).join(", ");
@@ -400,6 +382,26 @@ export async function syncGoalserveMatches(
         `Could not find matches in response. Top-level keys: [${topKeys}], tournament keys: [${tournamentKeys}], hasWeek=${hasWeek}, hasStage=${hasStage}`,
         { competitionId: competitionDbId, seasonKey, seasonKeyUsed: seasonKey, wroteCompetitionSeason }
       );
+    }
+
+    // Only bare/current feeds may advance current season — and only after a valid parse.
+    if (
+      competitionDbId &&
+      seasonKey &&
+      shouldPromoteCompetitionCurrentFromFixtureSync({
+        seasonKeyParam,
+        feedParsedOk: true,
+      })
+    ) {
+      await setTrustedCurrentCompetitionSeason(
+        competitionDbId,
+        seasonKey,
+        competitionRow?.season ?? null,
+      );
+      wroteCompetitionSeason = true;
+    } else if (competitionDbId && seasonKey && isHistorical) {
+      // Historical/manual season: store evidence only; never flip current markers.
+      await ensureCompetitionSeasonEvidence(competitionDbId, seasonKey);
     }
 
     const { name: extractedName, weeks, responsePath } = extracted;

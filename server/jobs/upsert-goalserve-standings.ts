@@ -1,7 +1,9 @@
 import { db } from "../db";
-import { teams, standingsSnapshots, standingsRows } from "@shared/schema";
+import { teams, standingsSnapshots, standingsRows, competitions } from "@shared/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import crypto from "crypto";
+import { normalizeSeasonKey } from "@shared/season";
+import { setTrustedCurrentCompetitionSeason } from "../lib/competition-seasons";
 
 const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
 
@@ -452,7 +454,8 @@ export async function upsertGoalserveStandings(
   // Extract metadata from resolved tournament
   const returnedSeason = t?.season || "";
   const effectiveSeason = returnedSeason || seasonSlash || "";
-  const season = seasonSlash || effectiveSeason;
+  const seasonRaw = seasonSlash || effectiveSeason;
+  const season = normalizeSeasonKey(seasonRaw) || seasonRaw;
   const stageId = t?.stage_id || null;
 
   // Season mismatch detection
@@ -531,6 +534,20 @@ export async function upsertGoalserveStandings(
 
   if (latestSnapshot?.payloadHash === payloadHash && !force) {
     console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} NO CHANGE (hash match)`);
+    if (!isHistorical && season) {
+      const [competitionRow] = await db
+        .select({ id: competitions.id, season: competitions.season })
+        .from(competitions)
+        .where(eq(competitions.goalserveCompetitionId, leagueId))
+        .limit(1);
+      if (competitionRow?.id) {
+        await setTrustedCurrentCompetitionSeason(
+          competitionRow.id,
+          season,
+          competitionRow.season ?? null,
+        );
+      }
+    }
     return {
       ok: true,
       leagueId,
@@ -655,6 +672,22 @@ export async function upsertGoalserveStandings(
   });
 
   console.log(`[StandingsIngest] leagueId=${leagueId} season=${season} rows=${result.insertedRowsCount}`);
+
+  // Bare current-season feed: keep competitions.season aligned with provider.
+  if (!isHistorical && season) {
+    const [competitionRow] = await db
+      .select({ id: competitions.id, season: competitions.season })
+      .from(competitions)
+      .where(eq(competitions.goalserveCompetitionId, leagueId))
+      .limit(1);
+    if (competitionRow?.id) {
+      await setTrustedCurrentCompetitionSeason(
+        competitionRow.id,
+        season,
+        competitionRow.season ?? null,
+      );
+    }
+  }
 
   return {
     ok: true,

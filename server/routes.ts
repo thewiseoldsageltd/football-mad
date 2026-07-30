@@ -74,6 +74,15 @@ import { runSyncGoalserve } from "./jobs/sync-goalserve";
 import { previewGoalserveTable } from "./jobs/preview-goalserve-table";
 import { upsertGoalserveTable } from "./jobs/upsert-goalserve-table";
 import { upsertGoalserveStandings, getSupportedStandingsSeasons } from "./jobs/upsert-goalserve-standings";
+import {
+  findStandingsSeasonVariant,
+  getCompetitionSeasonsForLeague,
+} from "./lib/competition-seasons";
+import {
+  areSeasonKeysEquivalent,
+  normalizeSeasonKey,
+  seasonKeyToUiLabel,
+} from "@shared/season";
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
 import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
 import { backfillStandings } from "./jobs/backfill-standings";
@@ -458,6 +467,66 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching team:", error);
       res.status(500).json({ error: "Failed to fetch team" });
+    }
+  });
+
+  app.get("/api/teams/:slug/memberships", async (req, res) => {
+    try {
+      const team = await storage.getTeamBySlug(req.params.slug);
+      if (!team) {
+        return res.status(404).json({ error: "Team not found" });
+      }
+
+      const rows = await db
+        .select({
+          competitionId: competitionTeamMemberships.competitionId,
+          seasonKey: competitionTeamMemberships.seasonKey,
+          membershipType: competitionTeamMemberships.membershipType,
+          isCurrent: competitionTeamMemberships.isCurrent,
+          competitionName: competitions.name,
+          competitionSlug: competitions.slug,
+          goalserveCompetitionId: competitions.goalserveCompetitionId,
+          competitionSeason: competitions.season,
+        })
+        .from(competitionTeamMemberships)
+        .innerJoin(competitions, eq(competitionTeamMemberships.competitionId, competitions.id))
+        .where(eq(competitionTeamMemberships.teamId, team.id));
+
+      const current = rows.filter((r) => r.isCurrent);
+      const currentSeasonKeys = current
+        .map((r) => normalizeSeasonKey(r.seasonKey) || r.seasonKey)
+        .filter(Boolean);
+      const currentSeasonKey =
+        currentSeasonKeys.sort((a, b) => b.localeCompare(a))[0] ??
+        normalizeSeasonKey(current[0]?.competitionSeason) ??
+        null;
+
+      res.json({
+        teamId: team.id,
+        teamSlug: team.slug,
+        currentSeasonKey,
+        currentSeasonLabel: currentSeasonKey ? seasonKeyToUiLabel(currentSeasonKey) : null,
+        memberships: rows.map((r) => ({
+          competitionId: r.competitionId,
+          competitionName: r.competitionName,
+          competitionSlug: r.competitionSlug,
+          goalserveCompetitionId: r.goalserveCompetitionId,
+          seasonKey: normalizeSeasonKey(r.seasonKey) || r.seasonKey,
+          membershipType: r.membershipType,
+          isCurrent: r.isCurrent,
+        })),
+        currentMemberships: current.map((r) => ({
+          competitionId: r.competitionId,
+          competitionName: r.competitionName,
+          competitionSlug: r.competitionSlug,
+          goalserveCompetitionId: r.goalserveCompetitionId,
+          seasonKey: normalizeSeasonKey(r.seasonKey) || r.seasonKey,
+          membershipType: r.membershipType,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching team memberships:", error);
+      res.status(500).json({ error: "Failed to fetch team memberships" });
     }
   });
 
@@ -4722,6 +4791,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ========== PUBLIC STANDINGS ENDPOINT ==========
   // Read-only endpoint: no synchronous upstream refresh in public GET path.
 
+  app.get("/api/standings/seasons", async (req, res) => {
+    try {
+      const leagueId = String(req.query.leagueId ?? "").trim();
+      if (!leagueId) {
+        return res.status(400).json({ error: "leagueId query param required" });
+      }
+      const payload = await getCompetitionSeasonsForLeague(leagueId);
+      res.json(payload);
+    } catch (error) {
+      console.error("Error fetching standings seasons:", error);
+      res.status(500).json({ error: "Failed to fetch seasons" });
+    }
+  });
+
   app.get("/api/standings", async (req, res) => {
     try {
       const leagueId = req.query.leagueId as string;
@@ -4729,35 +4812,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(400).json({ error: "leagueId query param required" });
       }
 
-      const now = new Date();
-      const currentYear = now.getMonth() >= 7 ? now.getFullYear() : now.getFullYear() - 1;
-      const defaultSeason = `${currentYear}/${currentYear + 1}`;
-      const season = (req.query.season as string) || defaultSeason;
+      const seasonsMeta = await getCompetitionSeasonsForLeague(leagueId);
+      const requestedRaw = (req.query.season as string | undefined)?.trim();
+      const seasonCanonical =
+        normalizeSeasonKey(requestedRaw) || seasonsMeta.currentSeason.key;
       const asOfParam = req.query.asOf as string | undefined;
       const tablesOnly = req.query.tablesOnly === "1";
 
-      // Normalize season to YYYY-YYYY format for comparison (handles 2025/26, 2025-26, 2025/2026, etc.)
-      const normalizeSeason = (s: string): string => {
-        const match = s.match(/(\d{4})[\/\-](\d{2,4})/);
-        if (!match) return s;
-        const startYear = match[1];
-        let endYear = match[2];
-        if (endYear.length === 2) {
-          endYear = startYear.slice(0, 2) + endYear;
-        }
-        return `${startYear}-${endYear}`;
-      };
-      const CURRENT_SEASON = "2025-2026";
-      const seasonNorm = normalizeSeason(season);
-      const isCurrentSeason = seasonNorm === CURRENT_SEASON;
+      const isCurrentSeason = areSeasonKeysEquivalent(
+        seasonCanonical,
+        seasonsMeta.currentSeason.key,
+      );
       const isPremierLeague = leagueId === "1204";
       // Only fetch Goalserve XML and compute rounds for current season Premier League
       // When tablesOnly=1, skip round computation entirely for faster response
       const includeRounds = !tablesOnly && isCurrentSeason && isPremierLeague;
 
+      const seasonForLookup =
+        (await findStandingsSeasonVariant(leagueId, seasonCanonical)) || seasonCanonical;
+
       const conditions = [
         eq(standingsSnapshots.leagueId, leagueId),
-        eq(standingsSnapshots.season, season),
+        eq(standingsSnapshots.season, seasonForLookup),
       ];
 
       if (asOfParam) {
@@ -4765,19 +4841,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         conditions.push(lte(standingsSnapshots.asOf, asOfDate));
       }
 
-      let [snapshot] = await db
-        .select()
-        .from(standingsSnapshots)
-        .where(and(...conditions))
-        .orderBy(desc(standingsSnapshots.asOf))
-        .limit(1);
+      let snapshot:
+        | {
+            id: string;
+            leagueId: string;
+            season: string;
+            stageId: string | null;
+            asOf: Date;
+            source: string | null;
+            payloadHash: string | null;
+            createdAt: Date | null;
+          }
+        | undefined;
+
+      {
+        const [exact] = await db
+          .select()
+          .from(standingsSnapshots)
+          .where(and(...conditions))
+          .orderBy(desc(standingsSnapshots.asOf))
+          .limit(1);
+        snapshot = exact;
+      }
+
+      // If exact stored string missed (legacy format variants), scan recent snapshots.
+      if (!snapshot) {
+        const recent = await db
+          .select()
+          .from(standingsSnapshots)
+          .where(eq(standingsSnapshots.leagueId, leagueId))
+          .orderBy(desc(standingsSnapshots.asOf))
+          .limit(40);
+        snapshot = recent.find((row) =>
+          areSeasonKeysEquivalent(row.season, seasonCanonical),
+        );
+      }
 
       if (!snapshot) {
-        return res.status(404).json({ 
-          error: "No standings snapshot found", 
-          leagueId, 
-          season,
-          hint: "Goalserve may not have data for this league/season combination"
+        // Preseason / newly published season: return empty table rather than 404 so
+        // the client can show a current-season empty state instead of falling back.
+        if (isCurrentSeason) {
+          return res.json({
+            snapshot: {
+              leagueId,
+              season: seasonCanonical,
+              seasonLabel: seasonKeyToUiLabel(seasonCanonical),
+              currentSeason: seasonsMeta.currentSeason,
+              empty: true,
+              emptyReason: "preseason",
+            },
+            table: [],
+            seasons: seasonsMeta.seasons,
+            currentSeason: seasonsMeta.currentSeason,
+          });
+        }
+        return res.status(404).json({
+          error: "No standings snapshot found",
+          leagueId,
+          season: seasonCanonical,
+          hint: "Goalserve may not have data for this league/season combination",
         });
       }
 
@@ -4964,12 +5086,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.json({
           snapshot: {
             leagueId: snapshot.leagueId,
-            season: snapshot.season,
+            season: normalizeSeasonKey(snapshot.season) || snapshot.season,
+            seasonLabel: seasonKeyToUiLabel(snapshot.season),
             stageId: snapshot.stageId,
             asOf: snapshot.asOf,
             nowUtc: nowUtc.toISOString(),
           },
           table,
+          seasons: seasonsMeta.seasons,
+          currentSeason: seasonsMeta.currentSeason,
         });
       }
 
@@ -4990,8 +5115,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       // Fetch Goalserve XML for proper week numbers (only for current season Premier League)
       const { goalserveFetchXml } = await import("./integrations/goalserve/client");
-      const xmlEndpoint = season 
-        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(season)}`
+      const xmlEndpoint = seasonCanonical
+        ? `soccerfixtures/leagueid/${leagueId}?season=${encodeURIComponent(seasonCanonical)}`
         : `soccerfixtures/leagueid/${leagueId}`;
       
       let xmlData: any;

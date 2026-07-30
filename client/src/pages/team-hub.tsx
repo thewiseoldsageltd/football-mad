@@ -19,6 +19,14 @@ import { TransferCard } from "@/components/cards/transfer-card";
 import type { BlendedTransferItem } from "@/data/transfers-dummy";
 import { newsArticle, playerProfile, managerProfile } from "@/lib/urls";
 import { resolveMatchDetailHref } from "@shared/match-slug";
+import {
+  areSeasonKeysEquivalent,
+  calendarFootballSeasonKeyLocal,
+  isPreseasonMonthForSeason,
+  isSeasonKeyBefore,
+  normalizeSeasonKey,
+  seasonKeyToUiLabel,
+} from "@shared/season";
 import { getPublicCompetitionDisplayName } from "@/components/matches/competition-priority";
 import type { Team, Article, Match, Transfer, Injury, Post, FplPlayerAvailability, Player, Manager } from "@shared/schema";
 import { EntityAvatar, EntityIcon } from "@/components/entity-media";
@@ -1232,7 +1240,7 @@ interface HubMatchRow {
 
 /** Split football season label for a calendar month (Aug→May → YYYY/YYYY+1). */
 function footballSeasonLabelForMonth(month: number, year: number): string {
-  return month >= 7 ? `${year}/${year + 1}` : `${year - 1}/${year}`;
+  return calendarFootballSeasonKeyLocal(month, year);
 }
 
 function matchBelongsToFootballSeason(
@@ -1597,6 +1605,24 @@ function MatchesTabContent({
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [competitionFilter, setCompetitionFilter] = useState<string>("all");
+
+  const { data: membershipsData } = useQuery<{
+    currentSeasonKey: string | null;
+    currentMemberships: Array<{
+      competitionId: string;
+      competitionName: string;
+      seasonKey: string;
+    }>;
+  }>({
+    queryKey: ["/api/teams", teamSlug, "memberships"],
+    queryFn: async () => {
+      const res = await fetch(`/api/teams/${encodeURIComponent(teamSlug)}/memberships`);
+      if (!res.ok) throw new Error("Failed to load memberships");
+      return res.json();
+    },
+    enabled: !!teamSlug,
+    staleTime: 60_000,
+  });
   
   const allMatches = useMemo(
     () => (matches ?? []).map(apiMatchToHubRow),
@@ -1623,17 +1649,46 @@ function MatchesTabContent({
     [selectedMonth, selectedYear],
   );
 
+  const teamCurrentSeasonKey = useMemo(() => {
+    return (
+      normalizeSeasonKey(membershipsData?.currentSeasonKey) ||
+      normalizeSeasonKey(membershipsData?.currentMemberships?.[0]?.seasonKey) ||
+      null
+    );
+  }, [membershipsData]);
+
+  // Current competition identity uses memberships (provider season), not the selected month.
+  // Historical months still use fixture-derived competitions for that older season.
+  const viewingHistoricalSeason = useMemo(() => {
+    if (!teamCurrentSeasonKey) return false;
+    if (areSeasonKeysEquivalent(seasonLabel, teamCurrentSeasonKey)) return false;
+    if (isPreseasonMonthForSeason(selectedMonth, selectedYear, teamCurrentSeasonKey)) {
+      return false;
+    }
+    return isSeasonKeyBefore(seasonLabel, teamCurrentSeasonKey);
+  }, [teamCurrentSeasonKey, seasonLabel, selectedMonth, selectedYear]);
+
   const seasonMatches = useMemo(
     () => allMatches.filter((m) => matchBelongsToFootballSeason(m, seasonLabel)),
     [allMatches, seasonLabel],
   );
 
   const competitions = useMemo(() => {
+    if (!viewingHistoricalSeason && membershipsData?.currentMemberships?.length) {
+      const names = Array.from(
+        new Set(
+          membershipsData.currentMemberships
+            .map((m) => m.competitionName)
+            .filter(Boolean),
+        ),
+      ).sort((a, b) => a.localeCompare(b));
+      return ["all", ...names];
+    }
     const names = Array.from(new Set(seasonMatches.map((m) => m.competition).filter(Boolean))).sort((a, b) =>
       a.localeCompare(b),
     );
     return ["all", ...names];
-  }, [seasonMatches]);
+  }, [viewingHistoricalSeason, membershipsData, seasonMatches]);
   
   // Filter matches by selected month and competition
   const filteredMatches = useMemo(() => {
@@ -1685,14 +1740,46 @@ function MatchesTabContent({
     return { completed, upcoming, total: filteredMatches.length };
   }, [filteredMatches]);
 
-  // Season-scoped competition totals (Model B) — avoids combining e.g. 2025/26 + 2026/27 into "76".
+  // Season-scoped competition totals — membership identity for current/preseason.
   const competitionCounts = useMemo(() => {
+    if (!viewingHistoricalSeason && membershipsData?.currentMemberships?.length) {
+      const membershipSeason = teamCurrentSeasonKey || seasonLabel;
+      const currentSeasonFixtures = allMatches.filter((m) =>
+        matchBelongsToFootballSeason(m, membershipSeason),
+      );
+      const counts = new Map<string, number>();
+      for (const m of membershipsData.currentMemberships) {
+        counts.set(m.competitionName, 0);
+      }
+      for (const m of currentSeasonFixtures) {
+        if (!counts.has(m.competition)) continue;
+        counts.set(m.competition, (counts.get(m.competition) ?? 0) + 1);
+      }
+      return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    }
     const counts = new Map<string, number>();
     for (const m of seasonMatches) {
       counts.set(m.competition, (counts.get(m.competition) ?? 0) + 1);
     }
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  }, [seasonMatches]);
+  }, [
+    viewingHistoricalSeason,
+    membershipsData,
+    teamCurrentSeasonKey,
+    seasonLabel,
+    allMatches,
+    seasonMatches,
+  ]);
+
+  const footerSeasonLabel = viewingHistoricalSeason
+    ? seasonLabel
+    : teamCurrentSeasonKey || seasonLabel;
+
+  useEffect(() => {
+    if (competitionFilter !== "all" && !competitions.includes(competitionFilter)) {
+      setCompetitionFilter("all");
+    }
+  }, [competitions, competitionFilter]);
 
   if (isLoading) {
     return (
@@ -1770,7 +1857,7 @@ function MatchesTabContent({
       {competitionCounts.length > 0 && (
         <div className="mt-6 pt-4 border-t">
           <p className="text-xs text-muted-foreground mb-2 px-1" data-testid="season-summary-label">
-            {seasonLabel} season
+            {footerSeasonLabel} season
           </p>
           <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
             {competitionCounts.map(([name, count]) => (
