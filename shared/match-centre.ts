@@ -28,6 +28,8 @@ export type MatchCentreStandingContext = {
 export type MatchCentreFormMatch = {
   opponentName: string;
   opponentSlug: string | null;
+  /** Canonical opponent team id when known — powers crest lookup. */
+  opponentTeamId?: string | null;
   homeAway: "home" | "away";
   homeScore: number;
   awayScore: number;
@@ -75,6 +77,8 @@ export type MatchCentreFixtureLink = {
   href: string | null;
   homeAway: "home" | "away";
   opponentName: string;
+  /** Canonical opponent team id when known — powers crest lookup. */
+  opponentTeamId?: string | null;
 };
 
 export type MatchCentreRelatedArticle = {

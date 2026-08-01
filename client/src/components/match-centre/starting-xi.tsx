@@ -11,6 +11,9 @@ import type {
 
 const XI_VIEW_STORAGE_KEY = "fm.match-centre.xi-view";
 
+/** Pitch XI stays behind a feature flag until ready for product rollout. */
+const PITCH_XI_ENABLED = import.meta.env.VITE_MATCH_CENTRE_PITCH_XI === "1";
+
 export type StartingXiViewMode = "list" | "pitch";
 
 function readStoredView(): StartingXiViewMode {
@@ -101,15 +104,15 @@ function ListView({
   const rows = Math.max(homeStarters.length, awayStarters.length, 0);
 
   return (
-    <div className="rounded-2xl border border-border/80 overflow-hidden" data-testid="starting-xi-list">
-      <div className="grid grid-cols-2 gap-0 border-b border-border/60 bg-muted/30">
-        <div className="px-3 py-2.5 sm:px-4">
+    <div className="overflow-hidden" data-testid="starting-xi-list">
+      <div className="grid grid-cols-2 gap-0 border-b border-border/60 pb-2 mb-1">
+        <div className="pr-2">
           <p className="text-sm font-semibold truncate">{homeTeam.name}</p>
           {home?.formation ? (
             <p className="text-xs text-muted-foreground tabular-nums">{home.formation}</p>
           ) : null}
         </div>
-        <div className="px-3 py-2.5 sm:px-4 text-right">
+        <div className="pl-2 text-right">
           <p className="text-sm font-semibold truncate">{awayTeam.name}</p>
           {away?.formation ? (
             <p className="text-xs text-muted-foreground tabular-nums">{away.formation}</p>
@@ -123,7 +126,7 @@ function ListView({
           return (
             <li
               key={i}
-              className="grid grid-cols-2 gap-2 border-b border-border/50 last:border-0 px-3 py-2 sm:px-4 text-sm"
+              className="grid grid-cols-2 gap-2 border-b border-border/40 last:border-0 py-2 text-sm"
             >
               <div className="min-w-0 flex items-baseline gap-2">
                 {h ? (
@@ -189,11 +192,8 @@ function PitchView({
         role="img"
         aria-label={`Formation pitch. ${homeTeam.name} attack left to right. ${awayTeam.name} attack right to left.`}
       >
-        {/* Pitch surface — restrained, no decoration gradients */}
         <div className="absolute inset-2 rounded-xl border border-border/50 bg-background/80" />
-        {/* Halfway line */}
         <div className="absolute top-2 bottom-2 left-1/2 w-px -translate-x-1/2 bg-border" />
-        {/* Centre circle hint */}
         <div className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border/40" />
 
         {[...homePlaces, ...awayPlaces].map((p) => (
@@ -219,8 +219,7 @@ function PitchView({
 }
 
 /**
- * State-aware Starting XI foundation.
- * Phase 2: confirmed XI only. Predicted XI can reuse this shell later.
+ * Starting XI — list by default. Pitch toggle only when feature-flagged.
  */
 export function StartingXiSection({
   lineups,
@@ -231,13 +230,12 @@ export function StartingXiSection({
   lineups: MatchCentreLineups | null;
   homeTeam: MatchCentreTeamRef;
   awayTeam: MatchCentreTeamRef;
-  /** Future: "Predicted XI" / "Final XI" */
   title?: string;
 }) {
   const [view, setView] = useState<StartingXiViewMode>("list");
 
   useEffect(() => {
-    setView(readStoredView());
+    if (PITCH_XI_ENABLED) setView(readStoredView());
   }, []);
 
   const setAndStore = (mode: StartingXiViewMode) => {
@@ -250,6 +248,7 @@ export function StartingXiSection({
   };
 
   const available = hasAnyStarters(lineups);
+  const showPitch = PITCH_XI_ENABLED && view === "pitch";
 
   return (
     <section data-testid="match-starting-xi" className="space-y-3">
@@ -262,25 +261,30 @@ export function StartingXiSection({
             <p className="text-xs text-muted-foreground mt-0.5">Confirmed line-ups</p>
           ) : null}
         </div>
-        {available ? <ViewToggle value={view} onChange={setAndStore} /> : null}
+        {available && PITCH_XI_ENABLED ? (
+          <ViewToggle value={view} onChange={setAndStore} />
+        ) : null}
       </div>
 
       {!available ? (
         <div
-          className="rounded-2xl border border-dashed border-border/80 px-4 py-6 text-sm text-muted-foreground text-center"
+          className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-5 py-8 text-center"
           data-testid="starting-xi-empty"
         >
-          Confirmed line-ups will appear when they become available.
+          <p className="text-sm font-medium text-foreground/80">Line-ups not confirmed yet</p>
+          <p className="mt-1.5 text-sm text-muted-foreground max-w-sm mx-auto">
+            Confirmed starting elevens will appear here when they become available.
+          </p>
         </div>
-      ) : view === "list" ? (
-        <ListView
+      ) : showPitch ? (
+        <PitchView
           homeTeam={homeTeam}
           awayTeam={awayTeam}
           home={lineups?.home ?? null}
           away={lineups?.away ?? null}
         />
       ) : (
-        <PitchView
+        <ListView
           homeTeam={homeTeam}
           awayTeam={awayTeam}
           home={lineups?.home ?? null}

@@ -185,6 +185,7 @@ function toFormMatch(
   return {
     opponentName: (side === "home" ? row.awayName : row.homeName) || "Opponent",
     opponentSlug: (side === "home" ? row.awaySlug : row.homeSlug) ?? null,
+    opponentTeamId: (side === "home" ? row.awayTeamId : row.homeTeamId) ?? null,
     homeAway: side,
     homeScore: row.homeScore,
     awayScore: row.awayScore,
@@ -214,6 +215,7 @@ function toFixtureLink(
     href: matchHref(row),
     homeAway: side,
     opponentName: (side === "home" ? row.awayName : row.homeName) || "Opponent",
+    opponentTeamId: (side === "home" ? row.awayTeamId : row.homeTeamId) ?? null,
   };
 }
 

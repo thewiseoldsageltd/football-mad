@@ -93,18 +93,22 @@ function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
       ? `${match.homeScore}–${match.awayScore}`
       : `${match.awayScore}–${match.homeScore}`;
   const body = (
-    <div className="flex items-start gap-3 py-2.5">
-      <ResultBadge result={match.result} />
+    <div className="flex items-center gap-2.5 py-2">
+      <MatchTeamBadge
+        team={{ id: match.opponentTeamId || undefined, name: match.opponentName }}
+        size="xs"
+      />
+      <ResultBadge result={match.result} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="font-medium truncate">{match.opponentName}</span>
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            {match.homeAway === "home" ? "Home" : "Away"}
+          <span className="font-medium text-sm truncate">{match.opponentName}</span>
+          <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            {match.homeAway === "home" ? "H" : "A"}
           </span>
+          <span className="tabular-nums text-sm font-semibold">{score}</span>
         </div>
-        <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
-          <span className="tabular-nums font-medium text-foreground">{score}</span>
-          <span>{match.competitionName}</span>
+        <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+          <span className="truncate">{match.competitionName}</span>
           {kickoff ? <span>{format(kickoff, "d MMM yyyy")}</span> : null}
         </div>
       </div>
@@ -112,9 +116,9 @@ function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
   );
 
   return (
-    <li className="border-b border-border/50 last:border-0">
+    <li className="border-b border-border/40 last:border-0">
       {match.href ? (
-        <Link href={match.href} className="block hover:bg-muted/40 -mx-1 px-1 rounded-md">
+        <Link href={match.href} className="block hover:bg-muted/30 -mx-1 px-1 rounded-md">
           {body}
         </Link>
       ) : (
@@ -127,16 +131,28 @@ function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
 function TeamFormColumn({ ctx }: { ctx: MatchCentreTeamContext }) {
   if (!ctx.form.length) {
     return (
-      <div className="space-y-2">
-        <p className="text-sm font-semibold">{ctx.team.name}</p>
+      <div className="space-y-1.5 min-w-0">
+        <div className="flex items-center gap-2">
+          <MatchTeamBadge
+            team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
+            size="xs"
+          />
+          <p className="text-sm font-semibold truncate">{ctx.team.name}</p>
+        </div>
         <p className="text-sm text-muted-foreground">No recent competitive form before this kickoff.</p>
       </div>
     );
   }
   return (
-    <div className="space-y-2 min-w-0">
-      <p className="text-sm font-semibold">{ctx.team.name}</p>
-      <ul className="divide-y-0">
+    <div className="space-y-1.5 min-w-0">
+      <div className="flex items-center gap-2">
+        <MatchTeamBadge
+          team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
+          size="xs"
+        />
+        <p className="text-sm font-semibold truncate">{ctx.team.name}</p>
+      </div>
+      <ul>
         {ctx.form.map((m, i) => (
           <FormMatchRow key={`${m.kickoffTime}-${i}`} match={m} />
         ))}
@@ -154,11 +170,11 @@ function RecentFormSection({
   away: MatchCentreTeamContext;
   title?: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   if (!home.form.length && !away.form.length) return null;
 
   return (
-    <Section testId="match-recent-form">
+    <Section testId="match-recent-form" className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{title}</h2>
         <button
@@ -173,19 +189,19 @@ function RecentFormSection({
             </>
           ) : (
             <>
-              Show details <ChevronDown className="h-3.5 w-3.5" />
+              Match details <ChevronDown className="h-3.5 w-3.5" />
             </>
           )}
         </button>
       </div>
       {open ? (
-        <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+        <div className="grid gap-5 md:grid-cols-2 md:gap-6">
           <TeamFormColumn ctx={home} />
           <TeamFormColumn ctx={away} />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Form summary is shown in Tale of the tape. Expand for fixture details.
+          Form badges are in Tale of the tape. Expand for the last five fixtures.
         </p>
       )}
     </Section>
@@ -203,8 +219,8 @@ function StatsSection({
 }) {
   if (!hasMeaningfulMatchStats(stats)) return null;
   return (
-    <Section title="Statistics" testId="match-statistics">
-      <div className="rounded-xl border border-border/70 px-4 py-4 space-y-4">
+    <Section title="Statistics" testId="match-statistics" className="space-y-3">
+      <div className="space-y-3.5">
         <div className="grid grid-cols-3 text-xs text-muted-foreground">
           <span className="truncate">{homeName}</span>
           <span className="text-center">Stat</span>
@@ -259,26 +275,76 @@ function H2HSection({
     );
   }
 
+  const historical = h2h.matches.filter((m) => !m.isCurrentMatch);
+  const lastMeeting = historical[0] ?? null;
+  const list = historical.length > 0 ? historical : h2h.matches;
+
   return (
-    <Section title="Head-to-head" testId="match-h2h">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mb-1">
-        <span>
-          <span className="font-semibold">{homeName}</span>{" "}
-          <span className="tabular-nums">{h2h.summary.homeTeamWins}</span>
-        </span>
-        <span className="text-muted-foreground">
-          Draws <span className="tabular-nums text-foreground">{h2h.summary.draws}</span>
-        </span>
-        <span>
-          <span className="font-semibold">{awayName}</span>{" "}
-          <span className="tabular-nums">{h2h.summary.awayTeamWins}</span>
-        </span>
+    <Section title="Head-to-head" testId="match-h2h" className="space-y-3">
+      <div
+        className="grid grid-cols-3 gap-2 text-center"
+        data-testid="match-h2h-summary"
+      >
+        <div className="rounded-xl bg-muted/40 px-2 py-3">
+          <p className="text-2xl font-semibold tabular-nums leading-none">{h2h.summary.homeTeamWins}</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground truncate">{homeName} wins</p>
+        </div>
+        <div className="rounded-xl bg-muted/40 px-2 py-3">
+          <p className="text-2xl font-semibold tabular-nums leading-none">{h2h.summary.draws}</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">Draws</p>
+        </div>
+        <div className="rounded-xl bg-muted/40 px-2 py-3">
+          <p className="text-2xl font-semibold tabular-nums leading-none">{h2h.summary.awayTeamWins}</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground truncate">{awayName} wins</p>
+        </div>
       </div>
-      <ul className="divide-y divide-border/60 rounded-xl border border-border/70 overflow-hidden">
-        {h2h.matches.map((m) => {
-          const body = (
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between px-4 py-3 text-sm">
-              <div className="min-w-0 space-y-0.5">
+
+      {lastMeeting ? (
+        <div className="px-0.5" data-testid="match-h2h-last-meeting">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+            Last meeting
+          </p>
+          {lastMeeting.href ? (
+            <Link href={lastMeeting.href} className="block text-sm hover:underline">
+              <span className="font-medium">
+                {highlightClubName(lastMeeting.homeTeamName, homeName, awayName)}{" "}
+                <span className="tabular-nums font-semibold">
+                  {lastMeeting.homeScore}–{lastMeeting.awayScore}
+                </span>{" "}
+                {highlightClubName(lastMeeting.awayTeamName, homeName, awayName)}
+              </span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                {lastMeeting.kickoffTime
+                  ? format(new Date(lastMeeting.kickoffTime), "d MMM yyyy")
+                  : ""}
+                {lastMeeting.competitionName ? ` · ${lastMeeting.competitionName}` : ""}
+              </span>
+            </Link>
+          ) : (
+            <div className="text-sm">
+              <span className="font-medium">
+                {highlightClubName(lastMeeting.homeTeamName, homeName, awayName)}{" "}
+                <span className="tabular-nums font-semibold">
+                  {lastMeeting.homeScore}–{lastMeeting.awayScore}
+                </span>{" "}
+                {highlightClubName(lastMeeting.awayTeamName, homeName, awayName)}
+              </span>
+              <span className="block text-xs text-muted-foreground mt-0.5">
+                {lastMeeting.kickoffTime
+                  ? format(new Date(lastMeeting.kickoffTime), "d MMM yyyy")
+                  : ""}
+                {lastMeeting.competitionName ? ` · ${lastMeeting.competitionName}` : ""}
+              </span>
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {list.length > 1 ? (
+        <ul className="divide-y divide-border/40">
+          {list.slice(1, 6).map((m) => {
+            const body = (
+              <div className="flex flex-col gap-0.5 py-2.5 text-sm">
                 <p className="tabular-nums">
                   {highlightClubName(m.homeTeamName, homeName, awayName)}{" "}
                   <span className="font-semibold tabular-nums">
@@ -292,21 +358,21 @@ function H2HSection({
                   {m.competitionName ? ` · ${m.competitionName}` : ""}
                 </p>
               </div>
-            </div>
-          );
-          return (
-            <li key={`${m.kickoffTime}-${m.homeTeamName}-${m.awayTeamName}`}>
-              {m.href ? (
-                <Link href={m.href} className="block hover:bg-muted/40">
-                  {body}
-                </Link>
-              ) : (
-                body
-              )}
-            </li>
-          );
-        })}
-      </ul>
+            );
+            return (
+              <li key={`${m.kickoffTime}-${m.homeTeamName}-${m.awayTeamName}`}>
+                {m.href ? (
+                  <Link href={m.href} className="block hover:bg-muted/30 -mx-1 px-1 rounded-md">
+                    {body}
+                  </Link>
+                ) : (
+                  body
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </Section>
   );
 }
@@ -328,9 +394,9 @@ function FixtureRow({
       : null;
 
   const body = (
-    <div className="flex items-center gap-3 px-3 py-2.5">
+    <div className="flex items-center gap-2.5 py-2">
       <MatchTeamBadge
-        team={{ name: fixture.opponentName }}
+        team={{ id: fixture.opponentTeamId || undefined, name: fixture.opponentName }}
         size="xs"
       />
       <div className="min-w-0 flex-1">
@@ -339,7 +405,7 @@ function FixtureRow({
           {result ? <ResultBadge result={result} size="sm" /> : null}
           {score ? <span className="text-sm font-semibold tabular-nums">{score}</span> : null}
         </div>
-        <div className="text-xs text-muted-foreground flex flex-wrap gap-x-2">
+        <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-2">
           {kickoff ? (
             <span>
               {kind === "upcoming"
@@ -357,9 +423,9 @@ function FixtureRow({
   );
 
   return (
-    <li className="border-b border-border/50 last:border-0">
+    <li className="border-b border-border/40 last:border-0">
       {fixture.href ? (
-        <Link href={fixture.href} className="block hover:bg-muted/40">
+        <Link href={fixture.href} className="block hover:bg-muted/30 -mx-1 px-1 rounded-md">
           {body}
         </Link>
       ) : (
@@ -380,32 +446,44 @@ function TeamFixturesColumn({
   const hasNext = ctx.nextFixtures.length > 0;
   if (!hasPrev && !hasNext) {
     return (
-      <div className="space-y-2 min-w-0">
-        <p className="text-sm font-semibold">{label}</p>
+      <div className="space-y-1.5 min-w-0">
+        <div className="flex items-center gap-2">
+          <MatchTeamBadge
+            team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
+            size="xs"
+          />
+          <p className="text-sm font-semibold truncate">{label}</p>
+        </div>
         <p className="text-sm text-muted-foreground">No nearby fixtures available.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 min-w-0">
-      <p className="text-sm font-semibold">{label}</p>
+    <div className="space-y-3 min-w-0">
+      <div className="flex items-center gap-2">
+        <MatchTeamBadge
+          team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
+          size="xs"
+        />
+        <p className="text-sm font-semibold truncate">{label}</p>
+      </div>
       {hasPrev ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Previous
           </p>
-          <ul className="rounded-lg border border-border/60 overflow-hidden bg-muted/20">
+          <ul>
             <FixtureRow fixture={ctx.previousFixture!} kind="previous" />
           </ul>
         </div>
       ) : null}
       {hasNext ? (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Upcoming
           </p>
-          <ul className="rounded-lg border border-border/60 overflow-hidden">
+          <ul>
             {ctx.nextFixtures.map((f) => (
               <FixtureRow
                 key={`${f.kickoffTime}-${f.opponentName}`}
@@ -434,8 +512,8 @@ function FixturesSection({
   if (!hasPrev && !hasNext) return null;
 
   return (
-    <Section title={title} testId="match-fixtures-context">
-      <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+    <Section title={title} testId="match-fixtures-context" className="space-y-3">
+      <div className="grid gap-5 md:grid-cols-2 md:gap-6">
         <TeamFixturesColumn label={home.team.name} ctx={home} />
         <TeamFixturesColumn label={away.team.name} ctx={away} />
       </div>
@@ -449,14 +527,14 @@ function RelatedNews({ articles }: { articles: MatchCentrePayload["relatedNews"]
   const [featured, ...rest] = limited;
 
   return (
-    <Section title="Related news" testId="match-related-news">
+    <Section title="Related news" testId="match-related-news" className="space-y-3">
       <div className="space-y-3">
         {featured ? (
           <Link
             href={newsArticle(featured.slug)}
-            className="group grid gap-3 sm:grid-cols-[180px_1fr] rounded-xl border border-border/70 overflow-hidden hover:bg-muted/30"
+            className="group grid gap-3 sm:grid-cols-[160px_1fr] overflow-hidden hover:opacity-95"
           >
-            <div className="aspect-[16/10] sm:aspect-auto sm:h-full sm:min-h-[112px] bg-muted overflow-hidden">
+            <div className="aspect-[16/10] sm:aspect-auto sm:h-full sm:min-h-[100px] bg-muted overflow-hidden rounded-xl">
               {featured.coverImage ? (
                 <img
                   src={featured.coverImage}
@@ -466,7 +544,7 @@ function RelatedNews({ articles }: { articles: MatchCentrePayload["relatedNews"]
                 />
               ) : null}
             </div>
-            <div className="px-4 py-3 sm:py-4 min-w-0">
+            <div className="min-w-0 py-0.5">
               <h3 className="text-base font-semibold leading-snug group-hover:underline line-clamp-3">
                 {featured.title}
               </h3>
@@ -480,14 +558,14 @@ function RelatedNews({ articles }: { articles: MatchCentrePayload["relatedNews"]
         ) : null}
 
         {rest.length > 0 ? (
-          <ul className="divide-y divide-border/60 rounded-xl border border-border/70 overflow-hidden">
+          <ul className="divide-y divide-border/40">
             {rest.map((a) => (
               <li key={a.id}>
                 <Link
                   href={newsArticle(a.slug)}
-                  className="flex gap-3 px-3 py-2.5 hover:bg-muted/40"
+                  className="flex gap-3 py-2.5 hover:bg-muted/30 -mx-1 px-1 rounded-md"
                 >
-                  <div className="w-16 h-12 shrink-0 rounded-md overflow-hidden bg-muted">
+                  <div className="w-14 h-10 shrink-0 rounded-md overflow-hidden bg-muted">
                     {a.coverImage ? (
                       <img
                         src={a.coverImage}
@@ -683,42 +761,37 @@ export function MatchCentreSupportingSkeleton({
   const isLive = presentationState === "LIVE";
   const isCompleted = presentationState === "COMPLETED";
   return (
-    <div className="space-y-8" data-testid="match-centre-supporting-skeleton" aria-hidden="true">
-      {(isLive || isCompleted) && (
-        <>
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-40 w-full rounded-xl" />
-          </div>
-          <div className="space-y-3">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-28 w-full rounded-xl" />
-          </div>
-        </>
-      )}
-      <div className="space-y-3">
+    <div className="space-y-7" data-testid="match-centre-supporting-skeleton" aria-hidden="true">
+      {/* Tale of the tape */}
+      <div className="space-y-2.5">
         <Skeleton className="h-4 w-36" />
-        <Skeleton className="h-28 w-full rounded-2xl" />
+        <Skeleton className="h-44 w-full rounded-2xl" />
       </div>
-      <div className="space-y-3">
+      {/* Form + H2H (compact) */}
+      <div className="space-y-2">
         <Skeleton className="h-4 w-28" />
-        <Skeleton className="h-48 w-full rounded-2xl" />
+        <Skeleton className="h-8 w-full rounded-md" />
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-20 w-full rounded-xl" />
+      </div>
+      {(isLive || isCompleted) && (
+        <div className="space-y-2.5">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-48 w-full rounded-2xl" />
+        </div>
+      )}
+      <div className="space-y-2">
         <Skeleton className="h-4 w-28" />
         <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-36 w-full rounded-xl" />
-          <Skeleton className="h-36 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-xl" />
         </div>
       </div>
-      <div className="space-y-3">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-      </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         <Skeleton className="h-4 w-28" />
-        <Skeleton className="h-28 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-24 w-full rounded-xl" />
       </div>
     </div>
   );
@@ -747,25 +820,23 @@ function ExceptionalBanner({ centre }: { centre: MatchCentrePayload }) {
 
 export function PreEventMatchCentre({ centre }: { centre: MatchCentrePayload }) {
   return (
-    <div className="space-y-8 md:space-y-10" data-testid="pre-event-match-centre">
+    <div className="space-y-7 md:space-y-9" data-testid="pre-event-match-centre">
       <MatchCentreHeader centre={centre} />
       <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
+      <RecentFormSection home={centre.home} away={centre.away} />
+      <H2HSection
+        h2h={centre.h2h}
+        homeName={centre.match.homeTeam.name}
+        awayName={centre.match.awayTeam.name}
+      />
+      <FixturesSection home={centre.home} away={centre.away} title="Previous and upcoming" />
       <StartingXiSection
         lineups={centre.lineups}
         homeTeam={centre.match.homeTeam}
         awayTeam={centre.match.awayTeam}
         title="Starting XI"
       />
-      <div className="space-y-8 border-t border-border/60 pt-8">
-        <RecentFormSection home={centre.home} away={centre.away} />
-        <H2HSection
-          h2h={centre.h2h}
-          homeName={centre.match.homeTeam.name}
-          awayName={centre.match.awayTeam.name}
-        />
-        <FixturesSection home={centre.home} away={centre.away} title="Previous and upcoming" />
-        <RelatedNews articles={centre.relatedNews} />
-      </div>
+      <RelatedNews articles={centre.relatedNews} />
     </div>
   );
 }
@@ -774,8 +845,9 @@ export function LiveMatchCentre({ centre }: { centre: MatchCentrePayload }) {
   const events = centre.match.timeline?.events ?? [];
   const stats = centre.match.timeline?.stats ?? [];
   return (
-    <div className="space-y-8 md:space-y-10" data-testid="live-match-centre">
+    <div className="space-y-7 md:space-y-9" data-testid="live-match-centre">
       <MatchCentreHeader centre={centre} />
+      <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
       <MatchTimeline
         events={events}
         homeTeam={centre.match.homeTeam}
@@ -783,6 +855,12 @@ export function LiveMatchCentre({ centre }: { centre: MatchCentrePayload }) {
       />
       <StatsSection
         stats={stats}
+        homeName={centre.match.homeTeam.name}
+        awayName={centre.match.awayTeam.name}
+      />
+      <RecentFormSection home={centre.home} away={centre.away} />
+      <H2HSection
+        h2h={centre.h2h}
         homeName={centre.match.homeTeam.name}
         awayName={centre.match.awayTeam.name}
       />
@@ -792,15 +870,7 @@ export function LiveMatchCentre({ centre }: { centre: MatchCentrePayload }) {
         awayTeam={centre.match.awayTeam}
         title="Starting XI"
       />
-      <div className="space-y-8 border-t border-border/60 pt-8">
-        <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
-        <H2HSection
-          h2h={centre.h2h}
-          homeName={centre.match.homeTeam.name}
-          awayName={centre.match.awayTeam.name}
-        />
-        <RelatedNews articles={centre.relatedNews} />
-      </div>
+      <RelatedNews articles={centre.relatedNews} />
     </div>
   );
 }
@@ -809,8 +879,19 @@ export function CompletedMatchCentre({ centre }: { centre: MatchCentrePayload })
   const events = centre.match.timeline?.events ?? [];
   const stats = centre.match.timeline?.stats ?? [];
   return (
-    <div className="space-y-8 md:space-y-10" data-testid="completed-match-centre">
+    <div className="space-y-7 md:space-y-9" data-testid="completed-match-centre">
       <MatchCentreHeader centre={centre} />
+      <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
+      <RecentFormSection
+        home={centre.home}
+        away={centre.away}
+        title="Form before the match"
+      />
+      <H2HSection
+        h2h={centre.h2h}
+        homeName={centre.match.homeTeam.name}
+        awayName={centre.match.awayTeam.name}
+      />
       <MatchTimeline
         events={events}
         homeTeam={centre.match.homeTeam}
@@ -821,29 +902,14 @@ export function CompletedMatchCentre({ centre }: { centre: MatchCentrePayload })
         homeName={centre.match.homeTeam.name}
         awayName={centre.match.awayTeam.name}
       />
+      <FixturesSection home={centre.home} away={centre.away} title="What’s next" />
       <StartingXiSection
         lineups={centre.lineups}
         homeTeam={centre.match.homeTeam}
         awayTeam={centre.match.awayTeam}
         title="Final XI"
       />
-      <div className="space-y-8 border-t border-border/60 pt-8">
-        <FixturesSection home={centre.home} away={centre.away} title="What’s next" />
-        {(centre.home.form.length > 0 || centre.away.form.length > 0) && (
-          <RecentFormSection
-            home={centre.home}
-            away={centre.away}
-            title="Form before the match"
-          />
-        )}
-        <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
-        <H2HSection
-          h2h={centre.h2h}
-          homeName={centre.match.homeTeam.name}
-          awayName={centre.match.awayTeam.name}
-        />
-        <RelatedNews articles={centre.relatedNews} />
-      </div>
+      <RelatedNews articles={centre.relatedNews} />
     </div>
   );
 }
@@ -852,7 +918,7 @@ export function ExceptionalMatchCentre({ centre }: { centre: MatchCentrePayload 
   const events = centre.match.timeline?.events ?? [];
   const showEvents = centre.presentationState === "ABANDONED" && events.length > 0;
   return (
-    <div className="space-y-8 md:space-y-10" data-testid="exceptional-match-centre">
+    <div className="space-y-7 md:space-y-9" data-testid="exceptional-match-centre">
       <MatchCentreHeader centre={centre} />
       <ExceptionalBanner centre={centre} />
       {showEvents && (
