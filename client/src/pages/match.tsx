@@ -27,7 +27,12 @@ import {
   resolveMatchCentreState,
 } from "@shared/match-centre-state";
 import type { MatchCentrePayload } from "@shared/match-centre";
-import { MatchCentreView } from "@/components/match-centre/match-centre-view";
+import {
+  MatchCentreHeader,
+  MatchCentreSupportingSkeleton,
+  MatchCentreView,
+  matchCentreHeroFromCoreMatch,
+} from "@/components/match-centre/match-centre-view";
 import type { Match, Team, Article } from "@shared/schema";
 
 interface MatchTeam {
@@ -1889,11 +1894,11 @@ export default function MatchPage() {
     return null;
   }, [slug, isDummy]);
 
-  if (!isDummy && (coreLoading || centreLoading)) {
+  if (!isDummy && coreLoading) {
     return <LoadingSkeleton />;
   }
 
-  if (!isDummy && (coreError || centreError || !centre || !coreMatch)) {
+  if (!isDummy && (coreError || !coreMatch)) {
     return (
       <MainLayout>
         <div className="max-w-7xl mx-auto px-4 py-16 text-center">
@@ -1927,10 +1932,11 @@ export default function MatchPage() {
     );
   }
 
-  if (!isDummy && centre) {
-    const backLink = centre.match.homeTeam.slug
-      ? `/teams/${centre.match.homeTeam.slug}/matches`
-      : "/matches";
+  if (!isDummy && coreMatch) {
+    const backLink =
+      coreMatch.homeTeam?.slug || centre?.match.homeTeam.slug
+        ? `/teams/${coreMatch.homeTeam?.slug || centre?.match.homeTeam.slug}/matches`
+        : "/matches";
     const handleBack = () => {
       if (typeof window !== "undefined" && window.history.length > 1) {
         window.history.back();
@@ -1953,8 +1959,35 @@ export default function MatchPage() {
             Back
           </Button>
         </div>
-        <div className="max-w-7xl mx-auto px-4 pb-6">
-          <MatchCentreView centre={centre} />
+        <div className="max-w-7xl mx-auto px-4 pb-10">
+          {centre ? (
+            <MatchCentreView centre={centre} />
+          ) : (
+            <div className="space-y-8 md:space-y-10">
+              <MatchCentreHeader
+                centre={matchCentreHeroFromCoreMatch({
+                  ...coreMatch,
+                  competition: coreMatch.competition,
+                  round: coreMatch.goalserveRound,
+                })}
+              />
+              {centreError ? (
+                <p className="text-sm text-muted-foreground">
+                  Supporting match context could not be loaded. The fixture details above remain available.
+                </p>
+              ) : (
+                <MatchCentreSupportingSkeleton
+                  presentationState={
+                    resolveMatchCentreState({
+                      rawStatus:
+                        readGoalserveMatchTimeline(coreMatch.timeline)?.status ?? null,
+                      storedStatus: coreMatch.status,
+                    }).presentationState
+                  }
+                />
+              )}
+            </div>
+          )}
         </div>
       </MainLayout>
     );
