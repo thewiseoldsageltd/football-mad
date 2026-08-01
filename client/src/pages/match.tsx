@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { format } from "date-fns";
@@ -21,6 +21,13 @@ import {
   type GoalserveMatchEvent,
   type GoalserveMatchStat,
 } from "@shared/goalserve-match-detail";
+import {
+  MATCH_CENTRE_PRE_KICKOFF_POLL_MS,
+  matchCentreRefetchIntervalMs,
+  resolveMatchCentreState,
+} from "@shared/match-centre-state";
+import type { MatchCentrePayload } from "@shared/match-centre";
+import { MatchCentreView } from "@/components/match-centre/match-centre-view";
 import type { Match, Team, Article } from "@shared/schema";
 
 interface MatchTeam {
@@ -1729,61 +1736,7 @@ function RealMatchBody({
   );
 }
 
-const LIVE_POLL_MS = 15_000;
-const SCHEDULED_POLL_MS = 30_000;
-const PRE_KICKOFF_POLL_MS = 30 * 60 * 1000;
-const POST_KICKOFF_POLL_MS = 90 * 60 * 1000;
-
-function isTerminalMatchStatus(match: Match & { homeTeam?: Team; awayTeam?: Team }): boolean {
-  const timeline = readGoalserveMatchTimeline(match.timeline);
-  const raw = String(timeline?.status || match.status || "").toLowerCase();
-  const db = String(match.status || "").toLowerCase();
-
-  if (["finished", "ft", "aet", "pen", "pen.", "final", "ended"].includes(raw)) return true;
-  if (["finished", "postponed", "cancelled", "canceled", "abandoned"].includes(db)) return true;
-  if (raw.includes("postpon") || raw.includes("cancel") || raw.includes("abandon")) return true;
-  return false;
-}
-
-function isLiveMatchStatus(match: Match & { homeTeam?: Team; awayTeam?: Team }): boolean {
-  const timeline = readGoalserveMatchTimeline(match.timeline);
-  const raw = String(timeline?.status || match.status || "").toLowerCase();
-
-  if (["live", "ht", "1h", "2h", "et", "penalties"].includes(raw)) return true;
-  if (/^\d+$/.test(raw)) return true;
-  return String(match.status || "").toLowerCase() === "live";
-}
-
-function isScheduledMatchStatus(match: Match & { homeTeam?: Team; awayTeam?: Team }): boolean {
-  if (isLiveMatchStatus(match) || isTerminalMatchStatus(match)) return false;
-
-  const timeline = readGoalserveMatchTimeline(match.timeline);
-  const raw = String(timeline?.status || match.status || "").toLowerCase();
-  const db = String(match.status || "").toLowerCase();
-
-  if (db === "scheduled") return true;
-  return ["scheduled", "ns", "not started"].includes(raw);
-}
-
-function matchRefetchIntervalMs(
-  match: (Match & { homeTeam?: Team; awayTeam?: Team }) | undefined,
-): number | false {
-  if (!match || isTerminalMatchStatus(match)) return false;
-  if (isLiveMatchStatus(match)) return LIVE_POLL_MS;
-
-  if (isScheduledMatchStatus(match) && match.kickoffTime) {
-    const kickoffMs = new Date(match.kickoffTime).getTime();
-    if (Number.isNaN(kickoffMs)) return false;
-
-    const diffMs = kickoffMs - Date.now();
-    const withinPreKickoff = diffMs > 0 && diffMs <= PRE_KICKOFF_POLL_MS;
-    const withinPostKickoff = diffMs <= 0 && -diffMs <= POST_KICKOFF_POLL_MS;
-
-    if (withinPreKickoff || withinPostKickoff) return SCHEDULED_POLL_MS;
-  }
-
-  return false;
-}
+const PRE_KICKOFF_POLL_MS = MATCH_CENTRE_PRE_KICKOFF_POLL_MS;
 
 /** Wake polling when a scheduled match enters the pre-kickoff window without an active interval. */
 function useKickoffPollingWakeUp(
@@ -1794,7 +1747,13 @@ function useKickoffPollingWakeUp(
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!enabled || !slug || !match?.kickoffTime || !isScheduledMatchStatus(match)) return;
+    if (!enabled || !slug || !match?.kickoffTime) return;
+    const timeline = readGoalserveMatchTimeline(match.timeline);
+    const state = resolveMatchCentreState({
+      rawStatus: timeline?.status ?? null,
+      storedStatus: match.status,
+    });
+    if (state.presentationState !== "PRE_EVENT") return;
 
     const kickoffMs = new Date(match.kickoffTime).getTime();
     if (Number.isNaN(kickoffMs)) return;
@@ -1808,16 +1767,23 @@ function useKickoffPollingWakeUp(
     }, windowStart - now + 100);
 
     return () => clearTimeout(timer);
-  }, [enabled, slug, match, match?.kickoffTime, match?.status, match?.timeline, queryClient]);
+  }, [
+    enabled,
+    slug,
+    match?.kickoffTime,
+    match?.status,
+    match?.timeline,
+    queryClient,
+  ]);
 }
 
 export default function MatchPage() {
   const params = useParams<Record<string, string | undefined>>();
+  const queryClient = useQueryClient();
 
   const slug = useMemo(() => {
     const direct = params.slug?.trim();
     if (direct) return direct;
-    // Legacy / mis-parsed wouter key from `:homeSlug-vs-:awaySlug-:date` patterns.
     const legacyKey = Object.keys(params).find((key) => key.includes("-vs-"));
     if (legacyKey && params[legacyKey]?.trim()) return params[legacyKey]!.trim();
     if (params.homeSlug && params.awaySlug && params.date) {
@@ -1825,45 +1791,114 @@ export default function MatchPage() {
     }
     return undefined;
   }, [params]);
-  
-  const isDummy = useMemo(() => slug ? isDummyMatchId(slug) : false, [slug]);
 
-  const { data: apiMatch, isLoading, isError } = useQuery<Match & { homeTeam?: Team; awayTeam?: Team }>({
+  const isDummy = useMemo(() => (slug ? isDummyMatchId(slug) : false), [slug]);
+
+  // Core match — adaptive polling (score / timer / timeline / status).
+  const {
+    data: coreMatch,
+    isLoading: coreLoading,
+    isError: coreError,
+  } = useQuery<Match & { homeTeam?: Team; awayTeam?: Team }>({
     queryKey: ["/api/matches", slug],
     enabled: !!slug && !isDummy,
     retry: false,
     throwOnError: false,
-    refetchInterval: (query) => matchRefetchIntervalMs(query.state.data),
+    refetchInterval: (query) => {
+      const m = query.state.data;
+      if (!m) return false;
+      const timeline = readGoalserveMatchTimeline(m.timeline);
+      const state = resolveMatchCentreState({
+        rawStatus: timeline?.status ?? null,
+        storedStatus: m.status,
+      });
+      return matchCentreRefetchIntervalMs({
+        presentationState: state.presentationState,
+        kickoffTime: m.kickoffTime,
+      });
+    },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
-  useKickoffPollingWakeUp(slug, apiMatch, !!slug && !isDummy);
-  
+  // Supporting context — load once; refresh only on presentation-state transition.
+  const {
+    data: centreContext,
+    isLoading: centreLoading,
+    isError: centreError,
+  } = useQuery<MatchCentrePayload>({
+    queryKey: ["/api/matches", slug, "centre"],
+    enabled: !!slug && !isDummy,
+    retry: false,
+    throwOnError: false,
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const coreState = useMemo(() => {
+    if (!coreMatch) return null;
+    const timeline = readGoalserveMatchTimeline(coreMatch.timeline);
+    return resolveMatchCentreState({
+      rawStatus: timeline?.status ?? null,
+      storedStatus: coreMatch.status,
+    });
+  }, [coreMatch]);
+
+  const prevPresentationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!slug || !coreState) return;
+    const prev = prevPresentationRef.current;
+    prevPresentationRef.current = coreState.presentationState;
+    if (prev && prev !== coreState.presentationState) {
+      void queryClient.invalidateQueries({ queryKey: ["/api/matches", slug, "centre"] });
+    }
+  }, [slug, coreState?.presentationState, queryClient]);
+
+  useKickoffPollingWakeUp(slug, coreMatch, !!slug && !isDummy);
+
+  const centre = useMemo(() => {
+    if (!centreContext || !coreMatch) return centreContext ?? null;
+    const timeline = readGoalserveMatchTimeline(coreMatch.timeline);
+    const state = resolveMatchCentreState({
+      rawStatus: timeline?.status ?? null,
+      storedStatus: coreMatch.status,
+    });
+    return {
+      ...centreContext,
+      match: {
+        ...centreContext.match,
+        homeScore: coreMatch.homeScore,
+        awayScore: coreMatch.awayScore,
+        status: coreMatch.status || centreContext.match.status,
+        venue: coreMatch.venue || timeline?.venue || centreContext.match.venue,
+        referee: timeline?.referee || centreContext.match.referee,
+        kickoffTime: coreMatch.kickoffTime
+          ? new Date(coreMatch.kickoffTime).toISOString()
+          : centreContext.match.kickoffTime,
+        timeline,
+      },
+      state,
+      presentationState: state.presentationState,
+    } satisfies MatchCentrePayload;
+  }, [centreContext, coreMatch]);
+
   const match = useMemo(() => {
     if (!slug) return null;
-    
-    if (isDummy) {
-      return parseDummyMatchId(slug);
-    }
-    
-    if (apiMatch) {
-      return apiMatchToMatchData(apiMatch);
-    }
-    
+    if (isDummy) return parseDummyMatchId(slug);
     return null;
-  }, [slug, isDummy, apiMatch]);
-  
-  if (!isDummy && isLoading) {
+  }, [slug, isDummy]);
+
+  if (!isDummy && (coreLoading || centreLoading)) {
     return <LoadingSkeleton />;
   }
-  
-  if (!isDummy && isError) {
+
+  if (!isDummy && (coreError || centreError || !centre || !coreMatch)) {
     return (
       <MainLayout>
         <div className="max-w-7xl mx-auto px-4 py-16 text-center">
           <h1 className="text-2xl font-bold mb-4">Match not found</h1>
-          <p className="text-muted-foreground mb-6">We couldn't find the match you're looking for.</p>
+          <p className="text-muted-foreground mb-6">We couldn&apos;t find the match you&apos;re looking for.</p>
           <Link href="/matches">
             <Button data-testid="button-back-to-matches">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -1874,13 +1909,13 @@ export default function MatchPage() {
       </MainLayout>
     );
   }
-  
-  if (!match) {
+
+  if (isDummy && !match) {
     return (
       <MainLayout>
         <div className="max-w-7xl mx-auto px-4 py-16 text-center">
           <h1 className="text-2xl font-bold mb-4">Match not found</h1>
-          <p className="text-muted-foreground mb-6">We couldn't find the match you're looking for.</p>
+          <p className="text-muted-foreground mb-6">We couldn&apos;t find the match you&apos;re looking for.</p>
           <Link href="/matches">
             <Button data-testid="button-back-to-matches">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -1891,12 +1926,44 @@ export default function MatchPage() {
       </MainLayout>
     );
   }
-  
-  const isPreMatch = match.status === "scheduled" || match.status === "postponed";
-  const isPostMatch = match.status === "finished";
-  
-  const backLink = match.homeTeam.slug ? `/teams/${match.homeTeam.slug}/matches` : "/matches";
-  
+
+  if (!isDummy && centre) {
+    const backLink = centre.match.homeTeam.slug
+      ? `/teams/${centre.match.homeTeam.slug}/matches`
+      : "/matches";
+    const handleBack = () => {
+      if (typeof window !== "undefined" && window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = backLink;
+      }
+    };
+
+    return (
+      <MainLayout>
+        <div className="mb-4 px-4 pt-4 max-w-7xl mx-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-2"
+            onClick={handleBack}
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 pb-6">
+          <MatchCentreView centre={centre} />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Isolated legacy dummy Match Centre — never used for real canonical matches.
+  const isPreMatch = match!.status === "scheduled" || match!.status === "postponed";
+  const isPostMatch = match!.status === "finished";
+  const backLink = match!.homeTeam.slug ? `/teams/${match!.homeTeam.slug}/matches` : "/matches";
   const handleBack = () => {
     if (typeof window !== "undefined" && window.history.length > 1) {
       window.history.back();
@@ -1904,14 +1971,14 @@ export default function MatchPage() {
       window.location.href = backLink;
     }
   };
-  
+
   return (
     <MainLayout>
       <div className="mb-4 px-4 pt-4 max-w-7xl mx-auto">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="-ml-2" 
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2"
           onClick={handleBack}
           data-testid="button-back"
         >
@@ -1919,36 +1986,33 @@ export default function MatchPage() {
           Back
         </Button>
       </div>
-      
-      <MatchHeader match={match} />
-      
+
+      <MatchHeader match={match!} />
+
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {isDummy ? (
-          <div className="space-y-4">
-            {isPreMatch && (
-              <>
-                <PreMatchNarrative match={match} />
-                <HeadToHeadSection match={match} />
-                <FormLast5 match={match} />
-                <InjuriesAndSuspensions match={match} />
-                <PredictedXI match={match} />
-              </>
-            )}
-            
-            {isPostMatch && (
-              <>
-                <PostMatchSummary match={match} />
-                <MatchStatsSection match={match} />
-                <Timeline match={match} />
-                <TopPerformers match={match} />
-                <Momentum match={match} />
-              </>
-            )}
-          </div>
-        ) : apiMatch ? (
-          <RealMatchBody match={match} apiMatch={apiMatch} />
-        ) : null}
+        <div className="space-y-4">
+          {isPreMatch && (
+            <>
+              <PreMatchNarrative match={match!} />
+              <HeadToHeadSection match={match!} />
+              <FormLast5 match={match!} />
+              <InjuriesAndSuspensions match={match!} />
+              <PredictedXI match={match!} />
+            </>
+          )}
+
+          {isPostMatch && (
+            <>
+              <PostMatchSummary match={match!} />
+              <MatchStatsSection match={match!} />
+              <Timeline match={match!} />
+              <TopPerformers match={match!} />
+              <Momentum match={match!} />
+            </>
+          )}
+        </div>
       </div>
     </MainLayout>
   );
 }
+

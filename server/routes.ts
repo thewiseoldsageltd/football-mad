@@ -1721,6 +1721,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Status sets for robust matching (case-insensitive)
   const FINISHED_STATUSES = ['finished', 'ft', 'full_time', 'ended', 'final', 'aet', 'pen'];
   const LIVE_STATUSES = ['live', 'inplay', 'in_play', 'ht', 'halftime', 'et', 'extra_time', 'pen', 'penalties', '1h', '2h'];
+  const NON_SCHEDULED_STATUSES = [
+    ...FINISHED_STATUSES,
+    ...LIVE_STATUSES,
+    'postponed',
+    'cancelled',
+    'canceled',
+    'abandoned',
+  ];
   
   function isFinishedStatus(status: string | null): boolean {
     if (!status) return false;
@@ -1819,11 +1827,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const now = new Date();
       const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-      // Fixtures: kickoff within window AND status is NOT finished (case-insensitive)
+      // Fixtures: kickoff within window AND status is NOT finished/exceptional
       const conditions: any[] = [
         gte(matches.kickoffTime, now),
         lte(matches.kickoffTime, endDate),
-        drizzleSql`LOWER(COALESCE(${matches.status}, '')) NOT IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`,
+        drizzleSql`LOWER(COALESCE(${matches.status}, '')) NOT IN (${drizzleSql.join(NON_SCHEDULED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`,
       ];
 
       if (competitionId) {
@@ -2261,9 +2269,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           drizzleSql`(LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`
         );
       } else if (status === "scheduled") {
-        // Scheduled = not live and not finished
+        // Scheduled = not live, not finished, not exceptional
         conditions.push(
-          drizzleSql`LOWER(COALESCE(${matches.status}, '')) NOT IN (${drizzleSql.join(FINISHED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`
+          drizzleSql`LOWER(COALESCE(${matches.status}, '')) NOT IN (${drizzleSql.join(NON_SCHEDULED_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)})`
         );
         conditions.push(
           drizzleSql`NOT (LOWER(COALESCE(${matches.status}, '')) IN (${drizzleSql.join(LIVE_STATUSES.map(s => drizzleSql`${s}`), drizzleSql`, `)}) OR ${matches.status} ~ '^[0-9]+$')`
@@ -2368,6 +2376,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (error) {
       console.error("Error fetching match:", error);
       res.status(500).json({ error: "Failed to fetch match" });
+    }
+  });
+
+  app.get("/api/matches/:slug/centre", async (req, res) => {
+    try {
+      const match = await storage.getMatchBySlug(req.params.slug);
+      if (!match) {
+        return res.status(404).json({ error: "Match not found" });
+      }
+      const { buildMatchCentrePayload } = await import("./lib/match-centre");
+      const payload = await buildMatchCentrePayload(match);
+      res.json(payload);
+    } catch (error) {
+      console.error("Error building match centre:", error);
+      res.status(500).json({ error: "Failed to build match centre" });
     }
   });
 

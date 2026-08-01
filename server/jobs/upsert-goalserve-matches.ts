@@ -4,7 +4,8 @@ import {
   FIFA_WORLD_CUP_CANONICAL_SLUG,
   FIFA_WORLD_CUP_GOALSERVE_COMPETITION_ID,
 } from "@shared/world-cup";
-import { buildGoalserveMatchTimeline } from "@shared/goalserve-match-detail";
+import { buildGoalserveMatchTimeline, mergeGoalserveMatchTimeline, readGoalserveMatchTimeline } from "@shared/goalserve-match-detail";
+import { normalizeGoalserveMatchStatus, preferStoredMatchStatus } from "@shared/match-centre-state";
 import { goalserveFetch } from "../integrations/goalserve/client";
 import { ensureGoalserveTeam } from "../lib/ensure-goalserve-team";
 import { resolveDayFeedSeasonKey } from "./sync-goalserve-matches";
@@ -40,24 +41,6 @@ function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
   
   if (isNaN(date.getTime())) return null;
   return date;
-}
-
-function normalizeStatus(rawStatus: string): string {
-  const s = rawStatus?.toLowerCase() || "";
-  
-  if (s === "ft" || s === "aet" || s === "pen." || s.includes("finished")) {
-    return "finished";
-  }
-  if (s === "ht" || s === "1st half" || s === "2nd half" || s.match(/^\d+$/)) {
-    return "live";
-  }
-  if (s === "postp." || s === "postponed" || s === "canc." || s === "cancelled") {
-    return "postponed";
-  }
-  if (s === "ns" || s === "" || s.match(/^\d{1,2}:\d{2}$/)) {
-    return "scheduled";
-  }
-  return "scheduled";
 }
 
 function extractRound(match: any, category: any): string | null {
@@ -320,7 +303,6 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
         }
 
         const rawStatus = String(match["@status"] ?? match.status ?? timeStr);
-        const status = normalizeStatus(rawStatus);
 
         const venue = String(match["@venue"] ?? match.venue ?? "");
         const slug = `gs-${goalserveMatchId}`;
@@ -373,6 +355,14 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             .limit(1))[0];
         }
 
+        const status = preferStoredMatchStatus(
+          existing?.status,
+          normalizeGoalserveMatchStatus(rawStatus),
+        );
+
+        const existingTimeline = readGoalserveMatchTimeline(existing?.timeline);
+        const mergedTimeline = mergeGoalserveMatchTimeline(existingTimeline, compactRaw);
+
         // extractScore already returns number | null
         const newHomeScore = homeScore;
         const newAwayScore = awayScore;
@@ -396,6 +386,9 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
           // league sync (authoritative for full schedules).
           const nextSeasonKey = existing.seasonKey || seasonKey;
 
+          // Prefer non-empty venue; keep existing when day feeds omit it.
+          const nextVenue = venue || existing.venue || mergedTimeline.venue || null;
+
           await db
             .update(matches)
             .set({
@@ -414,8 +407,8 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               competition: competitionName,
               status,
               kickoffTime,
-              venue: venue || null,
-              timeline: compactRaw,
+              venue: nextVenue,
+              timeline: mergedTimeline,
             })
             .where(eq(matches.id, existing.id));
           updated++;
@@ -439,7 +432,7 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
               status,
               kickoffTime,
               venue: venue || null,
-              timeline: compactRaw,
+              timeline: mergedTimeline,
             });
             inserted++;
           } catch (e: any) {
@@ -447,6 +440,10 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
             if (e?.code === "23505") {
               const [bySlug] = await db.select().from(matches).where(eq(matches.slug, slug)).limit(1);
               if (bySlug) {
+                const racedTimeline = mergeGoalserveMatchTimeline(
+                  readGoalserveMatchTimeline(bySlug.timeline),
+                  compactRaw,
+                );
                 await db
                   .update(matches)
                   .set({
@@ -463,10 +460,10 @@ export async function upsertGoalserveMatches(feed: string): Promise<{
                     homeScore: newHomeScore !== null ? newHomeScore : bySlug.homeScore,
                     awayScore: newAwayScore !== null ? newAwayScore : bySlug.awayScore,
                     competition: competitionName,
-                    status,
+                    status: preferStoredMatchStatus(bySlug.status, status),
                     kickoffTime,
-                    venue: venue || null,
-                    timeline: compactRaw,
+                    venue: venue || bySlug.venue || racedTimeline.venue || null,
+                    timeline: racedTimeline,
                   })
                   .where(eq(matches.id, bySlug.id));
                 updated++;

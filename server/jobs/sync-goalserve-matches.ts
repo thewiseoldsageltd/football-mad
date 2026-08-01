@@ -13,6 +13,7 @@ import {
 } from "../lib/competition-seasons";
 import { shouldPromoteCompetitionCurrentFromFixtureSync } from "@shared/membership-rollover";
 import { normalizeSeasonKey } from "@shared/season";
+import { normalizeGoalserveMatchStatus } from "@shared/match-centre-state";
 
 export function resolveSeasonKey(
   inputSeasonKey: string | undefined,
@@ -98,21 +99,7 @@ function parseKickoffTime(formattedDate: string, timeStr: string): Date | null {
 }
 
 function normalizeStatus(rawStatus: string): string {
-  const s = rawStatus?.toLowerCase() || "";
-
-  if (s === "ft" || s === "aet" || s === "pen." || s.includes("finished")) {
-    return "finished";
-  }
-  if (s === "ht" || s === "1st half" || s === "2nd half" || s.match(/^\d+$/)) {
-    return "live";
-  }
-  if (s === "postp." || s === "postponed" || s === "canc." || s === "cancelled") {
-    return "postponed";
-  }
-  if (s === "ns" || s === "" || s.match(/^\d{1,2}:\d{2}$/)) {
-    return "scheduled";
-  }
-  return "scheduled";
+  return normalizeGoalserveMatchStatus(rawStatus);
 }
 
 function extractRound(match: any, week: any): string | null {
