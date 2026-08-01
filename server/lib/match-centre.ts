@@ -47,7 +47,11 @@ import { getCompetitionSeasonsForLeague } from "../lib/competition-seasons";
 const homeTeamAlias = aliasedTable(teams, "mc_home_team");
 const awayTeamAlias = aliasedTable(teams, "mc_away_team");
 
-function teamRef(team: Team | undefined | null, fallbackName: string): MatchCentreTeamRef {
+function teamRef(
+  team: Team | undefined | null,
+  fallbackName: string,
+  goalserveTeamId?: string | null,
+): MatchCentreTeamRef {
   return {
     id: team?.id ?? null,
     name: team?.name || fallbackName,
@@ -55,6 +59,7 @@ function teamRef(team: Team | undefined | null, fallbackName: string): MatchCent
     slug: team?.slug || "",
     primaryColor: team?.primaryColor ?? null,
     logoUrl: team?.logoUrl ?? null,
+    goalserveTeamId: goalserveTeamId ?? team?.goalserveTeamId ?? null,
   };
 }
 
@@ -369,7 +374,7 @@ async function buildTeamContext(
   const standing = await resolveDomesticStanding(teamId);
 
   return {
-    team: teamRef(team, fallbackName),
+    team: teamRef(team, fallbackName, goalserveTeamId),
     standing,
     form,
     previousFixture,
@@ -653,8 +658,12 @@ export async function buildMatchCentrePayload(
   const kickoff = match.kickoffTime ? new Date(match.kickoffTime) : new Date();
   const includeCurrentInH2H = state.presentationState === "COMPLETED";
 
-  const emptyTeam = (fallback: string, team?: Team): MatchCentreTeamContext => ({
-    team: teamRef(team, fallback),
+  const emptyTeam = (
+    fallback: string,
+    team?: Team,
+    goalserveTeamId?: string | null,
+  ): MatchCentreTeamContext => ({
+    team: teamRef(team, fallback, goalserveTeamId),
     standing: null,
     form: [],
     previousFixture: null,
@@ -691,9 +700,13 @@ export async function buildMatchCentrePayload(
   if (newsRes.status === "rejected") console.error("[match-centre] news failed", newsRes.reason);
 
   const homeCtx =
-    homeRes.status === "fulfilled" ? homeRes.value : emptyTeam("Home", match.homeTeam);
+    homeRes.status === "fulfilled"
+      ? homeRes.value
+      : emptyTeam("Home", match.homeTeam, match.homeGoalserveTeamId);
   const awayCtx =
-    awayRes.status === "fulfilled" ? awayRes.value : emptyTeam("Away", match.awayTeam);
+    awayRes.status === "fulfilled"
+      ? awayRes.value
+      : emptyTeam("Away", match.awayTeam, match.awayGoalserveTeamId);
   const h2h =
     h2hRes.status === "fulfilled"
       ? h2hRes.value

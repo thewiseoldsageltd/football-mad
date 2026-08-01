@@ -17,6 +17,10 @@ export type GoalserveMatchEvent = {
   assistId?: string;
   /** Goalserve @eventid when present — strongest dedupe key. */
   eventId?: string;
+  /** Optional provider team id when present on the raw event. */
+  teamId?: string;
+  /** Optional provider team name when present on the raw event. */
+  teamName?: string;
 };
 
 export type GoalserveMatchStat = {
@@ -127,6 +131,8 @@ export function parseGoalserveEvents(raw: unknown): GoalserveMatchEvent[] {
     const player = String(e["@player"] ?? e.player ?? "").trim();
     const assist = String(e["@assist"] ?? e.assist ?? "").trim();
     const eventId = String(e["@eventid"] ?? e["@eventId"] ?? e.eventid ?? e.eventId ?? "").trim();
+    const teamId = String(e["@team_id"] ?? e.team_id ?? e.teamId ?? "").trim();
+    const teamName = String(e["@team_name"] ?? e.team_name ?? e.teamName ?? "").trim();
     out.push({
       type,
       minute: String(e["@minute"] ?? e.minute ?? "").trim(),
@@ -138,6 +144,8 @@ export function parseGoalserveEvents(raw: unknown): GoalserveMatchEvent[] {
       playerId: String(e["@playerId"] ?? e.playerId ?? "").trim() || undefined,
       assistId: String(e["@assistid"] ?? e.assistId ?? "").trim() || undefined,
       eventId: eventId || undefined,
+      teamId: teamId || undefined,
+      teamName: teamName || undefined,
     });
   }
   return out;

@@ -7,10 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MatchTeamBadge } from "@/components/matches/match-team-badge";
 import { newsArticle, teamHub } from "@/lib/urls";
 import {
-  eventTypeLabel,
   hasMeaningfulMatchStats,
   readGoalserveMatchTimeline,
-  type GoalserveMatchEvent,
   type GoalserveMatchStat,
 } from "@shared/goalserve-match-detail";
 import {
@@ -26,6 +24,7 @@ import type {
 } from "@shared/match-centre";
 import { TaleOfTheTape } from "@/components/match-centre/tale-of-the-tape";
 import { StartingXiSection } from "@/components/match-centre/starting-xi";
+import { MatchTimeline } from "@/components/match-centre/match-timeline";
 
 function resultLabel(result: MatchCentreFormResult): string {
   if (result === "W") return "Win";
@@ -189,53 +188,6 @@ function RecentFormSection({
           Form summary is shown in Tale of the tape. Expand for fixture details.
         </p>
       )}
-    </Section>
-  );
-}
-
-function TimelineSection({
-  events,
-  homeName,
-  awayName,
-}: {
-  events: GoalserveMatchEvent[];
-  homeName: string;
-  awayName: string;
-}) {
-  if (!events.length) return null;
-  return (
-    <Section title="Timeline" testId="match-timeline">
-      <div className="rounded-xl border border-border/70 divide-y divide-border/60">
-        {events.map((event, idx) => {
-          const minute =
-            event.minute +
-            (event.extraMin ? `+${event.extraMin}` : "") +
-            (event.minute && !String(event.minute).includes("'") ? "'" : "");
-          const teamLabel =
-            event.team === "home" ? homeName : event.team === "away" ? awayName : "";
-          return (
-            <div
-              key={`${event.eventId ?? event.type}-${event.minute}-${event.player ?? ""}-${idx}`}
-              className="flex gap-3 px-4 py-3 text-sm"
-            >
-              <span className="w-12 shrink-0 tabular-nums text-muted-foreground">{minute || "—"}</span>
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {eventTypeLabel(event.type)}
-                  {teamLabel ? ` · ${teamLabel}` : ""}
-                </p>
-                {event.player && (
-                  <p className="text-muted-foreground">
-                    {event.player}
-                    {event.assist ? ` (assist: ${event.assist})` : ""}
-                  </p>
-                )}
-                {event.result && <p className="text-xs text-muted-foreground">{event.result}</p>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
     </Section>
   );
 }
@@ -824,10 +776,10 @@ export function LiveMatchCentre({ centre }: { centre: MatchCentrePayload }) {
   return (
     <div className="space-y-8 md:space-y-10" data-testid="live-match-centre">
       <MatchCentreHeader centre={centre} />
-      <TimelineSection
+      <MatchTimeline
         events={events}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
+        homeTeam={centre.match.homeTeam}
+        awayTeam={centre.match.awayTeam}
       />
       <StatsSection
         stats={stats}
@@ -859,10 +811,10 @@ export function CompletedMatchCentre({ centre }: { centre: MatchCentrePayload })
   return (
     <div className="space-y-8 md:space-y-10" data-testid="completed-match-centre">
       <MatchCentreHeader centre={centre} />
-      <TimelineSection
+      <MatchTimeline
         events={events}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
+        homeTeam={centre.match.homeTeam}
+        awayTeam={centre.match.awayTeam}
       />
       <StatsSection
         stats={stats}
@@ -904,10 +856,11 @@ export function ExceptionalMatchCentre({ centre }: { centre: MatchCentrePayload 
       <MatchCentreHeader centre={centre} />
       <ExceptionalBanner centre={centre} />
       {showEvents && (
-        <TimelineSection
+        <MatchTimeline
           events={events}
-          homeName={centre.match.homeTeam.name}
-          awayName={centre.match.awayTeam.name}
+          homeTeam={centre.match.homeTeam}
+          awayTeam={centre.match.awayTeam}
+          abandoned
         />
       )}
       <RelatedNews articles={centre.relatedNews} />

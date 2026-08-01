@@ -10,6 +10,8 @@ export type MatchCentreTeamRef = {
   slug: string;
   primaryColor?: string | null;
   logoUrl?: string | null;
+  /** Goalserve provider team id when known for the fixture side. */
+  goalserveTeamId?: string | null;
 };
 
 export type MatchCentreStandingContext = {
