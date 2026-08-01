@@ -387,7 +387,15 @@ export function buildGoalserveMatchTimeline(
   const eventsRaw = match.events ?? match.event ?? null;
   const liveStatsRaw = match.live_stats ?? match.stats ?? match.statistics ?? null;
   const lineupRaw = match.lineup ?? null;
-  const lineupsRaw = match.lineups ?? null;
+  const lineupsRaw =
+    match.lineups ??
+    // Some live-stats samples nest confirmed XI under `teams` with formation + player[].
+    (match.teams &&
+    typeof match.teams === "object" &&
+    ((match.teams as { localteam?: { formation?: unknown; player?: unknown } }).localteam?.player ||
+      (match.teams as { localteam?: { ["@formation"]?: unknown } }).localteam?.["@formation"])
+      ? match.teams
+      : null);
   const events = parseGoalserveEvents(eventsRaw);
   const stats = parseGoalserveLiveStats(liveStatsRaw);
 

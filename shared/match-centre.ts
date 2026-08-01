@@ -92,6 +92,28 @@ export type MatchCentreTeamContext = {
   nextFixtures: MatchCentreFixtureLink[];
 };
 
+/** Confirmed (or later predicted) XI for Match Centre Starting XI module. */
+export type MatchCentreLineupPlayer = {
+  id: string | null;
+  name: string;
+  number: string | null;
+  position: string | null;
+  formationPos: number | null;
+};
+
+export type MatchCentreTeamLineup = {
+  formation: string | null;
+  starters: MatchCentreLineupPlayer[];
+  substitutes: MatchCentreLineupPlayer[];
+};
+
+export type MatchCentreLineups = {
+  /** Phase 2: confirmed only. Architecture accepts predicted later. */
+  kind: "confirmed" | "predicted";
+  home: MatchCentreTeamLineup | null;
+  away: MatchCentreTeamLineup | null;
+};
+
 export type MatchCentrePayload = {
   match: {
     id: string;
@@ -116,4 +138,6 @@ export type MatchCentrePayload = {
   away: MatchCentreTeamContext;
   h2h: MatchCentreH2H;
   relatedNews: MatchCentreRelatedArticle[];
+  /** Null when no confirmed lineup is stored yet. */
+  lineups: MatchCentreLineups | null;
 };

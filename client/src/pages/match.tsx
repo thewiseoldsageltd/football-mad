@@ -21,6 +21,7 @@ import {
   type GoalserveMatchEvent,
   type GoalserveMatchStat,
 } from "@shared/goalserve-match-detail";
+import { parseGoalserveLineups } from "@shared/goalserve-lineup";
 import {
   MATCH_CENTRE_PRE_KICKOFF_POLL_MS,
   matchCentreRefetchIntervalMs,
@@ -1869,6 +1870,53 @@ export default function MatchPage() {
       rawStatus: timeline?.status ?? null,
       storedStatus: coreMatch.status,
     });
+    // Prefer live-refreshed lineup from core timeline when present.
+    const parsed =
+      parseGoalserveLineups(timeline) ?? parseGoalserveLineups(timeline?.raw ?? null);
+    const liveLineups = parsed
+      ? {
+          kind: "confirmed" as const,
+          home: parsed.home
+            ? {
+                formation: parsed.home.formation,
+                starters: parsed.home.starters.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  number: p.number,
+                  position: p.position,
+                  formationPos: p.formationPos,
+                })),
+                substitutes: parsed.home.substitutes.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  number: p.number,
+                  position: p.position,
+                  formationPos: p.formationPos,
+                })),
+              }
+            : null,
+          away: parsed.away
+            ? {
+                formation: parsed.away.formation,
+                starters: parsed.away.starters.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  number: p.number,
+                  position: p.position,
+                  formationPos: p.formationPos,
+                })),
+                substitutes: parsed.away.substitutes.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  number: p.number,
+                  position: p.position,
+                  formationPos: p.formationPos,
+                })),
+              }
+            : null,
+        }
+      : centreContext.lineups;
+
     return {
       ...centreContext,
       match: {
@@ -1883,6 +1931,7 @@ export default function MatchPage() {
           : centreContext.match.kickoffTime,
         timeline,
       },
+      lineups: liveLineups ?? centreContext.lineups,
       state,
       presentationState: state.presentationState,
     } satisfies MatchCentrePayload;

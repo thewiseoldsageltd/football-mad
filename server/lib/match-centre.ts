@@ -19,6 +19,7 @@ import {
   isClubFriendlyCompetition,
 } from "@shared/competition-display";
 import { readGoalserveMatchTimeline } from "@shared/goalserve-match-detail";
+import { parseGoalserveLineups } from "@shared/goalserve-lineup";
 import { resolveMatchDetailHref } from "@shared/match-slug";
 import { resolveMatchCentreState } from "@shared/match-centre-state";
 import type {
@@ -26,6 +27,7 @@ import type {
   MatchCentreFormResult,
   MatchCentreFixtureLink,
   MatchCentreH2H,
+  MatchCentreLineups,
   MatchCentrePayload,
   MatchCentreRelatedArticle,
   MatchCentreStandingContext,
@@ -606,6 +608,38 @@ async function buildRelatedNews(
     }));
 }
 
+function lineupsFromTimeline(
+  timeline: ReturnType<typeof readGoalserveMatchTimeline>,
+): MatchCentreLineups | null {
+  if (!timeline) return null;
+  const parsed = parseGoalserveLineups(timeline) ?? parseGoalserveLineups(timeline.raw ?? null);
+  if (!parsed) return null;
+  const mapTeam = (
+    t: NonNullable<typeof parsed.home>,
+  ): NonNullable<MatchCentreLineups["home"]> => ({
+    formation: t.formation,
+    starters: t.starters.map((p) => ({
+      id: p.id,
+      name: p.name,
+      number: p.number,
+      position: p.position,
+      formationPos: p.formationPos,
+    })),
+    substitutes: t.substitutes.map((p) => ({
+      id: p.id,
+      name: p.name,
+      number: p.number,
+      position: p.position,
+      formationPos: p.formationPos,
+    })),
+  });
+  return {
+    kind: "confirmed",
+    home: parsed.home ? mapTeam(parsed.home) : null,
+    away: parsed.away ? mapTeam(parsed.away) : null,
+  };
+}
+
 export async function buildMatchCentrePayload(
   match: Match & { homeTeam?: Team; awayTeam?: Team },
 ): Promise<MatchCentrePayload> {
@@ -614,6 +648,7 @@ export async function buildMatchCentrePayload(
     rawStatus: timeline?.status ?? null,
     storedStatus: match.status,
   });
+  const lineups = lineupsFromTimeline(timeline);
 
   const kickoff = match.kickoffTime ? new Date(match.kickoffTime) : new Date();
   const includeCurrentInH2H = state.presentationState === "COMPLETED";
@@ -699,5 +734,6 @@ export async function buildMatchCentrePayload(
     away: awayCtx,
     h2h,
     relatedNews,
+    lineups,
   };
 }

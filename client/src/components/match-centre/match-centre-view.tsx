@@ -24,21 +24,8 @@ import type {
   MatchCentrePayload,
   MatchCentreTeamContext,
 } from "@shared/match-centre";
-
-function ordinal(n: number): string {
-  const v = n % 100;
-  if (v >= 11 && v <= 13) return "th";
-  switch (n % 10) {
-    case 1:
-      return "st";
-    case 2:
-      return "nd";
-    case 3:
-      return "rd";
-    default:
-      return "th";
-  }
-}
+import { TaleOfTheTape } from "@/components/match-centre/tale-of-the-tape";
+import { StartingXiSection } from "@/components/match-centre/starting-xi";
 
 function resultLabel(result: MatchCentreFormResult): string {
   if (result === "W") return "Win";
@@ -100,64 +87,6 @@ function Section({
   );
 }
 
-function FormBadges({ form }: { form: MatchCentreFormMatch[] }) {
-  if (!form.length) {
-    return <span className="text-xs text-muted-foreground">No recent form available</span>;
-  }
-  return (
-    <div
-      className="inline-flex items-center gap-1.5"
-      aria-label={`Recent form ${form.map((f) => resultLabel(f.result)).join(", ")}`}
-    >
-      {form.map((f, i) => (
-        <ResultBadge key={`${f.kickoffTime}-${i}`} result={f.result} size="sm" />
-      ))}
-    </div>
-  );
-}
-
-function standingLine(ctx: MatchCentreTeamContext): string {
-  if (!ctx.standing) return "League context unavailable";
-  const pos = `${ctx.standing.position}${ordinal(ctx.standing.position)}`;
-  return `${pos} in ${ctx.standing.competitionName}`;
-}
-
-function TeamComparison({
-  home,
-  away,
-}: {
-  home: MatchCentreTeamContext;
-  away: MatchCentreTeamContext;
-}) {
-  if (!home.standing && !home.form.length && !away.standing && !away.form.length) return null;
-
-  const side = (ctx: MatchCentreTeamContext, align: "left" | "right") => (
-    <div className={`min-w-0 space-y-2 ${align === "right" ? "text-right" : "text-left"}`}>
-      <Link
-        href={teamHub(ctx.team.slug)}
-        className="block text-base font-semibold hover:underline truncate"
-      >
-        {ctx.team.name}
-      </Link>
-      <p className="text-sm text-muted-foreground">{standingLine(ctx)}</p>
-      <div className={`flex ${align === "right" ? "justify-end" : "justify-start"}`}>
-        <FormBadges form={ctx.form} />
-      </div>
-    </div>
-  );
-
-  return (
-    <Section title="How they compare" testId="match-team-comparison">
-      <div className="rounded-xl border border-border/70 bg-card/40 px-4 py-5 sm:px-6">
-        <div className="grid grid-cols-2 gap-4 sm:gap-8">
-          {side(home, "left")}
-          {side(away, "right")}
-        </div>
-      </div>
-    </Section>
-  );
-}
-
 function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
   const kickoff = match.kickoffTime ? new Date(match.kickoffTime) : null;
   const score =
@@ -207,10 +136,7 @@ function TeamFormColumn({ ctx }: { ctx: MatchCentreTeamContext }) {
   }
   return (
     <div className="space-y-2 min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold">{ctx.team.name}</p>
-        <FormBadges form={ctx.form} />
-      </div>
+      <p className="text-sm font-semibold">{ctx.team.name}</p>
       <ul className="divide-y-0">
         {ctx.form.map((m, i) => (
           <FormMatchRow key={`${m.kickoffTime}-${i}`} match={m} />
@@ -259,18 +185,9 @@ function RecentFormSection({
           <TeamFormColumn ctx={away} />
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <p className="text-sm font-medium truncate">{home.team.name}</p>
-            <FormBadges form={home.form} />
-          </div>
-          <div className="space-y-1.5 text-right">
-            <p className="text-sm font-medium truncate">{away.team.name}</p>
-            <div className="flex justify-end">
-              <FormBadges form={away.form} />
-            </div>
-          </div>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          Form summary is shown in Tale of the tape. Expand for fixture details.
+        </p>
       )}
     </Section>
   );
@@ -829,7 +746,11 @@ export function MatchCentreSupportingSkeleton({
       )}
       <div className="space-y-3">
         <Skeleton className="h-4 w-36" />
-        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-28 w-full rounded-2xl" />
+      </div>
+      <div className="space-y-3">
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-48 w-full rounded-2xl" />
       </div>
       <div className="space-y-3">
         <Skeleton className="h-4 w-28" />
@@ -876,15 +797,23 @@ export function PreEventMatchCentre({ centre }: { centre: MatchCentrePayload }) 
   return (
     <div className="space-y-8 md:space-y-10" data-testid="pre-event-match-centre">
       <MatchCentreHeader centre={centre} />
-      <TeamComparison home={centre.home} away={centre.away} />
-      <RecentFormSection home={centre.home} away={centre.away} />
-      <H2HSection
-        h2h={centre.h2h}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
+      <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
+      <StartingXiSection
+        lineups={centre.lineups}
+        homeTeam={centre.match.homeTeam}
+        awayTeam={centre.match.awayTeam}
+        title="Starting XI"
       />
-      <FixturesSection home={centre.home} away={centre.away} title="Previous and upcoming" />
-      <RelatedNews articles={centre.relatedNews} />
+      <div className="space-y-8 border-t border-border/60 pt-8">
+        <RecentFormSection home={centre.home} away={centre.away} />
+        <H2HSection
+          h2h={centre.h2h}
+          homeName={centre.match.homeTeam.name}
+          awayName={centre.match.awayTeam.name}
+        />
+        <FixturesSection home={centre.home} away={centre.away} title="Previous and upcoming" />
+        <RelatedNews articles={centre.relatedNews} />
+      </div>
     </div>
   );
 }
@@ -905,8 +834,14 @@ export function LiveMatchCentre({ centre }: { centre: MatchCentrePayload }) {
         homeName={centre.match.homeTeam.name}
         awayName={centre.match.awayTeam.name}
       />
+      <StartingXiSection
+        lineups={centre.lineups}
+        homeTeam={centre.match.homeTeam}
+        awayTeam={centre.match.awayTeam}
+        title="Starting XI"
+      />
       <div className="space-y-8 border-t border-border/60 pt-8">
-        <TeamComparison home={centre.home} away={centre.away} />
+        <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
         <H2HSection
           h2h={centre.h2h}
           homeName={centre.match.homeTeam.name}
@@ -934,20 +869,29 @@ export function CompletedMatchCentre({ centre }: { centre: MatchCentrePayload })
         homeName={centre.match.homeTeam.name}
         awayName={centre.match.awayTeam.name}
       />
-      <FixturesSection home={centre.home} away={centre.away} title="What’s next" />
-      {(centre.home.form.length > 0 || centre.away.form.length > 0) && (
-        <RecentFormSection
-          home={centre.home}
-          away={centre.away}
-          title="Form before the match"
-        />
-      )}
-      <H2HSection
-        h2h={centre.h2h}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
+      <StartingXiSection
+        lineups={centre.lineups}
+        homeTeam={centre.match.homeTeam}
+        awayTeam={centre.match.awayTeam}
+        title="Final XI"
       />
-      <RelatedNews articles={centre.relatedNews} />
+      <div className="space-y-8 border-t border-border/60 pt-8">
+        <FixturesSection home={centre.home} away={centre.away} title="What’s next" />
+        {(centre.home.form.length > 0 || centre.away.form.length > 0) && (
+          <RecentFormSection
+            home={centre.home}
+            away={centre.away}
+            title="Form before the match"
+          />
+        )}
+        <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
+        <H2HSection
+          h2h={centre.h2h}
+          homeName={centre.match.homeTeam.name}
+          awayName={centre.match.awayTeam.name}
+        />
+        <RelatedNews articles={centre.relatedNews} />
+      </div>
     </div>
   );
 }
