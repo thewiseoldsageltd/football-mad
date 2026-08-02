@@ -106,24 +106,26 @@ function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
       : `${match.awayScore}–${match.homeScore}`;
   const body = (
     <div className="flex items-center gap-2.5 py-2">
-      <ResultBadge result={match.result} size="sm" />
       <MatchTeamBadge
         team={{ id: match.opponentTeamId || undefined, name: match.opponentName }}
         size="xs"
       />
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-x-2 gap-y-0.5">
-          <span className="font-medium text-sm truncate min-w-0">{match.opponentName}</span>
-          <span className="text-[11px] uppercase tracking-wide text-muted-foreground shrink-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-medium text-sm truncate">{match.opponentName}</span>
+        </div>
+        <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-2">
+          <span className="truncate">{match.competitionName}</span>
+          {kickoff ? <span>{format(kickoff, "d MMM yyyy")}</span> : null}
+          <span className="uppercase tracking-wide">
             {match.homeAway === "home" ? "H" : "A"}
           </span>
         </div>
-        <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
-          <span className="truncate">{match.competitionName}</span>
-          {kickoff ? <span>{format(kickoff, "d MMM yyyy")}</span> : null}
-        </div>
       </div>
-      <span className="tabular-nums text-sm font-semibold shrink-0">{score}</span>
+      <div className="shrink-0 flex items-center gap-2">
+        <span className="tabular-nums text-sm font-semibold">{score}</span>
+        <ResultBadge result={match.result} size="sm" />
+      </div>
     </div>
   );
 
