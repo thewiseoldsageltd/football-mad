@@ -143,29 +143,27 @@ function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
 }
 
 function TeamFormColumn({ ctx }: { ctx: MatchCentreTeamContext }) {
+  const header = (
+    <div className="flex items-center gap-2 border-b border-border/40 pb-2 mb-1">
+      <MatchTeamBadge
+        team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
+        size="xs"
+      />
+      <p className="text-sm font-semibold truncate">{ctx.team.name}</p>
+    </div>
+  );
+
   if (!ctx.form.length) {
     return (
       <div className="space-y-1.5 min-w-0">
-        <div className="flex items-center gap-2">
-          <MatchTeamBadge
-            team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
-            size="xs"
-          />
-          <p className="text-sm font-semibold truncate">{ctx.team.name}</p>
-        </div>
+        {header}
         <p className="text-sm text-muted-foreground">No recent competitive form before this kickoff.</p>
       </div>
     );
   }
   return (
     <div className="space-y-1.5 min-w-0">
-      <div className="flex items-center gap-2">
-        <MatchTeamBadge
-          team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
-          size="xs"
-        />
-        <p className="text-sm font-semibold truncate">{ctx.team.name}</p>
-      </div>
+      {header}
       <ul>
         {ctx.form.map((m, i) => (
           <FormMatchRow key={`${m.kickoffTime}-${i}`} match={m} />
@@ -209,7 +207,7 @@ function RecentFormSection({
         </button>
       </div>
       <div className={`${open ? "block" : "hidden"} md:block`}>
-        <div className="grid gap-5 md:grid-cols-2 md:gap-6">
+        <div className="grid gap-5 md:grid-cols-2 md:gap-6 md:[&>*:nth-child(2)]:border-l md:[&>*:nth-child(2)]:border-border/20 md:[&>*:nth-child(2)]:pl-6">
           {home.form.length ? <TeamFormColumn ctx={home} /> : null}
           {away.form.length ? <TeamFormColumn ctx={away} /> : null}
         </div>
