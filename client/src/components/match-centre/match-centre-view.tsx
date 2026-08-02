@@ -5,7 +5,7 @@ import { Calendar, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MatchTeamBadge } from "@/components/matches/match-team-badge";
-import { newsArticle, teamHub } from "@/lib/urls";
+import { teamHub } from "@/lib/urls";
 import {
   hasMeaningfulMatchStats,
   readGoalserveMatchTimeline,
@@ -13,8 +13,16 @@ import {
 } from "@shared/goalserve-match-detail";
 import {
   matchCentreResultLabel,
+  matchCentreStateLabel,
   resolveMatchCentreState,
 } from "@shared/match-centre-state";
+import {
+  resolveCompletedModuleOrder,
+  resolveLiveModuleOrder,
+  resolvePreEventModuleOrder,
+  type MatchCentreModuleId,
+} from "@shared/match-centre-modules";
+import { formatCompetitionHeroLabel } from "@shared/competition-display";
 import type {
   MatchCentreFixtureLink,
   MatchCentreFormMatch,
@@ -22,9 +30,10 @@ import type {
   MatchCentrePayload,
   MatchCentreTeamContext,
 } from "@shared/match-centre";
-import { TaleOfTheTape } from "@/components/match-centre/tale-of-the-tape";
+import { HowTheyCompare } from "@/components/match-centre/tale-of-the-tape";
 import { StartingXiSection } from "@/components/match-centre/starting-xi";
 import { MatchTimeline } from "@/components/match-centre/match-timeline";
+import { newsArticle } from "@/lib/urls";
 
 function resultLabel(result: MatchCentreFormResult): string {
   if (result === "W") return "Win";
@@ -179,31 +188,27 @@ function RecentFormSection({
         <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">{title}</h2>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground md:hidden"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
         >
           {open ? (
             <>
-              Hide details <ChevronUp className="h-3.5 w-3.5" />
+              Hide matches <ChevronUp className="h-3.5 w-3.5" />
             </>
           ) : (
             <>
-              Match details <ChevronDown className="h-3.5 w-3.5" />
+              Show matches <ChevronDown className="h-3.5 w-3.5" />
             </>
           )}
         </button>
       </div>
-      {open ? (
+      <div className={`${open ? "block" : "hidden"} md:block`}>
         <div className="grid gap-5 md:grid-cols-2 md:gap-6">
-          <TeamFormColumn ctx={home} />
-          <TeamFormColumn ctx={away} />
+          {home.form.length ? <TeamFormColumn ctx={home} /> : null}
+          {away.form.length ? <TeamFormColumn ctx={away} /> : null}
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Form badges are in Tale of the tape. Expand for the last five fixtures.
-        </p>
-      )}
+      </div>
     </Section>
   );
 }
@@ -264,41 +269,14 @@ function H2HSection({
   homeName: string;
   awayName: string;
 }) {
-  if (h2h.emptyMessage || h2h.matches.length === 0) {
-    return (
-      <p
-        className="text-sm text-muted-foreground px-0.5"
-        data-testid="match-h2h-empty"
-      >
-        {h2h.emptyMessage || "No previous meetings are available in Football Mad yet."}
-      </p>
-    );
-  }
+  if (h2h.matches.length === 0) return null;
 
   const historical = h2h.matches.filter((m) => !m.isCurrentMatch);
-  const lastMeeting = historical[0] ?? null;
   const list = historical.length > 0 ? historical : h2h.matches;
+  const lastMeeting = list[0] ?? null;
 
   return (
     <Section title="Head-to-head" testId="match-h2h" className="space-y-3">
-      <div
-        className="grid grid-cols-3 gap-2 text-center"
-        data-testid="match-h2h-summary"
-      >
-        <div className="rounded-xl bg-muted/40 px-2 py-3">
-          <p className="text-2xl font-semibold tabular-nums leading-none">{h2h.summary.homeTeamWins}</p>
-          <p className="mt-1.5 text-[11px] text-muted-foreground truncate">{homeName} wins</p>
-        </div>
-        <div className="rounded-xl bg-muted/40 px-2 py-3">
-          <p className="text-2xl font-semibold tabular-nums leading-none">{h2h.summary.draws}</p>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">Draws</p>
-        </div>
-        <div className="rounded-xl bg-muted/40 px-2 py-3">
-          <p className="text-2xl font-semibold tabular-nums leading-none">{h2h.summary.awayTeamWins}</p>
-          <p className="mt-1.5 text-[11px] text-muted-foreground truncate">{awayName} wins</p>
-        </div>
-      </div>
-
       {lastMeeting ? (
         <div className="px-0.5" data-testid="match-h2h-last-meeting">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
@@ -435,32 +413,17 @@ function FixtureRow({
   );
 }
 
-function TeamFixturesColumn({
+function TeamUpcomingColumn({
   label,
   ctx,
 }: {
   label: string;
   ctx: MatchCentreTeamContext;
 }) {
-  const hasPrev = !!ctx.previousFixture;
-  const hasNext = ctx.nextFixtures.length > 0;
-  if (!hasPrev && !hasNext) {
-    return (
-      <div className="space-y-1.5 min-w-0">
-        <div className="flex items-center gap-2">
-          <MatchTeamBadge
-            team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
-            size="xs"
-          />
-          <p className="text-sm font-semibold truncate">{label}</p>
-        </div>
-        <p className="text-sm text-muted-foreground">No nearby fixtures available.</p>
-      </div>
-    );
-  }
+  if (!ctx.nextFixtures.length) return null;
 
   return (
-    <div className="space-y-3 min-w-0">
+    <div className="space-y-1.5 min-w-0">
       <div className="flex items-center gap-2">
         <MatchTeamBadge
           team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
@@ -468,146 +431,147 @@ function TeamFixturesColumn({
         />
         <p className="text-sm font-semibold truncate">{label}</p>
       </div>
-      {hasPrev ? (
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Previous
-          </p>
-          <ul>
-            <FixtureRow fixture={ctx.previousFixture!} kind="previous" />
-          </ul>
-        </div>
-      ) : null}
-      {hasNext ? (
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Upcoming
-          </p>
-          <ul>
-            {ctx.nextFixtures.map((f) => (
-              <FixtureRow
-                key={`${f.kickoffTime}-${f.opponentName}`}
-                fixture={f}
-                kind="upcoming"
-              />
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <ul>
+        {ctx.nextFixtures.slice(0, 5).map((f) => (
+          <FixtureRow
+            key={`${f.kickoffTime}-${f.opponentName}`}
+            fixture={f}
+            kind="upcoming"
+          />
+        ))}
+      </ul>
     </div>
   );
 }
 
-function FixturesSection({
+function UpcomingFixturesSection({
   home,
   away,
-  title,
+  title = "Upcoming fixtures",
 }: {
   home: MatchCentreTeamContext;
   away: MatchCentreTeamContext;
-  title: string;
+  title?: string;
 }) {
-  const hasPrev = home.previousFixture || away.previousFixture;
-  const hasNext = home.nextFixtures.length || away.nextFixtures.length;
-  if (!hasPrev && !hasNext) return null;
+  const homeNext = home.nextFixtures.length > 0;
+  const awayNext = away.nextFixtures.length > 0;
+  if (!homeNext && !awayNext) return null;
 
   return (
-    <Section title={title} testId="match-fixtures-context" className="space-y-3">
+    <Section title={title} testId="match-upcoming-fixtures" className="space-y-3">
       <div className="grid gap-5 md:grid-cols-2 md:gap-6">
-        <TeamFixturesColumn label={home.team.name} ctx={home} />
-        <TeamFixturesColumn label={away.team.name} ctx={away} />
+        {homeNext ? <TeamUpcomingColumn label={home.team.name} ctx={home} /> : null}
+        {awayNext ? <TeamUpcomingColumn label={away.team.name} ctx={away} /> : null}
       </div>
     </Section>
   );
 }
 
-function RelatedNews({ articles }: { articles: MatchCentrePayload["relatedNews"] }) {
+function RelatedArticles({ articles }: { articles: MatchCentrePayload["relatedNews"] }) {
   if (!articles.length) return null;
   const limited = articles.slice(0, 4);
   const [featured, ...rest] = limited;
 
   return (
-    <Section title="Related news" testId="match-related-news" className="space-y-3">
-      <div className="space-y-3">
-        {featured ? (
-          <Link
-            href={newsArticle(featured.slug)}
-            className="group grid gap-3 sm:grid-cols-[160px_1fr] overflow-hidden hover:opacity-95"
-          >
-            <div className="aspect-[16/10] sm:aspect-auto sm:h-full sm:min-h-[100px] bg-muted overflow-hidden rounded-xl">
-              {featured.coverImage ? (
-                <img
-                  src={featured.coverImage}
-                  alt=""
-                  className="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              ) : null}
-            </div>
-            <div className="min-w-0 py-0.5">
-              <h3 className="text-base font-semibold leading-snug group-hover:underline line-clamp-3">
-                {featured.title}
-              </h3>
+    <Section title="Related articles" testId="match-related-articles" className="space-y-4">
+      {featured ? (
+        <Link
+          href={newsArticle(featured.slug)}
+          className="group block overflow-hidden rounded-xl border border-border/70 hover-elevate"
+          data-testid={`link-related-featured-${featured.id}`}
+        >
+          <div className="relative aspect-video bg-muted overflow-hidden">
+            {featured.coverImage ? (
+              <img
+                src={featured.coverImage}
+                alt=""
+                className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
+                loading="lazy"
+              />
+            ) : null}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
+            <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
+              <h3 className="text-white text-lg sm:text-xl font-bold line-clamp-2">{featured.title}</h3>
               {featured.publishedAt ? (
-                <p className="mt-2 text-xs text-muted-foreground">
+                <p className="mt-2 text-xs text-white/70">
                   {formatDistanceToNow(new Date(featured.publishedAt), { addSuffix: true })}
                 </p>
               ) : null}
             </div>
-          </Link>
-        ) : null}
+          </div>
+        </Link>
+      ) : null}
 
-        {rest.length > 0 ? (
-          <ul className="divide-y divide-border/40">
-            {rest.map((a) => (
-              <li key={a.id}>
-                <Link
-                  href={newsArticle(a.slug)}
-                  className="flex gap-3 py-2.5 hover:bg-muted/30 -mx-1 px-1 rounded-md"
-                >
-                  <div className="w-14 h-10 shrink-0 rounded-md overflow-hidden bg-muted">
-                    {a.coverImage ? (
-                      <img
-                        src={a.coverImage}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium leading-snug line-clamp-2">{a.title}</p>
-                    {a.publishedAt ? (
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {formatDistanceToNow(new Date(a.publishedAt), { addSuffix: true })}
-                      </p>
-                    ) : null}
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
+      {rest.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {rest.map((a) => (
+            <Link
+              key={a.id}
+              href={newsArticle(a.slug)}
+              className="group flex flex-col overflow-hidden rounded-xl border border-border/70 hover-elevate"
+              data-testid={`link-related-${a.id}`}
+            >
+              <div className="relative aspect-video bg-muted overflow-hidden">
+                {a.coverImage ? (
+                  <img
+                    src={a.coverImage}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : null}
+              </div>
+              <div className="p-3.5 flex-1">
+                <h3 className="font-semibold text-base line-clamp-2 group-hover:text-primary transition-colors">
+                  {a.title}
+                </h3>
+                {a.publishedAt ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(a.publishedAt), { addSuffix: true })}
+                  </p>
+                ) : null}
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : null}
     </Section>
   );
 }
 
-function statusBadge(centre: Pick<MatchCentrePayload, "presentationState" | "state">) {
-  const { presentationState, state } = centre;
-  if (presentationState === "LIVE") {
-    if (state.interruptionKind === "suspended") return <Badge variant="destructive">Suspended</Badge>;
-    if (state.interruptionKind === "interrupted") return <Badge variant="destructive">Interrupted</Badge>;
-    if (state.interruptionKind === "delayed") return <Badge variant="secondary">Delayed</Badge>;
-    return <Badge className="bg-red-600 hover:bg-red-600 text-white">LIVE</Badge>;
+function statusBadge(centre: Pick<MatchCentrePayload, "presentationState" | "state" | "match">) {
+  const rawTimer = centre.presentationState === "LIVE" ? centre.match.timeline?.timer || null : null;
+  const minute =
+    rawTimer && /^\d+$/.test(String(rawTimer).trim()) ? String(rawTimer).trim() : null;
+  const label = matchCentreStateLabel({
+    presentationState: centre.presentationState,
+    rawStatus: centre.state.rawStatus,
+    interruptionKind: centre.state.interruptionKind,
+    minute,
+  });
+
+  if (centre.presentationState === "LIVE") {
+    if (centre.state.interruptionKind === "suspended") {
+      return <Badge variant="destructive">{label}</Badge>;
+    }
+    if (centre.state.interruptionKind === "interrupted") {
+      return <Badge variant="destructive">{label}</Badge>;
+    }
+    if (centre.state.interruptionKind === "delayed") {
+      return <Badge variant="secondary">{label}</Badge>;
+    }
+    if (label === "Half-time") {
+      return <Badge variant="secondary">{label}</Badge>;
+    }
+    return <Badge className="bg-red-600 hover:bg-red-600 text-white">{label}</Badge>;
   }
-  if (presentationState === "COMPLETED") {
-    return <Badge variant="secondary">{matchCentreResultLabel(state.rawStatus)}</Badge>;
+  if (centre.presentationState === "ABANDONED") {
+    return <Badge variant="destructive">{label}</Badge>;
   }
-  if (presentationState === "POSTPONED") return <Badge variant="secondary">Postponed</Badge>;
-  if (presentationState === "CANCELLED") return <Badge variant="secondary">Cancelled</Badge>;
-  if (presentationState === "ABANDONED") return <Badge variant="destructive">Abandoned</Badge>;
-  return <Badge variant="outline">Scheduled</Badge>;
+  if (centre.presentationState === "PRE_EVENT") {
+    return <Badge variant="outline">{label}</Badge>;
+  }
+  return <Badge variant="secondary">{label}</Badge>;
 }
 
 export type MatchCentreHeroProps = Pick<
@@ -623,15 +587,20 @@ export function MatchCentreHeader({ centre }: { centre: MatchCentreHeroProps }) 
     centre.presentationState === "LIVE" ||
     centre.presentationState === "COMPLETED" ||
     centre.presentationState === "ABANDONED";
-  const rawTimer = centre.presentationState === "LIVE" ? m.timeline?.timer || null : null;
-  const minuteTimer =
-    rawTimer && /^\d+$/.test(String(rawTimer).trim()) ? String(rawTimer).trim() : null;
   const scoreReady =
     typeof m.homeScore === "number" &&
     Number.isFinite(m.homeScore) &&
     typeof m.awayScore === "number" &&
     Number.isFinite(m.awayScore);
   const crestSize = isPreEvent || showScore ? "xl" : "lg";
+  const competitionLabel = formatCompetitionHeroLabel(
+    m.competitionName,
+    m.goalserveCompetitionId,
+  );
+  const resultMarker =
+    centre.presentationState === "COMPLETED"
+      ? matchCentreResultLabel(centre.state.rawStatus)
+      : null;
 
   return (
     <header
@@ -642,14 +611,11 @@ export function MatchCentreHeader({ centre }: { centre: MatchCentreHeroProps }) 
     >
       <div className={`px-4 sm:px-6 ${isPreEvent ? "pt-5 pb-6 sm:pt-6 sm:pb-8" : "py-5 sm:py-6"}`}>
         <div className="flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm text-muted-foreground mb-5 sm:mb-7">
-          <span className="font-medium text-foreground/80">{m.competitionName}</span>
+          <span className="font-medium text-foreground/80">{competitionLabel}</span>
           {m.round ? <span aria-hidden="true">·</span> : null}
           {m.round ? <span>{m.round}</span> : null}
           <span aria-hidden="true">·</span>
           {statusBadge(centre)}
-          {minuteTimer ? (
-            <span className="tabular-nums font-semibold text-foreground">{minuteTimer}&apos;</span>
-          ) : null}
         </div>
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
@@ -699,6 +665,11 @@ export function MatchCentreHeader({ centre }: { centre: MatchCentreHeroProps }) 
             ) : (
               <div className="text-muted-foreground">TBC</div>
             )}
+            {resultMarker ? (
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-1.5">
+                {resultMarker}
+              </div>
+            ) : null}
             {m.timeline?.htScore &&
               (centre.presentationState === "LIVE" ||
                 centre.presentationState === "COMPLETED" ||
@@ -818,98 +789,142 @@ function ExceptionalBanner({ centre }: { centre: MatchCentrePayload }) {
   );
 }
 
+function hasLineupStarters(centre: MatchCentrePayload): boolean {
+  return Boolean(centre.lineups?.home?.starters.length || centre.lineups?.away?.starters.length);
+}
+
+function renderModule(id: MatchCentreModuleId, centre: MatchCentrePayload) {
+  const events = centre.match.timeline?.events ?? [];
+  const stats = centre.match.timeline?.stats ?? [];
+  const confirmed = centre.lineups?.kind === "confirmed" && hasLineupStarters(centre);
+  const predicted = centre.lineups?.kind === "predicted" && hasLineupStarters(centre);
+
+  switch (id) {
+    case "howTheyCompare":
+      return (
+        <HowTheyCompare
+          key={id}
+          home={centre.home}
+          away={centre.away}
+          h2h={centre.h2h}
+          compared={centre.presentationState === "COMPLETED"}
+        />
+      );
+    case "recentForm":
+      return <RecentFormSection key={id} home={centre.home} away={centre.away} />;
+    case "predictedXi":
+      return predicted ? (
+        <StartingXiSection
+          key={id}
+          lineups={centre.lineups}
+          homeTeam={centre.match.homeTeam}
+          awayTeam={centre.match.awayTeam}
+          title="Predicted XI"
+        />
+      ) : null;
+    case "startingXi":
+      return confirmed || (hasLineupStarters(centre) && centre.lineups?.kind !== "predicted") ? (
+        <StartingXiSection
+          key={id}
+          lineups={centre.lineups}
+          homeTeam={centre.match.homeTeam}
+          awayTeam={centre.match.awayTeam}
+          title="Starting XI"
+        />
+      ) : null;
+    case "finalXi":
+      return hasLineupStarters(centre) ? (
+        <StartingXiSection
+          key={id}
+          lineups={centre.lineups}
+          homeTeam={centre.match.homeTeam}
+          awayTeam={centre.match.awayTeam}
+          title="Final XI"
+        />
+      ) : null;
+    case "upcomingFixtures":
+      return (
+        <UpcomingFixturesSection
+          key={id}
+          home={centre.home}
+          away={centre.away}
+          title={centre.presentationState === "COMPLETED" ? "What’s next" : "Upcoming fixtures"}
+        />
+      );
+    case "timeline":
+      return (
+        <MatchTimeline
+          key={id}
+          events={events}
+          homeTeam={centre.match.homeTeam}
+          awayTeam={centre.match.awayTeam}
+        />
+      );
+    case "statistics":
+      return (
+        <StatsSection
+          key={id}
+          stats={stats}
+          homeName={centre.match.homeTeam.name}
+          awayName={centre.match.awayTeam.name}
+        />
+      );
+    case "h2hDetail":
+      return (
+        <H2HSection
+          key={id}
+          h2h={centre.h2h}
+          homeName={centre.match.homeTeam.name}
+          awayName={centre.match.awayTeam.name}
+        />
+      );
+    case "relatedArticles":
+      return <RelatedArticles key={id} articles={centre.relatedNews} />;
+    default:
+      return null;
+  }
+}
+
 export function PreEventMatchCentre({ centre }: { centre: MatchCentrePayload }) {
+  const hasConfirmed = centre.lineups?.kind === "confirmed" && hasLineupStarters(centre);
+  const hasPredicted = centre.lineups?.kind === "predicted" && hasLineupStarters(centre);
+  const order = resolvePreEventModuleOrder({
+    hasPredictedLineup: hasPredicted,
+    hasConfirmedLineup: hasConfirmed,
+    kickoff: centre.match.kickoffTime,
+    now: Date.now(),
+  });
+
   return (
     <div className="space-y-7 md:space-y-9" data-testid="pre-event-match-centre">
       <MatchCentreHeader centre={centre} />
-      <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
-      <RecentFormSection home={centre.home} away={centre.away} />
-      <H2HSection
-        h2h={centre.h2h}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
-      />
-      <FixturesSection home={centre.home} away={centre.away} title="Previous and upcoming" />
-      <StartingXiSection
-        lineups={centre.lineups}
-        homeTeam={centre.match.homeTeam}
-        awayTeam={centre.match.awayTeam}
-        title="Starting XI"
-      />
-      <RelatedNews articles={centre.relatedNews} />
+      {order.map((id) => renderModule(id, centre))}
     </div>
   );
 }
 
 export function LiveMatchCentre({ centre }: { centre: MatchCentrePayload }) {
-  const events = centre.match.timeline?.events ?? [];
-  const stats = centre.match.timeline?.stats ?? [];
+  const order = resolveLiveModuleOrder({
+    hasConfirmedLineup: hasLineupStarters(centre),
+  });
+
   return (
     <div className="space-y-7 md:space-y-9" data-testid="live-match-centre">
       <MatchCentreHeader centre={centre} />
-      <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
-      <MatchTimeline
-        events={events}
-        homeTeam={centre.match.homeTeam}
-        awayTeam={centre.match.awayTeam}
-      />
-      <StatsSection
-        stats={stats}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
-      />
-      <RecentFormSection home={centre.home} away={centre.away} />
-      <H2HSection
-        h2h={centre.h2h}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
-      />
-      <StartingXiSection
-        lineups={centre.lineups}
-        homeTeam={centre.match.homeTeam}
-        awayTeam={centre.match.awayTeam}
-        title="Starting XI"
-      />
-      <RelatedNews articles={centre.relatedNews} />
+      {order.map((id) => renderModule(id, centre))}
     </div>
   );
 }
 
 export function CompletedMatchCentre({ centre }: { centre: MatchCentrePayload }) {
-  const events = centre.match.timeline?.events ?? [];
-  const stats = centre.match.timeline?.stats ?? [];
+  const order = resolveCompletedModuleOrder({
+    hasConfirmedLineup: hasLineupStarters(centre),
+  });
+
   return (
     <div className="space-y-7 md:space-y-9" data-testid="completed-match-centre">
       <MatchCentreHeader centre={centre} />
-      <TaleOfTheTape home={centre.home} away={centre.away} h2h={centre.h2h} />
-      <RecentFormSection
-        home={centre.home}
-        away={centre.away}
-        title="Form before the match"
-      />
-      <H2HSection
-        h2h={centre.h2h}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
-      />
-      <MatchTimeline
-        events={events}
-        homeTeam={centre.match.homeTeam}
-        awayTeam={centre.match.awayTeam}
-      />
-      <StatsSection
-        stats={stats}
-        homeName={centre.match.homeTeam.name}
-        awayName={centre.match.awayTeam.name}
-      />
-      <FixturesSection home={centre.home} away={centre.away} title="What’s next" />
-      <StartingXiSection
-        lineups={centre.lineups}
-        homeTeam={centre.match.homeTeam}
-        awayTeam={centre.match.awayTeam}
-        title="Final XI"
-      />
-      <RelatedNews articles={centre.relatedNews} />
+      {order.map((id) => renderModule(id, centre))}
     </div>
   );
 }
@@ -929,7 +944,7 @@ export function ExceptionalMatchCentre({ centre }: { centre: MatchCentrePayload 
           abandoned
         />
       )}
-      <RelatedNews articles={centre.relatedNews} />
+      <RelatedArticles articles={centre.relatedNews} />
     </div>
   );
 }
@@ -962,6 +977,7 @@ export function matchCentreHeroFromCoreMatch(core: {
   timeline?: unknown;
   competition?: string | null;
   competitionName?: string | null;
+  goalserveCompetitionId?: string | null;
   round?: string | null;
   season?: string | null;
   homeTeam?: {
@@ -1002,6 +1018,7 @@ export function matchCentreHeroFromCoreMatch(core: {
       venue: core.venue ?? timelineParsed?.venue ?? null,
       referee: timelineParsed?.referee ?? null,
       competitionName: String(core.competitionName || core.competition || "Match"),
+      goalserveCompetitionId: core.goalserveCompetitionId ?? null,
       competitionSlug: null,
       season: core.season ?? null,
       round: core.round ?? null,

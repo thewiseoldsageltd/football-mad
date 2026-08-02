@@ -358,7 +358,7 @@ async function buildTeamContext(
 
   const nextFixtures: MatchCentreFixtureLink[] = [];
   for (const row of after) {
-    if (nextFixtures.length >= 3) break;
+    if (nextFixtures.length >= 5) break;
     if (
       !isEligibleNextFixture({
         matchId: row.id,
@@ -390,7 +390,7 @@ async function buildH2H(
   awayTeam: Team | undefined,
   includeCurrent: boolean,
 ): Promise<MatchCentreH2H> {
-  const emptyMessage = "No previous meetings are available in Football Mad yet.";
+  const emptyMessage = "No recorded meetings.";
   const homeId = homeTeam?.id ?? null;
   const awayId = awayTeam?.id ?? null;
   const homeGs = current.homeGoalserveTeamId;
@@ -715,7 +715,7 @@ export async function buildMatchCentrePayload(
       : {
           matches: [],
           summary: { homeTeamWins: 0, draws: 0, awayTeamWins: 0 },
-          emptyMessage: "No previous meetings are available in Football Mad yet.",
+          emptyMessage: "No recorded meetings.",
         };
   const relatedNews = newsRes.status === "fulfilled" ? newsRes.value : [];
   const competitionRow = competitionRes.status === "fulfilled" ? competitionRes.value : null;
@@ -724,6 +724,8 @@ export async function buildMatchCentrePayload(
     competitionRow?.name || match.competition,
     competitionRow?.goalserveCompetitionId || match.goalserveCompetitionId,
   );
+  const goalserveCompetitionId =
+    competitionRow?.goalserveCompetitionId || match.goalserveCompetitionId || null;
 
   return {
     match: {
@@ -735,6 +737,7 @@ export async function buildMatchCentrePayload(
       venue: match.venue || timeline?.venue || null,
       referee: timeline?.referee || null,
       competitionName,
+      goalserveCompetitionId,
       competitionSlug: competitionRow?.slug ?? null,
       season: match.seasonKey || competitionRow?.season || null,
       round: match.goalserveRound || null,

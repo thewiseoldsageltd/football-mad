@@ -7,6 +7,7 @@ import type { MockMatch } from "./mockMatches";
 import { getCountryFlagUrl } from "@/lib/flags";
 import { MatchTeamBadge } from "./match-team-badge";
 import { getCompetitionCountryById, getPublicCompetitionDisplayName } from "./competition-priority";
+import { formatCompetitionHeroLabel } from "@shared/competition-display";
 import { resolveMatchDetailHref } from "@shared/match-slug";
 
 interface EnhancedMatchCardProps {
@@ -22,23 +23,34 @@ interface ParsedCompetition {
 
 function parseCompetitionLabel(competition: string | null | undefined): ParsedCompetition {
   if (!competition) return { name: "Unknown" };
-  
+
   const fullMatch = competition.match(/^(.+?)\s*\(([^)]+)\)\s*\[(\d+)\]$/);
   if (fullMatch) {
-    return { name: getPublicCompetitionDisplayName(fullMatch[1].trim(), fullMatch[3]), country: fullMatch[2].trim(), id: fullMatch[3] };
+    return {
+      name: getPublicCompetitionDisplayName(fullMatch[1].trim(), fullMatch[3]),
+      country: fullMatch[2].trim(),
+      id: fullMatch[3],
+    };
   }
-  
+
   const colonMatch = competition.match(/^([^:]+):\s*(.+)$/);
   if (colonMatch) {
-    return { name: getPublicCompetitionDisplayName(colonMatch[2].trim(), null), country: colonMatch[1].trim() };
+    return {
+      name: getPublicCompetitionDisplayName(colonMatch[2].trim(), null),
+      country: colonMatch[1].trim(),
+    };
   }
 
   const idMatch = competition.match(/\[(\d+)\]\s*$/);
   if (idMatch) {
     const country = getCompetitionCountryById(idMatch[1]);
-    return { name: getPublicCompetitionDisplayName(competition, idMatch[1]), country: country ?? undefined, id: idMatch[1] };
+    return {
+      name: getPublicCompetitionDisplayName(competition, idMatch[1]),
+      country: country ?? undefined,
+      id: idMatch[1],
+    };
   }
-  
+
   return { name: getPublicCompetitionDisplayName(competition, null) };
 }
 
@@ -60,7 +72,7 @@ function CompetitionBadge({
   return (
     <Badge
       variant="outline"
-      className="text-[11px] font-medium flex-shrink-0 gap-2 border-border/70 bg-muted/40 text-foreground px-2.5 py-1 rounded-full"
+      className="text-[11px] font-medium flex-shrink-0 gap-2 border-border/70 bg-muted/40 text-foreground px-2.5 py-1 rounded-full max-w-full"
     >
       {logoUrl ? (
         <span className="h-5 w-5 rounded-md bg-white dark:bg-background border border-border/60 p-[1px] overflow-hidden flex items-center justify-center shadow-[0_0_0_1px_rgba(255,255,255,0.5)_inset]">
@@ -74,18 +86,18 @@ function CompetitionBadge({
           />
         </span>
       ) : flagUrl ? (
-        <img 
-          src={flagUrl} 
-          alt={country || ""} 
+        <img
+          src={flagUrl}
+          alt={country || ""}
           className="w-4 h-3 object-cover rounded-sm"
           onError={(e) => {
-            e.currentTarget.style.display = 'none';
+            e.currentTarget.style.display = "none";
           }}
         />
       ) : (
         <Globe className="w-3 h-3 text-muted-foreground" />
       )}
-      <span>{displayName}</span>
+      <span className="truncate">{displayName}</span>
     </Badge>
   );
 }
@@ -97,7 +109,7 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
         <Badge className="bg-red-500 text-white border-0" data-testid="badge-live">
           <span className="relative flex h-2 w-2 mr-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-white"></span>
           </span>
           LIVE {minute ? `${minute}'` : ""}
         </Badge>
@@ -110,7 +122,11 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
       );
     case "postponed":
       return (
-        <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400" data-testid="badge-postponed">
+        <Badge
+          variant="outline"
+          className="border-amber-500 text-amber-600 dark:text-amber-400"
+          data-testid="badge-postponed"
+        >
           P-P
         </Badge>
       );
@@ -119,18 +135,51 @@ function StatusBadge({ status, minute }: { status: MockMatch["status"]; minute?:
   }
 }
 
+function CenterScoreOrTime({ match, kickoffTime }: { match: MockMatch; kickoffTime: Date }) {
+  const hasScores =
+    match.homeScore !== null &&
+    match.homeScore !== undefined &&
+    match.awayScore !== null &&
+    match.awayScore !== undefined;
+
+  if (match.status === "finished" || match.status === "live") {
+    if (hasScores) {
+      return (
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-xl md:text-2xl font-bold tabular-nums whitespace-nowrap leading-none">
+            {match.homeScore}–{match.awayScore}
+          </span>
+          {match.status === "live" && match.minute ? (
+            <span className="text-[11px] font-semibold tabular-nums text-red-600">{match.minute}'</span>
+          ) : match.status === "finished" ? (
+            <StatusBadge status={match.status} />
+          ) : null}
+        </div>
+      );
+    }
+    return <StatusBadge status={match.status} minute={match.minute} />;
+  }
+  if (match.status === "postponed") {
+    return <span className="text-sm text-muted-foreground font-medium whitespace-nowrap leading-none">TBC</span>;
+  }
+  return (
+    <span className="text-xl md:text-2xl font-bold tabular-nums whitespace-nowrap leading-none tracking-tight">
+      {format(kickoffTime, "HH:mm")}
+    </span>
+  );
+}
+
 export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCardProps) {
   const kickoffTime = new Date(match.kickOffTime);
   const isLive = match.status === "live";
   const homeDisplayName = match.homeTeam.name?.trim() || match.homeTeam.shortName || "Unknown";
   const awayDisplayName = match.awayTeam.name?.trim() || match.awayTeam.shortName || "Unknown";
-  // Use provided competitionLabel (may be disambiguated), fallback to match.competition
-  // Strip any country suffix like "(England)" or "• England" - flag is enough
   const rawLabel = competitionLabel || match.competition;
   const idMatch = rawLabel.match(/\[(\d+)\]\s*$/);
-  const displayLabel = getPublicCompetitionDisplayName(
+  const goalserveId = idMatch ? idMatch[1] : match.goalserveCompetitionId ?? null;
+  const displayLabel = formatCompetitionHeroLabel(
     rawLabel.replace(/\s*•\s*\w+\s*$/, "").trim(),
-    idMatch ? idMatch[1] : match.goalserveCompetitionId ?? null,
+    goalserveId,
   );
   const hasVenue = typeof match.venue === "string" && match.venue.trim().length > 0;
   const detailHref = resolveMatchDetailHref({
@@ -141,85 +190,73 @@ export function EnhancedMatchCard({ match, competitionLabel }: EnhancedMatchCard
   });
 
   const cardInner = (
-      <Card className="hover-elevate active-elevate-2 overflow-hidden border-border/70">
-        <CardContent className={`p-4 md:p-5 ${isLive ? "pl-5 md:pl-6" : ""} overflow-hidden`}>
-          {/* LINE 1: Competition pill (centered) */}
-          <div className="flex justify-center mb-2">
-            <CompetitionBadge
-              rawCompetition={match.rawCompetition}
-              displayName={displayLabel}
-              goalserveCompetitionId={match.goalserveCompetitionId}
-              logoUrl={match.competitionLogoUrl}
-            />
-          </div>
+    <Card className="hover-elevate active-elevate-2 overflow-hidden border-border/70">
+      <CardContent className={`p-4 md:p-5 ${isLive ? "pl-5 md:pl-6" : ""} overflow-hidden`}>
+        <div className="flex justify-center mb-3">
+          <CompetitionBadge
+            rawCompetition={match.rawCompetition}
+            displayName={displayLabel}
+            goalserveCompetitionId={match.goalserveCompetitionId}
+            logoUrl={match.competitionLogoUrl}
+          />
+        </div>
 
-          {/* LINE 2: 5-column grid [crest][name-right][kickoff][name-left][crest] */}
-          <div className="grid grid-cols-[56px_minmax(0,1fr)_88px_minmax(0,1fr)_56px] md:grid-cols-[64px_minmax(0,1fr)_116px_minmax(0,1fr)_64px] gap-x-2 md:gap-x-3 items-center">
-            {/* Home crest */}
-            <div className="h-14 md:h-16 flex items-center justify-center">
-              <MatchTeamBadge team={match.homeTeam} size="sm" />
-            </div>
-
-            {/* Home name - right aligned toward center */}
-            <div className="min-w-0 overflow-hidden flex items-center justify-end">
-              <span className="font-semibold text-sm md:text-base truncate leading-tight">{homeDisplayName}</span>
-            </div>
-
-            {/* Center: kickoff time / score */}
-            <div className="flex items-center justify-center">
-              {(() => {
-                const hasScores = match.homeScore !== null && match.homeScore !== undefined &&
-                                  match.awayScore !== null && match.awayScore !== undefined;
-                
-                if (match.status === "finished" || match.status === "live") {
-                  if (hasScores) {
-                    return (
-                      <span className="text-xl md:text-2xl font-bold tabular-nums whitespace-nowrap leading-none">
-                        {match.homeScore}–{match.awayScore}
-                      </span>
-                    );
-                  }
-                  // Finished/live but no scores - show FT badge only
-                  return <StatusBadge status={match.status} minute={match.minute} />;
-                }
-                if (match.status === "postponed") {
-                  return <span className="text-sm text-muted-foreground font-medium whitespace-nowrap leading-none">TBC</span>;
-                }
-                // Scheduled - show kickoff time
-                return (
-                  <span className="text-xl md:text-2xl font-bold tabular-nums whitespace-nowrap leading-none tracking-tight">
-                    {format(kickoffTime, "HH:mm")}
-                  </span>
-                );
-              })()}
-            </div>
-
-            {/* Away name - left aligned toward center */}
-            <div className="min-w-0 overflow-hidden flex items-center justify-start">
-              <span className="font-semibold text-sm md:text-base truncate leading-tight">{awayDisplayName}</span>
-            </div>
-
-            {/* Away crest */}
-            <div className="h-14 md:h-16 flex items-center justify-center">
-              <MatchTeamBadge team={match.awayTeam} size="sm" />
-            </div>
-          </div>
-
-          {/* LINE 3: Date + optional venue */}
-          <div className="flex flex-col items-center justify-center mt-2 text-xs text-muted-foreground/80">
-            <span className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {format(kickoffTime, "EEE d MMM")}
+        {/* Mobile: crest-over-name columns matching Match Centre hero */}
+        <div className="md:hidden grid grid-cols-[1fr_auto_1fr] gap-x-2 items-start">
+          <div className="flex flex-col items-center gap-1.5 min-w-0">
+            <MatchTeamBadge team={match.homeTeam} size="sm" />
+            <span className="font-semibold text-sm leading-snug text-center line-clamp-2 w-full">
+              {homeDisplayName}
             </span>
-            {hasVenue && (
-              <span className="mt-1 flex items-center gap-1 max-w-[85%] truncate">
-                <MapPin className="h-3 w-3 shrink-0" />
-                <span className="truncate">{match.venue?.trim()}</span>
-              </span>
-            )}
           </div>
-        </CardContent>
-      </Card>
+          <div className="flex items-center justify-center pt-3 min-w-[4.5rem]">
+            <CenterScoreOrTime match={match} kickoffTime={kickoffTime} />
+          </div>
+          <div className="flex flex-col items-center gap-1.5 min-w-0">
+            <MatchTeamBadge team={match.awayTeam} size="sm" />
+            <span className="font-semibold text-sm leading-snug text-center line-clamp-2 w-full">
+              {awayDisplayName}
+            </span>
+          </div>
+        </div>
+
+        {/* Desktop: crest | name | kickoff | name | crest */}
+        <div className="hidden md:grid grid-cols-[64px_minmax(0,1fr)_116px_minmax(0,1fr)_64px] gap-x-3 items-center">
+          <div className="h-16 flex items-center justify-center">
+            <MatchTeamBadge team={match.homeTeam} size="sm" />
+          </div>
+          <div className="min-w-0 overflow-hidden flex items-center justify-end">
+            <span className="font-semibold text-base leading-tight text-right line-clamp-2">
+              {homeDisplayName}
+            </span>
+          </div>
+          <div className="flex items-center justify-center">
+            <CenterScoreOrTime match={match} kickoffTime={kickoffTime} />
+          </div>
+          <div className="min-w-0 overflow-hidden flex items-center justify-start">
+            <span className="font-semibold text-base leading-tight text-left line-clamp-2">
+              {awayDisplayName}
+            </span>
+          </div>
+          <div className="h-16 flex items-center justify-center">
+            <MatchTeamBadge team={match.awayTeam} size="sm" />
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center justify-center mt-2.5 text-xs text-muted-foreground/80">
+          <span className="flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {format(kickoffTime, "EEE d MMM")}
+          </span>
+          {hasVenue && (
+            <span className="mt-1 flex items-center gap-1 max-w-[85%] truncate">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{match.venue?.trim()}</span>
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 
   if (!detailHref) {

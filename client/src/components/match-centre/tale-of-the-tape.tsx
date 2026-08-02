@@ -1,6 +1,4 @@
-import { Link } from "wouter";
-import { MatchTeamBadge } from "@/components/matches/match-team-badge";
-import { teamHub } from "@/lib/urls";
+import type { ReactNode } from "react";
 import type {
   MatchCentreFormMatch,
   MatchCentreFormResult,
@@ -29,7 +27,7 @@ function resultLabel(result: MatchCentreFormResult): string {
   return "Loss";
 }
 
-/** Compact form dots — colour + letter for accessibility. */
+/** Compact form dots — colour + letter (never colour alone). */
 function FormDots({ form, align }: { form: MatchCentreFormMatch[]; align: "left" | "right" }) {
   return (
     <div
@@ -58,150 +56,150 @@ function FormDots({ form, align }: { form: MatchCentreFormMatch[]; align: "left"
   );
 }
 
-function VsDivider({ label }: { label: string }) {
+function CompareRow({
+  label,
+  home,
+  away,
+  testId,
+}: {
+  label: string;
+  home: ReactNode;
+  away: ReactNode;
+  testId?: string;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-1 px-1 min-w-[3.5rem] sm:min-w-[4.5rem]">
-      <div className="flex w-full items-center gap-1.5" aria-hidden="true">
-        <span className="h-px flex-1 bg-border" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          VS
-        </span>
-        <span className="h-px flex-1 bg-border" />
-      </div>
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+    <li
+      className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center px-3 sm:px-5 py-3.5"
+      data-testid={testId}
+    >
+      <div className="min-w-0 text-left">{home}</div>
+      <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center px-1 max-w-[7rem]">
         {label}
-      </span>
-    </div>
+      </div>
+      <div className="min-w-0 text-right">{away}</div>
+    </li>
   );
 }
 
 /**
- * Signature comparison band — answers who is stronger / in form / historically ahead.
- * Only renders rows with honest available data.
+ * Comparison-first band — dimensions only (no repeated crests / team names / VS).
+ * Heading adapts for completed matches via `compared`.
  */
-export function TaleOfTheTape({
+export function HowTheyCompare({
   home,
   away,
   h2h,
+  compared = false,
 }: {
   home: MatchCentreTeamContext;
   away: MatchCentreTeamContext;
   h2h: MatchCentreH2H;
+  compared?: boolean;
 }) {
-  const hasLeague = Boolean(home.standing || away.standing);
   const hasForm = home.form.length > 0 || away.form.length > 0;
+  const hasLeague = Boolean(home.standing || away.standing);
   const hasH2h = h2h.matches.length > 0;
 
-  if (!hasLeague && !hasForm && !hasH2h) return null;
+  if (!hasForm && !hasLeague && !hasH2h) return null;
 
   return (
-    <section data-testid="match-tale-of-the-tape" className="space-y-2.5">
+    <section data-testid="match-how-they-compare" className="space-y-2.5">
       <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase px-0.5">
-        Tale of the tape
+        {compared ? "How they compared" : "How they compare"}
       </h2>
 
       <div className="rounded-2xl border border-border/80 bg-card overflow-hidden">
-        {/* Club anchors */}
-        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 sm:px-5 pt-4 pb-3">
-          <Link
-            href={teamHub(home.team.slug)}
-            className="flex items-center gap-2 min-w-0 hover:underline"
-          >
-            <MatchTeamBadge
-              team={{
-                id: home.team.id || undefined,
-                name: home.team.name,
-                logoUrl: home.team.logoUrl,
-              }}
-              size="xs"
-            />
-            <span className="text-sm sm:text-base font-semibold truncate">{home.team.name}</span>
-          </Link>
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">vs</span>
-          <Link
-            href={teamHub(away.team.slug)}
-            className="flex items-center gap-2 min-w-0 justify-end text-right hover:underline"
-          >
-            <span className="text-sm sm:text-base font-semibold truncate">{away.team.name}</span>
-            <MatchTeamBadge
-              team={{
-                id: away.team.id || undefined,
-                name: away.team.name,
-                logoUrl: away.team.logoUrl,
-              }}
-              size="xs"
-            />
-          </Link>
-        </div>
-
         <ul className="divide-y divide-border/50">
-          {hasLeague ? (
-            <li className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 sm:px-5 py-3.5">
-              <div className="min-w-0 text-left">
-                {home.standing ? (
-                  <>
-                    <p className="text-xl sm:text-2xl font-semibold tabular-nums leading-none">
-                      {ordinal(home.standing.position)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground truncate">
-                      {home.standing.competitionName}
-                    </p>
-                  </>
+          {hasForm ? (
+            <CompareRow
+              label="Form"
+              testId="compare-form"
+              home={
+                home.form.length ? (
+                  <FormDots form={home.form} align="left" />
                 ) : (
-                  <span className="text-sm text-muted-foreground">—</span>
-                )}
-              </div>
-              <VsDivider label="League" />
-              <div className="min-w-0 text-right">
-                {away.standing ? (
-                  <>
-                    <p className="text-xl sm:text-2xl font-semibold tabular-nums leading-none">
-                      {ordinal(away.standing.position)}
-                    </p>
-                    <p className="mt-1 text-[11px] text-muted-foreground truncate">
-                      {away.standing.competitionName}
-                    </p>
-                  </>
+                  <span className="text-sm text-muted-foreground" aria-label={`${home.team.name}: no form`}>
+                    —
+                  </span>
+                )
+              }
+              away={
+                away.form.length ? (
+                  <FormDots form={away.form} align="right" />
                 ) : (
-                  <span className="text-sm text-muted-foreground">—</span>
-                )}
-              </div>
-            </li>
+                  <span className="text-sm text-muted-foreground" aria-label={`${away.team.name}: no form`}>
+                    —
+                  </span>
+                )
+              }
+            />
           ) : null}
 
-          {hasForm ? (
-            <li className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center px-3 sm:px-5 py-3.5">
-              <div className="min-w-0 flex justify-start">
-                {home.form.length ? <FormDots form={home.form} align="left" /> : (
-                  <span className="text-sm text-muted-foreground">—</span>
-                )}
-              </div>
-              <VsDivider label="Form" />
-              <div className="min-w-0 flex justify-end">
-                {away.form.length ? <FormDots form={away.form} align="right" /> : (
-                  <span className="text-sm text-muted-foreground">—</span>
-                )}
-              </div>
-            </li>
+          {hasLeague ? (
+            <CompareRow
+              label="League position"
+              testId="compare-league"
+              home={
+                home.standing ? (
+                  <span
+                    className="text-xl sm:text-2xl font-semibold tabular-nums leading-none"
+                    aria-label={`${home.team.name}: ${ordinal(home.standing.position)}`}
+                  >
+                    {ordinal(home.standing.position)}
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground" aria-label={`${home.team.name}: league position unavailable`}>
+                    —
+                  </span>
+                )
+              }
+              away={
+                away.standing ? (
+                  <span
+                    className="text-xl sm:text-2xl font-semibold tabular-nums leading-none"
+                    aria-label={`${away.team.name}: ${ordinal(away.standing.position)}`}
+                  >
+                    {ordinal(away.standing.position)}
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground" aria-label={`${away.team.name}: league position unavailable`}>
+                    —
+                  </span>
+                )
+              }
+            />
           ) : null}
 
           {hasH2h ? (
-            <li className="px-3 sm:px-5 py-3.5" data-testid="tape-h2h-summary">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground text-center mb-2">
+            <li className="px-3 sm:px-5 py-3.5" data-testid="compare-h2h">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center mb-2.5">
                 Head-to-head
               </p>
-              <div className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1 text-sm">
-                <span>
-                  <span className="font-semibold">{home.team.name}</span>{" "}
-                  <span className="tabular-nums font-semibold">{h2h.summary.homeTeamWins}</span>
-                </span>
-                <span className="text-muted-foreground">
-                  Draws <span className="tabular-nums text-foreground font-semibold">{h2h.summary.draws}</span>
-                </span>
-                <span>
-                  <span className="font-semibold">{away.team.name}</span>{" "}
-                  <span className="tabular-nums font-semibold">{h2h.summary.awayTeamWins}</span>
-                </span>
+              <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                <div>
+                  <p className="text-xl font-semibold tabular-nums leading-none">
+                    {h2h.summary.homeTeamWins}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {h2h.summary.homeTeamWins === 1 ? "win" : "wins"}
+                  </p>
+                  <span className="sr-only">{home.team.name}</span>
+                </div>
+                <div>
+                  <p className="text-xl font-semibold tabular-nums leading-none">{h2h.summary.draws}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {h2h.summary.draws === 1 ? "draw" : "draws"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xl font-semibold tabular-nums leading-none">
+                    {h2h.summary.awayTeamWins}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {h2h.summary.awayTeamWins === 1 ? "win" : "wins"}
+                  </p>
+                  <span className="sr-only">{away.team.name}</span>
+                </div>
               </div>
             </li>
           ) : null}
@@ -210,3 +208,6 @@ export function TaleOfTheTape({
     </section>
   );
 }
+
+/** @deprecated Use HowTheyCompare — kept as alias during transition. */
+export const TaleOfTheTape = HowTheyCompare;

@@ -248,6 +248,8 @@ export function StartingXiSection({
   };
 
   const available = hasAnyStarters(lineups);
+  if (!available) return null;
+
   const showPitch = PITCH_XI_ENABLED && view === "pitch";
 
   return (
@@ -257,26 +259,16 @@ export function StartingXiSection({
           <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
             {title}
           </h2>
-          {lineups?.kind === "confirmed" && available ? (
-            <p className="text-xs text-muted-foreground mt-0.5">Confirmed line-ups</p>
+          {lineups?.kind === "confirmed" ? (
+            <p className="text-xs text-muted-foreground mt-0.5">Confirmed</p>
+          ) : lineups?.kind === "predicted" ? (
+            <p className="text-xs text-muted-foreground mt-0.5">Predicted</p>
           ) : null}
         </div>
-        {available && PITCH_XI_ENABLED ? (
-          <ViewToggle value={view} onChange={setAndStore} />
-        ) : null}
+        {PITCH_XI_ENABLED ? <ViewToggle value={view} onChange={setAndStore} /> : null}
       </div>
 
-      {!available ? (
-        <div
-          className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-5 py-8 text-center"
-          data-testid="starting-xi-empty"
-        >
-          <p className="text-sm font-medium text-foreground/80">Line-ups not confirmed yet</p>
-          <p className="mt-1.5 text-sm text-muted-foreground max-w-sm mx-auto">
-            Confirmed starting elevens will appear here when they become available.
-          </p>
-        </div>
-      ) : showPitch ? (
+      {showPitch ? (
         <PitchView
           homeTeam={homeTeam}
           awayTeam={awayTeam}

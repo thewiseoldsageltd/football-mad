@@ -2017,6 +2017,7 @@ export default function MatchPage() {
                 centre={matchCentreHeroFromCoreMatch({
                   ...coreMatch,
                   competition: coreMatch.competition,
+                  goalserveCompetitionId: coreMatch.goalserveCompetitionId,
                   round: coreMatch.goalserveRound,
                 })}
               />

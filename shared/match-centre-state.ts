@@ -284,10 +284,43 @@ export function matchCentreRefetchIntervalMs(input: MatchCentrePollInput): numbe
 export function matchCentreResultLabel(rawStatus?: string | null): string {
   const s = String(rawStatus ?? "").trim().toLowerCase();
   if (s === "aet") return "AET";
-  if (s === "pen.") return "Penalties";
+  if (s === "pen." || s === "pen" || s === "penalties") return "Pens";
   if (s === "ft" || s === "full-time" || s === "full time" || s.includes("finished")) return "FT";
   if (s === "awarded" || s.includes("awarded")) return "Awarded";
   return "FT";
+}
+
+/**
+ * Supporter-facing primary state label for Match Centre hero pills.
+ * Distinct from concise result markers (FT / AET / Pens) shown near the score.
+ */
+export function matchCentreStateLabel(input: {
+  presentationState: MatchCentrePresentationState;
+  rawStatus?: string | null;
+  interruptionKind?: MatchCentreState["interruptionKind"];
+  /** Numeric live minute when available (e.g. timeline timer). */
+  minute?: string | number | null;
+}): string {
+  const { presentationState, interruptionKind } = input;
+  const raw = String(input.rawStatus ?? "").trim().toLowerCase();
+
+  if (presentationState === "POSTPONED") return "Postponed";
+  if (presentationState === "CANCELLED") return "Cancelled";
+  if (presentationState === "ABANDONED") return "Abandoned";
+  if (presentationState === "PRE_EVENT") return "Scheduled";
+  if (presentationState === "COMPLETED") return "Finished";
+
+  // LIVE
+  if (interruptionKind === "suspended") return "Suspended";
+  if (interruptionKind === "interrupted") return "Interrupted";
+  if (interruptionKind === "delayed") return "Delayed";
+  if (raw === "ht" || raw === "half-time" || raw === "halftime") return "Half-time";
+
+  const minuteRaw = input.minute != null ? String(input.minute).trim() : "";
+  if (/^\d+$/.test(minuteRaw)) return `Live · ${minuteRaw}'`;
+  if (/^\d+$/.test(raw)) return `Live · ${raw}'`;
+
+  return "Live";
 }
 
 /** Prefer terminal raw timeline status over a later non-terminal raw value. */

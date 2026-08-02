@@ -9,7 +9,7 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:season": "tsx --test shared/season.test.ts shared/season-rollover.test.ts",
-    "test:match-centre": "tsx --test shared/match-centre-state.test.ts shared/competition-display.test.ts shared/goalserve-lineup.test.ts shared/match-centre-timeline.test.ts",
+    "test:match-centre": "tsx --test shared/match-centre-state.test.ts shared/competition-display.test.ts shared/goalserve-lineup.test.ts shared/match-centre-timeline.test.ts shared/match-centre-modules.test.ts",
     "validate:social-meta": "bash script/validate-social-meta.sh",
     "db:push": "drizzle-kit push",
     "db:generate": "tsx script/db-generate.ts",

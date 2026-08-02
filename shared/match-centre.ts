@@ -130,6 +130,8 @@ export type MatchCentrePayload = {
     venue: string | null;
     referee: string | null;
     competitionName: string;
+    /** Goalserve competition id for region-aware hero labels. */
+    goalserveCompetitionId?: string | null;
     competitionSlug: string | null;
     season: string | null;
     round: string | null;
