@@ -87,6 +87,10 @@ export type MatchCentreRelatedArticle = {
   slug: string;
   excerpt: string | null;
   coverImage: string | null;
+  /** Prefer for card covers when present (same as article pages). */
+  heroImageUrl?: string | null;
+  authorName?: string | null;
+  viewCount?: number | null;
   publishedAt: string | null;
 };
 

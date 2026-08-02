@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { Calendar, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,7 +33,10 @@ import type {
 import { HowTheyCompare } from "@/components/match-centre/tale-of-the-tape";
 import { StartingXiSection } from "@/components/match-centre/starting-xi";
 import { MatchTimeline } from "@/components/match-centre/match-timeline";
-import { newsArticle } from "@/lib/urls";
+import {
+  RelatedArticlesSection,
+  matchCentreArticleToCardArticle,
+} from "@/components/related-articles-section";
 
 function resultLabel(result: MatchCentreFormResult): string {
   if (result === "W") return "Win";
@@ -469,73 +472,17 @@ function UpcomingFixturesSection({
 
 function RelatedArticles({ articles }: { articles: MatchCentrePayload["relatedNews"] }) {
   if (!articles.length) return null;
-  const limited = articles.slice(0, 4);
-  const [featured, ...rest] = limited;
-
+  const cardArticles = articles.map(matchCentreArticleToCardArticle);
   return (
-    <Section title="Related articles" testId="match-related-articles" className="space-y-4">
-      {featured ? (
-        <Link
-          href={newsArticle(featured.slug)}
-          className="group block overflow-hidden rounded-xl border border-border/70 hover-elevate"
-          data-testid={`link-related-featured-${featured.id}`}
-        >
-          <div className="relative aspect-video bg-muted overflow-hidden">
-            {featured.coverImage ? (
-              <img
-                src={featured.coverImage}
-                alt=""
-                className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]"
-                loading="lazy"
-              />
-            ) : null}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
-            <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5">
-              <h3 className="text-white text-lg sm:text-xl font-bold line-clamp-2">{featured.title}</h3>
-              {featured.publishedAt ? (
-                <p className="mt-2 text-xs text-white/70">
-                  {formatDistanceToNow(new Date(featured.publishedAt), { addSuffix: true })}
-                </p>
-              ) : null}
-            </div>
-          </div>
-        </Link>
-      ) : null}
-
-      {rest.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rest.map((a) => (
-            <Link
-              key={a.id}
-              href={newsArticle(a.slug)}
-              className="group flex flex-col overflow-hidden rounded-xl border border-border/70 hover-elevate"
-              data-testid={`link-related-${a.id}`}
-            >
-              <div className="relative aspect-video bg-muted overflow-hidden">
-                {a.coverImage ? (
-                  <img
-                    src={a.coverImage}
-                    alt=""
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : null}
-              </div>
-              <div className="p-3.5 flex-1">
-                <h3 className="font-semibold text-base line-clamp-2 group-hover:text-primary transition-colors">
-                  {a.title}
-                </h3>
-                {a.publishedAt ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(a.publishedAt), { addSuffix: true })}
-                  </p>
-                ) : null}
-              </div>
-            </Link>
-          ))}
-        </div>
-      ) : null}
-    </Section>
+    <RelatedArticlesSection
+      articles={cardArticles}
+      limit={3}
+      heading="Related articles"
+      headingStyle="compact"
+      showPills={false}
+      showMoreNews={false}
+      testId="match-related-articles"
+    />
   );
 }
 

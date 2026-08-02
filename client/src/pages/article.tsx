@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
-import { ArrowLeft, Copy, Check, Share2, ChevronRight } from "lucide-react";
+import { ArrowLeft, Copy, Check, Share2 } from "lucide-react";
 import { SiWhatsapp, SiX, SiFacebook } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +16,7 @@ import { useArticleEntityModules } from "@/hooks/use-article-entity-modules";
 import { selectSidebarEntities } from "@/lib/article-sidebar-entities";
 import { newsArticle, authorProfile } from "@/lib/urls";
 import { ArticleCoverImage } from "@/components/article-cover-image";
+import { RelatedArticlesSection } from "@/components/related-articles-section";
 import { articleSeoImageUrl } from "@/lib/article-images";
 import { articleReadTimeMinutes, isBootstrapPartialArticle } from "@/lib/article-bootstrap";
 import { absoluteSeoUrl } from "@/lib/seo";
@@ -742,21 +743,12 @@ export default function ArticlePage() {
             <ArticleMobileEntityModules entityModules={entityModules} />
 
             {relatedArticles.length > 0 && (
-              <section className="mb-24 lg:mb-12">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold">Related Articles</h2>
-                  <Link href="/news">
-                    <Button variant="ghost" size="sm" className="gap-1">
-                      More News <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {relatedArticles.map((related) => (
-                    <ArticleCard key={related.id} article={related} />
-                  ))}
-                </div>
-              </section>
+              <RelatedArticlesSection
+                articles={relatedArticles}
+                showMoreNews
+                headingStyle="page"
+                className="mb-24 lg:mb-12"
+              />
             )}
           </article>
 

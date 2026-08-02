@@ -567,6 +567,9 @@ async function buildRelatedNews(
       slug: articles.slug,
       excerpt: articles.excerpt,
       coverImage: articles.coverImage,
+      heroImageUrl: articles.heroImageUrl,
+      authorName: articles.authorName,
+      viewCount: articles.viewCount,
       publishedAt: articles.publishedAt,
     })
     .from(articles)
@@ -611,6 +614,9 @@ async function buildRelatedNews(
       slug: r.slug,
       excerpt: r.excerpt ?? null,
       coverImage: r.coverImage ?? null,
+      heroImageUrl: r.heroImageUrl ?? null,
+      authorName: r.authorName ?? null,
+      viewCount: r.viewCount ?? 0,
       publishedAt: r.publishedAt ? new Date(r.publishedAt).toISOString() : null,
     }));
 }
