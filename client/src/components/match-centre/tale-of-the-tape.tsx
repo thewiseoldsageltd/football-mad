@@ -5,6 +5,12 @@ import type {
   MatchCentreH2H,
   MatchCentreTeamContext,
 } from "@shared/match-centre";
+import {
+  compareFormLabel,
+  compareH2HSupport,
+  compareLeagueLabel,
+  howTheyCompareHeading,
+} from "@shared/match-centre-compare";
 
 function ordinal(n: number): string {
   const v = n % 100;
@@ -62,7 +68,7 @@ function CompareRow({
   away,
   testId,
 }: {
-  label: string;
+  label: ReactNode;
   home: ReactNode;
   away: ReactNode;
   testId?: string;
@@ -73,7 +79,7 @@ function CompareRow({
       data-testid={testId}
     >
       <div className="min-w-0 text-left">{home}</div>
-      <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center px-1 max-w-[7rem]">
+      <div className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center px-1 max-w-[8.5rem] leading-tight">
         {label}
       </div>
       <div className="min-w-0 text-right">{away}</div>
@@ -99,20 +105,21 @@ export function HowTheyCompare({
   const hasForm = home.form.length > 0 || away.form.length > 0;
   const hasLeague = Boolean(home.standing || away.standing);
   const hasH2h = h2h.matches.length > 0;
+  const h2hSupport = compareH2HSupport(compared);
 
   if (!hasForm && !hasLeague && !hasH2h) return null;
 
   return (
     <section data-testid="match-how-they-compare" className="space-y-2.5">
       <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase px-0.5">
-        {compared ? "How they compared" : "How they compare"}
+        {howTheyCompareHeading(compared)}
       </h2>
 
       <div className="rounded-2xl border border-border/80 bg-card overflow-hidden">
         <ul className="divide-y divide-border/50">
           {hasForm ? (
             <CompareRow
-              label="Form"
+              label={compareFormLabel(compared)}
               testId="compare-form"
               home={
                 home.form.length ? (
@@ -137,7 +144,7 @@ export function HowTheyCompare({
 
           {hasLeague ? (
             <CompareRow
-              label="League position"
+              label={compareLeagueLabel(compared)}
               testId="compare-league"
               home={
                 home.standing ? (
@@ -172,10 +179,15 @@ export function HowTheyCompare({
 
           {hasH2h ? (
             <li className="px-3 sm:px-5 py-3.5" data-testid="compare-h2h">
-              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center mb-2.5">
+              <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-muted-foreground text-center">
                 Head-to-head
               </p>
-              <div className="grid grid-cols-3 gap-2 text-center text-sm">
+              {h2hSupport ? (
+                <p className="mt-0.5 text-[10px] sm:text-[11px] text-muted-foreground/80 text-center tracking-wide uppercase">
+                  {h2hSupport}
+                </p>
+              ) : null}
+              <div className="mt-2.5 grid grid-cols-3 gap-2 text-center text-sm">
                 <div>
                   <p className="text-xl font-semibold tabular-nums leading-none">
                     {h2h.summary.homeTeamWins}

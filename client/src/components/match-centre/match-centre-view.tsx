@@ -23,6 +23,7 @@ import {
   type MatchCentreModuleId,
 } from "@shared/match-centre-modules";
 import { formatCompetitionHeroLabel } from "@shared/competition-display";
+import { upcomingFixturesHeading } from "@shared/match-centre-compare";
 import type {
   MatchCentreFixtureLink,
   MatchCentreFormMatch,
@@ -31,6 +32,14 @@ import type {
   MatchCentreTeamContext,
 } from "@shared/match-centre";
 import { HowTheyCompare } from "@/components/match-centre/tale-of-the-tape";
+
+/** Shared two-club column grid: centre rule on md+, stacks cleanly on mobile. */
+const MATCH_CENTRE_TWO_CLUB_GRID =
+  "grid gap-5 md:grid-cols-2 md:gap-6 md:[&>*:nth-child(2)]:border-l md:[&>*:nth-child(2)]:border-border/20 md:[&>*:nth-child(2)]:pl-6";
+
+/** Shared club header rule used by Recent Form and Upcoming Fixtures. */
+const MATCH_CENTRE_CLUB_HEADER =
+  "flex items-center gap-2 border-b border-border/40 pb-2 mb-1";
 import { StartingXiSection } from "@/components/match-centre/starting-xi";
 import { MatchTimeline } from "@/components/match-centre/match-timeline";
 import {
@@ -144,7 +153,7 @@ function FormMatchRow({ match }: { match: MatchCentreFormMatch }) {
 
 function TeamFormColumn({ ctx }: { ctx: MatchCentreTeamContext }) {
   const header = (
-    <div className="flex items-center gap-2 border-b border-border/40 pb-2 mb-1">
+    <div className={MATCH_CENTRE_CLUB_HEADER}>
       <MatchTeamBadge
         team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
         size="xs"
@@ -207,7 +216,7 @@ function RecentFormSection({
         </button>
       </div>
       <div className={`${open ? "block" : "hidden"} md:block`}>
-        <div className="grid gap-5 md:grid-cols-2 md:gap-6 md:[&>*:nth-child(2)]:border-l md:[&>*:nth-child(2)]:border-border/20 md:[&>*:nth-child(2)]:pl-6">
+        <div className={MATCH_CENTRE_TWO_CLUB_GRID}>
           {home.form.length ? <TeamFormColumn ctx={home} /> : null}
           {away.form.length ? <TeamFormColumn ctx={away} /> : null}
         </div>
@@ -427,7 +436,7 @@ function TeamUpcomingColumn({
 
   return (
     <div className="space-y-1.5 min-w-0">
-      <div className="flex items-center gap-2">
+      <div className={MATCH_CENTRE_CLUB_HEADER}>
         <MatchTeamBadge
           team={{ id: ctx.team.id || undefined, name: ctx.team.name, logoUrl: ctx.team.logoUrl }}
           size="xs"
@@ -450,7 +459,7 @@ function TeamUpcomingColumn({
 function UpcomingFixturesSection({
   home,
   away,
-  title = "Upcoming fixtures",
+  title = upcomingFixturesHeading(),
 }: {
   home: MatchCentreTeamContext;
   away: MatchCentreTeamContext;
@@ -462,7 +471,7 @@ function UpcomingFixturesSection({
 
   return (
     <Section title={title} testId="match-upcoming-fixtures" className="space-y-3">
-      <div className="grid gap-5 md:grid-cols-2 md:gap-6">
+      <div className={MATCH_CENTRE_TWO_CLUB_GRID}>
         {homeNext ? <TeamUpcomingColumn label={home.team.name} ctx={home} /> : null}
         {awayNext ? <TeamUpcomingColumn label={away.team.name} ctx={away} /> : null}
       </div>
@@ -795,7 +804,6 @@ function renderModule(id: MatchCentreModuleId, centre: MatchCentrePayload) {
           key={id}
           home={centre.home}
           away={centre.away}
-          title={centre.presentationState === "COMPLETED" ? "What’s next" : "Upcoming fixtures"}
         />
       );
     case "timeline":
