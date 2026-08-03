@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql as drizzleSql } from "drizzle-orm";
 import { db } from "../db";
-import { competitions, paEntityAliasMap, teams } from "@shared/schema";
+import { competitions, paEntityAliasMap, players, teams } from "@shared/schema";
 import { ARTICLE_SOURCE_PA_MEDIA } from "./sources";
 
 export async function resolveCanonicalTeamPublicSlug(requestSlug: string): Promise<string | null> {
@@ -35,6 +35,52 @@ export async function resolveCanonicalTeamPublicSlug(requestSlug: string): Promi
       and(
         eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
         inArray(paEntityAliasMap.entityType, ["team", "teams"]),
+        eq(paEntityAliasMap.publicSlug, requestSlug),
+      ),
+    )
+    .limit(2);
+
+  const uniqueEntityIds = Array.from(new Set(aliasMatches.map((row) => row.entityId)));
+  if (uniqueEntityIds.length === 1) return requestSlug;
+  return null;
+}
+
+/**
+ * Canonical public player slug for SPA redirects (mirrors team behaviour).
+ * Prefer PA publicSlug when the request hits the internal `players.slug`.
+ */
+export async function resolveCanonicalPlayerPublicSlug(requestSlug: string): Promise<string | null> {
+  const [playerByInternalSlug] = await db
+    .select({ id: players.id, slug: players.slug })
+    .from(players)
+    .where(eq(players.slug, requestSlug))
+    .limit(1);
+
+  if (playerByInternalSlug) {
+    const [alias] = await db
+      .select({ publicSlug: paEntityAliasMap.publicSlug })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+          inArray(paEntityAliasMap.entityType, ["player", "players"]),
+          eq(paEntityAliasMap.entityId, playerByInternalSlug.id),
+          drizzleSql`${paEntityAliasMap.publicSlug} IS NOT NULL AND trim(${paEntityAliasMap.publicSlug}) <> ''`,
+        ),
+      )
+      .limit(1);
+
+    const canonicalSlug = alias?.publicSlug ?? playerByInternalSlug.slug;
+    return canonicalSlug || null;
+  }
+
+  const aliasMatches = await db
+    .select({ entityId: paEntityAliasMap.entityId })
+    .from(paEntityAliasMap)
+    .where(
+      and(
+        eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+        inArray(paEntityAliasMap.entityType, ["player", "players"]),
         eq(paEntityAliasMap.publicSlug, requestSlug),
       ),
     )

@@ -60,3 +60,31 @@ If unsure, set **`DEPLOYMENT_ENV`** explicitly on each Render service.
 - [ ] Production deploy not triggered by staging branch pushes
 
 No repository change replaces these checks; they are **Render configuration**.
+
+## Player membership reconciliation
+
+Operational command for auditing / closing stale multi-open `player_team_memberships` using live Goalserve evidence (squad feeds + `soccerstats/player` `teamid`). Dry-run is the default. Writes require explicit confirmation and only apply `SAFE_*` classifications.
+
+```bash
+# Audit only (default)
+npm run reconcile:player-memberships
+
+# Explicit dry-run
+npm run reconcile:player-memberships -- --dry-run
+
+# Apply only SAFE_* closes (after reviewing dry-run output)
+npm run reconcile:player-memberships -- --write --confirm-safe-repairs
+```
+
+Requires `DATABASE_URL` and `GOALSERVE_FEED_KEY`. Memberships are closed via `end_date` (never deleted). Conflict and insufficient-evidence players are left untouched.
+
+After a write, re-run dry-run and confirm `safeWritableCloses` is ~0 (idempotent).
+
+### Production rollout checklist (membership integrity)
+
+1. Deploy migration-compatible app code (nullable `player_team_memberships.last_seen_at`).
+2. Apply migration `0018_player_memberships_last_seen_at` through the normal migrate process for that environment.
+3. Run squad ingest so `last_seen_at` begins populating and absentee closes use the ≥18 completeness guard.
+4. `npm run reconcile:player-memberships -- --dry-run` — review classification counts, conflicts, and insufficient cases.
+5. Only if SAFE_* set is acceptable: `npm run reconcile:player-memberships -- --write --confirm-safe-repairs`.
+6. Re-run dry-run to confirm idempotency; spot-check Player Hub for a known multi-membership case.

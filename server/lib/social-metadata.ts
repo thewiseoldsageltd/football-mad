@@ -10,6 +10,7 @@ import {
 import { shouldBlockSearchIndexing } from "../middleware/environment";
 import {
   resolveCanonicalCompetitionSlug,
+  resolveCanonicalPlayerPublicSlug,
   resolveCanonicalTeamPublicSlug,
 } from "./canonical-entity-slugs";
 import { getEntityImage } from "./entity-media-resolver";
@@ -29,6 +30,10 @@ import { articleHeroPreloadImageUrl } from "@shared/article-display-image";
 import type { ArticlePrerenderContext } from "./article-prerender-context";
 import { resolveArticlePrerenderContext } from "./article-prerender-context";
 import { resolveTablesPageMetadata } from "./tables-page-metadata";
+import {
+  buildPlayerProfileDescription,
+  buildPlayerProfileTitle,
+} from "@shared/player-hub-seo";
 
 /** Canonical public origin for SEO / Open Graph (not derived from request Host). */
 export const CANONICAL_SITE_ORIGIN = "https://www.footballmad.co.uk";
@@ -590,27 +595,43 @@ export async function resolvePageMetadata(
   const playerMatch = path.match(/^\/players\/([^/]+)$/);
   if (playerMatch) {
     const slug = decodeURIComponent(playerMatch[1]);
-    const entityId = await resolvePlayerIdForRequestSlug(slug);
-    let name = titleCaseFromSlug(slug);
-    if (entityId) {
-      const [row] = await db
-        .select({ name: players.name })
-        .from(players)
-        .where(eq(players.id, entityId))
-        .limit(1);
-      if (row?.name) name = row.name;
-    }
-    const noindex = stagingBlock ? false : await entityNoindex("player", entityId);
+    const canonicalSlug = (await resolveCanonicalPlayerPublicSlug(slug)) ?? slug;
+    const player = await storage.getPlayerBySlug(slug);
+    const name = player?.name ?? titleCaseFromSlug(slug);
+    const noindex = stagingBlock
+      ? false
+      : player
+        ? player.seo?.indexable === false || (await entityNoindex("player", player.id))
+        : await entityNoindex("player", await resolvePlayerIdForRequestSlug(slug));
     let imageUrl = DEFAULT_SOCIAL_IMAGE_URL;
-    if (entityId) {
-      const img = await getEntityImage("player", entityId, "hub_header");
+    if (player?.id) {
+      const img = await getEntityImage("player", player.id, "hub_header");
       if (img) imageUrl = absoluteUrl(img) ?? DEFAULT_SOCIAL_IMAGE_URL;
+      else if (player.imageUrl) imageUrl = absoluteUrl(player.imageUrl) ?? DEFAULT_SOCIAL_IMAGE_URL;
     }
 
+    const title =
+      player?.seo?.title ??
+      buildPlayerProfileTitle({
+        name,
+        clubName: player?.currentClub?.name ?? player?.team?.name,
+        position: player?.currentClub?.position ?? player?.position,
+      });
+    const description =
+      player?.seo?.description ??
+      buildPlayerProfileDescription({
+        name,
+        clubName: player?.currentClub?.name ?? player?.team?.name,
+        position: player?.currentClub?.position ?? player?.position,
+        nationality: player?.nationality,
+        age: player?.age ?? null,
+        shirtNumber: player?.currentClub?.shirtNumber,
+      });
+
     return withRobots({
-      title: `${name} News, Profile & Updates | Football Mad`,
-      description: `Player profile and news for ${name} on Football Mad.`,
-      canonicalPath: `/players/${slug}`,
+      title,
+      description,
+      canonicalPath: `/players/${canonicalSlug}`,
       imageUrl,
       imageAlt: name,
       robots: noindex ? robotsNoindexFollow : robotsIndex,

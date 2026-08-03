@@ -1,4 +1,4 @@
-import { and, type SQL, asc, desc, eq, inArray, isNull, notInArray, or, gt } from "drizzle-orm";
+import { and, type SQL, desc, eq, inArray, isNull, notInArray, or, gt } from "drizzle-orm";
 import { db } from "../db";
 import {
   articleCompetitions,
@@ -12,6 +12,7 @@ import {
   players,
 } from "@shared/schema";
 import { TEAMS_PAGE_EXCLUDED_GOALSERVE_IDS } from "@shared/teams-mvp";
+import { resolvePlayerCurrentClub } from "@shared/player-current-club";
 
 type RowWithId = { id: string };
 
@@ -117,8 +118,15 @@ export class MvpGraphBoundary {
     const now = new Date();
     const activeMembershipRows = await db
       .select({
+        id: playerTeamMemberships.id,
         playerId: playerTeamMemberships.playerId,
         teamId: playerTeamMemberships.teamId,
+        endDate: playerTeamMemberships.endDate,
+        startDate: playerTeamMemberships.startDate,
+        createdAt: playerTeamMemberships.createdAt,
+        lastSeenAt: playerTeamMemberships.lastSeenAt,
+        shirtNumber: playerTeamMemberships.shirtNumber,
+        position: playerTeamMemberships.position,
       })
       .from(playerTeamMemberships)
       .where(
@@ -129,35 +137,31 @@ export class MvpGraphBoundary {
             gt(playerTeamMemberships.endDate, now),
           ),
         ),
-      )
-      .orderBy(
-        asc(playerTeamMemberships.playerId),
-        desc(playerTeamMemberships.startDate),
-        desc(playerTeamMemberships.createdAt),
-        desc(playerTeamMemberships.id),
       );
 
+    const membershipsByPlayer = new Map<string, typeof activeMembershipRows>();
     for (const row of activeMembershipRows) {
-      if (!this.playerCurrentTeamCache.has(row.playerId)) {
-        this.playerCurrentTeamCache.set(row.playerId, row.teamId);
-      }
+      const list = membershipsByPlayer.get(row.playerId) ?? [];
+      list.push(row);
+      membershipsByPlayer.set(row.playerId, list);
     }
 
-    const unresolvedPlayerIds = missing.filter((id) => !this.playerCurrentTeamCache.has(id));
-    if (unresolvedPlayerIds.length > 0) {
-      const playerRows = await db
-        .select({
-          id: players.id,
-          teamId: players.teamId,
-        })
-        .from(players)
-        .where(inArray(players.id, unresolvedPlayerIds));
-      for (const row of playerRows) {
-        this.playerCurrentTeamCache.set(row.id, row.teamId ?? null);
-      }
-      for (const id of unresolvedPlayerIds) {
-        if (!this.playerCurrentTeamCache.has(id)) this.playerCurrentTeamCache.set(id, null);
-      }
+    const playerRows = await db
+      .select({
+        id: players.id,
+        teamId: players.teamId,
+      })
+      .from(players)
+      .where(inArray(players.id, missing));
+    const playerTeamById = new Map(playerRows.map((row) => [row.id, row.teamId ?? null]));
+
+    for (const id of missing) {
+      const resolution = resolvePlayerCurrentClub({
+        playerTeamId: playerTeamById.get(id) ?? null,
+        memberships: membershipsByPlayer.get(id) ?? [],
+        now,
+      });
+      this.playerCurrentTeamCache.set(id, resolution.teamId);
     }
   }
 

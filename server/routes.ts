@@ -118,7 +118,7 @@ import {
 } from "./lib/author-identity-resolver";
 import { MvpGraphBoundary } from "./lib/mvp-graph-boundary";
 import { computeMvpIndexable } from "./lib/mvp-indexing";
-import { resolveCanonicalCompetitionSlug, resolveCanonicalTeamPublicSlug } from "./lib/canonical-entity-slugs";
+import { resolveCanonicalCompetitionSlug, resolveCanonicalPlayerPublicSlug, resolveCanonicalTeamPublicSlug } from "./lib/canonical-entity-slugs";
 import { registerLegacyGhostTagRedirects } from "./lib/legacy-ghost-tag-redirects";
 import { registerLegacyGoalserveMatchRedirects } from "./lib/legacy-goalserve-match-redirects";
 import { registerLegacyGhostArticleRedirects } from "./lib/legacy-ghost-article-redirects";
@@ -640,7 +640,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       const boundary = new MvpGraphBoundary();
       const mvpIndexable = (await boundary.filterPlayerIds([player.id])).has(player.id);
-      res.json({ ...player, mvpIndexable });
+      const indexable = Boolean(player.seo?.indexable) && mvpIndexable;
+      res.json({
+        ...player,
+        mvpIndexable: indexable,
+        seo: {
+          ...player.seo,
+          indexable,
+        },
+      });
     } catch (error) {
       console.error("Error fetching player:", error);
       res.status(500).json({ error: "Failed to fetch player" });
@@ -9316,10 +9324,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   const playerEntitySpaSeo = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await maybeApplyNonMvpEntityNoindexHeader(res, "player", req.params.slug);
+      const requestedSlug = req.params.slug;
+      const canonicalSlug = await resolveCanonicalPlayerPublicSlug(requestedSlug);
+      if (canonicalSlug && canonicalSlug !== requestedSlug) {
+        return res.redirect(301, `/players/${canonicalSlug}`);
+      }
+      await maybeApplyNonMvpEntityNoindexHeader(res, "player", requestedSlug);
       return next();
     } catch (error) {
-      console.error("[player-entity-spa-seo] Error:", error);
+      console.error("[canonical-player-redirect] Error:", error);
       return next();
     }
   };

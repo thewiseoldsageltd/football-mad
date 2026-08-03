@@ -127,6 +127,13 @@
       "when": 1774600000000,
       "tag": "0017_link_fifa_world_cup_goalserve",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1774700000000,
+      "tag": "0018_player_memberships_last_seen_at",
+      "breakpoints": true
     }
   ]
 }

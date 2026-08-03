@@ -463,6 +463,8 @@ export const playerTeamMemberships = pgTable("player_team_memberships", {
   position: text("position"),
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
+  /** Last time this membership was confirmed present in an authoritative squad snapshot. */
+  lastSeenAt: timestamp("last_seen_at"),
   isLoan: boolean("is_loan").default(false),
   source: text("source").default("goalserve"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -470,6 +472,7 @@ export const playerTeamMemberships = pgTable("player_team_memberships", {
   index("player_memberships_player_idx").on(table.playerId),
   index("player_memberships_team_idx").on(table.teamId),
   index("player_memberships_end_date_idx").on(table.endDate),
+  index("player_memberships_last_seen_at_idx").on(table.lastSeenAt),
 ]);
 
 export const playerTeamMembershipsRelations = relations(playerTeamMemberships, ({ one }) => ({

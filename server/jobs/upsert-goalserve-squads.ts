@@ -1,8 +1,13 @@
 import { db } from "../db";
 import { players, managers, playerTeamMemberships, squadsSnapshots, teams } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray, isNull, or, gt } from "drizzle-orm";
 import crypto from "crypto";
 import { upsertCurrentManagerMapping } from "../lib/manager-current-mapping";
+import {
+  isAuthoritativeSquadSnapshot,
+  selectMembershipsToClose,
+  MIN_AUTHORITATIVE_SQUAD_SIZE,
+} from "@shared/player-membership-reconcile";
 
 const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
 const GOALSERVE_BASE = "https://www.goalserve.com";
@@ -36,6 +41,7 @@ export interface UpsertGoalserveSquadsResult {
   insertedManagersCount: number;
   insertedTeamPlayersCount: number;
   insertedTeamManagersCount: number;
+  closedMembershipsCount: number;
   endpointUsed: string;
   tournamentCount?: number;
   skippedTeams?: string[];
@@ -61,6 +67,7 @@ export async function upsertGoalserveSquads(
       insertedManagersCount: 0,
       insertedTeamPlayersCount: 0,
       insertedTeamManagersCount: 0,
+      closedMembershipsCount: 0,
       error: `Fetch failed for ${endpointUsed}: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`,
     };
   }
@@ -74,6 +81,7 @@ export async function upsertGoalserveSquads(
       insertedManagersCount: 0,
       insertedTeamPlayersCount: 0,
       insertedTeamManagersCount: 0,
+      closedMembershipsCount: 0,
       error: `Goalserve API returned ${response.status} for ${endpointUsed}`,
     };
   }
@@ -90,6 +98,7 @@ export async function upsertGoalserveSquads(
       insertedManagersCount: 0,
       insertedTeamPlayersCount: 0,
       insertedTeamManagersCount: 0,
+      closedMembershipsCount: 0,
       error: "No league object in response",
     };
   }
@@ -105,6 +114,7 @@ export async function upsertGoalserveSquads(
       insertedManagersCount: 0,
       insertedTeamPlayersCount: 0,
       insertedTeamManagersCount: 0,
+      closedMembershipsCount: 0,
       error: "No teams in league feed",
     };
   }
@@ -129,6 +139,7 @@ export async function upsertGoalserveSquads(
       insertedManagersCount: 0,
       insertedTeamPlayersCount: 0,
       insertedTeamManagersCount: 0,
+      closedMembershipsCount: 0,
     };
   }
 
@@ -157,6 +168,7 @@ export async function upsertGoalserveSquads(
   let insertedManagersCount = 0;
   let insertedTeamPlayersCount = 0;
   let insertedTeamManagersCount = 0;
+  let closedMembershipsCount = 0;
   const skippedTeams: string[] = [];
 
   for (const feedTeam of feedTeams) {
@@ -245,6 +257,8 @@ export async function upsertGoalserveSquads(
       ? squadNode.player
       : (squadNode?.player ? [squadNode.player] : []);
 
+    const presentPlayerIds: string[] = [];
+
     for (const fp of feedPlayers) {
       const gsPlayerId = String(fp?.id || fp?.["@id"] || "").trim();
       const playerName = String(fp?.name || fp?.["@name"] || "").trim();
@@ -306,37 +320,108 @@ export async function upsertGoalserveSquads(
       }
 
       if (playerId) {
-        const [existingMembership] = await db
+        presentPlayerIds.push(playerId);
+
+        const nowOpen = new Date();
+        const [existingOpenMembership] = await db
           .select({ id: playerTeamMemberships.id })
           .from(playerTeamMemberships)
           .where(and(
             eq(playerTeamMemberships.playerId, playerId),
             eq(playerTeamMemberships.teamId, teamId),
+            or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, nowOpen)),
           ))
+          .orderBy(desc(playerTeamMemberships.lastSeenAt), desc(playerTeamMemberships.startDate), desc(playerTeamMemberships.id))
           .limit(1);
 
-        if (existingMembership) {
+        if (existingOpenMembership) {
           await db.update(playerTeamMemberships)
-            .set({ shirtNumber, position: playerPosition, startDate: asOfDate, source: "goalserve" })
-            .where(eq(playerTeamMemberships.id, existingMembership.id));
+            .set({
+              shirtNumber,
+              position: playerPosition,
+              lastSeenAt: asOfDate,
+              endDate: null,
+              source: "goalserve",
+            })
+            .where(eq(playerTeamMemberships.id, existingOpenMembership.id));
         } else {
-          try {
-            await db.insert(playerTeamMemberships)
-              .values({
-                playerId,
-                teamId,
+          const [existingAnyMembership] = await db
+            .select({ id: playerTeamMemberships.id })
+            .from(playerTeamMemberships)
+            .where(and(
+              eq(playerTeamMemberships.playerId, playerId),
+              eq(playerTeamMemberships.teamId, teamId),
+            ))
+            .orderBy(desc(playerTeamMemberships.startDate), desc(playerTeamMemberships.id))
+            .limit(1);
+
+          if (existingAnyMembership) {
+            await db.update(playerTeamMemberships)
+              .set({
                 shirtNumber,
                 position: playerPosition,
+                lastSeenAt: asOfDate,
+                endDate: null,
                 startDate: asOfDate,
                 source: "goalserve",
               })
-              .onConflictDoNothing();
-          } catch (err) {
-            console.warn(`[SquadsIngest] Membership insert failed playerId=${playerId} teamId=${teamId}:`, err);
+              .where(eq(playerTeamMemberships.id, existingAnyMembership.id));
+          } else {
+            try {
+              await db.insert(playerTeamMemberships)
+                .values({
+                  playerId,
+                  teamId,
+                  shirtNumber,
+                  position: playerPosition,
+                  startDate: asOfDate,
+                  lastSeenAt: asOfDate,
+                  source: "goalserve",
+                })
+                .onConflictDoNothing();
+            } catch (err) {
+              console.warn(`[SquadsIngest] Membership insert failed playerId=${playerId} teamId=${teamId}:`, err);
+            }
           }
         }
         insertedTeamPlayersCount++;
       }
+    }
+
+    // Close stale open memberships for this team only when the squad snapshot is
+    // complete enough to be authoritative (min size guard — empty/partial feeds never close).
+    if (isAuthoritativeSquadSnapshot(presentPlayerIds.length, { minPlayers: MIN_AUTHORITATIVE_SQUAD_SIZE })) {
+      const uniquePresent = Array.from(new Set(presentPlayerIds));
+      const openMembershipsForTeam = await db
+        .select({
+          id: playerTeamMemberships.id,
+          playerId: playerTeamMemberships.playerId,
+          teamId: playerTeamMemberships.teamId,
+        })
+        .from(playerTeamMemberships)
+        .where(and(
+          eq(playerTeamMemberships.teamId, teamId),
+          or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, asOfDate)),
+        ));
+
+      const toClose = selectMembershipsToClose({
+        teamId,
+        presentPlayerIds: uniquePresent,
+        openMembershipsForTeam,
+      });
+
+      if (toClose.length > 0) {
+        const closeIds = toClose.map((m) => m.id);
+        await db
+          .update(playerTeamMemberships)
+          .set({ endDate: asOfDate })
+          .where(inArray(playerTeamMemberships.id, closeIds));
+        closedMembershipsCount += closeIds.length;
+      }
+    } else if (presentPlayerIds.length > 0) {
+      console.warn(
+        `[SquadsIngest] Skipping absentee closes for teamId=${teamId}: squad size ${presentPlayerIds.length} < min ${MIN_AUTHORITATIVE_SQUAD_SIZE}`,
+      );
     }
   }
 
@@ -353,7 +438,7 @@ export async function upsertGoalserveSquads(
     console.warn(`[SquadsIngest] Snapshot insert failed:`, snapErr);
   }
 
-  console.log(`[SquadsIngest] leagueId=${leagueId} players=${insertedPlayersCount} managers=${insertedManagersCount} teamPlayers=${insertedTeamPlayersCount} teamManagers=${insertedTeamManagersCount} skippedTeams=${skippedTeams.length}`);
+  console.log(`[SquadsIngest] leagueId=${leagueId} players=${insertedPlayersCount} managers=${insertedManagersCount} teamPlayers=${insertedTeamPlayersCount} teamManagers=${insertedTeamManagersCount} closedMemberships=${closedMembershipsCount} skippedTeams=${skippedTeams.length}`);
 
   return {
     ok: true,
@@ -364,6 +449,7 @@ export async function upsertGoalserveSquads(
     insertedManagersCount,
     insertedTeamPlayersCount,
     insertedTeamManagersCount,
+    closedMembershipsCount,
     tournamentCount: feedTeams.length,
     skippedTeams: skippedTeams.length > 0 ? skippedTeams : undefined,
   };

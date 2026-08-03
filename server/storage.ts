@@ -38,6 +38,19 @@ import {
   resolveAuthorIdentityForRequestSlug,
 } from "./lib/author-identity-resolver";
 import { parseMatchSlug } from "@shared/news-article-slug";
+import {
+  isActivePlayerMembership,
+  resolvePlayerCurrentClub,
+  selectPlayerHubTeammates,
+} from "@shared/player-current-club";
+import {
+  buildPlayerProfileDescription,
+  buildPlayerProfileTitle,
+  isPlayerProfileIndexable,
+} from "@shared/player-hub-seo";
+import type { PlayerHubPhaseAExtras } from "@shared/player-hub";
+
+const PLAYER_HUB_CANONICAL_ORIGIN = "https://www.footballmad.co.uk";
 
 /** Tags too generic to use as inferred author primary beat (exact match, case-insensitive). */
 const GENERIC_INFERRED_PRIMARY_BEAT_TAGS = new Set([
@@ -156,7 +169,7 @@ export interface IStorage {
   
   // Players
   getPlayersByTeam(teamId: string): Promise<Player[]>;
-  getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined>;
+  getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null } & PlayerHubPhaseAExtras) | undefined>;
   createPlayer(data: InsertPlayer): Promise<Player>;
   
   // Articles
@@ -479,6 +492,36 @@ export class DatabaseStorage implements IStorage {
     return undefined;
   }
 
+  private async getPlayerPublicSlugMap(playerIds: string[]): Promise<Map<string, string>> {
+    const uniqueIds = Array.from(new Set(playerIds.filter(Boolean)));
+    if (uniqueIds.length === 0) return new Map();
+
+    const rows = await db
+      .select({
+        entityId: paEntityAliasMap.entityId,
+        publicSlug: paEntityAliasMap.publicSlug,
+        createdAt: paEntityAliasMap.createdAt,
+      })
+      .from(paEntityAliasMap)
+      .where(
+        and(
+          eq(paEntityAliasMap.source, ARTICLE_SOURCE_PA_MEDIA),
+          inArray(paEntityAliasMap.entityType, ["player", "players"]),
+          inArray(paEntityAliasMap.entityId, uniqueIds),
+          isNotNull(paEntityAliasMap.publicSlug),
+          sql`trim(${paEntityAliasMap.publicSlug}) <> ''`,
+        ),
+      )
+      .orderBy(desc(paEntityAliasMap.createdAt));
+
+    const map = new Map<string, string>();
+    for (const row of rows) {
+      if (!row.publicSlug) continue;
+      if (!map.has(row.entityId)) map.set(row.entityId, row.publicSlug);
+    }
+    return map;
+  }
+
   private async resolveEntityIdByPublicSlug(
     publicSlug: string,
     entityTypes: string[],
@@ -641,7 +684,7 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null }) | undefined> {
+  async getPlayerBySlug(slug: string): Promise<(Player & { team?: Team | null } & PlayerHubPhaseAExtras) | undefined> {
     let [player] = await db.select().from(players).where(eq(players.slug, slug)).limit(1);
     if (!player) {
       const playerId = await this.resolveEntityIdByPublicSlug(slug, ["player", "players"]);
@@ -651,33 +694,149 @@ export class DatabaseStorage implements IStorage {
     }
 
     const now = new Date();
-    const [latestActiveMembership] = await db
-      .select({ teamId: playerTeamMemberships.teamId })
+    const memberships = await db
+      .select({
+        id: playerTeamMemberships.id,
+        teamId: playerTeamMemberships.teamId,
+        shirtNumber: playerTeamMemberships.shirtNumber,
+        position: playerTeamMemberships.position,
+        startDate: playerTeamMemberships.startDate,
+        endDate: playerTeamMemberships.endDate,
+        lastSeenAt: playerTeamMemberships.lastSeenAt,
+        createdAt: playerTeamMemberships.createdAt,
+      })
       .from(playerTeamMemberships)
-      .where(
-        and(
-          eq(playerTeamMemberships.playerId, player.id),
-          or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)),
-        ),
-      )
-      .orderBy(
-        desc(playerTeamMemberships.startDate),
-        desc(playerTeamMemberships.createdAt),
-        desc(playerTeamMemberships.id),
-      )
-      .limit(1);
+      .where(eq(playerTeamMemberships.playerId, player.id));
 
-    const resolvedTeamId = latestActiveMembership?.teamId ?? player.teamId ?? null;
+    const resolution = resolvePlayerCurrentClub({
+      playerTeamId: player.teamId,
+      memberships,
+      now,
+    });
+
     const boundary = new MvpGraphBoundary();
-    if (!resolvedTeamId || !(await boundary.isMvpTeam(resolvedTeamId))) return undefined;
+    const mvpTeamIds = await boundary.getMvpTeamIds();
+    const activeMemberships = memberships.filter((m) => isActivePlayerMembership(m, now));
+    const linkedToMvp =
+      (resolution.teamId != null && mvpTeamIds.has(resolution.teamId)) ||
+      (player.teamId != null && mvpTeamIds.has(player.teamId)) ||
+      activeMemberships.some((m) => mvpTeamIds.has(m.teamId));
+    if (!linkedToMvp) return undefined;
 
-    const [team] = resolvedTeamId
-      ? await db.select().from(teams).where(eq(teams.id, resolvedTeamId)).limit(1)
-      : [];
+    let team: Team | null = null;
+    let currentClub: PlayerHubPhaseAExtras["currentClub"] = null;
+    if (resolution.teamId && !resolution.ambiguous) {
+      const [teamRow] = await db.select().from(teams).where(eq(teams.id, resolution.teamId)).limit(1);
+      if (teamRow) {
+        const slugMap = await this.getTeamPublicSlugMap([teamRow.id]);
+        team = { ...teamRow, slug: slugMap.get(teamRow.id) ?? teamRow.slug };
+        currentClub = {
+          id: team.id,
+          slug: team.slug,
+          name: team.name,
+          crestUrl: team.logoUrl ?? null,
+          shirtNumber: resolution.shirtNumber,
+          position: resolution.position ?? player.position ?? null,
+        };
+      }
+    }
+
+    const playerSlugMap = await this.getPlayerPublicSlugMap([player.id]);
+    const publicSlug = playerSlugMap.get(player.id) ?? player.slug;
+    const canonicalPath = `/players/${publicSlug}`;
+    const canonicalUrl = `${PLAYER_HUB_CANONICAL_ORIGIN}${canonicalPath}`;
+
+    let teammates: PlayerHubPhaseAExtras["teammates"] = [];
+    if (currentClub) {
+      const squadPlayers = await this.getPlayersByTeam(currentClub.id);
+      const squadMemberships = await db
+        .select({
+          playerId: playerTeamMemberships.playerId,
+          shirtNumber: playerTeamMemberships.shirtNumber,
+          position: playerTeamMemberships.position,
+        })
+        .from(playerTeamMemberships)
+        .where(
+          and(
+            eq(playerTeamMemberships.teamId, currentClub.id),
+            or(isNull(playerTeamMemberships.endDate), gt(playerTeamMemberships.endDate, now)),
+          ),
+        );
+      const shirtByPlayer = new Map<string, string | null>();
+      const positionByPlayer = new Map<string, string | null>();
+      for (const row of squadMemberships) {
+        if (!shirtByPlayer.has(row.playerId)) {
+          shirtByPlayer.set(row.playerId, row.shirtNumber ?? null);
+          positionByPlayer.set(row.playerId, row.position ?? null);
+        }
+      }
+      const teammateSlugMap = await this.getPlayerPublicSlugMap(squadPlayers.map((p) => p.id));
+      teammates = selectPlayerHubTeammates({
+        currentPlayerId: player.id,
+        currentPlayerPosition: currentClub.position ?? player.position,
+        squad: squadPlayers.map((p) => ({
+          id: p.id,
+          slug: teammateSlugMap.get(p.id) ?? p.slug,
+          name: p.name,
+          position: positionByPlayer.get(p.id) ?? p.position,
+          shirtNumber: shirtByPlayer.get(p.id) ?? p.number,
+          imageUrl: p.imageUrl,
+        })),
+      });
+    }
+
+    const clubReliable = Boolean(currentClub) && !resolution.ambiguous;
+    const mvpIndexableGate = (await boundary.filterPlayerIds([player.id])).has(player.id);
+    const indexable =
+      mvpIndexableGate &&
+      isPlayerProfileIndexable({
+        id: player.id,
+        name: player.name,
+        slug: publicSlug,
+        goalservePlayerId: player.goalservePlayerId,
+        currentClubReliable: clubReliable,
+        hasImage: Boolean(player.imageUrl),
+        nationality: player.nationality,
+        age: player.age,
+        hasTeammateContext: teammates.length > 0,
+      });
+
+    const displayPosition = currentClub?.position ?? player.position;
+    const title = buildPlayerProfileTitle({
+      name: player.name,
+      clubName: currentClub?.name,
+      position: displayPosition,
+    });
+    const description = buildPlayerProfileDescription({
+      name: player.name,
+      clubName: currentClub?.name,
+      position: displayPosition,
+      nationality: player.nationality,
+      age: player.age ?? null,
+      shirtNumber: currentClub?.shirtNumber,
+    });
 
     return {
       ...player,
-      team: team ?? null,
+      slug: publicSlug,
+      number:
+        currentClub?.shirtNumber != null
+          ? Number.parseInt(String(currentClub.shirtNumber), 10) || player.number
+          : player.number,
+      position: displayPosition ?? player.position,
+      team,
+      currentClub,
+      teammates,
+      seo: {
+        indexable,
+        canonicalUrl,
+        title,
+        description,
+      },
+      currentClubMeta: {
+        source: resolution.source,
+        ambiguous: resolution.ambiguous,
+      },
     };
   }
 
