@@ -134,6 +134,20 @@
       "when": 1774700000000,
       "tag": "0018_player_memberships_last_seen_at",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1774800000000,
+      "tag": "0019_player_season_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1774900000000,
+      "tag": "0020_player_goalserve_profiles",
+      "breakpoints": true
     }
   ]
 }

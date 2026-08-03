@@ -5,6 +5,12 @@ import {
   follows, posts, comments, reactions, products, orders, subscribers, shareClicks,
   fplPlayerAvailability, managers, articleManagers, articlePlayers,
   competitions, articleCompetitions, paEntityAliasMap, entityAliases, playerTeamMemberships, teamManagers,
+  playerSeasonStats,
+  playerCareerStats,
+  playerCareerTotals,
+  playerProfileTransfers,
+  playerSidelined,
+  playerHonours,
   type Team, type InsertTeam,
   type Player, type InsertPlayer,
   type Article, type InsertArticle,
@@ -49,6 +55,18 @@ import {
   isPlayerProfileIndexable,
 } from "@shared/player-hub-seo";
 import type { PlayerHubPhaseAExtras } from "@shared/player-hub";
+import {
+  selectBestCurrentSeasonStatsRow,
+  toCurrentSeasonStatsApi,
+} from "@shared/player-season-stats";
+import {
+  buildPlayerHubCareerApi,
+  buildPlayerHubHonoursApi,
+  buildPlayerHubIdentityApi,
+  buildPlayerHubSidelinedApi,
+  buildPlayerHubTransfersApi,
+} from "@shared/player-profile-feed";
+import { calendarFootballSeasonKey } from "@shared/season";
 
 const PLAYER_HUB_CANONICAL_ORIGIN = "https://www.footballmad.co.uk";
 
@@ -801,6 +819,85 @@ export class DatabaseStorage implements IStorage {
         hasTeammateContext: teammates.length > 0,
       });
 
+    const statsRows = await db
+      .select({
+        teamId: playerSeasonStats.teamId,
+        competitionId: playerSeasonStats.competitionId,
+        goalserveCompetitionId: playerSeasonStats.goalserveCompetitionId,
+        season: playerSeasonStats.season,
+        appearances: playerSeasonStats.appearances,
+        starts: playerSeasonStats.starts,
+        substituteAppearances: playerSeasonStats.substituteAppearances,
+        substitutedOff: playerSeasonStats.substitutedOff,
+        unusedBench: playerSeasonStats.unusedBench,
+        minutes: playerSeasonStats.minutes,
+        captainAppearances: playerSeasonStats.captainAppearances,
+        goals: playerSeasonStats.goals,
+        assists: playerSeasonStats.assists,
+        shots: playerSeasonStats.shots,
+        shotsOnTarget: playerSeasonStats.shotsOnTarget,
+        keyPasses: playerSeasonStats.keyPasses,
+        dribbles: playerSeasonStats.dribbles,
+        successfulDribbles: playerSeasonStats.successfulDribbles,
+        penaltiesWon: playerSeasonStats.penaltiesWon,
+        penaltiesScored: playerSeasonStats.penaltiesScored,
+        penaltiesMissed: playerSeasonStats.penaltiesMissed,
+        woodworkHits: playerSeasonStats.woodworkHits,
+        passes: playerSeasonStats.passes,
+        passesAccurate: playerSeasonStats.passesAccurate,
+        crosses: playerSeasonStats.crosses,
+        accurateCrosses: playerSeasonStats.accurateCrosses,
+        tackles: playerSeasonStats.tackles,
+        interceptions: playerSeasonStats.interceptions,
+        blocks: playerSeasonStats.blocks,
+        clearances: playerSeasonStats.clearances,
+        duels: playerSeasonStats.duels,
+        duelsWon: playerSeasonStats.duelsWon,
+        foulsWon: playerSeasonStats.foulsWon,
+        foulsCommitted: playerSeasonStats.foulsCommitted,
+        dispossessions: playerSeasonStats.dispossessions,
+        penaltiesConceded: playerSeasonStats.penaltiesConceded,
+        saves: playerSeasonStats.saves,
+        goalsConceded: playerSeasonStats.goalsConceded,
+        penaltiesSaved: playerSeasonStats.penaltiesSaved,
+        insideBoxSaves: playerSeasonStats.insideBoxSaves,
+        yellowCards: playerSeasonStats.yellowCards,
+        secondYellow: playerSeasonStats.secondYellow,
+        redCards: playerSeasonStats.redCards,
+        rating: playerSeasonStats.rating,
+        updatedAt: playerSeasonStats.updatedAt,
+        isPriority: competitions.isPriority,
+      })
+      .from(playerSeasonStats)
+      .leftJoin(
+        competitions,
+        or(
+          eq(playerSeasonStats.competitionId, competitions.id),
+          and(
+            isNull(playerSeasonStats.competitionId),
+            eq(playerSeasonStats.goalserveCompetitionId, competitions.goalserveCompetitionId),
+          ),
+        ),
+      )
+      .where(eq(playerSeasonStats.playerId, player.id));
+
+    const calendarSeason = calendarFootballSeasonKey(now);
+    const seasonKeys = new Set<string>(
+      statsRows.map((r) => r.season).filter(Boolean) as string[],
+    );
+    // Prefer calendar current season when present among rows; otherwise best available.
+    const currentSeasonKeys = seasonKeys.has(calendarSeason)
+      ? new Set([calendarSeason])
+      : seasonKeys;
+
+    const bestStats = selectBestCurrentSeasonStatsRow(statsRows, {
+      currentTeamId: currentClub?.id ?? resolution.teamId,
+      currentSeasonKeys,
+    });
+    const currentSeasonStats = bestStats
+      ? toCurrentSeasonStatsApi(bestStats)
+      : null;
+
     const displayPosition = currentClub?.position ?? player.position;
     const title = buildPlayerProfileTitle({
       name: player.name,
@@ -816,6 +913,40 @@ export class DatabaseStorage implements IStorage {
       shirtNumber: currentClub?.shirtNumber,
     });
 
+    const identity = buildPlayerHubIdentityApi(player);
+
+    const [careerSeasonRows, careerTotalRows, transferRows, sidelinedRows, honourRows] =
+      await Promise.all([
+        db
+          .select()
+          .from(playerCareerStats)
+          .where(eq(playerCareerStats.playerId, player.id)),
+        db
+          .select()
+          .from(playerCareerTotals)
+          .where(eq(playerCareerTotals.playerId, player.id)),
+        db
+          .select()
+          .from(playerProfileTransfers)
+          .where(eq(playerProfileTransfers.playerId, player.id)),
+        db
+          .select()
+          .from(playerSidelined)
+          .where(eq(playerSidelined.playerId, player.id)),
+        db
+          .select()
+          .from(playerHonours)
+          .where(eq(playerHonours.playerId, player.id)),
+      ]);
+
+    const career = buildPlayerHubCareerApi({
+      totals: careerTotalRows[0] ?? null,
+      seasons: careerSeasonRows,
+    });
+    const transfers = buildPlayerHubTransfersApi(transferRows);
+    const sidelined = buildPlayerHubSidelinedApi(sidelinedRows);
+    const honours = buildPlayerHubHonoursApi(honourRows);
+
     return {
       ...player,
       slug: publicSlug,
@@ -827,6 +958,12 @@ export class DatabaseStorage implements IStorage {
       team,
       currentClub,
       teammates,
+      currentSeasonStats,
+      identity,
+      career,
+      transfers,
+      sidelined,
+      honours,
       seo: {
         indexable,
         canonicalUrl,

@@ -86,6 +86,7 @@ import {
   isUnplayedStandingsTable,
 } from "@shared/season";
 import { upsertGoalserveSquads } from "./jobs/upsert-goalserve-squads";
+import { upsertGoalservePlayerProfiles } from "./jobs/upsert-goalserve-player-profiles";
 import { enrichGoalservePlayerNationality } from "./jobs/enrich-goalserve-player-nationality";
 import { backfillStandings } from "./jobs/backfill-standings";
 import { runRefreshGoalserveStandings } from "./jobs/refresh-goalserve-standings";
@@ -4579,6 +4580,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         res.status(500).json({ ok: false, error: error instanceof Error ? error.message : "Unknown error" });
       }
     }
+  );
+
+  // ========== GOALSERVE PLAYER PROFILE INGEST (Phase C career/transfers/honours) ==========
+  app.post(
+    "/api/jobs/upsert-goalserve-player-profiles",
+    requireJobSecret("GOALSERVE_SYNC_SECRET"),
+    async (req, res) => {
+      try {
+        const force = req.query.force === "1";
+        const dryRun = req.query.dryRun === "1";
+        const leagueId = typeof req.query.leagueId === "string" ? req.query.leagueId : undefined;
+        const teamSlug = typeof req.query.teamSlug === "string" ? req.query.teamSlug : undefined;
+        const maxPlayers =
+          typeof req.query.maxPlayers === "string" && Number.isFinite(Number(req.query.maxPlayers))
+            ? Math.max(1, Math.floor(Number(req.query.maxPlayers)))
+            : undefined;
+        const maxAgeHours =
+          typeof req.query.maxAgeHours === "string" && Number.isFinite(Number(req.query.maxAgeHours))
+            ? Math.max(0, Number(req.query.maxAgeHours))
+            : undefined;
+        const slugsRaw = typeof req.query.slugs === "string" ? req.query.slugs : "";
+        const slugs = slugsRaw
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        const scope = teamSlug ? "team" : leagueId ? "league" : undefined;
+
+        const result = await upsertGoalservePlayerProfiles({
+          slugs: slugs.length ? slugs : undefined,
+          leagueId,
+          teamSlug,
+          scope,
+          maxPlayers,
+          maxAgeHours,
+          force,
+          dryRun,
+        });
+        res.json(result);
+      } catch (error) {
+        console.error("Upsert Goalserve player profiles error:", error);
+        res.status(500).json({
+          ok: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    },
   );
 
   // ========== GOALSERVE PLAYER NATIONALITY ENRICHMENT ==========

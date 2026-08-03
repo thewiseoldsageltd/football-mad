@@ -1,5 +1,14 @@
 import { db } from "../db";
-import { players, managers, playerTeamMemberships, squadsSnapshots, teams } from "@shared/schema";
+import {
+  players,
+  managers,
+  playerTeamMemberships,
+  playerSeasonStats,
+  squadsSnapshots,
+  teams,
+  competitions,
+  competitionSeasons,
+} from "@shared/schema";
 import { eq, and, desc, inArray, isNull, or, gt } from "drizzle-orm";
 import crypto from "crypto";
 import { upsertCurrentManagerMapping } from "../lib/manager-current-mapping";
@@ -8,6 +17,8 @@ import {
   selectMembershipsToClose,
   MIN_AUTHORITATIVE_SQUAD_SIZE,
 } from "@shared/player-membership-reconcile";
+import { parseGoalserveSquadPlayerStats } from "@shared/player-season-stats";
+import { resolveCurrentSeasonKey, normalizeSeasonKey } from "@shared/season";
 
 const GOALSERVE_FEED_KEY = process.env.GOALSERVE_FEED_KEY || "";
 const GOALSERVE_BASE = "https://www.goalserve.com";
@@ -118,6 +129,35 @@ export async function upsertGoalserveSquads(
       error: "No teams in league feed",
     };
   }
+
+  const [competition] = await db
+    .select({
+      id: competitions.id,
+      season: competitions.season,
+    })
+    .from(competitions)
+    .where(eq(competitions.goalserveCompetitionId, leagueId))
+    .limit(1);
+
+  let markedCurrentSeason: string | null = null;
+  if (competition?.id) {
+    const [marked] = await db
+      .select({ seasonKey: competitionSeasons.seasonKey })
+      .from(competitionSeasons)
+      .where(and(
+        eq(competitionSeasons.competitionId, competition.id),
+        eq(competitionSeasons.isCurrent, true),
+      ))
+      .limit(1);
+    markedCurrentSeason = marked?.seasonKey ?? null;
+  }
+
+  const seasonKey = resolveCurrentSeasonKey({
+    providerSeason: leagueNode?.["@season"] ?? leagueNode?.season ?? null,
+    markedCurrentSeason,
+    storedCompetitionSeason: competition?.season ?? null,
+  });
+  const season = normalizeSeasonKey(seasonKey) ?? seasonKey;
 
   const payloadHash = computeHash(data);
 
@@ -384,6 +424,43 @@ export async function upsertGoalserveSquads(
             }
           }
         }
+
+        const stats = parseGoalserveSquadPlayerStats(fp as Record<string, unknown>);
+        try {
+          await db.insert(playerSeasonStats)
+            .values({
+              playerId,
+              teamId,
+              competitionId: competition?.id ?? null,
+              goalserveCompetitionId: leagueId,
+              season,
+              ...stats,
+              source: "goalserve",
+              asOf: asOfDate,
+              updatedAt: new Date(),
+            })
+            .onConflictDoUpdate({
+              target: [
+                playerSeasonStats.playerId,
+                playerSeasonStats.goalserveCompetitionId,
+                playerSeasonStats.season,
+              ],
+              set: {
+                teamId,
+                competitionId: competition?.id ?? null,
+                ...stats,
+                source: "goalserve",
+                asOf: asOfDate,
+                updatedAt: new Date(),
+              },
+            });
+        } catch (statsErr) {
+          console.warn(
+            `[SquadsIngest] Season stats upsert failed playerId=${playerId} leagueId=${leagueId}:`,
+            statsErr,
+          );
+        }
+
         insertedTeamPlayersCount++;
       }
     }

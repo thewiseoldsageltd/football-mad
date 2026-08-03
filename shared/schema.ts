@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, timestamp, decimal, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, timestamp, decimal, real, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -52,6 +52,21 @@ export const players = pgTable("players", {
   imageUrl: text("image_url"),
   marketValue: text("market_value"),
   goalservePlayerId: text("goalserve_player_id").unique(),
+  /** Goalserve soccerstats/player enrichment (Phase C). */
+  commonName: text("common_name"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  dateOfBirth: timestamp("date_of_birth"),
+  birthPlace: text("birth_place"),
+  birthCountry: text("birth_country"),
+  heightCm: integer("height_cm"),
+  weightKg: integer("weight_kg"),
+  preferredFoot: text("preferred_foot"),
+  goalserveNationalTeamId: text("goalserve_national_team_id"),
+  goalserveCurrentTeamId: text("goalserve_current_team_id"),
+  goalserveCurrentTeamName: text("goalserve_current_team_name"),
+  marketValueEur: integer("market_value_eur"),
+  profileSyncedAt: timestamp("profile_synced_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1135,3 +1150,248 @@ export const squadsSnapshots = pgTable("squads_snapshots", {
   index("squads_snapshots_league_idx").on(table.leagueId),
   uniqueIndex("squads_snapshots_league_hash_idx").on(table.leagueId, table.payloadHash),
 ]);
+
+/**
+ * Current-season player statistics from Goalserve soccerleague squad feeds.
+ * One row per player × competition × season (idempotent upsert on squad sync).
+ */
+export const playerSeasonStats = pgTable("player_season_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id).notNull(),
+  teamId: varchar("team_id").references(() => teams.id),
+  competitionId: varchar("competition_id").references(() => competitions.id),
+  goalserveCompetitionId: text("goalserve_competition_id").notNull(),
+  season: text("season").notNull(),
+  appearances: integer("appearances"),
+  starts: integer("starts"),
+  substituteAppearances: integer("substitute_appearances"),
+  substitutedOff: integer("substituted_off"),
+  unusedBench: integer("unused_bench"),
+  minutes: integer("minutes"),
+  captainAppearances: integer("captain_appearances"),
+  goals: integer("goals"),
+  assists: integer("assists"),
+  shots: integer("shots"),
+  shotsOnTarget: integer("shots_on_target"),
+  keyPasses: integer("key_passes"),
+  dribbles: integer("dribbles"),
+  successfulDribbles: integer("successful_dribbles"),
+  penaltiesWon: integer("penalties_won"),
+  penaltiesScored: integer("penalties_scored"),
+  penaltiesMissed: integer("penalties_missed"),
+  woodworkHits: integer("woodwork_hits"),
+  passes: integer("passes"),
+  /** Accurate pass count from Goalserve @pAccuracy (not a percentage). */
+  passesAccurate: integer("passes_accurate"),
+  crosses: integer("crosses"),
+  accurateCrosses: integer("accurate_crosses"),
+  tackles: integer("tackles"),
+  interceptions: integer("interceptions"),
+  blocks: integer("blocks"),
+  clearances: integer("clearances"),
+  duels: integer("duels"),
+  duelsWon: integer("duels_won"),
+  foulsWon: integer("fouls_won"),
+  foulsCommitted: integer("fouls_committed"),
+  dispossessions: integer("dispossessions"),
+  penaltiesConceded: integer("penalties_conceded"),
+  saves: integer("saves"),
+  goalsConceded: integer("goals_conceded"),
+  penaltiesSaved: integer("penalties_saved"),
+  insideBoxSaves: integer("inside_box_saves"),
+  yellowCards: integer("yellow_cards"),
+  secondYellow: integer("second_yellow"),
+  redCards: integer("red_cards"),
+  rating: real("rating"),
+  source: text("source").default("goalserve"),
+  asOf: timestamp("as_of"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("player_season_stats_player_comp_season_uidx").on(
+    table.playerId,
+    table.goalserveCompetitionId,
+    table.season,
+  ),
+  index("player_season_stats_player_idx").on(table.playerId),
+  index("player_season_stats_team_idx").on(table.teamId),
+  index("player_season_stats_competition_idx").on(table.competitionId),
+]);
+
+export const playerSeasonStatsRelations = relations(playerSeasonStats, ({ one }) => ({
+  player: one(players, { fields: [playerSeasonStats.playerId], references: [players.id] }),
+  team: one(teams, { fields: [playerSeasonStats.teamId], references: [teams.id] }),
+  competition: one(competitions, { fields: [playerSeasonStats.competitionId], references: [competitions.id] }),
+}));
+
+export type PlayerSeasonStats = typeof playerSeasonStats.$inferSelect;
+export type InsertPlayerSeasonStats = typeof playerSeasonStats.$inferInsert;
+
+/** Career season rows from Goalserve soccerstats/player (Phase C). */
+export const playerCareerStats = pgTable("player_career_stats", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
+  /** domestic_league | domestic_cup | european | international */
+  category: text("category").notNull(),
+  season: text("season").notNull(),
+  clubName: text("club_name"),
+  goalserveClubId: text("goalserve_club_id"),
+  competitionName: text("competition_name"),
+  goalserveCompetitionId: text("goalserve_competition_id"),
+  appearances: integer("appearances"),
+  starts: integer("starts"),
+  substituteAppearances: integer("substitute_appearances"),
+  substitutedOff: integer("substituted_off"),
+  unusedBench: integer("unused_bench"),
+  minutes: integer("minutes"),
+  captainAppearances: integer("captain_appearances"),
+  goals: integer("goals"),
+  assists: integer("assists"),
+  shots: integer("shots"),
+  shotsOnTarget: integer("shots_on_target"),
+  keyPasses: integer("key_passes"),
+  dribbles: integer("dribbles"),
+  successfulDribbles: integer("successful_dribbles"),
+  penaltiesWon: integer("penalties_won"),
+  penaltiesScored: integer("penalties_scored"),
+  penaltiesMissed: integer("penalties_missed"),
+  woodworkHits: integer("woodwork_hits"),
+  passes: integer("passes"),
+  passesAccurate: integer("passes_accurate"),
+  crosses: integer("crosses"),
+  accurateCrosses: integer("accurate_crosses"),
+  tackles: integer("tackles"),
+  interceptions: integer("interceptions"),
+  blocks: integer("blocks"),
+  clearances: integer("clearances"),
+  duels: integer("duels"),
+  duelsWon: integer("duels_won"),
+  foulsWon: integer("fouls_won"),
+  foulsCommitted: integer("fouls_committed"),
+  dispossessions: integer("dispossessions"),
+  penaltiesConceded: integer("penalties_conceded"),
+  saves: integer("saves"),
+  goalsConceded: integer("goals_conceded"),
+  penaltiesSaved: integer("penalties_saved"),
+  insideBoxSaves: integer("inside_box_saves"),
+  yellowCards: integer("yellow_cards"),
+  secondYellow: integer("second_yellow"),
+  redCards: integer("red_cards"),
+  rating: real("rating"),
+  source: text("source").default("goalserve"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("player_career_stats_player_idx").on(table.playerId),
+  index("player_career_stats_player_category_idx").on(table.playerId, table.category),
+]);
+
+export type PlayerCareerStats = typeof playerCareerStats.$inferSelect;
+
+export const playerCareerTotals = pgTable("player_career_totals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
+  scope: text("scope").notNull().default("overall_clubs"),
+  appearances: integer("appearances"),
+  starts: integer("starts"),
+  substituteAppearances: integer("substitute_appearances"),
+  minutes: integer("minutes"),
+  captainAppearances: integer("captain_appearances"),
+  goals: integer("goals"),
+  assists: integer("assists"),
+  shots: integer("shots"),
+  shotsOnTarget: integer("shots_on_target"),
+  keyPasses: integer("key_passes"),
+  dribbles: integer("dribbles"),
+  successfulDribbles: integer("successful_dribbles"),
+  penaltiesWon: integer("penalties_won"),
+  penaltiesScored: integer("penalties_scored"),
+  penaltiesMissed: integer("penalties_missed"),
+  woodworkHits: integer("woodwork_hits"),
+  passes: integer("passes"),
+  passesAccurate: integer("passes_accurate"),
+  crosses: integer("crosses"),
+  accurateCrosses: integer("accurate_crosses"),
+  tackles: integer("tackles"),
+  interceptions: integer("interceptions"),
+  blocks: integer("blocks"),
+  clearances: integer("clearances"),
+  duels: integer("duels"),
+  duelsWon: integer("duels_won"),
+  foulsWon: integer("fouls_won"),
+  foulsCommitted: integer("fouls_committed"),
+  dispossessions: integer("dispossessions"),
+  penaltiesConceded: integer("penalties_conceded"),
+  saves: integer("saves"),
+  goalsConceded: integer("goals_conceded"),
+  penaltiesSaved: integer("penalties_saved"),
+  insideBoxSaves: integer("inside_box_saves"),
+  yellowCards: integer("yellow_cards"),
+  secondYellow: integer("second_yellow"),
+  redCards: integer("red_cards"),
+  rating: real("rating"),
+  source: text("source").default("goalserve"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("player_career_totals_player_scope_uidx").on(table.playerId, table.scope),
+]);
+
+export type PlayerCareerTotals = typeof playerCareerTotals.$inferSelect;
+
+/** Goalserve profile transfers — separate from editorial rumour `transfers` table. */
+export const playerProfileTransfers = pgTable("player_profile_transfers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
+  transferDate: timestamp("transfer_date"),
+  transferDateRaw: text("transfer_date_raw"),
+  fromClubName: text("from_club_name"),
+  fromGoalserveClubId: text("from_goalserve_club_id"),
+  toClubName: text("to_club_name"),
+  toGoalserveClubId: text("to_goalserve_club_id"),
+  fee: text("fee"),
+  transferType: text("transfer_type"),
+  sortIndex: integer("sort_index").notNull().default(0),
+  source: text("source").default("goalserve"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("player_profile_transfers_player_idx").on(table.playerId),
+]);
+
+export type PlayerProfileTransfer = typeof playerProfileTransfers.$inferSelect;
+
+export const playerSidelined = pgTable("player_sidelined", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind"),
+  typeLabel: text("type_label").notNull(),
+  dateStart: timestamp("date_start"),
+  dateEnd: timestamp("date_end"),
+  dateStartRaw: text("date_start_raw"),
+  dateEndRaw: text("date_end_raw"),
+  gamesMissed: integer("games_missed"),
+  sortIndex: integer("sort_index").notNull().default(0),
+  source: text("source").default("goalserve"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("player_sidelined_player_idx").on(table.playerId),
+]);
+
+export type PlayerSidelined = typeof playerSidelined.$inferSelect;
+
+export const playerHonours = pgTable("player_honours", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id").references(() => players.id, { onDelete: "cascade" }).notNull(),
+  competition: text("competition").notNull(),
+  country: text("country"),
+  status: text("status"),
+  count: integer("count"),
+  seasonsRaw: text("seasons_raw"),
+  sortIndex: integer("sort_index").notNull().default(0),
+  source: text("source").default("goalserve"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("player_honours_player_idx").on(table.playerId),
+]);
+
+export type PlayerHonour = typeof playerHonours.$inferSelect;

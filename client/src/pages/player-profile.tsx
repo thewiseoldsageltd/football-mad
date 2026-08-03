@@ -9,6 +9,22 @@ import { RelatedArticlesSection } from "@/components/related-articles-section";
 import { teamHub, playerProfile } from "@/lib/urls";
 import type { Team, Article } from "@shared/schema";
 import type { PlayerHubCurrentClub, PlayerHubTeammate } from "@shared/player-hub";
+import type { PlayerHubCurrentSeasonStats } from "@shared/player-season-stats";
+import type {
+  PlayerHubCareer,
+  PlayerHubHonour,
+  PlayerHubIdentity,
+  PlayerHubSidelined,
+  PlayerHubTransfer,
+} from "@shared/player-profile-feed";
+import { buildThisSeasonStatCards } from "@shared/player-hub-season-ui";
+import {
+  formatIdentityDetailBits,
+  PlayerCareerSection,
+  PlayerHonoursSection,
+  PlayerSidelinedSection,
+  PlayerTransfersSection,
+} from "@/components/player-hub-profile-sections";
 import {
   formatPlayerPositionLabel,
   parseShirtNumber,
@@ -36,6 +52,12 @@ type PlayerApiResponse = {
   team?: Team | null;
   currentClub?: PlayerHubCurrentClub | null;
   teammates?: PlayerHubTeammate[];
+  currentSeasonStats?: PlayerHubCurrentSeasonStats | null;
+  identity?: PlayerHubIdentity | null;
+  career?: PlayerHubCareer | null;
+  transfers?: PlayerHubTransfer[] | null;
+  sidelined?: PlayerHubSidelined[] | null;
+  honours?: PlayerHubHonour[] | null;
   mvpIndexable?: boolean;
   seo?: {
     indexable: boolean;
@@ -91,14 +113,22 @@ export default function PlayerProfilePage() {
     currentClub?.name,
     shirt != null ? `No. ${shirt}` : null,
   ]);
-  const detailLine = joinMeta([
+  const detailLine = formatIdentityDetailBits(player?.identity, {
     positionLabel,
-    player?.nationality,
-    typeof player?.age === "number" && player.age > 0 ? String(player.age) : null,
-  ]);
+    nationality: player?.nationality,
+    age: player?.age,
+  });
 
   const relatedArticles = archiveData?.articles ?? [];
   const teammates = player?.teammates ?? [];
+  const seasonStatCards = useMemo(
+    () =>
+      buildThisSeasonStatCards(
+        player?.currentSeasonStats,
+        currentClub?.position ?? player?.position,
+      ),
+    [player?.currentSeasonStats, currentClub?.position, player?.position],
+  );
 
   const seoTitle =
     player?.seo?.title ??
@@ -224,6 +254,35 @@ export default function PlayerProfilePage() {
             </div>
           </div>
         </section>
+
+        {seasonStatCards.length > 0 ? (
+          <section data-testid="player-hub-this-season" className="space-y-3">
+            <h2 className="text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+              THIS SEASON
+            </h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {seasonStatCards.map((card) => (
+                <div
+                  key={card.key}
+                  className="rounded-md border border-border/60 bg-muted/20 px-3 py-3"
+                  data-testid={`season-stat-${card.key}`}
+                >
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                    {card.label}
+                  </div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight">
+                    {card.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {player.career ? <PlayerCareerSection career={player.career} /> : null}
+        {player.transfers?.length ? <PlayerTransfersSection transfers={player.transfers} /> : null}
+        {player.sidelined?.length ? <PlayerSidelinedSection items={player.sidelined} /> : null}
+        {player.honours?.length ? <PlayerHonoursSection honours={player.honours} /> : null}
 
         {!archiveLoading && relatedArticles.length > 0 ? (
           <RelatedArticlesSection
